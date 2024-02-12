@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/a5ce3f9dc5ce0db2b6e99bdfbd25b9d163953121/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/c2ddf2466db9bfdcb72de3ec04b393667f2bfe28/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -44,7 +44,7 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
 /// resolution.
 ///
 /// ```text
-/// df9d2d06
+/// 3f4ac9b2
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -61,11 +61,11 @@ fn requires_incompatible_python_version_compatible_override() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-df9d2d06", "albatross"));
-    filters.push((r"-df9d2d06", ""));
+    filters.push((r"a-3f4ac9b2", "albatross"));
+    filters.push((r"-3f4ac9b2", ""));
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("a-df9d2d06==1.0.0")?;
+    requirements_in.write_str("a-3f4ac9b2==1.0.0")?;
 
     let output = puffin_snapshot!(filters, command(&context, python_versions)
         .arg("--python-version=3.11")
@@ -86,7 +86,7 @@ fn requires_incompatible_python_version_compatible_override() -> Result<()> {
     output
         .assert()
         .success()
-        .stdout(predicate::str::contains("a-df9d2d06==1.0.0"));
+        .stdout(predicate::str::contains("a-3f4ac9b2==1.0.0"));
 
     Ok(())
 }
@@ -97,7 +97,7 @@ fn requires_incompatible_python_version_compatible_override() -> Result<()> {
 /// request an incompatible Python version for package resolution.
 ///
 /// ```text
-/// ad14da8a
+/// fd6db412
 /// ├── environment
 /// │   └── python3.11
 /// ├── root
@@ -114,11 +114,11 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-ad14da8a", "albatross"));
-    filters.push((r"-ad14da8a", ""));
+    filters.push((r"a-fd6db412", "albatross"));
+    filters.push((r"-fd6db412", ""));
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("a-ad14da8a==1.0.0")?;
+    requirements_in.write_str("a-fd6db412==1.0.0")?;
 
     let output = puffin_snapshot!(filters, command(&context, python_versions)
         .arg("--python-version=3.9")
@@ -147,7 +147,7 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
 /// source distributions available for the package.
 ///
 /// ```text
-/// 8efa8294
+/// 3521037f
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -164,11 +164,11 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-8efa8294", "albatross"));
-    filters.push((r"-8efa8294", ""));
+    filters.push((r"a-3521037f", "albatross"));
+    filters.push((r"-3521037f", ""));
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("a-8efa8294==1.0.0")?;
+    requirements_in.write_str("a-3521037f==1.0.0")?;
 
     // Since there are no wheels for the package and it is not compatible with the
     // local installation, we cannot build the source distribution to determine its
@@ -201,7 +201,7 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
 /// version installed elsewhere on their system.
 ///
 /// ```text
-/// 6b12f58c
+/// c68bcf5c
 /// ├── environment
 /// │   ├── python3.11
 /// │   └── python3.9 (active)
@@ -220,11 +220,11 @@ fn requires_incompatible_python_version_compatible_override_no_wheels_available_
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-6b12f58c", "albatross"));
-    filters.push((r"-6b12f58c", ""));
+    filters.push((r"a-c68bcf5c", "albatross"));
+    filters.push((r"-c68bcf5c", ""));
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("a-6b12f58c==1.0.0")?;
+    requirements_in.write_str("a-c68bcf5c==1.0.0")?;
 
     // Since there is a compatible Python version available on the system, it should be
     // used to build the source distributions.
@@ -246,7 +246,7 @@ fn requires_incompatible_python_version_compatible_override_no_wheels_available_
     output
         .assert()
         .success()
-        .stdout(predicate::str::contains("a-6b12f58c==1.0.0"));
+        .stdout(predicate::str::contains("a-c68bcf5c==1.0.0"));
 
     Ok(())
 }
@@ -258,7 +258,7 @@ fn requires_incompatible_python_version_compatible_override_no_wheels_available_
 /// wheel available for the package, but it does not have a compatible tag.
 ///
 /// ```text
-/// 27672836
+/// d7b25a2d
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -275,11 +275,11 @@ fn requires_incompatible_python_version_compatible_override_no_compatible_wheels
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-27672836", "albatross"));
-    filters.push((r"-27672836", ""));
+    filters.push((r"a-d7b25a2d", "albatross"));
+    filters.push((r"-d7b25a2d", ""));
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("a-27672836==1.0.0")?;
+    requirements_in.write_str("a-d7b25a2d==1.0.0")?;
 
     // Since there are no compatible wheels for the package and it is not compatible
     // with the local installation, we cannot build the source distribution to
@@ -312,7 +312,7 @@ fn requires_incompatible_python_version_compatible_override_no_compatible_wheels
 /// there is an incompatible version with a wheel available.
 ///
 /// ```text
-/// 6413f0ea
+/// a9179f0c
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -332,11 +332,11 @@ fn requires_incompatible_python_version_compatible_override_other_wheel() -> Res
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-6413f0ea", "albatross"));
-    filters.push((r"-6413f0ea", ""));
+    filters.push((r"a-a9179f0c", "albatross"));
+    filters.push((r"-a9179f0c", ""));
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("a-6413f0ea")?;
+    requirements_in.write_str("a-a9179f0c")?;
 
     // Since there are no wheels for the version of the package compatible with the
     // target and it is not compatible with the local installation, we cannot build the
@@ -375,7 +375,7 @@ fn requires_incompatible_python_version_compatible_override_other_wheel() -> Res
 /// and the user provides a target version without a patch version.
 ///
 /// ```text
-/// 6e610048
+/// e1884826
 /// ├── environment
 /// │   └── python3.8.18
 /// ├── root
@@ -392,11 +392,11 @@ fn requires_python_patch_version_override_no_patch() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-6e610048", "albatross"));
-    filters.push((r"-6e610048", ""));
+    filters.push((r"a-e1884826", "albatross"));
+    filters.push((r"-e1884826", ""));
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("a-6e610048==1.0.0")?;
+    requirements_in.write_str("a-e1884826==1.0.0")?;
 
     // Since the resolver is asked to solve with 3.8, the minimum compatible Python
     // requirement is treated as 3.8.0.
@@ -425,7 +425,7 @@ fn requires_python_patch_version_override_no_patch() -> Result<()> {
 /// and the user provides a target version with a compatible patch version.
 ///
 /// ```text
-/// 070b52ec
+/// 91b4bcfc
 /// ├── environment
 /// │   └── python3.8.18
 /// ├── root
@@ -442,11 +442,11 @@ fn requires_python_patch_version_override_patch_compatible() -> Result<()> {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-070b52ec", "albatross"));
-    filters.push((r"-070b52ec", ""));
+    filters.push((r"a-91b4bcfc", "albatross"));
+    filters.push((r"-91b4bcfc", ""));
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("a-070b52ec==1.0.0")?;
+    requirements_in.write_str("a-91b4bcfc==1.0.0")?;
 
     let output = puffin_snapshot!(filters, command(&context, python_versions)
         .arg("--python-version=3.8.0")
@@ -467,7 +467,7 @@ fn requires_python_patch_version_override_patch_compatible() -> Result<()> {
     output
         .assert()
         .success()
-        .stdout(predicate::str::contains("a-070b52ec==1.0.0"));
+        .stdout(predicate::str::contains("a-91b4bcfc==1.0.0"));
 
     Ok(())
 }

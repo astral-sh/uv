@@ -45,7 +45,7 @@ import textwrap
 from pathlib import Path
 
 
-PACKSE_COMMIT = "a5ce3f9dc5ce0db2b6e99bdfbd25b9d163953121"
+PACKSE_COMMIT = "c2ddf2466db9bfdcb72de3ec04b393667f2bfe28"
 TOOL_ROOT = Path(__file__).parent
 TEMPLATES = TOOL_ROOT / "templates"
 INSTALL_TEMPLATE = TEMPLATES / "install.mustache"
@@ -159,10 +159,14 @@ data = json.loads(
 )
 
 
-# Drop the example scenario
-for index, scenario in enumerate(data["scenarios"]):
-    if scenario["name"] == "example":
-        data["scenarios"].pop(index)
+data["scenarios"] = [
+    scenario
+    for scenario in data["scenarios"]
+    # Drop the example scenario
+    if scenario["name"] != "example"
+    # TODO(zanieb): Restore this scenario
+    and scenario["name"] != "no-sdist-no-wheels-with-matching-platform"
+]
 
 # Wrap the description onto multiple lines
 for scenario in data["scenarios"]:

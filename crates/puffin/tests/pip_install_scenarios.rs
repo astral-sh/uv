@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/a5ce3f9dc5ce0db2b6e99bdfbd25b9d163953121/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/c2ddf2466db9bfdcb72de3ec04b393667f2bfe28/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -60,7 +60,7 @@ fn command(context: &TestContext) -> Command {
 /// The user requires any version of package `a` which does not exist.
 ///
 /// ```text
-/// 3cb60d4c
+/// 5a1a4a35
 /// ├── environment
 /// │   └── python3.8
 /// └── root
@@ -73,10 +73,10 @@ fn requires_package_does_not_exist() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"-3cb60d4c", ""));
+    filters.push((r"-5a1a4a35", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-3cb60d4c")
+        .arg("a-5a1a4a35")
         , @r###"
     success: false
     exit_code: 1
@@ -87,7 +87,7 @@ fn requires_package_does_not_exist() {
       ╰─▶ Because a was not found in the package registry and you require a, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_3cb60d4c", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_5a1a4a35", &context.temp_dir);
 }
 
 /// requires-exact-version-does-not-exist
@@ -95,7 +95,7 @@ fn requires_package_does_not_exist() {
 /// The user requires an exact version of package `a` but only other versions exist
 ///
 /// ```text
-/// e7132fc5
+/// 7cff23d9
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -110,11 +110,11 @@ fn requires_exact_version_does_not_exist() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-e7132fc5", "albatross"));
-    filters.push((r"-e7132fc5", ""));
+    filters.push((r"a-7cff23d9", "albatross"));
+    filters.push((r"-7cff23d9", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-e7132fc5==2.0.0")
+        .arg("a-7cff23d9==2.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -125,7 +125,7 @@ fn requires_exact_version_does_not_exist() {
       ╰─▶ Because there is no version of albatross==2.0.0 and you require albatross==2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_e7132fc5", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_7cff23d9", &context.temp_dir);
 }
 
 /// requires-greater-version-does-not-exist
@@ -134,7 +134,7 @@ fn requires_exact_version_does_not_exist() {
 /// equal versions exist
 ///
 /// ```text
-/// 0e488e8f
+/// 63569c9e
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -150,11 +150,11 @@ fn requires_greater_version_does_not_exist() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-0e488e8f", "albatross"));
-    filters.push((r"-0e488e8f", ""));
+    filters.push((r"a-63569c9e", "albatross"));
+    filters.push((r"-63569c9e", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-0e488e8f>1.0.0")
+        .arg("a-63569c9e>1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -165,7 +165,7 @@ fn requires_greater_version_does_not_exist() {
       ╰─▶ Because only albatross<=1.0.0 is available and you require albatross>1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_0e488e8f", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_63569c9e", &context.temp_dir);
 }
 
 /// requires-less-version-does-not-exist
@@ -174,7 +174,7 @@ fn requires_greater_version_does_not_exist() {
 /// exist
 ///
 /// ```text
-/// 1a4076bc
+/// 2af6fa02
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -191,11 +191,11 @@ fn requires_less_version_does_not_exist() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-1a4076bc", "albatross"));
-    filters.push((r"-1a4076bc", ""));
+    filters.push((r"a-2af6fa02", "albatross"));
+    filters.push((r"-2af6fa02", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-1a4076bc<2.0.0")
+        .arg("a-2af6fa02<2.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -206,7 +206,7 @@ fn requires_less_version_does_not_exist() {
       ╰─▶ Because only albatross>=2.0.0 is available and you require albatross<2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_1a4076bc", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_2af6fa02", &context.temp_dir);
 }
 
 /// transitive-requires-package-does-not-exist
@@ -214,7 +214,7 @@ fn requires_less_version_does_not_exist() {
 /// The user requires package `a` but `a` requires package `b` which does not exist
 ///
 /// ```text
-/// 22a72022
+/// 64b04b2b
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -231,11 +231,11 @@ fn transitive_requires_package_does_not_exist() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-22a72022", "albatross"));
-    filters.push((r"-22a72022", ""));
+    filters.push((r"a-64b04b2b", "albatross"));
+    filters.push((r"-64b04b2b", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-22a72022")
+        .arg("a-64b04b2b")
         , @r###"
     success: false
     exit_code: 1
@@ -247,7 +247,7 @@ fn transitive_requires_package_does_not_exist() {
           And because only albatross==1.0.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_22a72022", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_64b04b2b", &context.temp_dir);
 }
 
 /// excluded-only-version
@@ -256,7 +256,7 @@ fn transitive_requires_package_does_not_exist() {
 /// that version.
 ///
 /// ```text
-/// 2bc4455f
+/// 72f0d052
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -271,11 +271,11 @@ fn excluded_only_version() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-2bc4455f", "albatross"));
-    filters.push((r"-2bc4455f", ""));
+    filters.push((r"a-72f0d052", "albatross"));
+    filters.push((r"-72f0d052", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-2bc4455f!=1.0.0")
+        .arg("a-72f0d052!=1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -290,7 +290,7 @@ fn excluded_only_version() {
     "###);
 
     // Only `a==1.0.0` is available but the user excluded it.
-    assert_not_installed(&context.venv, "a_2bc4455f", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_72f0d052", &context.temp_dir);
 }
 
 /// excluded-only-compatible-version
@@ -299,7 +299,7 @@ fn excluded_only_version() {
 /// banned that version.
 ///
 /// ```text
-/// 5b90a629
+/// d6ce69da
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -329,13 +329,13 @@ fn excluded_only_compatible_version() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-5b90a629", "albatross"));
-    filters.push((r"b-5b90a629", "bluebird"));
-    filters.push((r"-5b90a629", ""));
+    filters.push((r"a-d6ce69da", "albatross"));
+    filters.push((r"b-d6ce69da", "bluebird"));
+    filters.push((r"-d6ce69da", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-5b90a629!=2.0.0")
-                .arg("b-5b90a629<3.0.0,>=2.0.0")
+        .arg("a-d6ce69da!=2.0.0")
+                .arg("b-d6ce69da<3.0.0,>=2.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -364,8 +364,8 @@ fn excluded_only_compatible_version() {
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require
     // incompatible versions of `b`. The user has excluded that version of `a` so
     // resolution fails.
-    assert_not_installed(&context.venv, "a_5b90a629", &context.temp_dir);
-    assert_not_installed(&context.venv, "b_5b90a629", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_d6ce69da", &context.temp_dir);
+    assert_not_installed(&context.venv, "b_d6ce69da", &context.temp_dir);
 }
 
 /// dependency-excludes-range-of-compatible-versions
@@ -374,7 +374,7 @@ fn excluded_only_compatible_version() {
 /// another dependency `c` excludes that range.
 ///
 /// ```text
-/// e59e1cd1
+/// 5824fb81
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -427,15 +427,15 @@ fn dependency_excludes_range_of_compatible_versions() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-e59e1cd1", "albatross"));
-    filters.push((r"b-e59e1cd1", "bluebird"));
-    filters.push((r"c-e59e1cd1", "crow"));
-    filters.push((r"-e59e1cd1", ""));
+    filters.push((r"a-5824fb81", "albatross"));
+    filters.push((r"b-5824fb81", "bluebird"));
+    filters.push((r"c-5824fb81", "crow"));
+    filters.push((r"-5824fb81", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-e59e1cd1")
-                .arg("b-e59e1cd1<3.0.0,>=2.0.0")
-                .arg("c-e59e1cd1")
+        .arg("a-5824fb81")
+                .arg("b-5824fb81<3.0.0,>=2.0.0")
+                .arg("c-5824fb81")
         , @r###"
     success: false
     exit_code: 1
@@ -443,20 +443,21 @@ fn dependency_excludes_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of crow are available:
+      ╰─▶ Because only the following versions of albatross are available:
+              albatross==1.0.0
+              albatross>=2.0.0,<=3.0.0
+          and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0. (1)
+
+          Because only the following versions of crow are available:
               crow==1.0.0
               crow==2.0.0
-          and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0. (1)
+          and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0.
+          And because crow==2.0.0 depends on albatross>=3.0.0, we can conclude that all versions of crow depend on one of:
+              albatross<2.0.0
+              albatross>=3.0.0
 
-          Because only the following versions of albatross are available:
-              albatross==1.0.0
-              albatross>=2.0.0
-          and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0.
-          And because we know from (1) that crow<2.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on bluebird==1.0.0.
-          And because crow==2.0.0 depends on albatross>=3.0.0, we can conclude that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible. (2)
-
-          Because only albatross<=3.0.0 is available and albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
-          And because we know from (2) that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
+          And because we know from (1) that albatross<2.0.0 depends on bluebird==1.0.0, we can conclude that albatross!=3.0.0, all versions of crow, bluebird!=1.0.0 are incompatible.
+          And because albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that all versions of crow depend on one of:
               bluebird==1.0.0
               bluebird==3.0.0
 
@@ -466,9 +467,9 @@ fn dependency_excludes_range_of_compatible_versions() {
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
     // require incompatible versions of `b`, but all available versions of `c` exclude
     // that range of `a` so resolution fails.
-    assert_not_installed(&context.venv, "a_e59e1cd1", &context.temp_dir);
-    assert_not_installed(&context.venv, "b_e59e1cd1", &context.temp_dir);
-    assert_not_installed(&context.venv, "c_e59e1cd1", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_5824fb81", &context.temp_dir);
+    assert_not_installed(&context.venv, "b_5824fb81", &context.temp_dir);
+    assert_not_installed(&context.venv, "c_5824fb81", &context.temp_dir);
 }
 
 /// dependency-excludes-non-contiguous-range-of-compatible-versions
@@ -480,7 +481,7 @@ fn dependency_excludes_range_of_compatible_versions() {
 /// `d`.
 ///
 /// ```text
-/// ed41451f
+/// 119f929b
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -541,15 +542,15 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-ed41451f", "albatross"));
-    filters.push((r"b-ed41451f", "bluebird"));
-    filters.push((r"c-ed41451f", "crow"));
-    filters.push((r"-ed41451f", ""));
+    filters.push((r"a-119f929b", "albatross"));
+    filters.push((r"b-119f929b", "bluebird"));
+    filters.push((r"c-119f929b", "crow"));
+    filters.push((r"-119f929b", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-ed41451f")
-                .arg("b-ed41451f<3.0.0,>=2.0.0")
-                .arg("c-ed41451f")
+        .arg("a-119f929b")
+                .arg("b-119f929b<3.0.0,>=2.0.0")
+                .arg("c-119f929b")
         , @r###"
     success: false
     exit_code: 1
@@ -567,22 +568,22 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
               albatross>=2.0.0
           and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0.
           And because we know from (1) that crow<2.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on bluebird==1.0.0.
-          And because crow==2.0.0 depends on albatross>=3.0.0, we can conclude that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible. (2)
+          And because crow==2.0.0 depends on albatross>=3.0.0, we can conclude that albatross<3.0.0, all versions of crow, bluebird!=1.0.0 are incompatible. (2)
 
           Because only albatross<=3.0.0 is available and albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
-          And because we know from (2) that all versions of crow, bluebird!=1.0.0, albatross<3.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
-              bluebird==1.0.0
-              bluebird==3.0.0
+          And because we know from (2) that albatross<3.0.0, all versions of crow, bluebird!=1.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
+              bluebird<=1.0.0
+              bluebird>=3.0.0
 
-          And because you require crow and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
+          And because you require bluebird>=2.0.0,<3.0.0 and you require crow, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
     // require incompatible versions of `b`, but all available versions of `c` exclude
     // that range of `a` so resolution fails.
-    assert_not_installed(&context.venv, "a_ed41451f", &context.temp_dir);
-    assert_not_installed(&context.venv, "b_ed41451f", &context.temp_dir);
-    assert_not_installed(&context.venv, "c_ed41451f", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_119f929b", &context.temp_dir);
+    assert_not_installed(&context.venv, "b_119f929b", &context.temp_dir);
+    assert_not_installed(&context.venv, "c_119f929b", &context.temp_dir);
 }
 
 /// extra-required
@@ -590,7 +591,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 /// Optional dependencies are requested for the package.
 ///
 /// ```text
-/// c9be513b
+/// c1e0ed38
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -611,12 +612,12 @@ fn extra_required() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-c9be513b", "albatross"));
-    filters.push((r"b-c9be513b", "bluebird"));
-    filters.push((r"-c9be513b", ""));
+    filters.push((r"a-c1e0ed38", "albatross"));
+    filters.push((r"b-c1e0ed38", "bluebird"));
+    filters.push((r"-c1e0ed38", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-c9be513b[extra]")
+        .arg("a-c1e0ed38[extra]")
         , @r###"
     success: true
     exit_code: 0
@@ -630,8 +631,8 @@ fn extra_required() {
      + bluebird==1.0.0
     "###);
 
-    assert_installed(&context.venv, "a_c9be513b", "1.0.0", &context.temp_dir);
-    assert_installed(&context.venv, "b_c9be513b", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "a_c1e0ed38", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "b_c1e0ed38", "1.0.0", &context.temp_dir);
 }
 
 /// missing-extra
@@ -640,7 +641,7 @@ fn extra_required() {
 /// exist.
 ///
 /// ```text
-/// 79fd9a92
+/// de25a6db
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -655,11 +656,11 @@ fn missing_extra() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-79fd9a92", "albatross"));
-    filters.push((r"-79fd9a92", ""));
+    filters.push((r"a-de25a6db", "albatross"));
+    filters.push((r"-de25a6db", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-79fd9a92[extra]")
+        .arg("a-de25a6db[extra]")
         , @r###"
     success: true
     exit_code: 0
@@ -673,7 +674,7 @@ fn missing_extra() {
     "###);
 
     // Missing extras are ignored during resolution.
-    assert_installed(&context.venv, "a_79fd9a92", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "a_de25a6db", "1.0.0", &context.temp_dir);
 }
 
 /// multiple-extras-required
@@ -681,7 +682,7 @@ fn missing_extra() {
 /// Multiple optional dependencies are requested for the package.
 ///
 /// ```text
-/// 14317535
+/// 502cbb59
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -708,13 +709,13 @@ fn multiple_extras_required() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-14317535", "albatross"));
-    filters.push((r"b-14317535", "bluebird"));
-    filters.push((r"c-14317535", "crow"));
-    filters.push((r"-14317535", ""));
+    filters.push((r"a-502cbb59", "albatross"));
+    filters.push((r"b-502cbb59", "bluebird"));
+    filters.push((r"c-502cbb59", "crow"));
+    filters.push((r"-502cbb59", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-14317535[extra_b,extra_c]")
+        .arg("a-502cbb59[extra_b,extra_c]")
         , @r###"
     success: true
     exit_code: 0
@@ -729,9 +730,9 @@ fn multiple_extras_required() {
      + crow==1.0.0
     "###);
 
-    assert_installed(&context.venv, "a_14317535", "1.0.0", &context.temp_dir);
-    assert_installed(&context.venv, "b_14317535", "1.0.0", &context.temp_dir);
-    assert_installed(&context.venv, "c_14317535", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "a_502cbb59", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "b_502cbb59", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "c_502cbb59", "1.0.0", &context.temp_dir);
 }
 
 /// extra-incompatible-with-extra
@@ -740,7 +741,7 @@ fn multiple_extras_required() {
 /// conflicting requirements with each other.
 ///
 /// ```text
-/// afa38951
+/// a5547b80
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -766,12 +767,12 @@ fn extra_incompatible_with_extra() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-afa38951", "albatross"));
-    filters.push((r"b-afa38951", "bluebird"));
-    filters.push((r"-afa38951", ""));
+    filters.push((r"a-a5547b80", "albatross"));
+    filters.push((r"b-a5547b80", "bluebird"));
+    filters.push((r"-a5547b80", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-afa38951[extra_b,extra_c]")
+        .arg("a-a5547b80[extra_b,extra_c]")
         , @r###"
     success: false
     exit_code: 1
@@ -781,12 +782,12 @@ fn extra_incompatible_with_extra() {
       × No solution found when resolving dependencies:
       ╰─▶ Because only albatross[extra-b]==1.0.0 is available and albatross[extra-b]==1.0.0 depends on bluebird==1.0.0, we can conclude that all versions of albatross[extra-b] depend on bluebird==1.0.0.
           And because albatross[extra-c]==1.0.0 depends on bluebird==2.0.0 and only albatross[extra-c]==1.0.0 is available, we can conclude that all versions of albatross[extra-c] and all versions of albatross[extra-b] are incompatible.
-          And because you require albatross[extra-b] and you require albatross[extra-c], we can conclude that the requirements are unsatisfiable.
+          And because you require albatross[extra-c] and you require albatross[extra-b], we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Because both `extra_b` and `extra_c` are requested and they require incompatible
     // versions of `b`, `a` cannot be installed.
-    assert_not_installed(&context.venv, "a_afa38951", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_a5547b80", &context.temp_dir);
 }
 
 /// extra-incompatible-with-extra-not-requested
@@ -794,7 +795,7 @@ fn extra_incompatible_with_extra() {
 /// One of two incompatible optional dependencies are requested for the package.
 ///
 /// ```text
-/// 5c305dd9
+/// 8bb31c23
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -820,12 +821,12 @@ fn extra_incompatible_with_extra_not_requested() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-5c305dd9", "albatross"));
-    filters.push((r"b-5c305dd9", "bluebird"));
-    filters.push((r"-5c305dd9", ""));
+    filters.push((r"a-8bb31c23", "albatross"));
+    filters.push((r"b-8bb31c23", "bluebird"));
+    filters.push((r"-8bb31c23", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-5c305dd9[extra_c]")
+        .arg("a-8bb31c23[extra_c]")
         , @r###"
     success: true
     exit_code: 0
@@ -841,8 +842,8 @@ fn extra_incompatible_with_extra_not_requested() {
 
     // Because the user does not request both extras, it is okay that one is
     // incompatible with the other.
-    assert_installed(&context.venv, "a_5c305dd9", "1.0.0", &context.temp_dir);
-    assert_installed(&context.venv, "b_5c305dd9", "2.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "a_8bb31c23", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "b_8bb31c23", "2.0.0", &context.temp_dir);
 }
 
 /// extra-incompatible-with-root
@@ -851,7 +852,7 @@ fn extra_incompatible_with_extra_not_requested() {
 /// compatible with other requested versions.
 ///
 /// ```text
-/// 743dac5a
+/// aca6971b
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -875,13 +876,13 @@ fn extra_incompatible_with_root() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-743dac5a", "albatross"));
-    filters.push((r"b-743dac5a", "bluebird"));
-    filters.push((r"-743dac5a", ""));
+    filters.push((r"a-aca6971b", "albatross"));
+    filters.push((r"b-aca6971b", "bluebird"));
+    filters.push((r"-aca6971b", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-743dac5a[extra]")
-                .arg("b-743dac5a==2.0.0")
+        .arg("a-aca6971b[extra]")
+                .arg("b-aca6971b==2.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -890,13 +891,13 @@ fn extra_incompatible_with_root() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only albatross[extra]==1.0.0 is available and albatross[extra]==1.0.0 depends on bluebird==1.0.0, we can conclude that all versions of albatross[extra] depend on bluebird==1.0.0.
-          And because you require bluebird==2.0.0 and you require albatross[extra], we can conclude that the requirements are unsatisfiable.
+          And because you require albatross[extra] and you require bluebird==2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Because the user requested `b==2.0.0` but the requested extra requires
     // `b==1.0.0`, the dependencies cannot be satisfied.
-    assert_not_installed(&context.venv, "a_743dac5a", &context.temp_dir);
-    assert_not_installed(&context.venv, "b_743dac5a", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_aca6971b", &context.temp_dir);
+    assert_not_installed(&context.venv, "b_aca6971b", &context.temp_dir);
 }
 
 /// extra-does-not-exist-backtrack
@@ -905,7 +906,7 @@ fn extra_incompatible_with_root() {
 /// on an older version.
 ///
 /// ```text
-/// a35e4442
+/// c4307e58
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -930,12 +931,12 @@ fn extra_does_not_exist_backtrack() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-a35e4442", "albatross"));
-    filters.push((r"b-a35e4442", "bluebird"));
-    filters.push((r"-a35e4442", ""));
+    filters.push((r"a-c4307e58", "albatross"));
+    filters.push((r"b-c4307e58", "bluebird"));
+    filters.push((r"-c4307e58", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-a35e4442[extra]")
+        .arg("a-c4307e58[extra]")
         , @r###"
     success: true
     exit_code: 0
@@ -950,7 +951,7 @@ fn extra_does_not_exist_backtrack() {
 
     // The resolver should not backtrack to `a==1.0.0` because missing extras are
     // allowed during resolution. `b` should not be installed.
-    assert_installed(&context.venv, "a_a35e4442", "3.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "a_c4307e58", "3.0.0", &context.temp_dir);
 }
 
 /// direct-incompatible-versions
@@ -958,7 +959,7 @@ fn extra_does_not_exist_backtrack() {
 /// The user requires two incompatible, existing versions of package `a`
 ///
 /// ```text
-/// f75c56e2
+/// c0e7adfa
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -976,12 +977,12 @@ fn direct_incompatible_versions() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-f75c56e2", "albatross"));
-    filters.push((r"-f75c56e2", ""));
+    filters.push((r"a-c0e7adfa", "albatross"));
+    filters.push((r"-c0e7adfa", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-f75c56e2==1.0.0")
-                .arg("a-f75c56e2==2.0.0")
+        .arg("a-c0e7adfa==1.0.0")
+                .arg("a-c0e7adfa==2.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -992,8 +993,8 @@ fn direct_incompatible_versions() {
       ╰─▶ your requirements cannot be used because there are conflicting versions for `albatross`: `albatross==1.0.0` does not intersect with `albatross==2.0.0`
     "###);
 
-    assert_not_installed(&context.venv, "a_f75c56e2", &context.temp_dir);
-    assert_not_installed(&context.venv, "a_f75c56e2", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_c0e7adfa", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_c0e7adfa", &context.temp_dir);
 }
 
 /// transitive-incompatible-with-root-version
@@ -1002,7 +1003,7 @@ fn direct_incompatible_versions() {
 /// `b`
 ///
 /// ```text
-/// 812a0fda
+/// a13da883
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1024,13 +1025,13 @@ fn transitive_incompatible_with_root_version() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-812a0fda", "albatross"));
-    filters.push((r"b-812a0fda", "bluebird"));
-    filters.push((r"-812a0fda", ""));
+    filters.push((r"a-a13da883", "albatross"));
+    filters.push((r"b-a13da883", "bluebird"));
+    filters.push((r"-a13da883", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-812a0fda")
-                .arg("b-812a0fda==1.0.0")
+        .arg("a-a13da883")
+                .arg("b-a13da883==1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -1038,12 +1039,12 @@ fn transitive_incompatible_with_root_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because albatross==1.0.0 depends on bluebird==2.0.0 and only albatross==1.0.0 is available, we can conclude that all versions of albatross depend on bluebird==2.0.0.
-          And because you require bluebird==1.0.0 and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 depends on bluebird==2.0.0, we can conclude that all versions of albatross depend on bluebird==2.0.0.
+          And because you require albatross and you require bluebird==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_812a0fda", &context.temp_dir);
-    assert_not_installed(&context.venv, "b_812a0fda", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_a13da883", &context.temp_dir);
+    assert_not_installed(&context.venv, "b_a13da883", &context.temp_dir);
 }
 
 /// transitive-incompatible-with-transitive
@@ -1052,7 +1053,7 @@ fn transitive_incompatible_with_root_version() {
 /// `c`
 ///
 /// ```text
-/// 74531fe0
+/// ec82e315
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1078,14 +1079,14 @@ fn transitive_incompatible_with_transitive() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-74531fe0", "albatross"));
-    filters.push((r"b-74531fe0", "bluebird"));
-    filters.push((r"c-74531fe0", "crow"));
-    filters.push((r"-74531fe0", ""));
+    filters.push((r"a-ec82e315", "albatross"));
+    filters.push((r"b-ec82e315", "bluebird"));
+    filters.push((r"c-ec82e315", "crow"));
+    filters.push((r"-ec82e315", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-74531fe0")
-                .arg("b-74531fe0")
+        .arg("a-ec82e315")
+                .arg("b-ec82e315")
         , @r###"
     success: false
     exit_code: 1
@@ -1093,13 +1094,13 @@ fn transitive_incompatible_with_transitive() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 depends on crow==1.0.0, we can conclude that all versions of albatross depend on crow==1.0.0.
-          And because bluebird==1.0.0 depends on crow==2.0.0 and only bluebird==1.0.0 is available, we can conclude that all versions of albatross and all versions of bluebird are incompatible.
-          And because you require albatross and you require bluebird, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only bluebird==1.0.0 is available and bluebird==1.0.0 depends on crow==2.0.0, we can conclude that all versions of bluebird depend on crow==2.0.0.
+          And because albatross==1.0.0 depends on crow==1.0.0 and only albatross==1.0.0 is available, we can conclude that all versions of bluebird and all versions of albatross are incompatible.
+          And because you require bluebird and you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_74531fe0", &context.temp_dir);
-    assert_not_installed(&context.venv, "b_74531fe0", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_ec82e315", &context.temp_dir);
+    assert_not_installed(&context.venv, "b_ec82e315", &context.temp_dir);
 }
 
 /// package-only-prereleases
@@ -1108,7 +1109,7 @@ fn transitive_incompatible_with_transitive() {
 /// available.
 ///
 /// ```text
-/// e2dbc237
+/// 472fcc7e
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1123,11 +1124,11 @@ fn package_only_prereleases() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-e2dbc237", "albatross"));
-    filters.push((r"-e2dbc237", ""));
+    filters.push((r"a-472fcc7e", "albatross"));
+    filters.push((r"-472fcc7e", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-e2dbc237")
+        .arg("a-472fcc7e")
         , @r###"
     success: true
     exit_code: 0
@@ -1142,7 +1143,7 @@ fn package_only_prereleases() {
 
     // Since there are only prerelease versions of `a` available, it should be
     // installed even though the user did not include a prerelease specifier.
-    assert_installed(&context.venv, "a_e2dbc237", "1.0.0a1", &context.temp_dir);
+    assert_installed(&context.venv, "a_472fcc7e", "1.0.0a1", &context.temp_dir);
 }
 
 /// package-only-prereleases-in-range
@@ -1151,7 +1152,7 @@ fn package_only_prereleases() {
 /// versions but they did not include a prerelease specifier.
 ///
 /// ```text
-/// 4e199000
+/// 1017748b
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1167,11 +1168,11 @@ fn package_only_prereleases_in_range() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-4e199000", "albatross"));
-    filters.push((r"-4e199000", ""));
+    filters.push((r"a-1017748b", "albatross"));
+    filters.push((r"-1017748b", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-4e199000>0.1.0")
+        .arg("a-1017748b>0.1.0")
         , @r###"
     success: false
     exit_code: 1
@@ -1186,7 +1187,7 @@ fn package_only_prereleases_in_range() {
 
     // Since there are stable versions of `a` available, prerelease versions should not
     // be selected without explicit opt-in.
-    assert_not_installed(&context.venv, "a_4e199000", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_1017748b", &context.temp_dir);
 }
 
 /// requires-package-only-prereleases-in-range-global-opt-in
@@ -1196,7 +1197,7 @@ fn package_only_prereleases_in_range() {
 /// opted into prereleases globally.
 ///
 /// ```text
-/// ebc4dbde
+/// 95140069
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1212,12 +1213,12 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-ebc4dbde", "albatross"));
-    filters.push((r"-ebc4dbde", ""));
+    filters.push((r"a-95140069", "albatross"));
+    filters.push((r"-95140069", ""));
 
     puffin_snapshot!(filters, command(&context)
         .arg("--prerelease=allow")
-        .arg("a-ebc4dbde>0.1.0")
+        .arg("a-95140069>0.1.0")
         , @r###"
     success: true
     exit_code: 0
@@ -1230,7 +1231,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
      + albatross==1.0.0a1
     "###);
 
-    assert_installed(&context.venv, "a_ebc4dbde", "1.0.0a1", &context.temp_dir);
+    assert_installed(&context.venv, "a_95140069", "1.0.0a1", &context.temp_dir);
 }
 
 /// requires-package-prerelease-and-final-any
@@ -1239,7 +1240,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
 /// and an older non-prerelease version.
 ///
 /// ```text
-/// 81dbab9d
+/// 909975d8
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1255,11 +1256,11 @@ fn requires_package_prerelease_and_final_any() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-81dbab9d", "albatross"));
-    filters.push((r"-81dbab9d", ""));
+    filters.push((r"a-909975d8", "albatross"));
+    filters.push((r"-909975d8", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-81dbab9d")
+        .arg("a-909975d8")
         , @r###"
     success: true
     exit_code: 0
@@ -1274,7 +1275,7 @@ fn requires_package_prerelease_and_final_any() {
 
     // Since the user did not provide a prerelease specifier, the older stable version
     // should be selected.
-    assert_installed(&context.venv, "a_81dbab9d", "0.1.0", &context.temp_dir);
+    assert_installed(&context.venv, "a_909975d8", "0.1.0", &context.temp_dir);
 }
 
 /// package-prerelease-specified-only-final-available
@@ -1283,7 +1284,7 @@ fn requires_package_prerelease_and_final_any() {
 /// releases are available.
 ///
 /// ```text
-/// 2ee8f3f9
+/// 6f8bea9f
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1302,11 +1303,11 @@ fn package_prerelease_specified_only_final_available() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-2ee8f3f9", "albatross"));
-    filters.push((r"-2ee8f3f9", ""));
+    filters.push((r"a-6f8bea9f", "albatross"));
+    filters.push((r"-6f8bea9f", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-2ee8f3f9>=0.1.0a1")
+        .arg("a-6f8bea9f>=0.1.0a1")
         , @r###"
     success: true
     exit_code: 0
@@ -1320,7 +1321,7 @@ fn package_prerelease_specified_only_final_available() {
     "###);
 
     // The latest stable version should be selected.
-    assert_installed(&context.venv, "a_2ee8f3f9", "0.3.0", &context.temp_dir);
+    assert_installed(&context.venv, "a_6f8bea9f", "0.3.0", &context.temp_dir);
 }
 
 /// package-prerelease-specified-only-prerelease-available
@@ -1329,7 +1330,7 @@ fn package_prerelease_specified_only_final_available() {
 /// prerelease releases are available.
 ///
 /// ```text
-/// dd6b1e32
+/// 48d4bba0
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1348,11 +1349,11 @@ fn package_prerelease_specified_only_prerelease_available() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-dd6b1e32", "albatross"));
-    filters.push((r"-dd6b1e32", ""));
+    filters.push((r"a-48d4bba0", "albatross"));
+    filters.push((r"-48d4bba0", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-dd6b1e32>=0.1.0a1")
+        .arg("a-48d4bba0>=0.1.0a1")
         , @r###"
     success: true
     exit_code: 0
@@ -1366,7 +1367,7 @@ fn package_prerelease_specified_only_prerelease_available() {
     "###);
 
     // The latest prerelease version should be selected.
-    assert_installed(&context.venv, "a_dd6b1e32", "0.3.0a1", &context.temp_dir);
+    assert_installed(&context.venv, "a_48d4bba0", "0.3.0a1", &context.temp_dir);
 }
 
 /// package-prerelease-specified-mixed-available
@@ -1375,7 +1376,7 @@ fn package_prerelease_specified_only_prerelease_available() {
 /// prerelease and stable releases are available.
 ///
 /// ```text
-/// 794fce4d
+/// 2b1193a7
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1396,11 +1397,11 @@ fn package_prerelease_specified_mixed_available() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-794fce4d", "albatross"));
-    filters.push((r"-794fce4d", ""));
+    filters.push((r"a-2b1193a7", "albatross"));
+    filters.push((r"-2b1193a7", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-794fce4d>=0.1.0a1")
+        .arg("a-2b1193a7>=0.1.0a1")
         , @r###"
     success: true
     exit_code: 0
@@ -1415,7 +1416,7 @@ fn package_prerelease_specified_mixed_available() {
 
     // Since the user provided a prerelease specifier, the latest prerelease version
     // should be selected.
-    assert_installed(&context.venv, "a_794fce4d", "1.0.0a1", &context.temp_dir);
+    assert_installed(&context.venv, "a_2b1193a7", "1.0.0a1", &context.temp_dir);
 }
 
 /// package-multiple-prereleases-kinds
@@ -1424,7 +1425,7 @@ fn package_prerelease_specified_mixed_available() {
 /// labels.
 ///
 /// ```text
-/// 256d4e16
+/// 72919cf7
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1443,11 +1444,11 @@ fn package_multiple_prereleases_kinds() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-256d4e16", "albatross"));
-    filters.push((r"-256d4e16", ""));
+    filters.push((r"a-72919cf7", "albatross"));
+    filters.push((r"-72919cf7", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-256d4e16>=1.0.0a1")
+        .arg("a-72919cf7>=1.0.0a1")
         , @r###"
     success: true
     exit_code: 0
@@ -1461,7 +1462,7 @@ fn package_multiple_prereleases_kinds() {
     "###);
 
     // Release candidates should be the highest precedence prerelease kind.
-    assert_installed(&context.venv, "a_256d4e16", "1.0.0rc1", &context.temp_dir);
+    assert_installed(&context.venv, "a_72919cf7", "1.0.0rc1", &context.temp_dir);
 }
 
 /// package-multiple-prereleases-numbers
@@ -1469,7 +1470,7 @@ fn package_multiple_prereleases_kinds() {
 /// The user requires `a` which has multiple alphas available.
 ///
 /// ```text
-/// ac82d3fb
+/// cecdb92d
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1488,11 +1489,11 @@ fn package_multiple_prereleases_numbers() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-ac82d3fb", "albatross"));
-    filters.push((r"-ac82d3fb", ""));
+    filters.push((r"a-cecdb92d", "albatross"));
+    filters.push((r"-cecdb92d", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-ac82d3fb>=1.0.0a1")
+        .arg("a-cecdb92d>=1.0.0a1")
         , @r###"
     success: true
     exit_code: 0
@@ -1506,7 +1507,7 @@ fn package_multiple_prereleases_numbers() {
     "###);
 
     // The latest alpha version should be selected.
-    assert_installed(&context.venv, "a_ac82d3fb", "1.0.0a3", &context.temp_dir);
+    assert_installed(&context.venv, "a_cecdb92d", "1.0.0a3", &context.temp_dir);
 }
 
 /// transitive-package-only-prereleases
@@ -1515,7 +1516,7 @@ fn package_multiple_prereleases_numbers() {
 /// prerelease versions available.
 ///
 /// ```text
-/// 9da8532e
+/// e3c94488
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1534,12 +1535,12 @@ fn transitive_package_only_prereleases() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-9da8532e", "albatross"));
-    filters.push((r"b-9da8532e", "bluebird"));
-    filters.push((r"-9da8532e", ""));
+    filters.push((r"a-e3c94488", "albatross"));
+    filters.push((r"b-e3c94488", "bluebird"));
+    filters.push((r"-e3c94488", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-9da8532e")
+        .arg("a-e3c94488")
         , @r###"
     success: true
     exit_code: 0
@@ -1555,8 +1556,8 @@ fn transitive_package_only_prereleases() {
 
     // Since there are only prerelease versions of `b` available, it should be selected
     // even though the user did not opt-in to prereleases.
-    assert_installed(&context.venv, "a_9da8532e", "0.1.0", &context.temp_dir);
-    assert_installed(&context.venv, "b_9da8532e", "1.0.0a1", &context.temp_dir);
+    assert_installed(&context.venv, "a_e3c94488", "0.1.0", &context.temp_dir);
+    assert_installed(&context.venv, "b_e3c94488", "1.0.0a1", &context.temp_dir);
 }
 
 /// transitive-package-only-prereleases-in-range
@@ -1565,7 +1566,7 @@ fn transitive_package_only_prereleases() {
 /// matches prerelease versions but they did not include a prerelease specifier.
 ///
 /// ```text
-/// c41a54fc
+/// 20238f1b
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1585,12 +1586,12 @@ fn transitive_package_only_prereleases_in_range() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-c41a54fc", "albatross"));
-    filters.push((r"b-c41a54fc", "bluebird"));
-    filters.push((r"-c41a54fc", ""));
+    filters.push((r"a-20238f1b", "albatross"));
+    filters.push((r"b-20238f1b", "bluebird"));
+    filters.push((r"-20238f1b", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-c41a54fc")
+        .arg("a-20238f1b")
         , @r###"
     success: false
     exit_code: 1
@@ -1607,7 +1608,7 @@ fn transitive_package_only_prereleases_in_range() {
     // Since there are stable versions of `b` available, the prerelease version should
     // not be selected without explicit opt-in. The available version is excluded by
     // the range requested by the user.
-    assert_not_installed(&context.venv, "a_c41a54fc", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_20238f1b", &context.temp_dir);
 }
 
 /// transitive-package-only-prereleases-in-range-opt-in
@@ -1617,7 +1618,7 @@ fn transitive_package_only_prereleases_in_range() {
 /// explicitly.
 ///
 /// ```text
-/// 96f98f65
+/// d65d5fdf
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1639,13 +1640,13 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-96f98f65", "albatross"));
-    filters.push((r"b-96f98f65", "bluebird"));
-    filters.push((r"-96f98f65", ""));
+    filters.push((r"a-d65d5fdf", "albatross"));
+    filters.push((r"b-d65d5fdf", "bluebird"));
+    filters.push((r"-d65d5fdf", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-96f98f65")
-                .arg("b-96f98f65>0.0.0a1")
+        .arg("a-d65d5fdf")
+                .arg("b-d65d5fdf>0.0.0a1")
         , @r###"
     success: true
     exit_code: 0
@@ -1661,8 +1662,8 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
 
     // Since the user included a dependency on `b` with a prerelease specifier, a
     // prerelease version can be selected.
-    assert_installed(&context.venv, "a_96f98f65", "0.1.0", &context.temp_dir);
-    assert_installed(&context.venv, "b_96f98f65", "1.0.0a1", &context.temp_dir);
+    assert_installed(&context.venv, "a_d65d5fdf", "0.1.0", &context.temp_dir);
+    assert_installed(&context.venv, "b_d65d5fdf", "1.0.0a1", &context.temp_dir);
 }
 
 /// transitive-prerelease-and-stable-dependency
@@ -1671,7 +1672,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
 /// only be satisfied by a prerelease
 ///
 /// ```text
-/// 3d5eb91f
+/// d62255d0
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1697,14 +1698,14 @@ fn transitive_prerelease_and_stable_dependency() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-3d5eb91f", "albatross"));
-    filters.push((r"b-3d5eb91f", "bluebird"));
-    filters.push((r"c-3d5eb91f", "crow"));
-    filters.push((r"-3d5eb91f", ""));
+    filters.push((r"a-d62255d0", "albatross"));
+    filters.push((r"b-d62255d0", "bluebird"));
+    filters.push((r"c-d62255d0", "crow"));
+    filters.push((r"-d62255d0", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-3d5eb91f")
-                .arg("b-3d5eb91f")
+        .arg("a-d62255d0")
+                .arg("b-d62255d0")
         , @r###"
     success: false
     exit_code: 1
@@ -1719,8 +1720,8 @@ fn transitive_prerelease_and_stable_dependency() {
     "###);
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_not_installed(&context.venv, "a_3d5eb91f", &context.temp_dir);
-    assert_not_installed(&context.venv, "b_3d5eb91f", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_d62255d0", &context.temp_dir);
+    assert_not_installed(&context.venv, "b_d62255d0", &context.temp_dir);
 }
 
 /// transitive-prerelease-and-stable-dependency-opt-in
@@ -1730,7 +1731,7 @@ fn transitive_prerelease_and_stable_dependency() {
 /// the transitive dependency.
 ///
 /// ```text
-/// 6192ec57
+/// 0778b0eb
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1759,15 +1760,15 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-6192ec57", "albatross"));
-    filters.push((r"b-6192ec57", "bluebird"));
-    filters.push((r"c-6192ec57", "crow"));
-    filters.push((r"-6192ec57", ""));
+    filters.push((r"a-0778b0eb", "albatross"));
+    filters.push((r"b-0778b0eb", "bluebird"));
+    filters.push((r"c-0778b0eb", "crow"));
+    filters.push((r"-0778b0eb", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-6192ec57")
-                .arg("b-6192ec57")
-                .arg("c-6192ec57>=0.0.0a1")
+        .arg("a-0778b0eb")
+                .arg("b-0778b0eb")
+                .arg("c-0778b0eb>=0.0.0a1")
         , @r###"
     success: true
     exit_code: 0
@@ -1783,9 +1784,9 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
     "###);
 
     // Since the user explicitly opted-in to a prerelease for `c`, it can be installed.
-    assert_installed(&context.venv, "a_6192ec57", "1.0.0", &context.temp_dir);
-    assert_installed(&context.venv, "b_6192ec57", "1.0.0", &context.temp_dir);
-    assert_installed(&context.venv, "c_6192ec57", "2.0.0b1", &context.temp_dir);
+    assert_installed(&context.venv, "a_0778b0eb", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "b_0778b0eb", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "c_0778b0eb", "2.0.0b1", &context.temp_dir);
 }
 
 /// transitive-prerelease-and-stable-dependency-many-versions
@@ -1794,7 +1795,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
 /// only be satisfied by a prerelease. There are many prerelease versions.
 ///
 /// ```text
-/// bcd0f988
+/// cc6a6eac
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1845,14 +1846,14 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-bcd0f988", "albatross"));
-    filters.push((r"b-bcd0f988", "bluebird"));
-    filters.push((r"c-bcd0f988", "crow"));
-    filters.push((r"-bcd0f988", ""));
+    filters.push((r"a-cc6a6eac", "albatross"));
+    filters.push((r"b-cc6a6eac", "bluebird"));
+    filters.push((r"c-cc6a6eac", "crow"));
+    filters.push((r"-cc6a6eac", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-bcd0f988")
-                .arg("b-bcd0f988")
+        .arg("a-cc6a6eac")
+                .arg("b-cc6a6eac")
         , @r###"
     success: false
     exit_code: 1
@@ -1869,8 +1870,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
     "###);
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_not_installed(&context.venv, "a_bcd0f988", &context.temp_dir);
-    assert_not_installed(&context.venv, "b_bcd0f988", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_cc6a6eac", &context.temp_dir);
+    assert_not_installed(&context.venv, "b_cc6a6eac", &context.temp_dir);
 }
 
 /// transitive-prerelease-and-stable-dependency-many-versions-holes
@@ -1880,7 +1881,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
 /// are excluded.
 ///
 /// ```text
-/// 5cee052e
+/// 041e36bc
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1923,14 +1924,14 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-5cee052e", "albatross"));
-    filters.push((r"b-5cee052e", "bluebird"));
-    filters.push((r"c-5cee052e", "crow"));
-    filters.push((r"-5cee052e", ""));
+    filters.push((r"a-041e36bc", "albatross"));
+    filters.push((r"b-041e36bc", "bluebird"));
+    filters.push((r"c-041e36bc", "crow"));
+    filters.push((r"-041e36bc", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-5cee052e")
-                .arg("b-5cee052e")
+        .arg("a-041e36bc")
+                .arg("b-041e36bc")
         , @r###"
     success: false
     exit_code: 1
@@ -1958,8 +1959,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     "###);
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_not_installed(&context.venv, "a_5cee052e", &context.temp_dir);
-    assert_not_installed(&context.venv, "b_5cee052e", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_041e36bc", &context.temp_dir);
+    assert_not_installed(&context.venv, "b_041e36bc", &context.temp_dir);
 }
 
 /// requires-python-version-does-not-exist
@@ -1967,7 +1968,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
 /// The user requires a package which requires a Python version that does not exist
 ///
 /// ```text
-/// d004e577
+/// 4486c0e5
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1983,11 +1984,11 @@ fn requires_python_version_does_not_exist() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-d004e577", "albatross"));
-    filters.push((r"-d004e577", ""));
+    filters.push((r"a-4486c0e5", "albatross"));
+    filters.push((r"-4486c0e5", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-d004e577==1.0.0")
+        .arg("a-4486c0e5==1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -1999,7 +2000,7 @@ fn requires_python_version_does_not_exist() {
           And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_d004e577", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_4486c0e5", &context.temp_dir);
 }
 
 /// requires-python-version-less-than-current
@@ -2008,7 +2009,7 @@ fn requires_python_version_does_not_exist() {
 /// current version
 ///
 /// ```text
-/// 5e520203
+/// d4ea58de
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2024,11 +2025,11 @@ fn requires_python_version_less_than_current() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-5e520203", "albatross"));
-    filters.push((r"-5e520203", ""));
+    filters.push((r"a-d4ea58de", "albatross"));
+    filters.push((r"-d4ea58de", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-5e520203==1.0.0")
+        .arg("a-d4ea58de==1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -2040,7 +2041,7 @@ fn requires_python_version_less_than_current() {
           And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_5e520203", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_d4ea58de", &context.temp_dir);
 }
 
 /// requires-python-version-greater-than-current
@@ -2049,7 +2050,7 @@ fn requires_python_version_less_than_current() {
 /// current version
 ///
 /// ```text
-/// 62394505
+/// 741c8854
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2065,11 +2066,11 @@ fn requires_python_version_greater_than_current() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-62394505", "albatross"));
-    filters.push((r"-62394505", ""));
+    filters.push((r"a-741c8854", "albatross"));
+    filters.push((r"-741c8854", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-62394505==1.0.0")
+        .arg("a-741c8854==1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -2081,7 +2082,7 @@ fn requires_python_version_greater_than_current() {
           And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_62394505", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_741c8854", &context.temp_dir);
 }
 
 /// requires-python-version-greater-than-current-patch
@@ -2090,7 +2091,7 @@ fn requires_python_version_greater_than_current() {
 /// greater than the current patch version
 ///
 /// ```text
-/// 7b98f5af
+/// 0044ac94
 /// ├── environment
 /// │   └── python3.8.12
 /// ├── root
@@ -2106,11 +2107,11 @@ fn requires_python_version_greater_than_current_patch() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-7b98f5af", "albatross"));
-    filters.push((r"-7b98f5af", ""));
+    filters.push((r"a-0044ac94", "albatross"));
+    filters.push((r"-0044ac94", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-7b98f5af==1.0.0")
+        .arg("a-0044ac94==1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -2122,7 +2123,7 @@ fn requires_python_version_greater_than_current_patch() {
           And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_7b98f5af", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_0044ac94", &context.temp_dir);
 }
 
 /// requires-python-version-greater-than-current-many
@@ -2131,7 +2132,7 @@ fn requires_python_version_greater_than_current_patch() {
 /// version greater than the current version
 ///
 /// ```text
-/// fd1f719c
+/// da5bd150
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2169,11 +2170,11 @@ fn requires_python_version_greater_than_current_many() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-fd1f719c", "albatross"));
-    filters.push((r"-fd1f719c", ""));
+    filters.push((r"a-da5bd150", "albatross"));
+    filters.push((r"-da5bd150", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-fd1f719c==1.0.0")
+        .arg("a-da5bd150==1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -2184,7 +2185,7 @@ fn requires_python_version_greater_than_current_many() {
       ╰─▶ Because there is no version of albatross==1.0.0 and you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_fd1f719c", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_da5bd150", &context.temp_dir);
 }
 
 /// requires-python-version-greater-than-current-backtrack
@@ -2193,7 +2194,7 @@ fn requires_python_version_greater_than_current_many() {
 /// greater than the current version, but an older version is compatible.
 ///
 /// ```text
-/// b2677f9a
+/// 3204bc0a
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2217,11 +2218,11 @@ fn requires_python_version_greater_than_current_backtrack() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-b2677f9a", "albatross"));
-    filters.push((r"-b2677f9a", ""));
+    filters.push((r"a-3204bc0a", "albatross"));
+    filters.push((r"-3204bc0a", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-b2677f9a")
+        .arg("a-3204bc0a")
         , @r###"
     success: true
     exit_code: 0
@@ -2234,7 +2235,7 @@ fn requires_python_version_greater_than_current_backtrack() {
      + albatross==1.0.0
     "###);
 
-    assert_installed(&context.venv, "a_b2677f9a", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "a_3204bc0a", "1.0.0", &context.temp_dir);
 }
 
 /// requires-python-version-greater-than-current-excluded
@@ -2243,7 +2244,7 @@ fn requires_python_version_greater_than_current_backtrack() {
 /// greater than the current version, but an excluded older version is compatible.
 ///
 /// ```text
-/// 34ee1c3e
+/// 874cae6d
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2266,11 +2267,11 @@ fn requires_python_version_greater_than_current_excluded() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-34ee1c3e", "albatross"));
-    filters.push((r"-34ee1c3e", ""));
+    filters.push((r"a-874cae6d", "albatross"));
+    filters.push((r"-874cae6d", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-34ee1c3e>=2.0.0")
+        .arg("a-874cae6d>=2.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -2298,7 +2299,7 @@ fn requires_python_version_greater_than_current_excluded() {
           And because you require albatross>=2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_34ee1c3e", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_874cae6d", &context.temp_dir);
 }
 
 /// specific-tag-and-default
@@ -2306,7 +2307,7 @@ fn requires_python_version_greater_than_current_excluded() {
 /// A wheel for a specific platform is available alongside the default.
 ///
 /// ```text
-/// ce63fb65
+/// 8f7a81f1
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2321,11 +2322,11 @@ fn specific_tag_and_default() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-ce63fb65", "albatross"));
-    filters.push((r"-ce63fb65", ""));
+    filters.push((r"a-8f7a81f1", "albatross"));
+    filters.push((r"-8f7a81f1", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-ce63fb65")
+        .arg("a-8f7a81f1")
         , @r###"
     success: true
     exit_code: 0
@@ -2344,7 +2345,7 @@ fn specific_tag_and_default() {
 /// No source distributions are available, only wheels.
 ///
 /// ```text
-/// 08df4319
+/// a874f41e
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2359,11 +2360,11 @@ fn only_wheels() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-08df4319", "albatross"));
-    filters.push((r"-08df4319", ""));
+    filters.push((r"a-a874f41e", "albatross"));
+    filters.push((r"-a874f41e", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-08df4319")
+        .arg("a-a874f41e")
         , @r###"
     success: true
     exit_code: 0
@@ -2382,7 +2383,7 @@ fn only_wheels() {
 /// No wheels are available, only source distributions.
 ///
 /// ```text
-/// 0a9090ba
+/// 0278f343
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2397,11 +2398,11 @@ fn no_wheels() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-0a9090ba", "albatross"));
-    filters.push((r"-0a9090ba", ""));
+    filters.push((r"a-0278f343", "albatross"));
+    filters.push((r"-0278f343", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-0a9090ba")
+        .arg("a-0278f343")
         , @r###"
     success: true
     exit_code: 0
@@ -2420,7 +2421,7 @@ fn no_wheels() {
 /// No wheels with valid tags are available, just source distributions.
 ///
 /// ```text
-/// b595b358
+/// 0c9f8397
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2435,11 +2436,11 @@ fn no_wheels_with_matching_platform() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-b595b358", "albatross"));
-    filters.push((r"-b595b358", ""));
+    filters.push((r"a-0c9f8397", "albatross"));
+    filters.push((r"-0c9f8397", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-b595b358")
+        .arg("a-0c9f8397")
         , @r###"
     success: true
     exit_code: 0
@@ -2459,7 +2460,7 @@ fn no_wheels_with_matching_platform() {
 /// builds.
 ///
 /// ```text
-/// d5567080
+/// 662cbd94
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2474,13 +2475,13 @@ fn no_wheels_no_build() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-d5567080", "albatross"));
-    filters.push((r"-d5567080", ""));
+    filters.push((r"a-662cbd94", "albatross"));
+    filters.push((r"-662cbd94", ""));
 
     puffin_snapshot!(filters, command(&context)
         .arg("--only-binary")
-        .arg("a-d5567080")
-        .arg("a-d5567080")
+        .arg("a-662cbd94")
+        .arg("a-662cbd94")
         , @r###"
     success: false
     exit_code: 2
@@ -2491,7 +2492,7 @@ fn no_wheels_no_build() {
       Caused by: Building source distributions is disabled
     "###);
 
-    assert_not_installed(&context.venv, "a_d5567080", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_662cbd94", &context.temp_dir);
 }
 
 /// only-wheels-no-binary
@@ -2500,7 +2501,7 @@ fn no_wheels_no_build() {
 /// using pre-built binaries.
 ///
 /// ```text
-/// 3850ba71
+/// dd137625
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2515,13 +2516,13 @@ fn only_wheels_no_binary() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-3850ba71", "albatross"));
-    filters.push((r"-3850ba71", ""));
+    filters.push((r"a-dd137625", "albatross"));
+    filters.push((r"-dd137625", ""));
 
     puffin_snapshot!(filters, command(&context)
         .arg("--no-binary")
-        .arg("a-3850ba71")
-        .arg("a-3850ba71")
+        .arg("a-dd137625")
+        .arg("a-dd137625")
         , @r###"
     success: false
     exit_code: 1
@@ -2532,7 +2533,7 @@ fn only_wheels_no_binary() {
       ╰─▶ Because there are no versions of albatross and you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_3850ba71", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_dd137625", &context.temp_dir);
 }
 
 /// no-build
@@ -2541,7 +2542,7 @@ fn only_wheels_no_binary() {
 /// builds.
 ///
 /// ```text
-/// e0451b4c
+/// 9ff1e173
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2556,13 +2557,13 @@ fn no_build() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-e0451b4c", "albatross"));
-    filters.push((r"-e0451b4c", ""));
+    filters.push((r"a-9ff1e173", "albatross"));
+    filters.push((r"-9ff1e173", ""));
 
     puffin_snapshot!(filters, command(&context)
         .arg("--only-binary")
-        .arg("a-e0451b4c")
-        .arg("a-e0451b4c")
+        .arg("a-9ff1e173")
+        .arg("a-9ff1e173")
         , @r###"
     success: true
     exit_code: 0
@@ -2584,7 +2585,7 @@ fn no_build() {
 /// binaries.
 ///
 /// ```text
-/// 5036ee47
+/// 10e961b8
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2599,13 +2600,13 @@ fn no_binary() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-5036ee47", "albatross"));
-    filters.push((r"-5036ee47", ""));
+    filters.push((r"a-10e961b8", "albatross"));
+    filters.push((r"-10e961b8", ""));
 
     puffin_snapshot!(filters, command(&context)
         .arg("--no-binary")
-        .arg("a-5036ee47")
-        .arg("a-5036ee47")
+        .arg("a-10e961b8")
+        .arg("a-10e961b8")
         , @r###"
     success: true
     exit_code: 0
@@ -2619,4 +2620,448 @@ fn no_binary() {
     "###);
 
     // The source distribution should be used for install
+}
+
+/// package-only-yanked
+///
+/// The user requires any version of package `a` which only has yanked versions
+/// available.
+///
+/// ```text
+/// e3de7eb4
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.0.0 (yanked)
+/// ```
+#[test]
+fn package_only_yanked() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-e3de7eb4", "albatross"));
+    filters.push((r"-e3de7eb4", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("a-e3de7eb4")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of albatross and you require albatross, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    // Yanked versions should not be installed, even if they are the only one
+    // available.
+    assert_not_installed(&context.venv, "a_e3de7eb4", &context.temp_dir);
+}
+
+/// package-only-yanked-in-range
+///
+/// The user requires a version of package `a` which only matches yanked versions.
+///
+/// ```text
+/// 84b3720e
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>0.1.0
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     ├── a-0.1.0
+///     └── a-1.0.0 (yanked)
+/// ```
+#[test]
+fn package_only_yanked_in_range() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-84b3720e", "albatross"));
+    filters.push((r"-84b3720e", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("a-84b3720e>0.1.0")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only albatross<=0.1.0 is available and you require albatross>0.1.0, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    // Since there are other versions of `a` available, yanked versions should not be
+    // selected without explicit opt-in.
+    assert_not_installed(&context.venv, "a_84b3720e", &context.temp_dir);
+}
+
+/// requires-package-yanked-and-unyanked-any
+///
+/// The user requires any version of package `a` has a yanked version available and
+/// an older unyanked version.
+///
+/// ```text
+/// 93eac6d7
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-0.1.0
+/// └── a
+///     ├── a-0.1.0
+///     └── a-1.0.0 (yanked)
+/// ```
+#[test]
+fn requires_package_yanked_and_unyanked_any() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-93eac6d7", "albatross"));
+    filters.push((r"-93eac6d7", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("a-93eac6d7")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + albatross==0.1.0
+    "###);
+
+    // The unyanked version should be selected.
+    assert_installed(&context.venv, "a_93eac6d7", "0.1.0", &context.temp_dir);
+}
+
+/// package-yanked-specified-mixed-available
+///
+/// The user requires any version of `a` and both yanked and unyanked releases are
+/// available.
+///
+/// ```text
+/// 3325916e
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>=0.1.0
+/// │       ├── satisfied by a-0.1.0
+/// │       └── satisfied by a-0.3.0
+/// └── a
+///     ├── a-0.1.0
+///     ├── a-0.2.0 (yanked)
+///     ├── a-0.3.0
+///     └── a-1.0.0 (yanked)
+/// ```
+#[test]
+fn package_yanked_specified_mixed_available() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-3325916e", "albatross"));
+    filters.push((r"-3325916e", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("a-3325916e>=0.1.0")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + albatross==0.3.0
+    "###);
+
+    // The latest unyanked version should be selected.
+    assert_installed(&context.venv, "a_3325916e", "0.3.0", &context.temp_dir);
+}
+
+/// transitive-package-only-yanked
+///
+/// The user requires any version of package `a` which requires `b` which only has
+/// yanked versions available.
+///
+/// ```text
+/// 9ec30fe2
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-0.1.0
+/// ├── a
+/// │   └── a-0.1.0
+/// │       └── requires b
+/// │           └── unsatisfied: no matching version
+/// └── b
+///     └── b-1.0.0 (yanked)
+/// ```
+#[test]
+fn transitive_package_only_yanked() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-9ec30fe2", "albatross"));
+    filters.push((r"b-9ec30fe2", "bluebird"));
+    filters.push((r"-9ec30fe2", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("a-9ec30fe2")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of bluebird and albatross==0.1.0 depends on bluebird, we can conclude that albatross==0.1.0 cannot be used.
+          And because only albatross==0.1.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    // Yanked versions should not be installed, even if they are the only one
+    // available.
+    assert_not_installed(&context.venv, "a_9ec30fe2", &context.temp_dir);
+}
+
+/// transitive-package-only-yanked-in-range
+///
+/// The user requires package `a` which has a dependency on a package which only
+/// matches yanked versions.
+///
+/// ```text
+/// 872d714e
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-0.1.0
+/// ├── a
+/// │   └── a-0.1.0
+/// │       └── requires b>0.1
+/// │           └── unsatisfied: no matching version
+/// └── b
+///     ├── b-0.1.0
+///     └── b-1.0.0 (yanked)
+/// ```
+#[test]
+fn transitive_package_only_yanked_in_range() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-872d714e", "albatross"));
+    filters.push((r"b-872d714e", "bluebird"));
+    filters.push((r"-872d714e", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("a-872d714e")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only bluebird<=0.1 is available and albatross==0.1.0 depends on bluebird>0.1, we can conclude that albatross==0.1.0 cannot be used.
+          And because only albatross==0.1.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    // Yanked versions should not be installed, even if they are the only valid version
+    // in a range.
+    assert_not_installed(&context.venv, "a_872d714e", &context.temp_dir);
+}
+
+/// transitive-package-only-yanked-in-range-opt-in
+///
+/// The user requires package `a` which has a dependency on a package which only
+/// matches yanked versions; the user has opted into allowing the yanked version of
+/// `b` explicitly.
+///
+/// ```text
+/// 1bbd5d1b
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-0.1.0
+/// │   └── requires b==1.0.0
+/// │       └── unsatisfied: no matching version
+/// ├── a
+/// │   └── a-0.1.0
+/// │       └── requires b>0.1
+/// │           └── unsatisfied: no matching version
+/// └── b
+///     ├── b-0.1.0
+///     └── b-1.0.0 (yanked)
+/// ```
+#[test]
+fn transitive_package_only_yanked_in_range_opt_in() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-1bbd5d1b", "albatross"));
+    filters.push((r"b-1bbd5d1b", "bluebird"));
+    filters.push((r"-1bbd5d1b", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("a-1bbd5d1b")
+                .arg("b-1bbd5d1b==1.0.0")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: bluebird==1.0.0 is yanked.
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + albatross==0.1.0
+     + bluebird==1.0.0
+    "###);
+
+    // Since the user included a dependency on `b` with an exact specifier, the yanked
+    // version can be selected.
+    assert_installed(&context.venv, "a_1bbd5d1b", "0.1.0", &context.temp_dir);
+    assert_installed(&context.venv, "b_1bbd5d1b", "1.0.0", &context.temp_dir);
+}
+
+/// transitive-yanked-and-unyanked-dependency
+///
+/// A transitive dependency has both a yanked and an unyanked version, but can only
+/// be satisfied by a yanked version
+///
+/// ```text
+/// eb1ba5f5
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b
+/// │       └── satisfied by b-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires c==2.0.0
+/// │           └── unsatisfied: no matching version
+/// ├── b
+/// │   └── b-1.0.0
+/// │       └── requires c<=3.0.0,>=1.0.0
+/// │           └── satisfied by c-1.0.0
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0 (yanked)
+/// ```
+#[test]
+fn transitive_yanked_and_unyanked_dependency() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-eb1ba5f5", "albatross"));
+    filters.push((r"b-eb1ba5f5", "bluebird"));
+    filters.push((r"c-eb1ba5f5", "crow"));
+    filters.push((r"-eb1ba5f5", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("a-eb1ba5f5")
+                .arg("b-eb1ba5f5")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of crow==2.0.0 and albatross==1.0.0 depends on crow==2.0.0, we can conclude that albatross==1.0.0 cannot be used.
+          And because only albatross==1.0.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    // Since the user did not explicitly select the yanked version, it cannot be used.
+    assert_not_installed(&context.venv, "a_eb1ba5f5", &context.temp_dir);
+    assert_not_installed(&context.venv, "b_eb1ba5f5", &context.temp_dir);
+}
+
+/// transitive-yanked-and-unyanked-dependency-opt-in
+///
+/// A transitive dependency has both a yanked and an unyanked version, but can only
+/// be satisfied by a yanked. The user includes an opt-in to the yanked version of
+/// the transitive dependency.
+///
+/// ```text
+/// f0760ee9
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   ├── requires b
+/// │   │   └── satisfied by b-1.0.0
+/// │   └── requires c==2.0.0
+/// │       └── unsatisfied: no matching version
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires c==2.0.0
+/// │           └── unsatisfied: no matching version
+/// ├── b
+/// │   └── b-1.0.0
+/// │       └── requires c<=3.0.0,>=1.0.0
+/// │           └── satisfied by c-1.0.0
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0 (yanked)
+/// ```
+#[test]
+fn transitive_yanked_and_unyanked_dependency_opt_in() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-f0760ee9", "albatross"));
+    filters.push((r"b-f0760ee9", "bluebird"));
+    filters.push((r"c-f0760ee9", "crow"));
+    filters.push((r"-f0760ee9", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("a-f0760ee9")
+                .arg("b-f0760ee9")
+                .arg("c-f0760ee9==2.0.0")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    warning: crow==2.0.0 is yanked.
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + albatross==1.0.0
+     + bluebird==1.0.0
+     + crow==2.0.0
+    "###);
+
+    // Since the user explicitly selected the yanked version of `c`, it can be
+    // installed.
+    assert_installed(&context.venv, "a_f0760ee9", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "b_f0760ee9", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "c_f0760ee9", "2.0.0", &context.temp_dir);
 }
