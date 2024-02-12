@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/c2ddf2466db9bfdcb72de3ec04b393667f2bfe28/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/a2c483f055f5cb01fbbbcf9189c238ee487a7a8e/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -2418,10 +2418,10 @@ fn no_wheels() {
 
 /// no-wheels-with-matching-platform
 ///
-/// No wheels with valid tags are available, just source distributions.
+/// No wheels with matching platform tags are available, just source distributions.
 ///
 /// ```text
-/// 0c9f8397
+/// f1a1f15c
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2436,11 +2436,11 @@ fn no_wheels_with_matching_platform() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-0c9f8397", "albatross"));
-    filters.push((r"-0c9f8397", ""));
+    filters.push((r"a-f1a1f15c", "albatross"));
+    filters.push((r"-f1a1f15c", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-0c9f8397")
+        .arg("a-f1a1f15c")
         , @r###"
     success: true
     exit_code: 0
@@ -2452,6 +2452,45 @@ fn no_wheels_with_matching_platform() {
     Installed 1 package in [TIME]
      + albatross==1.0.0
     "###);
+}
+
+/// no-sdist-no-wheels-with-matching-platform
+///
+/// No wheels with matching platform tags are available, nor are any source
+/// distributions available
+///
+/// ```text
+/// af6bcec1
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+/// ```
+#[test]
+fn no_sdist_no_wheels_with_matching_platform() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-af6bcec1", "albatross"));
+    filters.push((r"-af6bcec1", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("a-af6bcec1")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of albatross and you require albatross, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(&context.venv, "a_af6bcec1", &context.temp_dir);
 }
 
 /// no-wheels-no-build
