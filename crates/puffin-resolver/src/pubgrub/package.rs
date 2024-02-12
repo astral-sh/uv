@@ -1,5 +1,7 @@
 use derivative::Derivative;
 
+use distribution_types::PackageId;
+use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use puffin_normalize::{ExtraName, PackageName};
 
@@ -98,5 +100,11 @@ impl std::fmt::Display for PubGrubPackage {
                 write!(f, "{name}[{extra}]")
             }
         }
+    }
+}
+
+impl PubGrubPackage {
+    pub fn package_id(&self, version: &Version) -> PackageId {
+        PackageId::new(format!("{}=={}", self, version))
     }
 }

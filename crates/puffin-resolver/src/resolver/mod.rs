@@ -383,9 +383,44 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             let version = match version {
                 ResolverVersion::Available(version) => version,
                 ResolverVersion::Unavailable(version, unavailable) => {
+                    // Track the unavailability
+                    self.unavailable_versions
+                        .insert(next.package_id(&version), unavailable.clone());
+
                     let reason = match unavailable {
-                        // TODO(zanieb)
-                        UnavailableVersion::RequiresPython(_) => panic!("don't do this"),
+                        UnavailableVersion::RequiresPython(requires_python) => {
+                            // Incompatible requires-python versions are special in that we track
+                            // them as fake dependencies and report the incompatibility there instead
+                            // of marking the package version as incompatible directly
+                            let python_version = requires_python
+                                .iter()
+                                .map(PubGrubSpecifier::try_from)
+                                .fold_ok(Range::full(), |range, specifier| {
+                                    range.intersection(&specifier.into())
+                                })?;
+                            let mut dependencies = DependencyConstraints::default();
+                            dependencies.insert(
+                                PubGrubPackage::Python(PubGrubPython::Installed),
+                                python_version.clone(),
+                            );
+                            dependencies.insert(
+                                PubGrubPackage::Python(PubGrubPython::Target),
+                                python_version,
+                            );
+                            let package = &next;
+                            let dep_incompats = state.add_incompatibility_from_dependencies(
+                                package.clone(),
+                                version.clone(),
+                                &dependencies,
+                            );
+                            state.partial_solution.add_version(
+                                package.clone(),
+                                version,
+                                dep_incompats,
+                                &state.incompatibility_store,
+                            );
+                            continue;
+                        }
                         UnavailableVersion::Yanked(yanked) => match yanked {
                             Yanked::Bool(_) => "it was yanked".to_string(),
                             Yanked::Reason(reason) => format!(
@@ -632,7 +667,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(None);
                 };
 
-                // If the version is incompatible because it's yanked..
+                // If the version is incompatible because it was yanked
                 if candidate.yanked().is_yanked() {
                     if self
                         .allowed_yanks
@@ -647,15 +682,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     }
                 }
 
-                // If the version is incompatible because of it's Python requirement
+                // If the version is incompatible because of its Python requirement
                 if let Some(requires_python) = candidate.validate_python(&self.python_requirement) {
-                    self.unavailable_versions.insert(
-                        candidate.package_id(),
-                        UnavailableVersion::RequiresPython(requires_python.clone()),
-                    );
-                    // TODO(zanieb): We should probably use unavailable here?
-                    return Ok(Some(ResolverVersion::Available(
+                    return Ok(Some(ResolverVersion::Unavailable(
                         candidate.version().clone(),
+                        UnavailableVersion::RequiresPython(requires_python.clone()),
                     )));
                 }
 
@@ -791,33 +822,19 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     ));
                 }
 
-                // If the package is known to be incompatible, return the Python version as an
-                // incompatibility, and skip fetching the metadata.
-                if let Some(entry) = self.unavailable_versions.get(&package_id) {
+                // Check if the package is known to be incompatible
+                let id = package.package_id(version);
+                if let Some(entry) = self.unavailable_versions.get(&id) {
                     match entry.value() {
-                        UnavailableVersion::RequiresPython(requires_python) => {
-                            let version = requires_python
-                                .iter()
-                                .map(PubGrubSpecifier::try_from)
-                                .fold_ok(Range::full(), |range, specifier| {
-                                    range.intersection(&specifier.into())
-                                })?;
-
-                            let mut constraints = DependencyConstraints::default();
-                            constraints.insert(
-                                PubGrubPackage::Python(PubGrubPython::Installed),
-                                version.clone(),
-                            );
-                            constraints
-                                .insert(PubGrubPackage::Python(PubGrubPython::Target), version);
-                            return Ok(Dependencies::Available(constraints));
+                        UnavailableVersion::RequiresPython(_) => {
+                            unreachable!("Dependencies should not be retrieved for package versions with incompatible `requires-python`: {id}");
                         }
                         UnavailableVersion::Yanked(_) => {
                             // It's okay to retrieve dependencies from yanked packages,
                             // but we should only do so for "allowed" yanks
                             debug_assert!(
                                 self.allowed_yanks.allowed(package_name, version),
-                                "Dependencies should not need to be retrieved for disallowed yanked versions"
+                                "Dependencies should not need to be retrieved for disallowed yanked version: {id}"
                             );
                         }
                     }
@@ -992,11 +1009,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 };
 
                 // If the version is incompatible, short-circuit.
-                if let Some(requires_python) = candidate.validate_python(&self.python_requirement) {
-                    self.unavailable_versions.insert(
-                        candidate.package_id(),
-                        UnavailableVersion::RequiresPython(requires_python.clone()),
-                    );
+                if let Some(_) = candidate.validate_python(&self.python_requirement) {
                     return Ok(None);
                 }
 
