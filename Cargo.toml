@@ -56,8 +56,7 @@ indoc = { version = "2.0.4" }
 itertools = { version = "0.12.0" }
 junction = { version = "1.0.0" }
 mailparse = { version = "0.14.0" }
-# For additional textwrap options: https://github.com/zkat/miette/pull/321, https://github.com/zkat/miette/pull/328
-miette =  { git = "https://github.com/zkat/miette.git", rev = "b0744462adbbfbb6d845f382db36be883c7f3c45" }
+miette =  { version = "6.0.0" }
 nanoid = { version = "0.4.0" }
 once_cell = { version = "1.19.0" }
 owo-colors = { version = "4.0.0" }
@@ -87,7 +86,7 @@ sha2 = { version = "0.10.8" }
 tar = { version = "0.4.40" }
 target-lexicon = { version = "0.12.13" }
 tempfile = { version = "3.9.0" }
-textwrap = { version = "0.15.2" }
+textwrap = { version = "0.16.0" }
 thiserror = { version = "1.0.56" }
 tokio-stream = { version = "0.1.14" }
 tl = { version = "0.7.7" }
