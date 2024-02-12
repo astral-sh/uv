@@ -283,16 +283,11 @@ struct PipCompileArgs {
     #[arg(long, short)]
     python_version: Option<PythonVersion>,
 
-    /// Try to resolve at a past time.
+    /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// This works by filtering out files with a more recent upload time, so if the index you use
-    /// does not provide upload times, the results might be inaccurate. pypi provides upload times
-    /// for all files.
-    ///
-    /// Timestamps are given either as RFC 3339 timestamps such as `2006-12-02T02:07:43Z` or as
-    /// UTC dates in the same format such as `2006-12-02`. Dates are interpreted as including this
-    /// day, i.e. until midnight UTC that day.
-    #[arg(long, value_parser = date_or_datetime)]
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// format (e.g., `2006-12-02`).
+    #[arg(long, value_parser = date_or_datetime, hide = true)]
     exclude_newer: Option<DateTime<Utc>>,
 
     /// Include `--index-url` and `--extra-index-url` entries in the generated output file.
@@ -545,15 +540,10 @@ struct PipInstallArgs {
     #[clap(long)]
     strict: bool,
 
-    /// Try to resolve at a past time.
+    /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// This works by filtering out files with a more recent upload time, so if the index you use
-    /// does not provide upload times, the results might be inaccurate. pypi provides upload times
-    /// for all files.
-    ///
-    /// Timestamps are given either as RFC 3339 timestamps such as `2006-12-02T02:07:43Z` or as
-    /// UTC dates in the same format such as `2006-12-02`. Dates are interpreted as including this
-    /// day, i.e. until midnight UTC that day.
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// format (e.g., `2006-12-02`).
     #[arg(long, value_parser = date_or_datetime, hide = true)]
     exclude_newer: Option<DateTime<Utc>>,
 }
@@ -628,6 +618,13 @@ struct VenvArgs {
     /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
+    /// format (e.g., `2006-12-02`).
+    #[arg(long, value_parser = date_or_datetime, hide = true)]
+    exclude_newer: Option<DateTime<Utc>>,
 }
 
 #[derive(Args)]
@@ -943,6 +940,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python.as_deref(),
                 &index_locations,
                 args.seed,
+                args.exclude_newer,
                 &cache,
                 printer,
             )
