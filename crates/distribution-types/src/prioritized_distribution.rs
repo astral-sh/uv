@@ -12,12 +12,6 @@ pub struct DistRequiresPython {
     pub requires_python: Option<VersionSpecifiers>,
 }
 
-/// TODO(zanieb)
-#[derive(Debug, Clone)]
-pub struct DistCompatibilities {
-    pub yanked: Yanked,
-}
-
 // Boxed because `Dist` is large.
 #[derive(Debug, Default, Clone)]
 pub struct PrioritizedDistribution(Box<PrioritizedDistributionInner>);
