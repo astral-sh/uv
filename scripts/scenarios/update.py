@@ -45,7 +45,7 @@ import textwrap
 from pathlib import Path
 
 
-PACKSE_COMMIT = "c2ddf2466db9bfdcb72de3ec04b393667f2bfe28"
+PACKSE_COMMIT = "a2c483f055f5cb01fbbbcf9189c238ee487a7a8e"
 TOOL_ROOT = Path(__file__).parent
 TEMPLATES = TOOL_ROOT / "templates"
 INSTALL_TEMPLATE = TEMPLATES / "install.mustache"
@@ -164,8 +164,6 @@ data["scenarios"] = [
     for scenario in data["scenarios"]
     # Drop the example scenario
     if scenario["name"] != "example"
-    # TODO(zanieb): Restore this scenario
-    and scenario["name"] != "no-sdist-no-wheels-with-matching-platform"
 ]
 
 # Wrap the description onto multiple lines
