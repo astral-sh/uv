@@ -82,9 +82,17 @@ fn {{module_name}}() {
     filters.push((r"-{{version}}", ""));
 
     puffin_snapshot!(filters, command(&context)
-        {{#environment.prereleases}}
+        {{#resolver_options.prereleases}}
         .arg("--prerelease=allow")
-        {{/environment.prereleases}}
+        {{/resolver_options.prereleases}}
+        {{#resolver_options.no_build}}
+        .arg("--only-binary")
+        .arg("{{.}}-{{version}}")
+        {{/resolver_options.no_build}}
+        {{#resolver_options.no_binary}}
+        .arg("--no-binary")
+        .arg("{{.}}-{{version}}")
+        {{/resolver_options.no_binary}}
         {{#root.requires}}
         .arg("{{requirement}}")
         {{/root.requires}}, @r###"<snapshot>

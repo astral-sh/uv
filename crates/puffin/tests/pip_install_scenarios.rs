@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/0563417be973397d05b45cd2c5b415d7215161e3/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/a5ce3f9dc5ce0db2b6e99bdfbd25b9d163953121/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -1196,7 +1196,7 @@ fn package_only_prereleases_in_range() {
 /// opted into prereleases globally.
 ///
 /// ```text
-/// af391f9c
+/// ebc4dbde
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1212,12 +1212,12 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-af391f9c", "albatross"));
-    filters.push((r"-af391f9c", ""));
+    filters.push((r"a-ebc4dbde", "albatross"));
+    filters.push((r"-ebc4dbde", ""));
 
     puffin_snapshot!(filters, command(&context)
         .arg("--prerelease=allow")
-        .arg("a-af391f9c>0.1.0")
+        .arg("a-ebc4dbde>0.1.0")
         , @r###"
     success: true
     exit_code: 0
@@ -1230,7 +1230,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
      + albatross==1.0.0a1
     "###);
 
-    assert_installed(&context.venv, "a_af391f9c", "1.0.0a1", &context.temp_dir);
+    assert_installed(&context.venv, "a_ebc4dbde", "1.0.0a1", &context.temp_dir);
 }
 
 /// requires-package-prerelease-and-final-any
@@ -2451,4 +2451,172 @@ fn no_wheels_with_matching_platform() {
     Installed 1 package in [TIME]
      + albatross==1.0.0
     "###);
+}
+
+/// no-wheels-no-build
+///
+/// No wheels are available, only source distributions but the user has disabled
+/// builds.
+///
+/// ```text
+/// d5567080
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+/// ```
+#[test]
+fn no_wheels_no_build() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-d5567080", "albatross"));
+    filters.push((r"-d5567080", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("--only-binary")
+        .arg("a-d5567080")
+        .arg("a-d5567080")
+        , @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: albatross==1.0.0
+      Caused by: Building source distributions is disabled
+    "###);
+
+    assert_not_installed(&context.venv, "a_d5567080", &context.temp_dir);
+}
+
+/// only-wheels-no-binary
+///
+/// No source distributions are available, only wheels but the user has disabled
+/// using pre-built binaries.
+///
+/// ```text
+/// 3850ba71
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+/// ```
+#[test]
+fn only_wheels_no_binary() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-3850ba71", "albatross"));
+    filters.push((r"-3850ba71", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("--no-binary")
+        .arg("a-3850ba71")
+        .arg("a-3850ba71")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of albatross and you require albatross, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(&context.venv, "a_3850ba71", &context.temp_dir);
+}
+
+/// no-build
+///
+/// Both wheels and source distributions are available, and the user has disabled
+/// builds.
+///
+/// ```text
+/// e0451b4c
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+/// ```
+#[test]
+fn no_build() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-e0451b4c", "albatross"));
+    filters.push((r"-e0451b4c", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("--only-binary")
+        .arg("a-e0451b4c")
+        .arg("a-e0451b4c")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + albatross==1.0.0
+    "###);
+
+    // The wheel should be used for install
+}
+
+/// no-binary
+///
+/// Both wheels and source distributions are available, and the user has disabled
+/// binaries.
+///
+/// ```text
+/// 5036ee47
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+/// ```
+#[test]
+fn no_binary() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-5036ee47", "albatross"));
+    filters.push((r"-5036ee47", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("--no-binary")
+        .arg("a-5036ee47")
+        .arg("a-5036ee47")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + albatross==1.0.0
+    "###);
+
+    // The source distribution should be used for install
 }

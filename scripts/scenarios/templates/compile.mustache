@@ -72,9 +72,17 @@ fn {{module_name}}() -> Result<()> {
     // {{.}}
     {{/expected.explanation_lines}}
     let output = puffin_snapshot!(filters, command(&context, python_versions)
-        {{#environment.prereleases}}
+        {{#resolver_options.prereleases}}
         .arg("--prerelease=allow")
-        {{/environment.prereleases}}
+        {{/resolver_options.prereleases}}
+        {{#resolver_options.no_build}}
+        .arg("--only-binary")
+        .arg("{{.}}-{{version}}")
+        {{/resolver_options.no_build}}
+        {{#resolver_options.no_binary}}
+        .arg("--no-binary")
+        .arg("{{.}}-{{version}}")
+        {{/resolver_options.no_binary}}
         {{#resolver_options.python}}
         .arg("--python-version={{.}}")
         {{/resolver_options.python}}, @r###"<snapshot>
