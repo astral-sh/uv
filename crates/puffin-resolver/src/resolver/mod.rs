@@ -794,7 +794,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 // If the package is known to be incompatible, return the Python version as an
                 // incompatibility, and skip fetching the metadata.
                 if let Some(entry) = self.unavailable_versions.get(&package_id) {
-                    // TODO(zanieb): Handle additional variants here
                     match entry.value() {
                         UnavailableVersion::RequiresPython(requires_python) => {
                             let version = requires_python
