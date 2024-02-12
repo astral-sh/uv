@@ -4,7 +4,7 @@ use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use common::{puffin_snapshot, INSTA_FILTERS};
-use puffin_fs::NormalizedDisplay;
+use puffin_fs::Normalized;
 use url::Url;
 
 use crate::common::{get_bin, venv_to_interpreter, TestContext};

@@ -27,6 +27,7 @@ use tracing::{debug, info_span, instrument, Instrument};
 
 use distribution_types::Resolution;
 use pep508_rs::Requirement;
+use puffin_fs::Normalized;
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_traits::{BuildContext, BuildKind, SetupPyStrategy, SourceBuildTrait};
 
@@ -562,7 +563,7 @@ impl SourceBuild {
             );
             let output = Command::new(&python_interpreter)
                 .args(["setup.py", "bdist_wheel"])
-                .current_dir(&self.source_tree)
+                .current_dir(self.source_tree.normalized())
                 .output()
                 .instrument(span)
                 .await
@@ -771,7 +772,7 @@ async fn run_python_script(
     };
     Command::new(venv.python_executable())
         .args(["-c", script])
-        .current_dir(source_tree)
+        .current_dir(source_tree.normalized())
         // Activate the venv
         .env("VIRTUAL_ENV", venv.root())
         .env("PATH", new_path)

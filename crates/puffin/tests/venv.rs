@@ -5,7 +5,7 @@ use std::process::Command;
 use anyhow::Result;
 use assert_fs::prelude::*;
 
-use puffin_fs::NormalizedDisplay;
+use puffin_fs::Normalized;
 
 use crate::common::{create_bin_with_executables, get_bin, puffin_snapshot};
 

@@ -9,7 +9,7 @@ use rustc_hash::FxHashSet;
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
-use puffin_fs::NormalizedDisplay;
+use puffin_fs::Normalized;
 use puffin_normalize::{ExtraName, PackageName};
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 

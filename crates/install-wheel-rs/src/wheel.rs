@@ -21,7 +21,7 @@ use zip::{ZipArchive, ZipWriter};
 
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
-use puffin_fs::NormalizedDisplay;
+use puffin_fs::Normalized;
 use puffin_normalize::PackageName;
 use pypi_types::DirectUrl;
 
@@ -574,7 +574,7 @@ fn bytecode_compile_inner(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
-        .current_dir(site_packages)
+        .current_dir(site_packages.normalized())
         .spawn()
         .map_err(Error::PythonSubcommand)?;
 

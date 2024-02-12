@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 
 use puffin_cache::Cache;
-use puffin_fs::NormalizedDisplay;
+use puffin_fs::Normalized;
 use puffin_normalize::PackageName;
 
 use crate::commands::ExitStatus;

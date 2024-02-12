@@ -12,7 +12,7 @@ use platform_tags::Tags;
 use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
-use puffin_fs::NormalizedDisplay;
+use puffin_fs::Normalized;
 use puffin_installer::{
     Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };

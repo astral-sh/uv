@@ -13,7 +13,7 @@ use url::Url;
 use common::{
     create_bin_with_executables, create_venv, puffin_snapshot, venv_to_interpreter, INSTA_FILTERS,
 };
-use puffin_fs::NormalizedDisplay;
+use puffin_fs::Normalized;
 
 use crate::common::{get_bin, TestContext};
 
