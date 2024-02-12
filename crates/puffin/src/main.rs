@@ -21,6 +21,7 @@ use puffin_traits::{NoBuild, PackageNameSpecifier, SetupPyStrategy};
 use requirements::ExtrasSpecification;
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, Upgrade};
+use crate::compat::CompatArgs;
 use crate::requirements::RequirementsSource;
 
 #[cfg(target_os = "windows")]
@@ -625,6 +626,9 @@ struct VenvArgs {
     /// format (e.g., `2006-12-02`).
     #[arg(long, value_parser = date_or_datetime, hide = true)]
     exclude_newer: Option<DateTime<Utc>>,
+
+    #[command(flatten)]
+    compat_args: compat::VenvCompatArgs,
 }
 
 #[derive(Args)]
@@ -928,6 +932,8 @@ async fn run() -> Result<ExitStatus> {
         }) => commands::freeze(&cache, args.strict, printer),
         Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
         Commands::Venv(args) => {
+            args.compat_args.validate()?;
+
             let index_locations = IndexLocations::from_args(
                 args.index_url,
                 args.extra_index_url,

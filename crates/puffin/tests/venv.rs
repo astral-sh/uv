@@ -443,3 +443,47 @@ fn non_empty_dir_exists() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn virtualenv_compatibility() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
+    let venv = temp_dir.child(".venv");
+
+    // Create a virtual environment at `.venv`, passing the redundant `--clear` flag.
+    let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filters = &[
+        (
+            r"Using Python 3\.\d+\.\d+ interpreter at .+",
+            "Using Python [VERSION] interpreter at [PATH]",
+        ),
+        (&filter_venv, "/home/ferris/project/.venv"),
+    ];
+    puffin_snapshot!(filters, Command::new(get_bin())
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("PUFFIN_TEST_PYTHON_PATH", bin.clone())
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: virtualenv's `--clear` has no effect (Puffin always clears the virtual environment).
+    Using Python [VERSION] interpreter at [PATH]
+    Creating virtualenv at: /home/ferris/project/.venv
+    "###
+    );
+
+    venv.assert(predicates::path::is_dir());
+
+    Ok(())
+}
