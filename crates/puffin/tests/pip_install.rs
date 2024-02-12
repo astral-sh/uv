@@ -725,7 +725,6 @@ fn install_no_binary_subset() {
 
 /// Install a package only using pre-built wheels.
 #[test]
-#[cfg(not(all(windows, debug_assertions)))] // Stack overflow on debug on windows -.-
 fn install_only_binary() {
     let context = TestContext::new("3.12");
 
