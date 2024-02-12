@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use anstream::eprint;
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
@@ -17,7 +18,7 @@ use puffin_dispatch::BuildDispatch;
 use puffin_fs::Normalized;
 use puffin_installer::NoBinary;
 use puffin_interpreter::{find_default_python, find_requested_python, Error};
-use puffin_resolver::InMemoryIndex;
+use puffin_resolver::{InMemoryIndex, OptionsBuilder};
 use puffin_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::ExitStatus;
@@ -30,10 +31,21 @@ pub(crate) async fn venv(
     python_request: Option<&str>,
     index_locations: &IndexLocations,
     seed: bool,
+    exclude_newer: Option<DateTime<Utc>>,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    match venv_impl(path, python_request, index_locations, seed, cache, printer).await {
+    match venv_impl(
+        path,
+        python_request,
+        index_locations,
+        seed,
+        exclude_newer,
+        cache,
+        printer,
+    )
+    .await
+    {
         Ok(status) => Ok(status),
         Err(err) => {
             eprint!("{err:?}");
@@ -67,6 +79,7 @@ async fn venv_impl(
     python_request: Option<&str>,
     index_locations: &IndexLocations,
     seed: bool,
+    exclude_newer: Option<DateTime<Utc>>,
     cache: &Cache,
     mut printer: Printer,
 ) -> miette::Result<ExitStatus> {
@@ -125,6 +138,7 @@ async fn venv_impl(
         let in_flight = InFlight::default();
 
         // Prep the build context.
+        let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
         let build_dispatch = BuildDispatch::new(
             &client,
             cache,
@@ -137,7 +151,8 @@ async fn venv_impl(
             SetupPyStrategy::default(),
             &NoBuild::All,
             &NoBinary::None,
-        );
+        )
+        .with_options(options);
 
         // Resolve the seed packages.
         let resolution = build_dispatch

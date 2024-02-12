@@ -7,7 +7,7 @@ use assert_fs::prelude::*;
 
 use puffin_fs::Normalized;
 
-use crate::common::{create_bin_with_executables, get_bin, puffin_snapshot};
+use crate::common::{create_bin_with_executables, get_bin, puffin_snapshot, EXCLUDE_NEWER};
 
 mod common;
 
@@ -33,6 +33,8 @@ fn create_venv() -> Result<()> {
         .arg("3.12")
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
@@ -71,6 +73,8 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
         .arg("3.12")
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
@@ -111,6 +115,8 @@ fn seed() -> Result<()> {
         .arg("3.12")
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
@@ -120,9 +126,9 @@ fn seed() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
-     + setuptools==69.0.3
-     + pip==24.0
-     + wheel==0.42.0
+     + setuptools==68.2.2
+     + pip==23.3.1
+     + wheel==0.41.3
     "###
     );
 
@@ -146,6 +152,8 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         .arg("3.15")
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir);
     if cfg!(windows) {
@@ -198,6 +206,8 @@ fn create_venv_unknown_python_patch() -> Result<()> {
         .arg("3.8.0")
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: false
@@ -236,6 +246,8 @@ fn create_venv_python_patch() -> Result<()> {
         .arg("3.12.1")
         .arg("--cache-dir")
         .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
