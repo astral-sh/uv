@@ -61,18 +61,39 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
     let base_python: Utf8PathBuf = fs_err::canonicalize(interpreter.sys_executable())?
         .try_into()
         .map_err(|err: FromPathBufError| err.into_io_error())?;
-    if location.exists() {
-        if location.join("pyvenv.cfg").is_file() {
-            info!("Removing existing directory");
-            fs::remove_dir_all(location)?;
-        } else {
-            return Err(io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                format!("The directory {location} exists, but it is not virtualenv"),
-            ));
+
+    // Validate the existing location.
+    match location.metadata() {
+        Ok(metadata) => {
+            if metadata.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!("File exists at `{location}`"),
+                ));
+            } else if metadata.is_dir() {
+                if location.join("pyvenv.cfg").is_file() {
+                    info!("Removing existing directory");
+                    fs::remove_dir_all(location)?;
+                    fs::create_dir_all(location)?;
+                } else if location
+                    .read_dir()
+                    .is_ok_and(|mut dir| dir.next().is_none())
+                {
+                    info!("Ignoring empty directory");
+                } else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!("The directory `{location}` exists, but it's not a virtualenv"),
+                    ));
+                }
+            }
         }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            fs::create_dir_all(location)?;
+        }
+        Err(err) => return Err(err),
     }
-    fs::create_dir_all(location)?;
+
     // TODO(konstin): I bet on windows we'll have to strip the prefix again
     let location = location.canonicalize_utf8()?;
     let bin_name = if cfg!(unix) {
