@@ -9,7 +9,7 @@ use std::{env, str};
 use anyhow::{anyhow, Context as _, Result};
 use cargo_util::{paths, ProcessBuilder};
 use git2::{self, ErrorClass, ObjectType};
-use puffin_fs::NormalizedDisplay;
+use puffin_fs::Normalized;
 use reqwest::Client;
 use reqwest::StatusCode;
 use tracing::{debug, warn};

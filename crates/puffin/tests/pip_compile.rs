@@ -13,7 +13,7 @@ use itertools::Itertools;
 use url::Url;
 
 use common::{puffin_snapshot, TestContext, INSTA_FILTERS};
-use puffin_fs::NormalizedDisplay;
+use puffin_fs::Normalized;
 
 use crate::common::{get_bin, EXCLUDE_NEWER};
 

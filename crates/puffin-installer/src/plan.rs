@@ -14,7 +14,7 @@ use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use puffin_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Timestamp, WheelCache};
 use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
-use puffin_fs::NormalizedDisplay;
+use puffin_fs::Normalized;
 use puffin_interpreter::Virtualenv;
 use puffin_normalize::PackageName;
 use puffin_traits::NoBinary;

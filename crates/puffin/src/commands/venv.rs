@@ -14,7 +14,7 @@ use platform_host::Platform;
 use puffin_cache::Cache;
 use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
-use puffin_fs::NormalizedDisplay;
+use puffin_fs::Normalized;
 use puffin_installer::NoBinary;
 use puffin_interpreter::{find_default_python, find_requested_python, Error};
 use puffin_resolver::InMemoryIndex;

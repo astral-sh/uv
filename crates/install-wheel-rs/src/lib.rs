@@ -14,7 +14,7 @@ use distribution_filename::WheelFilename;
 pub use install_location::{normalize_name, InstallLocation, LockedDir};
 use pep440_rs::Version;
 use platform_host::{Arch, Os};
-use puffin_fs::NormalizedDisplay;
+use puffin_fs::Normalized;
 use puffin_normalize::PackageName;
 pub use record::RecordEntry;
 pub use script::Script;
