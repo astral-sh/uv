@@ -30,7 +30,7 @@ use puffin_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode,
     ResolutionMode, Resolver,
 };
-use puffin_traits::{InFlight, SetupPyStrategy};
+use puffin_traits::{InFlight, NoBuild, SetupPyStrategy};
 use puffin_warnings::warn_user;
 use requirements_txt::EditableRequirement;
 
@@ -59,7 +59,7 @@ pub(crate) async fn pip_compile(
     include_find_links: bool,
     index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
-    no_build: bool,
+    no_build: &NoBuild,
     python_version: Option<PythonVersion>,
     exclude_newer: Option<DateTime<Utc>>,
     cache: Cache,
@@ -152,7 +152,7 @@ pub(crate) async fn pip_compile(
             python_version.major() == interpreter.python_major()
                 && python_version.minor() == interpreter.python_minor()
         };
-        if !no_build
+        if no_build.is_none()
             && python_version.version() != interpreter.python_version()
             && (python_version.patch().is_some() || !matches_without_patch)
         {

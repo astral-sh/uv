@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
-use distribution_types::{IndexLocations, Name, Resolution};
+use distribution_types::{IndexLocations, Name, Resolution, SourceDist};
 use futures::FutureExt;
 use pep508_rs::Requirement;
 use puffin_build::{SourceBuild, SourceBuildContext};
@@ -18,7 +18,7 @@ use puffin_client::{FlatIndex, RegistryClient};
 use puffin_installer::{Downloader, Installer, NoBinary, Plan, Planner, Reinstall, SitePackages};
 use puffin_interpreter::{Interpreter, Virtualenv};
 use puffin_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use puffin_traits::{BuildContext, BuildKind, InFlight, SetupPyStrategy};
+use puffin_traits::{BuildContext, BuildKind, InFlight, NoBuild, SetupPyStrategy};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -32,7 +32,7 @@ pub struct BuildDispatch<'a> {
     in_flight: &'a InFlight,
     base_python: PathBuf,
     setup_py: SetupPyStrategy,
-    no_build: bool,
+    no_build: &'a NoBuild,
     no_binary: &'a NoBinary,
     source_build_context: SourceBuildContext,
     options: Options,
@@ -50,7 +50,7 @@ impl<'a> BuildDispatch<'a> {
         in_flight: &'a InFlight,
         base_python: PathBuf,
         setup_py: SetupPyStrategy,
-        no_build: bool,
+        no_build: &'a NoBuild,
         no_binary: &'a NoBinary,
     ) -> Self {
         Self {
@@ -92,7 +92,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &self.base_python
     }
 
-    fn no_build(&self) -> bool {
+    fn no_build(&self) -> &NoBuild {
         self.no_build
     }
 
@@ -246,10 +246,29 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         source: &'data Path,
         subdirectory: Option<&'data Path>,
         package_id: &'data str,
+        dist: Option<&'data SourceDist>,
         build_kind: BuildKind,
     ) -> Result<SourceBuild> {
-        if self.no_build {
-            bail!("Building source distributions is disabled");
+        match self.no_build {
+            NoBuild::All => bail!("Building source distributions is disabled"),
+            NoBuild::None => {}
+            NoBuild::Packages(packages) => {
+                if let Some(dist) = dist {
+                    // We can only prevent builds by name for packages with names
+                    // which is unknown before build of editable source distributions
+                    if packages.contains(dist.name()) {
+                        bail!(
+                            "Building source distributions for {} is disabled",
+                            dist.name()
+                        );
+                    }
+                } else {
+                    debug_assert!(
+                        matches!(build_kind, BuildKind::Editable),
+                        "Only editable builds are exempt from 'no build' checks"
+                    );
+                }
+            }
         }
 
         let builder = SourceBuild::setup(

@@ -18,7 +18,7 @@ use puffin_dispatch::BuildDispatch;
 use puffin_installer::NoBinary;
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use puffin_traits::{InFlight, SetupPyStrategy};
+use puffin_traits::{InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {
@@ -69,6 +69,12 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     let index = InMemoryIndex::default();
     let in_flight = InFlight::default();
 
+    let no_build = if args.no_build {
+        NoBuild::All
+    } else {
+        NoBuild::None
+    };
+
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -79,7 +85,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         &in_flight,
         venv.python_executable(),
         SetupPyStrategy::default(),
-        args.no_build,
+        &no_build,
         &NoBinary::None,
     );
 

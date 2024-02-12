@@ -18,7 +18,7 @@ use puffin_fs::Normalized;
 use puffin_installer::NoBinary;
 use puffin_interpreter::{find_default_python, find_requested_python, Error};
 use puffin_resolver::InMemoryIndex;
-use puffin_traits::{BuildContext, InFlight, SetupPyStrategy};
+use puffin_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -135,7 +135,7 @@ async fn venv_impl(
             &in_flight,
             venv.python_executable(),
             SetupPyStrategy::default(),
-            true,
+            &NoBuild::All,
             &NoBinary::None,
         );
 

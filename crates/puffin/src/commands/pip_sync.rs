@@ -18,7 +18,7 @@ use puffin_installer::{
 };
 use puffin_interpreter::Virtualenv;
 use puffin_resolver::InMemoryIndex;
-use puffin_traits::{InFlight, SetupPyStrategy};
+use puffin_traits::{InFlight, NoBuild, SetupPyStrategy};
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 
@@ -35,7 +35,7 @@ pub(crate) async fn pip_sync(
     link_mode: LinkMode,
     index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
-    no_build: bool,
+    no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
     cache: Cache,

@@ -132,7 +132,7 @@ pub enum BuiltDist {
     Path(PathBuiltDist),
 }
 
-/// A source distribution, with its three possible origins (index, url, path, git)
+/// A source distribution, with its possible origins (index, url, path, git)
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum SourceDist {

@@ -16,7 +16,7 @@ use puffin_cache::{Cache, CacheBucket, Timestamp, WheelCache};
 use puffin_client::{CacheControl, CachedClientError, RegistryClient};
 use puffin_fs::metadata_if_exists;
 use puffin_git::GitSource;
-use puffin_traits::{BuildContext, NoBinary};
+use puffin_traits::{BuildContext, NoBinary, NoBuild};
 use pypi_types::Metadata21;
 
 use crate::download::{BuiltWheel, UnzippedWheel};
@@ -340,8 +340,13 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 Ok((self.client.wheel_metadata(built_dist).boxed().await?, None))
             }
             Dist::Source(source_dist) => {
+                let no_build = match self.build_context.no_build() {
+                    NoBuild::All => true,
+                    NoBuild::None => false,
+                    NoBuild::Packages(packages) => packages.contains(source_dist.name()),
+                };
                 // Optimization: Skip source dist download when we must not build them anyway.
-                if self.build_context.no_build() {
+                if no_build {
                     return Err(Error::NoBuild);
                 }
 
