@@ -1,11 +1,11 @@
 # Puffin
 
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/puffin/main/assets/badge/v0.json)](https://github.com/astral-sh/puffin)
+[![Puffin](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/puffin/main/assets/badge/v0.json)](https://github.com/astral-sh/puffin)
 [![image](https://img.shields.io/pypi/v/puffin-alpha.svg)](https://pypi.python.org/pypi/puffin-alpha)
 [![image](https://img.shields.io/pypi/l/puffin-alpha.svg)](https://pypi.python.org/pypi/puffin-alpha)
 [![image](https://img.shields.io/pypi/pyversions/puffin-alpha.svg)](https://pypi.python.org/pypi/puffin-alpha)
 [![Actions status](https://github.com/astral-sh/puffin/workflows/CI/badge.svg)](https://github.com/astral-sh/puffin/actions)
-[![Discord](https://img.shields.io/discord/1039017663004942429?label=Discord)](https://discord.gg/astral-sh)
+[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
 
 An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in replacement for `pip` and `pip-compile`.
 
