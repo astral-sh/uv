@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/a2c483f055f5cb01fbbbcf9189c238ee487a7a8e/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/c35c57f5b4ab3381658661edbd0cd955680f9cda/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -2491,6 +2491,84 @@ fn no_sdist_no_wheels_with_matching_platform() {
     "###);
 
     assert_not_installed(&context.venv, "a_af6bcec1", &context.temp_dir);
+}
+
+/// no-sdist-no-wheels-with-matching-python
+///
+/// No wheels with matching Python tags are available, nor are any source
+/// distributions available
+///
+/// ```text
+/// 40fe677d
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+/// ```
+#[test]
+fn no_sdist_no_wheels_with_matching_python() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-40fe677d", "albatross"));
+    filters.push((r"-40fe677d", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("a-40fe677d")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of albatross and you require albatross, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(&context.venv, "a_40fe677d", &context.temp_dir);
+}
+
+/// no-sdist-no-wheels-with-matching-abi
+///
+/// No wheels with matching ABI tags are available, nor are any source distributions
+/// available
+///
+/// ```text
+/// 8727a9b9
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+/// ```
+#[test]
+fn no_sdist_no_wheels_with_matching_abi() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-8727a9b9", "albatross"));
+    filters.push((r"-8727a9b9", ""));
+
+    puffin_snapshot!(filters, command(&context)
+        .arg("a-8727a9b9")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of albatross and you require albatross, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(&context.venv, "a_8727a9b9", &context.temp_dir);
 }
 
 /// no-wheels-no-build
