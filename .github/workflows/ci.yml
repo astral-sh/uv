@@ -64,7 +64,7 @@ jobs:
         run: brew install coreutils
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - name: "Install pipx"
         run: pip install pipx
       - name: "Install required Python versions"
@@ -81,7 +81,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Cargo Test"
-        run: cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12
+        run: cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
   # Separate job for the nightly crate
   windows-trampoline:
