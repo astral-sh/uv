@@ -15,13 +15,13 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use tokio::select;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, info_span, instrument, trace, Instrument};
+use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, PackageId, RemoteSource,
-    SourceDist, VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, RemoteSource, SourceDist,
+    VersionOrUrl,
 };
 use pep440_rs::{Version, VersionSpecifiers, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, Requirement};
@@ -31,7 +31,7 @@ use puffin_distribution::DistributionDatabase;
 use puffin_interpreter::Interpreter;
 use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
-use pypi_types::Metadata21;
+use pypi_types::{Metadata21, Yanked};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ResolveError;
@@ -51,6 +51,7 @@ pub use crate::resolver::provider::ResolverProvider;
 pub(crate) use crate::resolver::provider::VersionsResponse;
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
+use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Options};
 
 mod allowed_urls;
@@ -64,6 +65,8 @@ mod reporter;
 pub(crate) enum UnavailableVersion {
     /// Version is incompatible due to the `Requires-Python` version specifiers for that package.
     RequiresPython(VersionSpecifiers),
+    /// Version is incompatible because it is yanked
+    Yanked(Yanked),
 }
 
 /// The package is unavailable and cannot be used
@@ -77,19 +80,25 @@ pub(crate) enum UnavailablePackage {
     NotFound,
 }
 
+enum ResolverVersion {
+    /// A usable version
+    Available(Version),
+    /// A version that is not usable for some reaosn
+    Unavailable(Version, UnavailableVersion),
+}
+
 pub struct Resolver<'a, Provider: ResolverProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Overrides,
+    allowed_yanks: AllowedYanks,
     allowed_urls: AllowedUrls,
     dependency_mode: DependencyMode,
     markers: &'a MarkerEnvironment,
     python_requirement: PythonRequirement,
     selector: CandidateSelector,
     index: &'a InMemoryIndex,
-    /// Incompatibilities for specific package versions
-    unavailable_versions: DashMap<PackageId, UnavailableVersion>,
     /// Incompatibilities for packages that are entirely unavailable
     unavailable_packages: DashMap<PackageName, UnavailablePackage>,
     /// The set of all registry-based packages visited during resolution.
@@ -122,11 +131,6 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
             tags,
             PythonRequirement::new(interpreter, markers),
             options.exclude_newer,
-            manifest
-                .requirements
-                .iter()
-                .chain(manifest.constraints.iter())
-                .collect(),
             build_context.no_binary(),
         );
         Self::new_custom_io(
@@ -190,13 +194,20 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             )
             .collect();
 
+        // Determine the allowed yanked package versions
+        let allowed_yanks = manifest
+            .requirements
+            .iter()
+            .chain(manifest.constraints.iter())
+            .collect();
+
         Self {
             index,
-            unavailable_versions: DashMap::default(),
             unavailable_packages: DashMap::default(),
             visited: DashSet::default(),
             selector,
             allowed_urls,
+            allowed_yanks,
             dependency_mode: options.dependency_mode,
             project: manifest.project,
             requirements: manifest.requirements,
@@ -369,6 +380,48 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
                 Some(version) => version,
             };
+            let version = match version {
+                ResolverVersion::Available(version) => version,
+                ResolverVersion::Unavailable(version, unavailable) => {
+                    let reason = match unavailable {
+                        UnavailableVersion::RequiresPython(requires_python) => {
+                            // Incompatible requires-python versions are special in that we track
+                            // them as incompatible dependencies instead of marking the package version
+                            // as unavailable directly
+                            let python_version = requires_python
+                                .iter()
+                                .map(PubGrubSpecifier::try_from)
+                                .fold_ok(Range::full(), |range, specifier| {
+                                    range.intersection(&specifier.into())
+                                })?;
+
+                            let package = &next;
+                            for kind in [PubGrubPython::Installed, PubGrubPython::Target] {
+                                state.add_incompatibility(Incompatibility::from_dependency(
+                                    package.clone(),
+                                    Range::singleton(version.clone()),
+                                    (&PubGrubPackage::Python(kind), &python_version),
+                                ));
+                            }
+                            state.partial_solution.add_decision(next.clone(), version);
+                            continue;
+                        }
+                        UnavailableVersion::Yanked(yanked) => match yanked {
+                            Yanked::Bool(_) => "it was yanked".to_string(),
+                            Yanked::Reason(reason) => format!(
+                                "it was yanked (reason: {})",
+                                reason.trim().trim_end_matches('.')
+                            ),
+                        },
+                    };
+                    state.add_incompatibility(Incompatibility::unavailable(
+                        next.clone(),
+                        version.clone(),
+                        reason,
+                    ));
+                    continue;
+                }
+            };
 
             self.on_progress(&next, &version);
 
@@ -483,6 +536,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
     /// Given a set of candidate packages, choose the next package (and version) to add to the
     /// partial solution.
+    ///
+    /// Returns [None] when there are no versions in the given range.
     #[instrument(skip_all, fields(%package))]
     async fn choose_version(
         &self,
@@ -490,14 +545,14 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         range: &Range<Version>,
         pins: &mut FilePins,
         request_sink: &tokio::sync::mpsc::Sender<Request>,
-    ) -> Result<Option<Version>, ResolveError> {
+    ) -> Result<Option<ResolverVersion>, ResolveError> {
         match package {
-            PubGrubPackage::Root(_) => Ok(Some(MIN_VERSION.clone())),
+            PubGrubPackage::Root(_) => Ok(Some(ResolverVersion::Available(MIN_VERSION.clone()))),
 
             PubGrubPackage::Python(PubGrubPython::Installed) => {
                 let version = self.python_requirement.installed();
                 if range.contains(version) {
-                    Ok(Some(version.clone()))
+                    Ok(Some(ResolverVersion::Available(version.clone())))
                 } else {
                     Ok(None)
                 }
@@ -506,7 +561,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Python(PubGrubPython::Target) => {
                 let version = self.python_requirement.target();
                 if range.contains(version) {
-                    Ok(Some(version.clone()))
+                    Ok(Some(ResolverVersion::Available(version.clone())))
                 } else {
                     Ok(None)
                 }
@@ -535,7 +590,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     // If the URL is that of a wheel, extract the version.
                     let version = wheel_filename.version;
                     if range.contains(&version) {
-                        Ok(Some(version))
+                        Ok(Some(ResolverVersion::Available(version)))
                     } else {
                         Ok(None)
                     }
@@ -550,7 +605,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         .ok_or(ResolveError::Unregistered)?;
                     let version = &metadata.version;
                     if range.contains(version) {
-                        Ok(Some(version.clone()))
+                        Ok(Some(ResolverVersion::Available(version.clone())))
                     } else {
                         Ok(None)
                     }
@@ -605,13 +660,27 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(None);
                 };
 
-                // If the version is incompatible, short-circuit.
-                if let Some(requires_python) = candidate.validate(&self.python_requirement) {
-                    self.unavailable_versions.insert(
-                        candidate.package_id(),
+                // If the version is incompatible because it was yanked
+                if candidate.yanked().is_yanked() {
+                    if self
+                        .allowed_yanks
+                        .allowed(package_name, candidate.version())
+                    {
+                        warn!("Allowing yanked version: {}", candidate.package_id());
+                    } else {
+                        return Ok(Some(ResolverVersion::Unavailable(
+                            candidate.version().clone(),
+                            UnavailableVersion::Yanked(candidate.yanked().clone()),
+                        )));
+                    }
+                }
+
+                // If the version is incompatible because of its Python requirement
+                if let Some(requires_python) = candidate.validate_python(&self.python_requirement) {
+                    return Ok(Some(ResolverVersion::Unavailable(
+                        candidate.version().clone(),
                         UnavailableVersion::RequiresPython(requires_python.clone()),
-                    );
-                    return Ok(Some(candidate.version().clone()));
+                    )));
                 }
 
                 if let Some(extra) = extra {
@@ -621,7 +690,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         extra,
                         candidate.version(),
                         candidate
-                            .resolve()
+                            .resolution_dist()
                             .dist
                             .filename()
                             .unwrap_or("unknown filename")
@@ -632,7 +701,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         candidate.name(),
                         candidate.version(),
                         candidate
-                            .resolve()
+                            .resolution_dist()
                             .dist
                             .filename()
                             .unwrap_or("unknown filename")
@@ -647,11 +716,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(candidate.package_id()) {
-                    let dist = candidate.resolve().dist.clone();
+                    let dist = candidate.resolution_dist().dist.clone();
                     request_sink.send(Request::Dist(dist)).await?;
                 }
 
-                Ok(Some(version))
+                Ok(Some(ResolverVersion::Available(version)))
             }
         }
     }
@@ -744,27 +813,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(Dependencies::Unavailable(
                         "The package is unavailable".to_string(),
                     ));
-                }
-
-                // If the package is known to be incompatible, return the Python version as an
-                // incompatibility, and skip fetching the metadata.
-                if let Some(entry) = self.unavailable_versions.get(&package_id) {
-                    // TODO(zanieb): Handle additional variants here
-                    let UnavailableVersion::RequiresPython(requires_python) = entry.value();
-                    let version = requires_python
-                        .iter()
-                        .map(PubGrubSpecifier::try_from)
-                        .fold_ok(Range::full(), |range, specifier| {
-                            range.intersection(&specifier.into())
-                        })?;
-
-                    let mut constraints = DependencyConstraints::default();
-                    constraints.insert(
-                        PubGrubPackage::Python(PubGrubPython::Installed),
-                        version.clone(),
-                    );
-                    constraints.insert(PubGrubPackage::Python(PubGrubPython::Target), version);
-                    return Ok(Dependencies::Available(constraints));
                 }
 
                 // Wait for the metadata to be available.
@@ -942,17 +990,16 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 };
 
                 // If the version is incompatible, short-circuit.
-                if let Some(requires_python) = candidate.validate(&self.python_requirement) {
-                    self.unavailable_versions.insert(
-                        candidate.package_id(),
-                        UnavailableVersion::RequiresPython(requires_python.clone()),
-                    );
+                if candidate
+                    .validate_python(&self.python_requirement)
+                    .is_some()
+                {
                     return Ok(None);
                 }
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(candidate.package_id()) {
-                    let dist = candidate.resolve().dist.clone();
+                    let dist = candidate.resolution_dist().dist.clone();
 
                     let (metadata, precise) = self
                         .provider

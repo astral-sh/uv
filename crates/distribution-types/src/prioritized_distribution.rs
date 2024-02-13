@@ -1,6 +1,6 @@
 use pep440_rs::VersionSpecifiers;
 use platform_tags::TagPriority;
-use pypi_types::Hashes;
+use pypi_types::{Hashes, Yanked};
 
 use crate::Dist;
 
@@ -24,6 +24,8 @@ struct PrioritizedDistributionInner {
     compatible_wheel: Option<(DistRequiresPython, TagPriority)>,
     /// An arbitrary, platform-incompatible wheel for the package version.
     incompatible_wheel: Option<DistRequiresPython>,
+    /// Is the distribution yanked
+    yanked: Yanked,
     /// The hashes for each distribution.
     hashes: Vec<Hashes>,
 }
@@ -35,6 +37,7 @@ impl PrioritizedDistribution {
         requires_python: Option<VersionSpecifiers>,
         hash: Option<Hashes>,
         priority: Option<TagPriority>,
+        yanked: Yanked,
     ) -> Self {
         if let Some(priority) = priority {
             Self(Box::new(PrioritizedDistributionInner {
@@ -42,13 +45,13 @@ impl PrioritizedDistribution {
                 compatible_wheel: Some((
                     DistRequiresPython {
                         dist,
-
                         requires_python,
                     },
                     priority,
                 )),
                 incompatible_wheel: None,
                 hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
+                yanked,
             }))
         } else {
             Self(Box::new(PrioritizedDistributionInner {
@@ -59,6 +62,7 @@ impl PrioritizedDistribution {
                     requires_python,
                 }),
                 hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
+                yanked,
             }))
         }
     }
@@ -68,6 +72,7 @@ impl PrioritizedDistribution {
         dist: Dist,
         requires_python: Option<VersionSpecifiers>,
         hash: Option<Hashes>,
+        yanked: Yanked,
     ) -> Self {
         Self(Box::new(PrioritizedDistributionInner {
             source: Some(DistRequiresPython {
@@ -77,6 +82,7 @@ impl PrioritizedDistribution {
             compatible_wheel: None,
             incompatible_wheel: None,
             hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
+            yanked,
         }))
     }
 
@@ -87,7 +93,12 @@ impl PrioritizedDistribution {
         requires_python: Option<VersionSpecifiers>,
         hash: Option<Hashes>,
         priority: Option<TagPriority>,
+        yanked: Yanked,
     ) {
+        if yanked.is_yanked() {
+            self.0.yanked = yanked;
+        }
+
         // Prefer the highest-priority, platform-compatible wheel.
         if let Some(priority) = priority {
             if let Some((.., existing_priority)) = &self.0.compatible_wheel {
@@ -127,7 +138,12 @@ impl PrioritizedDistribution {
         dist: Dist,
         requires_python: Option<VersionSpecifiers>,
         hash: Option<Hashes>,
+        yanked: Yanked,
     ) {
+        if yanked.is_yanked() {
+            self.0.yanked = yanked;
+        }
+
         if self.0.source.is_none() {
             self.0.source = Some(DistRequiresPython {
                 dist,
@@ -148,18 +164,24 @@ impl PrioritizedDistribution {
             &self.0.incompatible_wheel,
         ) {
             // Prefer the highest-priority, platform-compatible wheel.
-            (Some((wheel, tag_priority)), _, _) => {
-                Some(ResolvableDist::CompatibleWheel(wheel, *tag_priority))
-            }
+            (Some((wheel, tag_priority)), _, _) => Some(ResolvableDist::CompatibleWheel(
+                wheel,
+                &self.0.yanked,
+                *tag_priority,
+            )),
             // If we have a compatible source distribution and an incompatible wheel, return the
             // wheel. We assume that all distributions have the same metadata for a given package
             // version. If a compatible source distribution exists, we assume we can build it, but
             // using the wheel is faster.
-            (_, Some(source_dist), Some(wheel)) => {
-                Some(ResolvableDist::IncompatibleWheel { source_dist, wheel })
-            }
+            (_, Some(source_dist), Some(wheel)) => Some(ResolvableDist::IncompatibleWheel {
+                source_dist,
+                yanked: &self.0.yanked,
+                wheel,
+            }),
             // Otherwise, if we have a source distribution, return it.
-            (_, Some(source_dist), _) => Some(ResolvableDist::SourceDist(source_dist)),
+            (_, Some(source_dist), _) => {
+                Some(ResolvableDist::SourceDist(source_dist, &self.0.yanked))
+            }
             _ => None,
         }
     }
@@ -191,39 +213,54 @@ impl PrioritizedDistribution {
 #[derive(Debug, Clone)]
 pub enum ResolvableDist<'a> {
     /// The distribution should be resolved and installed using a source distribution.
-    SourceDist(&'a DistRequiresPython),
+    SourceDist(&'a DistRequiresPython, &'a Yanked),
     /// The distribution should be resolved and installed using a wheel distribution.
-    CompatibleWheel(&'a DistRequiresPython, TagPriority),
+    CompatibleWheel(&'a DistRequiresPython, &'a Yanked, TagPriority),
     /// The distribution should be resolved using an incompatible wheel distribution, but
     /// installed using a source distribution.
     IncompatibleWheel {
         source_dist: &'a DistRequiresPython,
+        yanked: &'a Yanked,
         wheel: &'a DistRequiresPython,
     },
 }
 
 impl<'a> ResolvableDist<'a> {
     /// Return the [`DistRequiresPython`] to use during resolution.
-    pub fn resolve(&self) -> &DistRequiresPython {
+    pub fn for_resolution(&self) -> &DistRequiresPython {
         match *self {
-            ResolvableDist::SourceDist(sdist) => sdist,
-            ResolvableDist::CompatibleWheel(wheel, _) => wheel,
+            ResolvableDist::SourceDist(sdist, _) => sdist,
+            ResolvableDist::CompatibleWheel(wheel, _, _) => wheel,
             ResolvableDist::IncompatibleWheel {
                 source_dist: _,
+                yanked: _,
                 wheel,
             } => wheel,
         }
     }
 
     /// Return the [`DistRequiresPython`] to use during installation.
-    pub fn install(&self) -> &DistRequiresPython {
+    pub fn for_installation(&self) -> &DistRequiresPython {
         match *self {
-            ResolvableDist::SourceDist(sdist) => sdist,
-            ResolvableDist::CompatibleWheel(wheel, _) => wheel,
+            ResolvableDist::SourceDist(sdist, _) => sdist,
+            ResolvableDist::CompatibleWheel(wheel, _, _) => wheel,
             ResolvableDist::IncompatibleWheel {
                 source_dist,
+                yanked: _,
                 wheel: _,
             } => source_dist,
+        }
+    }
+
+    pub fn yanked(&self) -> &Yanked {
+        match *self {
+            ResolvableDist::SourceDist(_, yanked) => yanked,
+            ResolvableDist::CompatibleWheel(_, yanked, _) => yanked,
+            ResolvableDist::IncompatibleWheel {
+                source_dist: _,
+                yanked,
+                wheel: _,
+            } => yanked,
         }
     }
 }

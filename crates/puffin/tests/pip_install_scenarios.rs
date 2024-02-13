@@ -2694,7 +2694,8 @@ fn package_only_yanked() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of albatross and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because it was yanked, we can conclude that all versions of albatross cannot be used.
+          And because you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Yanked versions should not be installed, even if they are the only one
@@ -2735,7 +2736,11 @@ fn package_only_yanked_in_range() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross<=0.1.0 is available and you require albatross>0.1.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only the following versions of albatross are available:
+              albatross<=0.1.0
+              albatross==1.0.0
+          and albatross==1.0.0 is unusable because it was yanked, we can conclude that albatross>0.1.0 cannot be used.
+          And because you require albatross>0.1.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Since there are other versions of `a` available, yanked versions should not be
@@ -2870,7 +2875,8 @@ fn transitive_package_only_yanked() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of bluebird and albatross==0.1.0 depends on bluebird, we can conclude that albatross==0.1.0 cannot be used.
+      ╰─▶ Because only bluebird==1.0.0 is available and bluebird==1.0.0 is unusable because it was yanked, we can conclude that all versions of bluebird cannot be used.
+          And because albatross==0.1.0 depends on bluebird, we can conclude that albatross==0.1.0 cannot be used.
           And because only albatross==0.1.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -2918,7 +2924,11 @@ fn transitive_package_only_yanked_in_range() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only bluebird<=0.1 is available and albatross==0.1.0 depends on bluebird>0.1, we can conclude that albatross==0.1.0 cannot be used.
+      ╰─▶ Because only the following versions of bluebird are available:
+              bluebird<=0.1
+              bluebird==1.0.0
+          and bluebird==1.0.0 is unusable because it was yanked, we can conclude that bluebird>0.1 cannot be used.
+          And because albatross==0.1.0 depends on bluebird>0.1, we can conclude that albatross==0.1.0 cannot be used.
           And because only albatross==0.1.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -3030,7 +3040,7 @@ fn transitive_yanked_and_unyanked_dependency() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of crow==2.0.0 and albatross==1.0.0 depends on crow==2.0.0, we can conclude that albatross==1.0.0 cannot be used.
+      ╰─▶ Because crow==2.0.0 is unusable because it was yanked and albatross==1.0.0 depends on crow==2.0.0, we can conclude that albatross==1.0.0 cannot be used.
           And because only albatross==1.0.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 

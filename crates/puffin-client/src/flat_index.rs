@@ -17,7 +17,7 @@ use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_cache::{Cache, CacheBucket};
 use puffin_normalize::PackageName;
-use pypi_types::Hashes;
+use pypi_types::{Hashes, Yanked};
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
@@ -298,11 +298,17 @@ impl FlatIndex {
                 }));
                 match distributions.0.entry(version) {
                     Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_built(dist, None, None, priority);
+                        entry
+                            .get_mut()
+                            .insert_built(dist, None, None, priority, Yanked::default());
                     }
                     Entry::Vacant(entry) => {
                         entry.insert(PrioritizedDistribution::from_built(
-                            dist, None, None, priority,
+                            dist,
+                            None,
+                            None,
+                            priority,
+                            Yanked::default(),
                         ));
                     }
                 }
@@ -315,10 +321,17 @@ impl FlatIndex {
                 }));
                 match distributions.0.entry(filename.version.clone()) {
                     Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_source(dist, None, None);
+                        entry
+                            .get_mut()
+                            .insert_source(dist, None, None, Yanked::default());
                     }
                     Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDistribution::from_source(dist, None, None));
+                        entry.insert(PrioritizedDistribution::from_source(
+                            dist,
+                            None,
+                            None,
+                            Yanked::default(),
+                        ));
                     }
                 }
             }
