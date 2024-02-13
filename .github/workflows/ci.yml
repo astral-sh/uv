@@ -64,9 +64,16 @@ jobs:
         run: brew install coreutils
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - name: "Install pipx"
         run: pip install pipx
+      - name: Cache Python binaries
+        # We only cache these on Windows because it's already fast on Unix
+        if: ${{ matrix.os == 'windows' }}
+        uses: actions/cache@v4
+        with:
+          path: bin
+          key: ${{ runner.os }}-py--${{ hashFiles('.python-versions') }}
       - name: "Install required Python versions"
         run: pipx run scripts/bootstrap/install.py
       - name: "Install Rust toolchain"
