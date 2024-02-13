@@ -533,6 +533,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
     /// Given a set of candidate packages, choose the next package (and version) to add to the
     /// partial solution.
+    ///
+    /// Returns [None] when there are no versions in the given range.
     #[instrument(skip_all, fields(%package))]
     async fn choose_version(
         &self,
