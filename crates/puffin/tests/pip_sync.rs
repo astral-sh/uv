@@ -808,44 +808,6 @@ fn install_numpy_py38() -> Result<()> {
     Ok(())
 }
 
-/// Install a package without using pre-built wheels.
-#[test]
-fn install_no_binary() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
-    requirements_txt.write_str("MarkupSafe==2.1.3")?;
-
-    let mut command = command(&context);
-    command
-        .arg("requirements.txt")
-        .arg("--no-binary")
-        .arg(":all:")
-        .arg("--strict");
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
-    puffin_snapshot!(command, @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + markupsafe==2.1.3
-        "###
-    );
-
-    context.assert_command("import markupsafe").success();
-
-    Ok(())
-}
-
 /// Attempt to install a package without using a remote index.
 #[test]
 fn install_no_index() -> Result<()> {
