@@ -78,9 +78,10 @@ impl VersionMap {
                     }
                 }
 
-                // It is possible for files to have a different yank status per the specification but
-                // in practice this should not ever happen. If any file is yanked, the version
-                // will be marked as yanked.
+                // It is possible for files to have a different yank status per PEP 592 but in the official
+                // PyPI warehouse this cannot happen.
+                // If any file is yanked, the version will be marked as yanked.
+                // <https://peps.python.org/pep-0592/#warehouse-pypi-implementation-notes>
                 let yanked = if let Some(ref yanked) = file.yanked {
                     yanked.clone()
                 } else {
