@@ -3235,8 +3235,6 @@ fn offline_find_links() -> Result<()> {
     );
 
     // Resolve with `--offline`, `--find-links`, and `--no-index`.
-    // TODO(charlie): This should indicate that the network was disabled, but we don't "know" that
-    // the `--find-links` lookup failed.
     puffin_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--find-links")
@@ -3249,8 +3247,10 @@ fn offline_find_links() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because tqdm was not found in the provided package locations and you
-          require tqdm, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can
+          conclude that the requirements are unsatisfiable.
+
+          hint: Packages were unavailable because the network was disabled
     "###
     );
 
