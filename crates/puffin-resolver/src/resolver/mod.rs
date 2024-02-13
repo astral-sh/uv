@@ -415,7 +415,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                                 reason.trim().trim_end_matches('.')
                             ),
                         },
-                        // TODO(zanieb)
                         UnavailableVersion::NoDistributions(best_incompatible) => {
                             if let Some(best_incompatible) = best_incompatible {
                                 match best_incompatible {
@@ -431,6 +430,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                                     }
                                 }
                             } else {
+                                // TODO(zanieb): It's unclear why we would encounter this case still
                                 "no wheels are available for your system".to_string()
                             }
                         }
