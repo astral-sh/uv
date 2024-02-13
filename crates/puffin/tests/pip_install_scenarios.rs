@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/c35c57f5b4ab3381658661edbd0cd955680f9cda/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/de58b3e3f998486b6c0f3dd67b7341c880eb54b2/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -2460,7 +2460,7 @@ fn no_wheels_with_matching_platform() {
 /// distributions available
 ///
 /// ```text
-/// af6bcec1
+/// 94e293e5
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2475,11 +2475,11 @@ fn no_sdist_no_wheels_with_matching_platform() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-af6bcec1", "albatross"));
-    filters.push((r"-af6bcec1", ""));
+    filters.push((r"a-94e293e5", "albatross"));
+    filters.push((r"-94e293e5", ""));
 
     puffin_snapshot!(filters, command(&context)
-        .arg("a-af6bcec1")
+        .arg("a-94e293e5")
         , @r###"
     success: false
     exit_code: 1
@@ -2487,11 +2487,11 @@ fn no_sdist_no_wheels_with_matching_platform() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no wheels are available with a matching Python ABI, we can conclude that all versions of albatross cannot be used.
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no wheels are available with a matching platform, we can conclude that all versions of albatross cannot be used.
           And because you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_af6bcec1", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_94e293e5", &context.temp_dir);
 }
 
 /// no-sdist-no-wheels-with-matching-python
