@@ -237,13 +237,9 @@ impl FlatIndex {
                 }));
                 match distributions.0.entry(version) {
                     Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_built(
-                            dist,
-                            None,
-                            None,
-                            priority,
-                            Yanked::Bool(false),
-                        );
+                        entry
+                            .get_mut()
+                            .insert_built(dist, None, None, priority, Yanked::default());
                     }
                     Entry::Vacant(entry) => {
                         entry.insert(PrioritizedDistribution::from_built(
@@ -251,7 +247,7 @@ impl FlatIndex {
                             None,
                             None,
                             priority,
-                            Yanked::Bool(false),
+                            Yanked::default(),
                         ));
                     }
                 }
@@ -266,14 +262,14 @@ impl FlatIndex {
                     Entry::Occupied(mut entry) => {
                         entry
                             .get_mut()
-                            .insert_source(dist, None, None, Yanked::Bool(false));
+                            .insert_source(dist, None, None, Yanked::default());
                     }
                     Entry::Vacant(entry) => {
                         entry.insert(PrioritizedDistribution::from_source(
                             dist,
                             None,
                             None,
-                            Yanked::Bool(false),
+                            Yanked::default(),
                         ));
                     }
                 }

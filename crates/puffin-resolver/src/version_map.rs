@@ -84,7 +84,7 @@ impl VersionMap {
                 let yanked = if let Some(ref yanked) = file.yanked {
                     yanked.clone()
                 } else {
-                    Yanked::Bool(false)
+                    Yanked::default()
                 };
 
                 // Prioritize amongst all available files.
