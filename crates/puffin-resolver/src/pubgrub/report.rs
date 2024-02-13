@@ -406,12 +406,16 @@ impl PubGrubReportFormatter<'_> {
                             index_locations.flat_index().peekable().peek().is_none();
 
                         if let PubGrubPackage::Package(name, ..) = package {
-                            if let Some(UnavailablePackage::NoIndex) =
-                                unavailable_packages.get(name)
-                            {
-                                if no_find_links {
-                                    hints.insert(PubGrubHint::NoIndex);
+                            match unavailable_packages.get(name) {
+                                Some(UnavailablePackage::NoIndex) => {
+                                    if no_find_links {
+                                        hints.insert(PubGrubHint::NoIndex);
+                                    }
                                 }
+                                Some(UnavailablePackage::Offline) => {
+                                    hints.insert(PubGrubHint::Offline);
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -460,6 +464,8 @@ pub(crate) enum PubGrubHint {
     /// Requirements were unavailable due to lookups in the index being disabled and no extra
     /// index was provided via `--find-links`
     NoIndex,
+    /// A package was not found in the registry, but
+    Offline,
 }
 
 impl std::fmt::Display for PubGrubHint {
@@ -489,6 +495,14 @@ impl std::fmt::Display for PubGrubHint {
                 write!(
                     f,
                     "{}{} Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                )
+            }
+            PubGrubHint::Offline => {
+                write!(
+                    f,
+                    "{}{} Packages were unavailable because the network was disabled",
                     "hint".bold().cyan(),
                     ":".bold(),
                 )

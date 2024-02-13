@@ -69,8 +69,10 @@ pub(crate) enum UnavailableVersion {
 /// The package is unavailable and cannot be used
 #[derive(Debug, Clone)]
 pub(crate) enum UnavailablePackage {
-    /// Index loopups were disabled (i.e. `--no-index`) and the package was not found in a flat index (i.e. from `--find-links`)
+    /// Index lookups were disabled (i.e., `--no-index`) and the package was not found in a flat index (i.e. from `--find-links`)
     NoIndex,
+    /// Network requests were disabled (i.e., `--offline`), and the package was not found in the cache.
+    Offline,
     /// The package was not found in the registry
     NotFound,
 }
@@ -346,6 +348,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                                     UnavailablePackage::NoIndex => {
                                         "was not found in the provided package locations"
                                     }
+                                    UnavailablePackage::Offline => "was not found in the cache",
                                     UnavailablePackage::NotFound => {
                                         "was not found in the package registry"
                                     }
@@ -571,6 +574,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     VersionsResponse::NoIndex => {
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::NoIndex);
+
+                        return Ok(None);
+                    }
+                    VersionsResponse::Offline => {
+                        self.unavailable_packages
+                            .insert(package_name.clone(), UnavailablePackage::Offline);
 
                         return Ok(None);
                     }
@@ -908,6 +917,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     VersionsResponse::NoIndex => {
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::NoIndex);
+
+                        return Ok(None);
+                    }
+                    VersionsResponse::Offline => {
+                        self.unavailable_packages
+                            .insert(package_name.clone(), UnavailablePackage::Offline);
 
                         return Ok(None);
                     }

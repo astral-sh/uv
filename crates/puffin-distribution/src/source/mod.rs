@@ -24,7 +24,9 @@ use platform_tags::Tags;
 use puffin_cache::{
     ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness, WheelCache,
 };
-use puffin_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
+use puffin_client::{
+    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
+};
 use puffin_fs::{write_atomic, LockedFile};
 use puffin_git::{Fetch, GitSource};
 use puffin_traits::{BuildContext, BuildKind, NoBuild, SourceBuildTrait};
@@ -42,7 +44,7 @@ mod manifest;
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub struct SourceDistCachedBuilder<'a, T: BuildContext> {
     build_context: &'a T,
-    cached_client: &'a CachedClient,
+    client: &'a RegistryClient,
     reporter: Option<Arc<dyn Reporter>>,
     tags: &'a Tags,
 }
@@ -55,11 +57,11 @@ pub(crate) const METADATA: &str = "metadata.msgpack";
 
 impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// Initialize a [`SourceDistCachedBuilder`] from a [`BuildContext`].
-    pub fn new(build_context: &'a T, cached_client: &'a CachedClient, tags: &'a Tags) -> Self {
+    pub fn new(build_context: &'a T, client: &'a RegistryClient, tags: &'a Tags) -> Self {
         Self {
             build_context,
             reporter: None,
-            cached_client,
+            client,
             tags,
         }
     }
@@ -251,12 +253,15 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let cache_entry = cache_shard.entry(MANIFEST);
-        let cache_control = CacheControl::from(
-            self.build_context
-                .cache()
-                .freshness(&cache_entry, Some(source_dist.name()))
-                .map_err(Error::CacheRead)?,
-        );
+        let cache_control = match self.client.connectivity() {
+            Connectivity::Online => CacheControl::from(
+                self.build_context
+                    .cache()
+                    .freshness(&cache_entry, Some(source_dist.name()))
+                    .map_err(Error::CacheRead)?,
+            ),
+            Connectivity::Offline => CacheControl::AllowStale,
+        };
 
         let download = |response| {
             async {
@@ -275,9 +280,15 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .boxed()
             .instrument(info_span!("download", source_dist = %source_dist))
         };
-        let req = self.cached_client.uncached().get(url.clone()).build()?;
+        let req = self
+            .client
+            .cached_client()
+            .uncached()
+            .get(url.clone())
+            .build()?;
         let manifest = self
-            .cached_client
+            .client
+            .cached_client()
             .get_serde(req, &cache_entry, cache_control, download)
             .await
             .map_err(|err| match err {
@@ -345,12 +356,15 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
     ) -> Result<Metadata21, Error> {
         let cache_entry = cache_shard.entry(MANIFEST);
-        let cache_control = CacheControl::from(
-            self.build_context
-                .cache()
-                .freshness(&cache_entry, Some(source_dist.name()))
-                .map_err(Error::CacheRead)?,
-        );
+        let cache_control = match self.client.connectivity() {
+            Connectivity::Online => CacheControl::from(
+                self.build_context
+                    .cache()
+                    .freshness(&cache_entry, Some(source_dist.name()))
+                    .map_err(Error::CacheRead)?,
+            ),
+            Connectivity::Offline => CacheControl::AllowStale,
+        };
 
         let download = |response| {
             async {
@@ -369,9 +383,15 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .boxed()
             .instrument(info_span!("download", source_dist = %source_dist))
         };
-        let req = self.cached_client.uncached().get(url.clone()).build()?;
+        let req = self
+            .client
+            .cached_client()
+            .uncached()
+            .get(url.clone())
+            .build()?;
         let manifest = self
-            .cached_client
+            .client
+            .cached_client()
             .get_serde(req, &cache_entry, cache_control, download)
             .await
             .map_err(|err| match err {

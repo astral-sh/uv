@@ -13,7 +13,7 @@ use distribution_types::{DistributionMetadata, IndexLocations, Name};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use puffin_cache::Cache;
-use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
+use puffin_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use puffin_dispatch::BuildDispatch;
 use puffin_fs::Normalized;
 use puffin_installer::NoBinary;
@@ -25,11 +25,12 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Create a virtual environment.
-#[allow(clippy::unnecessary_wraps)]
+#[allow(clippy::unnecessary_wraps, clippy::too_many_arguments)]
 pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
     cache: &Cache,
@@ -39,6 +40,7 @@ pub(crate) async fn venv(
         path,
         python_request,
         index_locations,
+        connectivity,
         seed,
         exclude_newer,
         cache,
@@ -74,10 +76,12 @@ enum VenvError {
 }
 
 /// Create a virtual environment.
+#[allow(clippy::too_many_arguments)]
 async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
     cache: &Cache,
@@ -118,7 +122,9 @@ async fn venv_impl(
         let interpreter = venv.interpreter();
 
         // Instantiate a client.
-        let client = RegistryClientBuilder::new(cache.clone()).build();
+        let client = RegistryClientBuilder::new(cache.clone())
+            .connectivity(connectivity)
+            .build();
 
         // Resolve the flat indexes from `--find-links`.
         let flat_index = {

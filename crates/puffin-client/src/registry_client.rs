@@ -26,6 +26,7 @@ use pypi_types::{Metadata21, SimpleJson};
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
+use crate::middleware::OfflineMiddleware;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{CachedClient, CachedClientError, Error, ErrorKind};
@@ -35,6 +36,7 @@ use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 pub struct RegistryClientBuilder {
     index_urls: IndexUrls,
     retries: u32,
+    connectivity: Connectivity,
     cache: Cache,
 }
 
@@ -43,6 +45,7 @@ impl RegistryClientBuilder {
         Self {
             index_urls: IndexUrls::default(),
             cache,
+            connectivity: Connectivity::Online,
             retries: 3,
         }
     }
@@ -52,6 +55,12 @@ impl RegistryClientBuilder {
     #[must_use]
     pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
         self.index_urls = index_urls;
+        self
+    }
+
+    #[must_use]
+    pub fn connectivity(mut self, connectivity: Connectivity) -> Self {
+        self.connectivity = connectivity;
         self
     }
 
@@ -69,6 +78,7 @@ impl RegistryClientBuilder {
 
     pub fn build(self) -> RegistryClient {
         let client_raw = {
+            // Disallow any connections.
             let client_core = ClientBuilder::new()
                 .user_agent("puffin")
                 .pool_max_idle_per_host(20)
@@ -77,19 +87,26 @@ impl RegistryClientBuilder {
             client_core.build().expect("Failed to build HTTP client.")
         };
 
-        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(self.retries);
-        let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
+        let uncached_client = match self.connectivity {
+            Connectivity::Online => {
+                let retry_policy =
+                    ExponentialBackoff::builder().build_with_max_retries(self.retries);
+                let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
+                reqwest_middleware::ClientBuilder::new(client_raw.clone())
+                    .with(retry_strategy)
+                    .build()
+            }
+            Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client_raw.clone())
+                .with(OfflineMiddleware)
+                .build(),
+        };
 
-        let uncached_client = reqwest_middleware::ClientBuilder::new(client_raw.clone())
-            .with(retry_strategy)
-            .build();
-
-        let client = CachedClient::new(uncached_client.clone());
         RegistryClient {
             index_urls: self.index_urls,
-            client_raw: client_raw.clone(),
             cache: self.cache,
-            client,
+            connectivity: self.connectivity,
+            client_raw: client_raw.clone(),
+            client: CachedClient::new(uncached_client.clone()),
         }
     }
 }
@@ -106,6 +123,8 @@ pub struct RegistryClient {
     client_raw: Client,
     /// Used for the remote wheel METADATA cache
     cache: Cache,
+    /// The connectivity mode to use.
+    connectivity: Connectivity,
 }
 
 impl RegistryClient {
@@ -114,12 +133,17 @@ impl RegistryClient {
         &self.client
     }
 
+    /// Return the [`Connectivity`] mode used by this client.
+    pub fn connectivity(&self) -> Connectivity {
+        self.connectivity
+    }
+
     /// Fetch a package from the `PyPI` simple API.
     ///
     /// "simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
     /// which the pypi json api approximately implements.
-    #[instrument("simple_api", skip_all, fields(package = %package_name))]
+    #[instrument("simple_api", skip_all, fields(package = % package_name))]
     pub async fn simple(
         &self,
         package_name: &PackageName,
@@ -134,6 +158,7 @@ impl RegistryClient {
             return match result {
                 Ok(metadata) => Ok((index.clone(), metadata)),
                 Err(CachedClientError::Client(err)) => match err.into_kind() {
+                    ErrorKind::Offline(_) => continue,
                     ErrorKind::RequestError(err) => {
                         if err.status() == Some(StatusCode::NOT_FOUND) {
                             continue;
@@ -146,7 +171,12 @@ impl RegistryClient {
             };
         }
 
-        Err(ErrorKind::PackageNotFound(package_name.to_string()).into())
+        match self.connectivity {
+            Connectivity::Online => {
+                Err(ErrorKind::PackageNotFound(package_name.to_string()).into())
+            }
+            Connectivity::Offline => Err(ErrorKind::Offline(package_name.to_string()).into()),
+        }
     }
 
     async fn simple_single_index(
@@ -171,11 +201,14 @@ impl RegistryClient {
             }),
             format!("{package_name}.rkyv"),
         );
-        let cache_control = CacheControl::from(
-            self.cache
-                .freshness(&cache_entry, Some(package_name))
-                .map_err(ErrorKind::Io)?,
-        );
+        let cache_control = match self.connectivity {
+            Connectivity::Online => CacheControl::from(
+                self.cache
+                    .freshness(&cache_entry, Some(package_name))
+                    .map_err(ErrorKind::Io)?,
+            ),
+            Connectivity::Offline => CacheControl::AllowStale,
+        };
 
         let simple_request = self
             .client
@@ -243,7 +276,7 @@ impl RegistryClient {
     /// 1. From a [PEP 658](https://peps.python.org/pep-0658/) data-dist-info-metadata url
     /// 2. From a remote wheel by partial zip reading
     /// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
-    #[instrument(skip_all, fields(%built_dist))]
+    #[instrument(skip_all, fields(% built_dist))]
     pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => match &wheel.file.url {
@@ -314,11 +347,14 @@ impl RegistryClient {
                 WheelCache::Index(index).remote_wheel_dir(filename.name.as_ref()),
                 format!("{}.msgpack", filename.stem()),
             );
-            let cache_control = CacheControl::from(
-                self.cache
-                    .freshness(&cache_entry, Some(&filename.name))
-                    .map_err(ErrorKind::Io)?,
-            );
+            let cache_control = match self.connectivity {
+                Connectivity::Online => CacheControl::from(
+                    self.cache
+                        .freshness(&cache_entry, Some(&filename.name))
+                        .map_err(ErrorKind::Io)?,
+                ),
+                Connectivity::Offline => CacheControl::AllowStale,
+            };
 
             let response_callback = |response: Response| async {
                 let bytes = response.bytes().await.map_err(ErrorKind::RequestError)?;
@@ -364,11 +400,14 @@ impl RegistryClient {
             cache_shard.remote_wheel_dir(filename.name.as_ref()),
             format!("{}.msgpack", filename.stem()),
         );
-        let cache_control = CacheControl::from(
-            self.cache
-                .freshness(&cache_entry, Some(&filename.name))
-                .map_err(ErrorKind::Io)?,
-        );
+        let cache_control = match self.connectivity {
+            Connectivity::Online => CacheControl::from(
+                self.cache
+                    .freshness(&cache_entry, Some(&filename.name))
+                    .map_err(ErrorKind::Io)?,
+            ),
+            Connectivity::Offline => CacheControl::AllowStale,
+        };
 
         // This response callback is special, we actually make a number of subsequent requests to
         // fetch the file from the remote zip.
@@ -421,7 +460,8 @@ impl RegistryClient {
         }
 
         // The range request version failed (this is bad, the webserver should support this), fall
-        // back to downloading the entire file and the reading the file from the zip the regular way
+        // back to downloading the entire file and the reading the file from the zip the regular
+        // way.
 
         debug!("Range requests not supported for {filename}; downloading wheel");
         // TODO(konstin): Download the wheel into a cache shared with the installer instead
@@ -462,7 +502,7 @@ impl RegistryClient {
 }
 
 /// It doesn't really fit into `puffin_client`, but it avoids cyclical crate dependencies.
-pub async fn read_metadata_async(
+async fn read_metadata_async(
     filename: &WheelFilename,
     debug_source: String,
     reader: impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
@@ -640,6 +680,15 @@ impl MediaType {
         // See: https://peps.python.org/pep-0691/#version-format-selection
         "application/vnd.pypi.simple.v1+json, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
     }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum Connectivity {
+    /// Allow access to the network.
+    Online,
+
+    /// Do not allow access to the network.
+    Offline,
 }
 
 #[cfg(test)]

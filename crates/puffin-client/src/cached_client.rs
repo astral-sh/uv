@@ -128,6 +128,8 @@ pub enum CacheControl {
     None,
     /// Apply `max-age=0, must-revalidate` to the request.
     MustRevalidate,
+    /// Allow the client to return stale responses.
+    AllowStale,
 }
 
 impl From<Freshness> for CacheControl {
@@ -307,7 +309,7 @@ impl CachedClient {
     ) -> Result<CachedResponse, Error> {
         // Apply the cache control header, if necessary.
         match cache_control {
-            CacheControl::None => {}
+            CacheControl::None | CacheControl::AllowStale => {}
             CacheControl::MustRevalidate => {
                 req.headers_mut().insert(
                     http::header::CACHE_CONTROL,
@@ -320,11 +322,17 @@ impl CachedClient {
                 debug!("Found fresh response for: {}", req.url());
                 CachedResponse::FreshCache(cached)
             }
-            BeforeRequest::Stale(new_cache_policy_builder) => {
-                debug!("Found stale response for: {}", req.url());
-                self.send_cached_handle_stale(req, cached, new_cache_policy_builder)
-                    .await?
-            }
+            BeforeRequest::Stale(new_cache_policy_builder) => match cache_control {
+                CacheControl::None | CacheControl::MustRevalidate => {
+                    debug!("Found stale response for: {}", req.url());
+                    self.send_cached_handle_stale(req, cached, new_cache_policy_builder)
+                        .await?
+                }
+                CacheControl::AllowStale => {
+                    debug!("Found stale (but allowed) response for: {}", req.url());
+                    CachedResponse::FreshCache(cached)
+                }
+            },
             BeforeRequest::NoMatch => {
                 // This shouldn't happen; if it does, we'll override the cache.
                 warn!(
@@ -349,7 +357,7 @@ impl CachedClient {
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
-            .map_err(ErrorKind::RequestMiddlewareError)?
+            .map_err(ErrorKind::from_middleware)?
             .error_for_status()
             .map_err(ErrorKind::RequestError)?;
         match cached
@@ -384,7 +392,7 @@ impl CachedClient {
             .0
             .execute(req)
             .await
-            .map_err(ErrorKind::RequestMiddlewareError)?
+            .map_err(ErrorKind::from_middleware)?
             .error_for_status()
             .map_err(ErrorKind::RequestError)?;
         let cache_policy = cache_policy_builder.build(&response);

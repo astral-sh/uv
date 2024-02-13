@@ -13,6 +13,7 @@ use tracing::instrument;
 
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use puffin_cache::{Cache, CacheArgs, Refresh};
+use puffin_client::Connectivity;
 use puffin_installer::{NoBinary, Reinstall};
 use puffin_interpreter::PythonVersion;
 use puffin_normalize::{ExtraName, PackageName};
@@ -50,6 +51,7 @@ mod requirements;
 #[derive(Parser)]
 #[command(author, version, about)]
 #[command(propagate_version = true)]
+#[allow(clippy::struct_excessive_bools)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -207,6 +209,15 @@ struct PipCompileArgs {
     #[clap(long)]
     no_header: bool,
 
+    /// Run offline, i.e., without accessing the network.
+    #[arg(
+        global = true,
+        long,
+        conflicts_with = "refresh",
+        conflicts_with = "refresh_package"
+    )]
+    offline: bool,
+
     /// Refresh all cached data.
     #[clap(long)]
     refresh: bool,
@@ -317,6 +328,15 @@ struct PipSyncArgs {
     /// Reinstall a specific package, regardless of whether it's already installed.
     #[clap(long)]
     reinstall_package: Vec<PackageName>,
+
+    /// Run offline, i.e., without accessing the network.
+    #[arg(
+        global = true,
+        long,
+        conflicts_with = "refresh",
+        conflicts_with = "refresh_package"
+    )]
+    offline: bool,
 
     /// Refresh all cached data.
     #[clap(long)]
@@ -450,6 +470,15 @@ struct PipInstallArgs {
     /// Reinstall a specific package, regardless of whether it's already installed.
     #[clap(long)]
     reinstall_package: Vec<PackageName>,
+
+    /// Run offline, i.e., without accessing the network.
+    #[arg(
+        global = true,
+        long,
+        conflicts_with = "refresh",
+        conflicts_with = "refresh_package"
+    )]
+    offline: bool,
 
     /// Refresh all cached data.
     #[clap(long)]
@@ -619,6 +648,10 @@ struct VenvArgs {
     /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// Run offline, i.e., without accessing the network.
+    #[arg(global = true, long)]
+    offline: bool,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -794,6 +827,11 @@ async fn run() -> Result<ExitStatus> {
                 } else {
                     SetupPyStrategy::Pep517
                 },
+                if args.offline {
+                    Connectivity::Offline
+                } else {
+                    Connectivity::Online
+                },
                 &no_build,
                 args.python_version,
                 args.exclude_newer,
@@ -831,6 +869,11 @@ async fn run() -> Result<ExitStatus> {
                     SetupPyStrategy::Setuptools
                 } else {
                     SetupPyStrategy::Pep517
+                },
+                if args.offline {
+                    Connectivity::Offline
+                } else {
+                    Connectivity::Online
                 },
                 &no_build,
                 &no_binary,
@@ -902,6 +945,11 @@ async fn run() -> Result<ExitStatus> {
                 } else {
                     SetupPyStrategy::Pep517
                 },
+                if args.offline {
+                    Connectivity::Offline
+                } else {
+                    Connectivity::Online
+                },
                 &no_build,
                 &no_binary,
                 args.strict,
@@ -945,6 +993,11 @@ async fn run() -> Result<ExitStatus> {
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
+                if args.offline {
+                    Connectivity::Offline
+                } else {
+                    Connectivity::Online
+                },
                 args.seed,
                 args.exclude_newer,
                 &cache,
