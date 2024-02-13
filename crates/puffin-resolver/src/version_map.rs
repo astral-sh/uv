@@ -136,16 +136,18 @@ impl VersionMap {
         Self(version_map)
     }
 
-    /// Return the [`DistFile`] for the given version, if any.
-    pub(crate) fn get(&self, version: &Version) -> Option<ResolvableDist> {
-        self.0.get(version).and_then(PrioritizedDistribution::get)
+    /// Return the [`PrioritizedDistribution`] for the given version, if any.
+    pub(crate) fn get(&self, version: &Version) -> Option<&PrioritizedDistribution> {
+        self.0.get(version)
     }
 
-    /// Return an iterator over the versions and distributions.
-    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (&Version, ResolvableDist)> {
+    /// Return an iterator over [`Version`] and [`PrioritizedDistribution`] pairs in the map.
+    pub(crate) fn iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (&Version, &PrioritizedDistribution)> {
         self.0
             .iter()
-            .filter_map(|(version, dist)| Some((version, dist.get()?)))
+            .filter_map(|(version, dist)| Some((version, dist)))
     }
 
     /// Return the [`Hashes`] for the given version, if any.

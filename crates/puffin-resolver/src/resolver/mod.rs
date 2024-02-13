@@ -67,6 +67,8 @@ pub(crate) enum UnavailableVersion {
     RequiresPython(VersionSpecifiers),
     /// Version is incompatible because it is yanked
     Yanked(Yanked),
+    /// Version is incompatible because it has no usable distributions
+    NoDistributions,
 }
 
 /// The package is unavailable and cannot be used
@@ -413,6 +415,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                                 reason.trim().trim_end_matches('.')
                             ),
                         },
+                        // TODO(zanieb)
+                        UnavailableVersion::NoDistributions => {
+                            "no distributions match your system".to_string()
+                        }
                     };
                     state.add_incompatibility(Incompatibility::unavailable(
                         next.clone(),
@@ -654,14 +660,22 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     debug!("Searching for a compatible version of {package_name} ({range})");
                 }
 
-                // Find a compatible version.
+                // Find a version.
                 let Some(candidate) = self.selector.select(package_name, range, version_map) else {
-                    // Short circuit: we couldn't find _any_ compatible versions for a package.
+                    // Short circuit: we couldn't find _any_ versions for a package.
                     return Ok(None);
                 };
 
+                // If the version is incompatible because no distributions match
+                let Some(dist) = candidate.resolvable_dist() else {
+                    return Ok(Some(ResolverVersion::Unavailable(
+                        candidate.version().clone(),
+                        UnavailableVersion::NoDistributions,
+                    )));
+                };
+
                 // If the version is incompatible because it was yanked
-                if candidate.yanked().is_yanked() {
+                if dist.yanked().is_yanked() {
                     if self
                         .allowed_yanks
                         .allowed(package_name, candidate.version())
@@ -670,7 +684,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     } else {
                         return Ok(Some(ResolverVersion::Unavailable(
                             candidate.version().clone(),
-                            UnavailableVersion::Yanked(candidate.yanked().clone()),
+                            UnavailableVersion::Yanked(dist.yanked().clone()),
                         )));
                     }
                 }
@@ -689,8 +703,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         candidate.name(),
                         extra,
                         candidate.version(),
-                        candidate
-                            .resolution_dist()
+                        dist.for_resolution()
                             .dist
                             .filename()
                             .unwrap_or("unknown filename")
@@ -700,8 +713,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         "Selecting: {}=={} ({})",
                         candidate.name(),
                         candidate.version(),
-                        candidate
-                            .resolution_dist()
+                        dist.for_resolution()
                             .dist
                             .filename()
                             .unwrap_or("unknown filename")
@@ -710,13 +722,13 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // We want to return a package pinned to a specific version; but we _also_ want to
                 // store the exact file that we selected to satisfy that version.
-                pins.insert(&candidate);
+                pins.insert(&candidate, &dist);
 
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(candidate.package_id()) {
-                    let dist = candidate.resolution_dist().dist.clone();
+                    let dist = dist.for_resolution().dist.clone();
                     request_sink.send(Request::Dist(dist)).await?;
                 }
 
@@ -997,9 +1009,13 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(None);
                 }
 
+                let Some(dist) = candidate.resolvable_dist() else {
+                    return Ok(None);
+                };
+
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(candidate.package_id()) {
-                    let dist = candidate.resolution_dist().dist.clone();
+                    let dist = dist.for_resolution().dist.clone();
 
                     let (metadata, precise) = self
                         .provider
