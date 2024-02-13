@@ -4,9 +4,11 @@ use chrono::{DateTime, Utc};
 use tracing::{instrument, warn};
 
 use distribution_filename::DistFilename;
-use distribution_types::{Dist, IndexUrl, PrioritizedDist, UsableDist};
-use pep440_rs::Version;
-use platform_tags::Tags;
+use distribution_types::{
+    Dist, IncompatibleWheel, IndexUrl, PrioritizedDist, WheelCompatibility,
+};
+use pep440_rs::{Version};
+use platform_tags::{Tags};
 use puffin_client::{FlatDistributions, OwnedArchive, SimpleMetadata, SimpleMetadatum};
 use puffin_normalize::PackageName;
 use puffin_traits::NoBinary;
@@ -89,20 +91,27 @@ impl VersionMap {
                 let hash = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
-                        // If pre-built binaries are disabled, skip this wheel
-                        if no_binary {
-                            continue;
-                        }
+                        // Determine a compatibility for the wheel based on tags
+                        let mut compatibility =
+                            WheelCompatibility::from(filename.compatibility(tags));
 
-                        // To be compatible, the wheel must both have compatible tags _and_ have a
-                        // compatible Python requirement.
-                        let priority = filename.compatibility(tags).filter(|_| {
-                            file.requires_python
-                                .as_ref()
-                                .map_or(true, |requires_python| {
-                                    requires_python.contains(python_requirement.target())
-                                })
-                        });
+                        if compatibility.is_compatible() {
+                            // Check for Python version incompatibility
+                            if let Some(ref requires_python) = file.requires_python {
+                                if !requires_python.contains(python_requirement.target()) {
+                                    compatibility = WheelCompatibility::Incompatible(
+                                        IncompatibleWheel::RequiresPython,
+                                    );
+                                }
+                            }
+
+                            // Mark all wheels as incompatibility when binaries are disabled
+                            if no_binary {
+                                compatibility =
+                                    WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
+                            }
+                        };
+
                         let dist = Dist::from_registry(
                             DistFilename::WheelFilename(filename),
                             file,
@@ -113,7 +122,7 @@ impl VersionMap {
                             requires_python,
                             yanked,
                             Some(hash),
-                            priority,
+                            compatibility,
                         );
                     }
                     DistFilename::SourceDistFilename(filename) => {
@@ -136,16 +145,14 @@ impl VersionMap {
         Self(version_map)
     }
 
-    /// Return the [`PrioritizedDistribution`] for the given version, if any.
+    /// Return the [`PrioritizedDist`] for the given version, if any.
     pub(crate) fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
         self.0.get(version)
     }
 
-    /// Return an iterator over [`Version`] and [`PrioritizedDistribution`] pairs in the map.
+    /// Return an iterator over [`Version`] and [`PrioritizedDist`] pairs in the map.
     pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (&Version, &PrioritizedDist)> {
-        self.0
-            .iter()
-            .filter_map(|(version, dist)| Some((version, dist)))
+        self.0.iter()
     }
 
     /// Return the [`Hashes`] for the given version, if any.

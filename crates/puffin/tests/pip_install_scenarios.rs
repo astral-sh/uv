@@ -2487,7 +2487,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no distributions match your system, we can conclude that all versions of albatross cannot be used.
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no wheels are available with a matching Python ABI, we can conclude that all versions of albatross cannot be used.
           And because you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -2527,7 +2527,7 @@ fn no_sdist_no_wheels_with_matching_python() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no distributions match your system, we can conclude that all versions of albatross cannot be used.
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no wheels are available with a matching Python implementation, we can conclude that all versions of albatross cannot be used.
           And because you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -2567,7 +2567,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no distributions match your system, we can conclude that all versions of albatross cannot be used.
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no wheels are available with a matching Python ABI, we can conclude that all versions of albatross cannot be used.
           And because you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -2650,7 +2650,7 @@ fn only_wheels_no_binary() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no distributions match your system, we can conclude that all versions of albatross cannot be used.
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no source distribution is available and using wheels is disabled, we can conclude that all versions of albatross cannot be used.
           And because you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 

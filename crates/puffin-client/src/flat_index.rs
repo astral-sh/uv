@@ -288,7 +288,7 @@ impl FlatIndex {
         // for wheels, we read it lazily only when selected.
         match filename {
             DistFilename::WheelFilename(filename) => {
-                let priority = filename.compatibility(tags);
+                let compatibility = filename.compatibility(tags);
                 let version = filename.version.clone();
 
                 let dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
@@ -298,9 +298,13 @@ impl FlatIndex {
                 }));
                 match distributions.0.entry(version) {
                     Entry::Occupied(mut entry) => {
-                        entry
-                            .get_mut()
-                            .insert_built(dist, None, Yanked::default(), None, priority);
+                        entry.get_mut().insert_built(
+                            dist,
+                            None,
+                            Yanked::default(),
+                            None,
+                            compatibility.into(),
+                        );
                     }
                     Entry::Vacant(entry) => {
                         entry.insert(PrioritizedDist::from_built(
@@ -308,7 +312,7 @@ impl FlatIndex {
                             None,
                             Yanked::default(),
                             None,
-                            priority,
+                            compatibility.into(),
                         ));
                     }
                 }

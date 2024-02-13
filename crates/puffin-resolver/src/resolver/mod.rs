@@ -20,12 +20,12 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, LocalEditable, Name, RemoteSource, SourceDist,
-    VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, IncompatibleWheel, LocalEditable, Name, RemoteSource,
+    SourceDist, VersionOrUrl,
 };
 use pep440_rs::{Version, VersionSpecifiers, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, Requirement};
-use platform_tags::Tags;
+use platform_tags::{IncompatibleTag, Tags};
 use puffin_client::{FlatIndex, RegistryClient};
 use puffin_distribution::DistributionDatabase;
 use puffin_interpreter::Interpreter;
@@ -33,7 +33,7 @@ use puffin_normalize::PackageName;
 use puffin_traits::BuildContext;
 use pypi_types::{Metadata21, Yanked};
 
-use crate::candidate_selector::CandidateSelector;
+use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::error::ResolveError;
 use crate::manifest::Manifest;
 use crate::overrides::Overrides;
@@ -68,7 +68,7 @@ pub(crate) enum UnavailableVersion {
     /// Version is incompatible because it is yanked
     Yanked(Yanked),
     /// Version is incompatible because it has no usable distributions
-    NoDistributions,
+    NoDistributions(Option<IncompatibleWheel>),
 }
 
 /// The package is unavailable and cannot be used
@@ -416,8 +416,23 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             ),
                         },
                         // TODO(zanieb)
-                        UnavailableVersion::NoDistributions => {
-                            "no distributions match your system".to_string()
+                        UnavailableVersion::NoDistributions(best_incompatible) => {
+                            if let Some(best_incompatible) = best_incompatible {
+                                match best_incompatible {
+                                    IncompatibleWheel::NoBinary => "no source distribution is available and using wheels is disabled".to_string(),
+                                    IncompatibleWheel::RequiresPython => "no wheels are available that meet your required Python version".to_string(),
+                                    IncompatibleWheel::Tag(tag) => {
+                                        match tag {
+                                            IncompatibleTag::Invalid => "no wheels are available with valid tags".to_string(),
+                                            IncompatibleTag::Python => "no wheels are available with a matching Python implementation".to_string(),
+                                            IncompatibleTag::Abi => "no wheels are available with a matching Python ABI".to_string(),
+                                            IncompatibleTag::Platform => "no wheels are available with a matching platform".to_string(),
+                                        }
+                                    }
+                                }
+                            } else {
+                                "no wheels are available for your system".to_string()
+                            }
                         }
                     };
                     state.add_incompatibility(Incompatibility::unavailable(
@@ -666,15 +681,18 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(None);
                 };
 
-                // If the version is incompatible because no distributions match
-                let Some(dist) = candidate.usable() else {
-                    return Ok(Some(ResolverVersion::Unavailable(
-                        candidate.version().clone(),
-                        UnavailableVersion::NoDistributions,
-                    )));
+                let dist = match candidate.dist() {
+                    CandidateDist::Compatible(dist) => dist,
+                    CandidateDist::Incompatible(incompatibility) => {
+                        // If the version is incompatible because no distributions match, exit early.
+                        return Ok(Some(ResolverVersion::Unavailable(
+                            candidate.version().clone(),
+                            UnavailableVersion::NoDistributions(incompatibility.cloned()),
+                        )));
+                    }
                 };
 
-                // If the version is incompatible because it was yanked
+                // If the version is incompatible because it was yanked, exit early.
                 if dist.yanked().is_yanked() {
                     if self
                         .allowed_yanks
@@ -722,7 +740,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // We want to return a package pinned to a specific version; but we _also_ want to
                 // store the exact file that we selected to satisfy that version.
-                pins.insert(&candidate, &dist);
+                pins.insert(&candidate, dist);
 
                 let version = candidate.version().clone();
 
@@ -1001,8 +1019,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(None);
                 };
 
-                // If there is not a usable distribution, short-circuit.
-                let Some(dist) = candidate.usable() else {
+                // If there is not a compatible distribution, short-circuit.
+                let Some(dist) = candidate.compatible() else {
                     return Ok(None);
                 };
 

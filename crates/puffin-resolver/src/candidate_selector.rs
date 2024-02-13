@@ -1,15 +1,15 @@
 use pubgrub::range::Range;
-use pypi_types::Yanked;
+
 use rustc_hash::FxHashMap;
 
-use distribution_types::{Dist, DistributionMetadata, Name, PrioritizedDist};
-use distribution_types::{DistMetadata, UsableDist};
-use pep440_rs::{Version, VersionSpecifiers};
+use distribution_types::CompatibleDist;
+use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
+use pep440_rs::Version;
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
 
 use crate::prerelease_mode::PreReleaseStrategy;
-use crate::python_requirement::PythonRequirement;
+
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::VersionMap;
 use crate::{Manifest, Options};
@@ -219,14 +219,33 @@ impl CandidateSelector {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) enum CandidateDist<'a> {
+    Compatible(CompatibleDist<'a>),
+    Incompatible(Option<&'a IncompatibleWheel>),
+}
+
+impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
+    fn from(value: &'a PrioritizedDist) -> Self {
+        if let Some(dist) = value.get() {
+            CandidateDist::Compatible(dist)
+        } else {
+            CandidateDist::Incompatible(
+                value
+                    .incompatible_wheel()
+                    .map(|(_, incompatibility)| incompatibility),
+            )
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct Candidate<'a> {
     /// The name of the package.
     name: &'a PackageName,
     /// The version of the package.
     version: &'a Version,
     /// The distributions to use for resolving and installing the package.
-    dist: &'a PrioritizedDist,
-    inner: Option<UsableDist<'a>>,
+    dist: CandidateDist<'a>,
 }
 
 impl<'a> Candidate<'a> {
@@ -234,8 +253,7 @@ impl<'a> Candidate<'a> {
         Self {
             name,
             version,
-            dist,
-            inner: dist.get(),
+            dist: CandidateDist::from(dist),
         }
     }
 
@@ -249,14 +267,18 @@ impl<'a> Candidate<'a> {
         self.version
     }
 
-    /// Return the prioritized distribution for the package.
-    pub(crate) fn prioritized(&self) -> &PrioritizedDist {
-        self.dist
+    /// Return the distribution for the package, if compatible.
+    pub(crate) fn compatible(&self) -> Option<&CompatibleDist<'a>> {
+        if let CandidateDist::Compatible(ref dist) = self.dist {
+            Some(dist)
+        } else {
+            None
+        }
     }
 
-    /// Return a usable distribution for the package.
-    pub(crate) fn usable(&self) -> Option<&UsableDist<'a>> {
-        self.inner.as_ref()
+    /// Return the distribution for the candidate.
+    pub(crate) fn dist(&self) -> &CandidateDist<'a> {
+        &self.dist
     }
 }
 

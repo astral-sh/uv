@@ -1,11 +1,9 @@
-use distribution_types::{Dist, UsableDist};
+use distribution_types::{CompatibleDist, Dist};
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::MarkerEnvironment;
 use puffin_interpreter::Interpreter;
 
-use crate::candidate_selector::Candidate;
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct PythonRequirement {
     /// The installed version of Python.
     installed: Version,
@@ -34,7 +32,10 @@ impl PythonRequirement {
     }
 
     /// If the dist doesn't match the given Python requirement, return the version specifiers.
-    pub(crate) fn validate_dist<'a>(&self, dist: &'a UsableDist) -> Option<&'a VersionSpecifiers> {
+    pub(crate) fn validate_dist<'a>(
+        &self,
+        dist: &'a CompatibleDist,
+    ) -> Option<&'a VersionSpecifiers> {
         // Validate the _installed_ file.
         let requires_python = dist.for_installation().requires_python.as_ref()?;
 

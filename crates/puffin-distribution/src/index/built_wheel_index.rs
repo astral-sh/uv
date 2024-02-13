@@ -106,7 +106,7 @@ impl BuiltWheelIndex {
                     let compatibility = dist_info.filename.compatibility(tags);
 
                     // Only consider wheels that are compatible with our tags.
-                    if compatibility.is_none() {
+                    if !compatibility.is_compatible() {
                         continue;
                     }
 

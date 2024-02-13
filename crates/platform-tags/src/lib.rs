@@ -1,5 +1,5 @@
-use std::num::NonZeroU32;
 use std::str::FromStr;
+use std::{cmp, num::NonZeroU32};
 
 use rustc_hash::FxHashMap;
 
@@ -15,6 +15,43 @@ pub enum TagsError {
     UnknownImplementation(String),
     #[error("Invalid priority: {0}")]
     InvalidPriority(usize, #[source] std::num::TryFromIntError),
+}
+
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone)]
+pub enum IncompatibleTag {
+    Invalid,
+    Python,
+    Abi,
+    Platform,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum TagCompatibility {
+    Incompatible(IncompatibleTag),
+    Compatible(TagPriority),
+}
+
+impl Ord for TagCompatibility {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (Self::Compatible(p_self), Self::Compatible(p_other)) => p_self.cmp(p_other),
+            (Self::Incompatible(_), Self::Compatible(_)) => cmp::Ordering::Less,
+            (Self::Compatible(_), Self::Incompatible(_)) => cmp::Ordering::Greater,
+            (Self::Incompatible(t_self), Self::Incompatible(t_other)) => t_self.cmp(t_other),
+        }
+    }
+}
+
+impl PartialOrd for TagCompatibility {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(TagCompatibility::cmp(self, other))
+    }
+}
+
+impl TagCompatibility {
+    pub fn is_compatible(&self) -> bool {
+        matches!(self, Self::Compatible(_))
+    }
 }
 
 /// A set of compatible tags for a given Python version and platform.
@@ -155,30 +192,43 @@ impl Tags {
         false
     }
 
-    /// Returns the [`TagPriority`] of the most-compatible platform tag, or `None` if there is no
-    /// compatible tag.
+    /// Returns the [`TagCompatiblity`] of the given tags.
+    ///
+    /// If compatible, includes the score of the most-compatible platform tag.
+    /// If incompatible, includes the tag part which was a closest match.
     pub fn compatibility(
         &self,
         wheel_python_tags: &[String],
         wheel_abi_tags: &[String],
         wheel_platform_tags: &[String],
-    ) -> Option<TagPriority> {
-        let mut max_priority = None;
+    ) -> TagCompatibility {
+        let mut max_compatibility = TagCompatibility::Incompatible(IncompatibleTag::Invalid);
+
         for wheel_py in wheel_python_tags {
             let Some(abis) = self.map.get(wheel_py) else {
+                max_compatibility =
+                    max_compatibility.max(TagCompatibility::Incompatible(IncompatibleTag::Python));
                 continue;
             };
             for wheel_abi in wheel_abi_tags {
                 let Some(platforms) = abis.get(wheel_abi) else {
+                    max_compatibility =
+                        max_compatibility.max(TagCompatibility::Incompatible(IncompatibleTag::Abi));
                     continue;
                 };
                 for wheel_platform in wheel_platform_tags {
                     let priority = platforms.get(wheel_platform).copied();
-                    max_priority = max_priority.max(priority);
+                    if let Some(priority) = priority {
+                        max_compatibility =
+                            max_compatibility.max(TagCompatibility::Compatible(priority));
+                    } else {
+                        max_compatibility = max_compatibility
+                            .max(TagCompatibility::Incompatible(IncompatibleTag::Platform));
+                    }
                 }
             }
         }
-        max_priority
+        max_compatibility
     }
 }
 
