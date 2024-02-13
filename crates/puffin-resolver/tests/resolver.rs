@@ -648,7 +648,7 @@ async fn msgraph_sdk() -> Result<()> {
         .unwrap_err();
 
     assert_snapshot!(err, @r###"
-    Because msgraph-core==1.0.0 is unusable because no distributions match your system and only the following versions of msgraph-core are available:
+    Because msgraph-core==1.0.0 is unusable because no wheels are available for your system and only the following versions of msgraph-core are available:
         msgraph-core<1.0.0a2
         msgraph-core>=1.0.0
     we can conclude that msgraph-core>=1.0.0a2 cannot be used.

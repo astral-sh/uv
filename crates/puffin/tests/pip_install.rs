@@ -71,9 +71,10 @@ fn no_solution() {
               flask==3.0.2
           and flask==3.0.0 depends on werkzeug>=3.0.0, we can conclude that
           flask>=3.0.0,<3.0.1 depends on werkzeug>=3.0.0.
-          And because flask==3.0.1 is unusable because no distributions match your
-          system and flask==3.0.2 is unusable because no distributions match your
-          system, we can conclude that flask>=3.0.0 depends on werkzeug>=3.0.0.
+          And because flask==3.0.1 is unusable because no wheels are available
+          for your system and flask==3.0.2 is unusable because no wheels are
+          available for your system, we can conclude that flask>=3.0.0 depends
+          on werkzeug>=3.0.0.
           And because you require flask>=3.0.0 and you require werkzeug<1.0.0, we
           can conclude that the requirements are unsatisfiable.
     "###);
