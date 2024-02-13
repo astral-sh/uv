@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use tracing::{instrument, warn};
 
 use distribution_filename::DistFilename;
-use distribution_types::{Dist, IndexUrl, PrioritizedDistribution, ResolvableDist};
+use distribution_types::{Dist, IndexUrl, PrioritizedDist, UsableDist};
 use pep440_rs::Version;
 use platform_tags::Tags;
 use puffin_client::{FlatDistributions, OwnedArchive, SimpleMetadata, SimpleMetadatum};
@@ -17,7 +17,7 @@ use crate::python_requirement::PythonRequirement;
 
 /// A map from versions to distributions.
 #[derive(Debug, Default, Clone)]
-pub struct VersionMap(BTreeMap<Version, PrioritizedDistribution>);
+pub struct VersionMap(BTreeMap<Version, PrioritizedDist>);
 
 impl VersionMap {
     /// Initialize a [`VersionMap`] from the given metadata.
@@ -137,14 +137,12 @@ impl VersionMap {
     }
 
     /// Return the [`PrioritizedDistribution`] for the given version, if any.
-    pub(crate) fn get(&self, version: &Version) -> Option<&PrioritizedDistribution> {
+    pub(crate) fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
         self.0.get(version)
     }
 
     /// Return an iterator over [`Version`] and [`PrioritizedDistribution`] pairs in the map.
-    pub(crate) fn iter(
-        &self,
-    ) -> impl DoubleEndedIterator<Item = (&Version, &PrioritizedDistribution)> {
+    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (&Version, &PrioritizedDist)> {
         self.0
             .iter()
             .filter_map(|(version, dist)| Some((version, dist)))

@@ -16,12 +16,13 @@ pub struct DistMetadata {
     pub yanked: Yanked,
 }
 
-// Boxed because `Dist` is large.
+/// A collection of distributions that have been filtered by relevance.
 #[derive(Debug, Default, Clone)]
-pub struct PrioritizedDistribution(Box<PrioritizedDistributionInner>);
+pub struct PrioritizedDist(Box<PrioritizedDistInner>);
 
+/// [`PrioritizedDist`] is boxed because [`Dist`] is large.
 #[derive(Debug, Default, Clone)]
-struct PrioritizedDistributionInner {
+struct PrioritizedDistInner {
     /// An arbitrary source distribution for the package version.
     source: Option<DistMetadata>,
     /// The highest-priority, platform-compatible wheel for the package version.
@@ -32,7 +33,7 @@ struct PrioritizedDistributionInner {
     hashes: Vec<Hashes>,
 }
 
-impl PrioritizedDistribution {
+impl PrioritizedDist {
     /// Create a new [`PrioritizedDistribution`] from the given wheel distribution.
     pub fn from_built(
         dist: Dist,
@@ -42,7 +43,7 @@ impl PrioritizedDistribution {
         priority: Option<TagPriority>,
     ) -> Self {
         if let Some(priority) = priority {
-            Self(Box::new(PrioritizedDistributionInner {
+            Self(Box::new(PrioritizedDistInner {
                 source: None,
                 compatible_wheel: Some((
                     DistMetadata {
@@ -56,7 +57,7 @@ impl PrioritizedDistribution {
                 hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
             }))
         } else {
-            Self(Box::new(PrioritizedDistributionInner {
+            Self(Box::new(PrioritizedDistInner {
                 source: None,
                 compatible_wheel: None,
                 incompatible_wheel: Some(DistMetadata {
@@ -76,7 +77,7 @@ impl PrioritizedDistribution {
         yanked: Yanked,
         hash: Option<Hashes>,
     ) -> Self {
-        Self(Box::new(PrioritizedDistributionInner {
+        Self(Box::new(PrioritizedDistInner {
             source: Some(DistMetadata {
                 dist,
                 requires_python,
@@ -155,7 +156,7 @@ impl PrioritizedDistribution {
     }
 
     /// Return the highest-priority distribution for the package version, if any.
-    pub fn get(&self) -> Option<ResolvableDist> {
+    pub fn get(&self) -> Option<UsableDist> {
         match (
             &self.0.compatible_wheel,
             &self.0.source,
@@ -163,17 +164,17 @@ impl PrioritizedDistribution {
         ) {
             // Prefer the highest-priority, platform-compatible wheel.
             (Some((wheel, tag_priority)), _, _) => {
-                Some(ResolvableDist::CompatibleWheel(wheel, *tag_priority))
+                Some(UsableDist::CompatibleWheel(wheel, *tag_priority))
             }
             // If we have a compatible source distribution and an incompatible wheel, return the
             // wheel. We assume that all distributions have the same metadata for a given package
             // version. If a compatible source distribution exists, we assume we can build it, but
             // using the wheel is faster.
             (_, Some(source_dist), Some(wheel)) => {
-                Some(ResolvableDist::IncompatibleWheel { source_dist, wheel })
+                Some(UsableDist::IncompatibleWheel { source_dist, wheel })
             }
             // Otherwise, if we have a source distribution, return it.
-            (_, Some(source_dist), _) => Some(ResolvableDist::SourceDist(source_dist)),
+            (_, Some(source_dist), _) => Some(UsableDist::SourceDist(source_dist)),
             _ => None,
         }
     }
@@ -202,9 +203,9 @@ impl PrioritizedDistribution {
     }
 }
 
-/// A collection of distributions ([`Dist`]) that can be used for resolution and installation.
+/// A distribution that can be used for both resolution and installation.
 #[derive(Debug, Clone)]
-pub enum ResolvableDist<'a> {
+pub enum UsableDist<'a> {
     /// The distribution should be resolved and installed using a source distribution.
     SourceDist(&'a DistMetadata),
     /// The distribution should be resolved and installed using a wheel distribution.
@@ -217,13 +218,13 @@ pub enum ResolvableDist<'a> {
     },
 }
 
-impl<'a> ResolvableDist<'a> {
+impl<'a> UsableDist<'a> {
     /// Return the [`DistMetadata`] to use during resolution.
     pub fn for_resolution(&self) -> &DistMetadata {
         match *self {
-            ResolvableDist::SourceDist(sdist) => sdist,
-            ResolvableDist::CompatibleWheel(wheel, _) => wheel,
-            ResolvableDist::IncompatibleWheel {
+            UsableDist::SourceDist(sdist) => sdist,
+            UsableDist::CompatibleWheel(wheel, _) => wheel,
+            UsableDist::IncompatibleWheel {
                 source_dist: _,
                 wheel,
             } => wheel,
@@ -233,9 +234,9 @@ impl<'a> ResolvableDist<'a> {
     /// Return the [`DistMetadata`] to use during installation.
     pub fn for_installation(&self) -> &DistMetadata {
         match *self {
-            ResolvableDist::SourceDist(sdist) => sdist,
-            ResolvableDist::CompatibleWheel(wheel, _) => wheel,
-            ResolvableDist::IncompatibleWheel {
+            UsableDist::SourceDist(sdist) => sdist,
+            UsableDist::CompatibleWheel(wheel, _) => wheel,
+            UsableDist::IncompatibleWheel {
                 source_dist,
                 wheel: _,
             } => source_dist,

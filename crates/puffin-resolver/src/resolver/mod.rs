@@ -667,7 +667,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 };
 
                 // If the version is incompatible because no distributions match
-                let Some(dist) = candidate.resolvable_dist() else {
+                let Some(dist) = candidate.usable() else {
                     return Ok(Some(ResolverVersion::Unavailable(
                         candidate.version().clone(),
                         UnavailableVersion::NoDistributions,
@@ -690,7 +690,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
 
                 // If the version is incompatible because of its Python requirement
-                if let Some(requires_python) = candidate.validate_python(&self.python_requirement) {
+                if let Some(requires_python) = self.python_requirement.validate_dist(dist) {
                     return Ok(Some(ResolverVersion::Unavailable(
                         candidate.version().clone(),
                         UnavailableVersion::RequiresPython(requires_python.clone()),
@@ -1001,17 +1001,15 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(None);
                 };
 
-                // If the version is incompatible, short-circuit.
-                if candidate
-                    .validate_python(&self.python_requirement)
-                    .is_some()
-                {
-                    return Ok(None);
-                }
-
-                let Some(dist) = candidate.resolvable_dist() else {
+                // If there is not a usable distribution, short-circuit.
+                let Some(dist) = candidate.usable() else {
                     return Ok(None);
                 };
+
+                // If the Python version is incompatible, short-circuit.
+                if self.python_requirement.validate_dist(dist).is_some() {
+                    return Ok(None);
+                }
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(candidate.package_id()) {

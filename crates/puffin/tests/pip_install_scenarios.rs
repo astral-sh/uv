@@ -2527,7 +2527,8 @@ fn no_sdist_no_wheels_with_matching_python() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of albatross and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no distributions match your system, we can conclude that all versions of albatross cannot be used.
+          And because you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(&context.venv, "a_40fe677d", &context.temp_dir);
@@ -2566,7 +2567,8 @@ fn no_sdist_no_wheels_with_matching_abi() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of albatross and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no distributions match your system, we can conclude that all versions of albatross cannot be used.
+          And because you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(&context.venv, "a_8727a9b9", &context.temp_dir);

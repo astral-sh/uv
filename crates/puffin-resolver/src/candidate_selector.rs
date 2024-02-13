@@ -2,8 +2,8 @@ use pubgrub::range::Range;
 use pypi_types::Yanked;
 use rustc_hash::FxHashMap;
 
-use distribution_types::{Dist, DistributionMetadata, Name, PrioritizedDistribution};
-use distribution_types::{DistMetadata, ResolvableDist};
+use distribution_types::{Dist, DistributionMetadata, Name, PrioritizedDist};
+use distribution_types::{DistMetadata, UsableDist};
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
@@ -163,7 +163,7 @@ impl CandidateSelector {
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over source distributions.
     fn select_candidate<'a>(
-        versions: impl Iterator<Item = (&'a Version, &'a PrioritizedDistribution)>,
+        versions: impl Iterator<Item = (&'a Version, &'a PrioritizedDist)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         allow_prerelease: AllowPreRelease,
@@ -171,7 +171,7 @@ impl CandidateSelector {
         #[derive(Debug)]
         enum PreReleaseCandidate<'a> {
             NotNecessary,
-            IfNecessary(&'a Version, &'a PrioritizedDistribution),
+            IfNecessary(&'a Version, &'a PrioritizedDist),
         }
 
         let mut prerelease = None;
@@ -225,12 +225,12 @@ pub(crate) struct Candidate<'a> {
     /// The version of the package.
     version: &'a Version,
     /// The distributions to use for resolving and installing the package.
-    dist: &'a PrioritizedDistribution,
-    inner: Option<ResolvableDist<'a>>,
+    dist: &'a PrioritizedDist,
+    inner: Option<UsableDist<'a>>,
 }
 
 impl<'a> Candidate<'a> {
-    fn new(name: &'a PackageName, version: &'a Version, dist: &'a PrioritizedDistribution) -> Self {
+    fn new(name: &'a PackageName, version: &'a Version, dist: &'a PrioritizedDist) -> Self {
         Self {
             name,
             version,
@@ -249,88 +249,14 @@ impl<'a> Candidate<'a> {
         self.version
     }
 
-    /// Return the distribution of the package.
-    pub(crate) fn dist(&self) -> &PrioritizedDistribution {
+    /// Return the prioritized distribution for the package.
+    pub(crate) fn prioritized(&self) -> &PrioritizedDist {
         self.dist
     }
 
-    /// Return the distribution of the package.
-    pub(crate) fn resolvable_dist(&self) -> Option<&ResolvableDist<'a>> {
+    /// Return a usable distribution for the package.
+    pub(crate) fn usable(&self) -> Option<&UsableDist<'a>> {
         self.inner.as_ref()
-    }
-
-    /// Return the [`DistMetadata`] to use when resolving the package.
-    pub(crate) fn resolution_dist(&self) -> Option<&DistMetadata> {
-        match self.inner {
-            Some(ref dist) => Some(dist.for_resolution()),
-            None => None,
-        }
-    }
-
-    /// Return the [`DistMetadata`] to use when installing the package.
-    pub(crate) fn installation_dist(&self) -> Option<&DistMetadata> {
-        match self.inner {
-            Some(ref dist) => Some(dist.for_installation()),
-            None => None,
-        }
-    }
-
-    /// If the candidate doesn't match the given Python requirement, return the version specifiers.
-    ///
-    /// If there are no distributions, this will always return [None].
-    pub(crate) fn validate_python(
-        &self,
-        requirement: &PythonRequirement,
-    ) -> Option<&VersionSpecifiers> {
-        let installation_dist = match self.installation_dist() {
-            Some(dist) => dist,
-            None => return None,
-        };
-
-        // Validate the _installed_ file.
-        let requires_python = installation_dist.requires_python.as_ref()?;
-
-        // If the candidate doesn't support the target Python version, return the failing version
-        // specifiers.
-        if !requires_python.contains(requirement.target()) {
-            return Some(requires_python);
-        }
-
-        // If the candidate is a source distribution, and doesn't support the installed Python
-        // version, return the failing version specifiers, since we won't be able to build it.
-        if matches!(installation_dist.dist, Dist::Source(_)) {
-            if !requires_python.contains(requirement.installed()) {
-                return Some(requires_python);
-            }
-        }
-
-        let resolution_dist = match self.resolution_dist() {
-            Some(dist) => dist,
-            None => return None,
-        };
-
-        // Validate the resolved file.
-        let requires_python = resolution_dist.requires_python.as_ref()?;
-
-        // If the candidate is a source distribution, and doesn't support the installed Python
-        // version, return the failing version specifiers, since we won't be able to build it.
-        // This isn't strictly necessary, since if `self.resolve()` is a source distribution, it
-        // should be the same file as `self.install()` (validated above).
-        if matches!(resolution_dist.dist, Dist::Source(_)) {
-            if !requires_python.contains(requirement.installed()) {
-                return Some(requires_python);
-            }
-        }
-
-        None
-    }
-
-    /// If the distribution is yanked
-    pub(crate) fn yanked(&self) -> Option<&Yanked> {
-        match self.inner {
-            Some(ref dist) => Some(dist.yanked()),
-            None => None,
-        }
     }
 }
 
