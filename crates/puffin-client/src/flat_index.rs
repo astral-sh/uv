@@ -300,15 +300,15 @@ impl FlatIndex {
                     Entry::Occupied(mut entry) => {
                         entry
                             .get_mut()
-                            .insert_built(dist, None, None, priority, Yanked::default());
+                            .insert_built(dist, None, Yanked::default(), None, priority);
                     }
                     Entry::Vacant(entry) => {
                         entry.insert(PrioritizedDistribution::from_built(
                             dist,
                             None,
+                            Yanked::default(),
                             None,
                             priority,
-                            Yanked::default(),
                         ));
                     }
                 }
@@ -323,14 +323,14 @@ impl FlatIndex {
                     Entry::Occupied(mut entry) => {
                         entry
                             .get_mut()
-                            .insert_source(dist, None, None, Yanked::default());
+                            .insert_source(dist, None, Yanked::default(), None);
                     }
                     Entry::Vacant(entry) => {
                         entry.insert(PrioritizedDistribution::from_source(
                             dist,
                             None,
-                            None,
                             Yanked::default(),
+                            None,
                         ));
                     }
                 }
