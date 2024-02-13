@@ -1,0 +1,4 @@
+doc-valid-idents = [
+  "PyPI",
+  ".." # Include the defaults
+] 
