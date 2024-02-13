@@ -78,10 +78,6 @@ impl VersionMap {
                     }
                 }
 
-                // It is possible for files to have a different yank status per PEP 592 but in the official
-                // PyPI warehouse this cannot happen.
-                // If any file is yanked, the version will be marked as yanked.
-                // <https://peps.python.org/pep-0592/#warehouse-pypi-implementation-notes>
                 let yanked = if let Some(ref yanked) = file.yanked {
                     yanked.clone()
                 } else {
@@ -115,9 +111,9 @@ impl VersionMap {
                         priority_dist.insert_built(
                             dist,
                             requires_python,
+                            yanked,
                             Some(hash),
                             priority,
-                            yanked,
                         );
                     }
                     DistFilename::SourceDistFilename(filename) => {
@@ -126,7 +122,7 @@ impl VersionMap {
                             file,
                             index.clone(),
                         );
-                        priority_dist.insert_source(dist, requires_python, Some(hash), yanked);
+                        priority_dist.insert_source(dist, requires_python, yanked, Some(hash));
                     }
                 }
             }

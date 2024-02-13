@@ -3,7 +3,7 @@ use pypi_types::Yanked;
 use rustc_hash::FxHashMap;
 
 use distribution_types::{Dist, DistributionMetadata, Name};
-use distribution_types::{DistRequiresPython, ResolvableDist};
+use distribution_types::{DistMetadata, ResolvableDist};
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
@@ -248,12 +248,12 @@ impl<'a> Candidate<'a> {
     }
 
     /// Return the [`DistFile`] to use when resolving the package.
-    pub(crate) fn resolution_dist(&self) -> &DistRequiresPython {
+    pub(crate) fn resolution_dist(&self) -> &DistMetadata {
         self.dist.for_resolution()
     }
 
     /// Return the [`DistFile`] to use when installing the package.
-    pub(crate) fn installation_dist(&self) -> &DistRequiresPython {
+    pub(crate) fn installation_dist(&self) -> &DistMetadata {
         self.dist.for_installation()
     }
 
@@ -295,8 +295,9 @@ impl<'a> Candidate<'a> {
         None
     }
 
+    /// If the distribution that would be installed is yanked.
     pub(crate) fn yanked(&self) -> &Yanked {
-        return self.dist.yanked();
+        self.dist.yanked()
     }
 }
 
