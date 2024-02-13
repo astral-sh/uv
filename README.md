@@ -13,20 +13,19 @@ Puffin is backed by [Astral](https://astral.sh), the creators of [Ruff](https://
 
 ## Highlights
 
+- ⚖️ Drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands.
 - ⚡️ 10-100x faster than `pip` and `pip-tools` (`pip-compile` and `pip-sync`).
-- 💾 Disk-space efficient, with a global cache for dependency deduplication and Copy-on-Write
-  installation on supported platforms.
-- 🐍 Installable via `pip`, `pipx`, `brew` etc. Puffin is a single static binary that can be
-  installed without Rust or even a Python environment.
+- 💾 Disk-space efficient, with a global cache for dependency deduplication.
+- 🐍 Installable via `pip`, `pipx`, `brew` etc. Puffin is a static binary that can be installed without Rust or
+  Python.
 - 🧪 Tested at-scale against the top 10,000 PyPI packages.
 - 🖥️ Support for macOS, Linux, and Windows.
-- ⚖️ Drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands.
-- 🤝 Support for a wide range of advanced `pip` features, including: editable installs, Git
-  dependencies, direct URL dependencies, local dependencies, constraints, source distributions,
-  HTML and JSON indexes, and more.
 - 🧰 Novel features such as [dependency version overrides](#dependency-overrides] and
    [alternative resolution strategies](#resolution-strategy).
 - ⁉️ Best-in-class error messages with a conflict-tracking resolver.
+- 🤝 Support for a wide range of advanced `pip` features, including: editable installs, Git
+  dependencies, direct URL dependencies, local dependencies, constraints, source distributions,
+  HTML and JSON indexes, and more.
 
 ## Getting Started
 
