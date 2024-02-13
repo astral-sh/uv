@@ -4,11 +4,9 @@ use chrono::{DateTime, Utc};
 use tracing::{instrument, warn};
 
 use distribution_filename::DistFilename;
-use distribution_types::{
-    Dist, IncompatibleWheel, IndexUrl, PrioritizedDist, WheelCompatibility,
-};
-use pep440_rs::{Version};
-use platform_tags::{Tags};
+use distribution_types::{Dist, IncompatibleWheel, IndexUrl, PrioritizedDist, WheelCompatibility};
+use pep440_rs::Version;
+use platform_tags::Tags;
 use puffin_client::{FlatDistributions, OwnedArchive, SimpleMetadata, SimpleMetadatum};
 use puffin_normalize::PackageName;
 use puffin_traits::NoBinary;
