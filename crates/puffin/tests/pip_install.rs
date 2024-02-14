@@ -82,22 +82,22 @@ fn install_package() {
     puffin_snapshot!(command(&context)
         .arg("Flask")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + blinker==1.7.0
-         + click==8.1.7
-         + flask==3.0.0
-         + itsdangerous==2.1.2
-         + jinja2==3.1.2
-         + markupsafe==2.1.3
-         + werkzeug==3.0.1
-        "###
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.2
+     + markupsafe==2.1.3
+     + werkzeug==3.0.1
+    "###
     );
 
     context.assert_command("import flask").success();
@@ -116,22 +116,22 @@ fn install_requirements_txt() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + blinker==1.7.0
-         + click==8.1.7
-         + flask==3.0.0
-         + itsdangerous==2.1.2
-         + jinja2==3.1.2
-         + markupsafe==2.1.3
-         + werkzeug==3.0.1
-        "###
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.2
+     + markupsafe==2.1.3
+     + werkzeug==3.0.1
+    "###
     );
 
     context.assert_command("import flask").success();
@@ -144,13 +144,13 @@ fn install_requirements_txt() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Audited 1 package in [TIME]
-        "###
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
     );
 
     context.assert_command("import flask").success();
@@ -172,22 +172,22 @@ fn respect_installed() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + blinker==1.7.0
-         + click==8.1.7
-         + flask==2.3.2
-         + itsdangerous==2.1.2
-         + jinja2==3.1.2
-         + markupsafe==2.1.3
-         + werkzeug==3.0.1
-        "###
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==2.3.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.2
+     + markupsafe==2.1.3
+     + werkzeug==3.0.1
+    "###
     );
 
     context.assert_command("import flask").success();
@@ -201,13 +201,13 @@ fn respect_installed() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Audited 1 package in [TIME]
-        "###
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
     );
 
     context.assert_command("import flask").success();
@@ -231,17 +231,17 @@ fn respect_installed() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - flask==2.3.2
-         + flask==2.3.3
-        "###
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - flask==2.3.2
+     + flask==2.3.3
+    "###
     );
 
     // Re-install Flask. We should upgrade it.
@@ -255,17 +255,17 @@ fn respect_installed() -> Result<()> {
         .arg("--reinstall-package")
         .arg("Flask")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - flask==2.3.3
-         + flask==3.0.0
-        "###
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - flask==2.3.3
+     + flask==3.0.0
+    "###
     );
 
     Ok(())
@@ -285,22 +285,22 @@ fn allow_incompatibilities() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + blinker==1.7.0
-         + click==8.1.7
-         + flask==3.0.0
-         + itsdangerous==2.1.2
-         + jinja2==3.1.2
-         + markupsafe==2.1.3
-         + werkzeug==3.0.1
-        "###
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.2
+     + markupsafe==2.1.3
+     + werkzeug==3.0.1
+    "###
     );
 
     context.assert_command("import flask").success();
@@ -314,18 +314,18 @@ fn allow_incompatibilities() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - jinja2==3.1.2
-         + jinja2==2.11.3
-        warning: The package `flask` requires `jinja2 >=3.1.2`, but `2.11.3` is installed.
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - jinja2==3.1.2
+     + jinja2==2.11.3
+    warning: The package `flask` requires `jinja2 >=3.1.2`, but `2.11.3` is installed.
+    "###
     );
 
     // This no longer works, since we have an incompatible version of Jinja2.
@@ -364,18 +364,18 @@ fn install_editable() -> Result<()> {
         .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Built 1 editable in [TIME]
-        Resolved 2 packages in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 2 packages in [TIME]
-         + numpy==1.26.2
-         + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-        "###
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + numpy==1.26.2
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+    "###
     );
 
     // Install it again (no-op).
@@ -391,13 +391,13 @@ fn install_editable() -> Result<()> {
         .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Audited 1 package in [TIME]
-        "###
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
     );
 
     // Add another, non-editable dependency.
@@ -414,24 +414,24 @@ fn install_editable() -> Result<()> {
         .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Built 1 editable in [TIME]
-        Resolved 8 packages in [TIME]
-        Downloaded 6 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + black==23.11.0
-         + click==8.1.7
-         + mypy-extensions==1.0.0
-         + packaging==23.2
-         + pathspec==0.11.2
-         + platformdirs==4.0.0
-         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-         + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-        "###
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 8 packages in [TIME]
+    Downloaded 6 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + black==23.11.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==23.2
+     + pathspec==0.11.2
+     + platformdirs==4.0.0
+     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+    "###
     );
 
     Ok(())
@@ -465,21 +465,21 @@ fn install_editable_and_registry() -> Result<()> {
         .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 6 packages in [TIME]
-        Downloaded 6 packages in [TIME]
-        Installed 6 packages in [TIME]
-         + black==23.11.0
-         + click==8.1.7
-         + mypy-extensions==1.0.0
-         + packaging==23.2
-         + pathspec==0.11.2
-         + platformdirs==4.0.0
-        "###
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Downloaded 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==23.11.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==23.2
+     + pathspec==0.11.2
+     + platformdirs==4.0.0
+    "###
     );
 
     // Install the editable version of Black. This should remove the registry-based version.
@@ -495,17 +495,17 @@ fn install_editable_and_registry() -> Result<()> {
         .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Built 1 editable in [TIME]
-        Resolved 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - black==23.11.0
-         + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
-        "###
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - black==23.11.0
+     + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
+    "###
     );
 
     // Re-install the registry-based version of Black. This should be a no-op, since we have a
@@ -521,13 +521,13 @@ fn install_editable_and_registry() -> Result<()> {
         .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Audited 1 package in [TIME]
-        "###
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
     );
 
     let filters2: Vec<_> = filters
@@ -550,17 +550,17 @@ fn install_editable_and_registry() -> Result<()> {
         .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 6 packages in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
-         + black==23.10.0
-        "###
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
+     + black==23.10.0
+    "###
     );
 
     Ok(())
@@ -586,23 +586,23 @@ fn reinstall_build_system() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 8 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 8 packages in [TIME]
-         + blinker==1.7.0
-         + click==8.1.7
-         + flask==3.0.0 (from https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz)
-         + flit-core==3.9.0
-         + itsdangerous==2.1.2
-         + jinja2==3.1.2
-         + markupsafe==2.1.3
-         + werkzeug==3.0.1
-        "###
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Downloaded 7 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.0 (from https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz)
+     + flit-core==3.9.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.2
+     + markupsafe==2.1.3
+     + werkzeug==3.0.1
+    "###
     );
 
     Ok(())
@@ -706,13 +706,13 @@ fn reinstall_no_binary() {
         command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
     }
     puffin_snapshot!(command, @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Audited 1 package in [TIME]
-        "###
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
     );
 
     context.assert_command("import anyio").success();
@@ -767,22 +767,22 @@ fn install_executable() {
 
     puffin_snapshot!(command(&context)
         .arg("pylint==3.0.0"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + astroid==3.0.1
-         + dill==0.3.7
-         + isort==5.12.0
-         + mccabe==0.7.0
-         + platformdirs==4.0.0
-         + pylint==3.0.0
-         + tomlkit==0.12.3
-        "###
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + astroid==3.0.1
+     + dill==0.3.7
+     + isort==5.12.0
+     + mccabe==0.7.0
+     + platformdirs==4.0.0
+     + pylint==3.0.0
+     + tomlkit==0.12.3
+    "###
     );
 
     // Verify that `pylint` is executable.
@@ -803,22 +803,22 @@ fn install_executable_copy() {
         .arg("pylint==3.0.0")
         .arg("--link-mode")
         .arg("copy"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + astroid==3.0.1
-         + dill==0.3.7
-         + isort==5.12.0
-         + mccabe==0.7.0
-         + platformdirs==4.0.0
-         + pylint==3.0.0
-         + tomlkit==0.12.3
-        "###
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + astroid==3.0.1
+     + dill==0.3.7
+     + isort==5.12.0
+     + mccabe==0.7.0
+     + platformdirs==4.0.0
+     + pylint==3.0.0
+     + tomlkit==0.12.3
+    "###
     );
 
     // Verify that `pylint` is executable.
@@ -839,22 +839,22 @@ fn install_executable_hardlink() {
         .arg("pylint==3.0.0")
         .arg("--link-mode")
         .arg("hardlink"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Downloaded 7 packages in [TIME]
-        Installed 7 packages in [TIME]
-         + astroid==3.0.1
-         + dill==0.3.7
-         + isort==5.12.0
-         + mccabe==0.7.0
-         + platformdirs==4.0.0
-         + pylint==3.0.0
-         + tomlkit==0.12.3
-        "###
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + astroid==3.0.1
+     + dill==0.3.7
+     + isort==5.12.0
+     + mccabe==0.7.0
+     + platformdirs==4.0.0
+     + pylint==3.0.0
+     + tomlkit==0.12.3
+    "###
     );
 
     // Verify that `pylint` is executable.
@@ -875,21 +875,21 @@ fn no_deps() {
         .arg("Flask")
         .arg("--no-deps")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + flask==3.0.0
-        warning: The package `flask` requires `werkzeug >=3.0.0`, but it's not installed.
-        warning: The package `flask` requires `jinja2 >=3.1.2`, but it's not installed.
-        warning: The package `flask` requires `itsdangerous >=2.1.2`, but it's not installed.
-        warning: The package `flask` requires `click >=8.1.3`, but it's not installed.
-        warning: The package `flask` requires `blinker >=1.6.2`, but it's not installed.
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + flask==3.0.0
+    warning: The package `flask` requires `werkzeug >=3.0.0`, but it's not installed.
+    warning: The package `flask` requires `jinja2 >=3.1.2`, but it's not installed.
+    warning: The package `flask` requires `itsdangerous >=2.1.2`, but it's not installed.
+    warning: The package `flask` requires `click >=8.1.3`, but it's not installed.
+    warning: The package `flask` requires `blinker >=1.6.2`, but it's not installed.
+    "###
     );
 
     context.assert_command("import flask").failure();
