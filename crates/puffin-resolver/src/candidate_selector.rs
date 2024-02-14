@@ -96,7 +96,7 @@ impl CandidateSelector {
     pub(crate) fn select<'a>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &'a Range<Version>,
         version_map: &'a VersionMap,
     ) -> Option<Candidate<'a>> {
         // If the package has a preference (e.g., an existing version from an existing lockfile),
@@ -130,6 +130,19 @@ impl CandidateSelector {
             }
         };
 
+        if let Some(version) = range.as_singleton() {
+            if !version.any_prerelease() {
+                let maybe_dist_with_version = version_map.get_with_version(version);
+                tracing::trace!(
+                    "range {:?} for package {:?} has exactly one version, found? {:?}",
+                    range,
+                    package_name,
+                    maybe_dist_with_version.is_some(),
+                );
+                return maybe_dist_with_version
+                    .map(|(version, dist)| Candidate::new(package_name, version, dist));
+            }
+        }
         tracing::trace!(
             "selecting candidate for package {:?} with range {:?} with {} versions",
             package_name,
