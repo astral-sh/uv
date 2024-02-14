@@ -357,7 +357,7 @@ impl<'a> Planner<'a> {
 
         // Remove any unnecessary packages.
         if !site_packages.is_empty() {
-            // If Puffin created the virtual environment, then remove all packages, regardless of
+            // If uv created the virtual environment, then remove all packages, regardless of
             // whether they're considered "seed" packages.
             let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_gourgeist());
             for dist_info in site_packages {

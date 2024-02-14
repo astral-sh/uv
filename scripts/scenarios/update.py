@@ -22,7 +22,7 @@ Usage:
         $ packse build scenarios/*
         $ packse publish dist/* --index-url http://localhost:3141/packages/local --anonymous
 
-        Override the default PyPI index for Puffin and update the scenarios
+        Override the default PyPI index for uv and update the scenarios
 
         $ PUFFIN_INDEX_URL="http://localhost:3141/packages/all/+simple" ./scripts/scenarios/update.py
 

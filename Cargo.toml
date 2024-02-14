@@ -13,7 +13,7 @@ rust-version = "1.74"
 homepage = "https://pypi.org/project/puffin-alpha/"
 documentation = "https://pypi.org/project/puffin-alpha/"
 repository = "https://github.com/astral-sh/puffin"
-authors = ["Puffin"]
+authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]

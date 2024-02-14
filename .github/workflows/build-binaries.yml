@@ -1,4 +1,4 @@
-# Build Puffin on all platforms.
+# Build uv on all platforms.
 #
 # Generates both wheels (for PyPI) and archived binaries (for GitHub releases).
 #
@@ -43,7 +43,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: echo "# uv" > README.md
       - name: "Build sdist"
         uses: PyO3/maturin-action@v1
         with:
@@ -71,7 +71,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: echo "# uv" > README.md
       - name: "Build wheels - x86_64"
         uses: PyO3/maturin-action@v1
         with:
@@ -111,7 +111,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: echo "# uv" > README.md
       - name: "Build wheels - universal2"
         uses: PyO3/maturin-action@v1
         with:
@@ -162,7 +162,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: echo "# uv" > README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -210,7 +210,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: echo "# uv" > README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -285,7 +285,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: echo "# uv" > README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -334,7 +334,7 @@ jobs:
             *.sha256
 
   # Like `linux-arm`, but use `--no-default-features --features flate2/rust_backend` when
-  # building Puffin.
+  # building uv.
   linux-s390x:
     runs-on: ubuntu-latest
     strategy:
@@ -351,7 +351,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: echo "# uv" > README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -399,9 +399,8 @@ jobs:
             *.tar.gz
             *.sha256
 
-
   # Like `linux-arm`, but use `--no-default-features --features flate2/rust_backend` when
-  # building Puffin, and install the `gcc-powerpc64-linux-gnu` package.
+  # building uv, and install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
     runs-on: ubuntu-latest
     strategy:
@@ -420,7 +419,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: echo "# uv" > README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -491,7 +490,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: echo "# uv" > README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -554,7 +553,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
-        run: echo "# Puffin" > README.md
+        run: echo "# uv" > README.md
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:

@@ -477,7 +477,7 @@ fn virtualenv_compatibility() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: virtualenv's `--clear` has no effect (Puffin always clears the virtual environment).
+    warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
     "###

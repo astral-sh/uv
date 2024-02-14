@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "puffin-alpha"
 version = "0.0.4"
-authors = [{ name = "Puffin" }]
+authors = [{ name = "uv" }]
 requires-python = ">=3.8"
 keywords = []
 classifiers = [

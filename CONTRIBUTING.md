@@ -2,7 +2,7 @@
 
 ## Setup
 
-[Rust](https://rustup.rs/), a C compiler, and CMake are required to build Puffin.
+[Rust](https://rustup.rs/), a C compiler, and CMake are required to build uv.
 
 ### Linux
 
@@ -35,7 +35,7 @@ You can install CMake from the [installers](https://cmake.org/download/) or with
 
 ## Testing
 
-Testing Puffin requires multiple specific Python versions. You can install them into
+Testing uv requires multiple specific Python versions. You can install them into
 `<project root>/bin` via our bootstrapping script:
 
 ```shell
@@ -66,11 +66,11 @@ We recommend using this container if you don't trust the dependency tree of the 
 
 ## Profiling
 
-Please refer to Ruff's [Profiling Guide](https://github.com/astral-sh/ruff/blob/main/CONTRIBUTING.md#profiling-projects), it applies to Puffin, too.
+Please refer to Ruff's [Profiling Guide](https://github.com/astral-sh/ruff/blob/main/CONTRIBUTING.md#profiling-projects), it applies to uv, too.
 
 ### Analysing concurrency
 
-You can use [tracing-durations-export](https://github.com/konstin/tracing-durations-export) to visualize parallel requests and find any spots where Puffin is CPU-bound. Example usage, with `puffin` and `puffin-dev` respectively:
+You can use [tracing-durations-export](https://github.com/konstin/tracing-durations-export) to visualize parallel requests and find any spots where uv is CPU-bound. Example usage, with `puffin` and `puffin-dev` respectively:
 
 ```bash
 RUST_LOG=puffin=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --profile profiling -- pip compile scripts/requirements/jupyter.in

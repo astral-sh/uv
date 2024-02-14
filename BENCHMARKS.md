@@ -1,18 +1,18 @@
 # Benchmarks
 
-All benchmarks were computed on macOS using Python 3.12 (for non-Puffin tools), and come with a few
+All benchmarks were computed on macOS using Python 3.12 (for non-uv tools), and come with a few
 important caveats:
 
 - Benchmark performance may vary dramatically across different operating systems and filesystems.
-  In particular, Puffin uses different installation strategies based on the underlying filesystem's
-  capabilities. (For example, Puffin uses reflinking on macOS, and hardlinking on Linux.)
+  In particular, uv uses different installation strategies based on the underlying filesystem's
+  capabilities. (For example, uv uses reflinking on macOS, and hardlinking on Linux.)
 - Benchmark performance may vary dramatically depending on the set of packages being installed.
   For example, a resolution that requires building a single intensive source distribution may appear
   very similar across tools, since the bottleneck is tool-agnostic.
-- Unlike Poetry, both Puffin and pip-tools do _not_ generate multi-platform lockfiles. As such,
+- Unlike Poetry, both uv and pip-tools do _not_ generate multi-platform lockfiles. As such,
   Poetry is (by design) doing significantly more work than other tools in the resolution benchmarks.
   Poetry is included for completeness, as many projects may not _need_ a multi-platform lockfile.
-  However, it's critical to understand that benchmarking Puffin's resolution time against Poetry is
+  However, it's critical to understand that benchmarking uv's resolution time against Poetry is
   an unfair comparison. (Benchmarking installation, however, _is_ a fair comparison.)
 
 This document benchmarks against Trio's `docs-requirements.in`, as a representative example of a
@@ -55,16 +55,16 @@ manager cache is not shared across runs).
 ## Reproduction
 
 All benchmarks were generated using the `scripts/bench/__main__.py` script, which wraps
-[`hyperfine`](https://github.com/sharkdp/hyperfine) to facilitate benchmarking Puffin
+[`hyperfine`](https://github.com/sharkdp/hyperfine) to facilitate benchmarking uv
 against a variety of other tools.
 
 The benchmark script itself has a several requirements:
 
-- A local Puffin release build (`cargo build --release`).
+- A local uv release build (`cargo build --release`).
 - A virtual environment with the script's own dependencies installed (`puffin venv && puffin pip sync scripts/bench/requirements.txt`).
 - The [`hyperfine`](https://github.com/sharkdp/hyperfine) command-line tool installed on your system.
 
-To benchmark Puffin's resolution against pip-compile and Poetry:
+To benchmark uv's resolution against pip-compile and Poetry:
 
 ```shell
 python -m scripts.bench \
@@ -76,7 +76,7 @@ python -m scripts.bench \
     --json
 ```
 
-To benchmark Puffin's installation against pip-sync and Poetry:
+To benchmark uv's installation against pip-sync and Poetry:
 
 ```shell
 python -m scripts.bench \

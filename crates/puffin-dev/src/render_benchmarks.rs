@@ -23,7 +23,7 @@ pub(crate) fn render_benchmarks(args: &RenderBenchmarksArgs) -> Result<()> {
     // but we assume we're running over a single benchmark here.)
     for result in &mut results.results {
         if result.command.starts_with("puffin") {
-            result.command = "Puffin".into();
+            result.command = "uv".into();
         } else if result.command.starts_with("pip-compile") {
             result.command = "pip-compile".into();
         } else if result.command.starts_with("pip-sync") {

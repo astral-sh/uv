@@ -27,7 +27,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir [^\s]+", "--cache-dir [CACHE_DIR]"),
     // Operation times
     (r"(\d+m )?(\d+\.)?\d+(ms|s)", "[TIME]"),
-    // Puffin versions
+    // uv versions
     (r"v\d+\.\d+\.\d+", "v[VERSION]"),
     // File sizes
     (r"(\d+\.)?\d+([KM]i)?B", "[SIZE]"),

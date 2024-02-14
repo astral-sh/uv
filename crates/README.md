@@ -2,7 +2,7 @@
 
 ## [bench](./bench)
 
-Functionality for benchmarking Puffin.
+Functionality for benchmarking uv.
 
 ## [cache-key](./cache-key)
 
@@ -49,11 +49,11 @@ Functionality for parsing and inferring Python platform tags as per [PEP 425](ht
 
 ## [puffin](./puffin)
 
-Command-line interface for the Puffin package manager.
+Command-line interface for the uv package manager.
 
 ## [puffin-build](./puffin-build)
 
-A [PEP 517](https://www.python.org/dev/peps/pep-0517/)-compatible build frontend for Puffin.
+A [PEP 517](https://www.python.org/dev/peps/pep-0517/)-compatible build frontend for uv.
 
 ## [puffin-cache](./puffin-cache)
 
@@ -65,7 +65,7 @@ Client for interacting with PyPI-compatible HTTP APIs.
 
 ## [puffin-dev](./puffin-dev)
 
-Development utilities for Puffin.
+Development utilities for uv.
 
 ## [puffin-dispatch](./puffin-dispatch)
 
@@ -111,7 +111,7 @@ Functionality for resolving Python packages and their dependencies.
 
 ## [puffin-traits](./puffin-traits)
 
-Shared traits for Puffin, to avoid circular dependencies.
+Shared traits for uv, to avoid circular dependencies.
 
 ## [pypi-types](./pypi-types)
 
@@ -119,7 +119,7 @@ General-purpose type definitions for types used in PyPI-compatible APIs.
 
 ## [puffin-warnings](./puffin-warnings)
 
-User-facing warnings for Puffin.
+User-facing warnings for uv.
 
 ## [requirements-txt](./requirements-txt)
 

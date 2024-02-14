@@ -1,7 +1,7 @@
-"""Benchmark Puffin against other packaging tools.
+"""Benchmark uv against other packaging tools.
 
 This script assumes that `pip`, `pip-tools`, `virtualenv`, `poetry` and `hyperfine` are
-installed, and that a Puffin release builds exists at `./target/release/puffin`
+installed, and that a uv release builds exists at `./target/release/puffin`
 (relative to the repository root).
 
 This script assumes that Python 3.12 is installed.
@@ -17,7 +17,7 @@ Example usage:
 
     python -m scripts.bench --puffin --pip-compile requirements.in
 
-Multiple versions of Puffin can be benchmarked by specifying the path to the binary for
+Multiple versions of uv can be benchmarked by specifying the path to the binary for
 each build, as in:
 
     python -m scripts.bench \
@@ -769,9 +769,9 @@ class Pdm(Suite):
         )
 
 
-class Puffin(Suite):
+class uv(Suite):
     def __init__(self, *, path: str | None = None) -> Command | None:
-        """Initialize a Puffin benchmark."""
+        """Initialize a uv benchmark."""
         self.name = path or "puffin"
         self.path = path or os.path.join(
             os.path.dirname(
@@ -909,7 +909,7 @@ class Puffin(Suite):
 def main():
     """Run the benchmark."""
     parser = argparse.ArgumentParser(
-        description="Benchmark Puffin against other packaging tools."
+        description="Benchmark uv against other packaging tools."
     )
     parser.add_argument(
         "file",
@@ -965,7 +965,7 @@ def main():
     )
     parser.add_argument(
         "--puffin",
-        help="Whether to benchmark Puffin (assumes a Puffin binary exists at `./target/release/puffin`).",
+        help="Whether to benchmark uv (assumes a uv binary exists at `./target/release/puffin`).",
         action="store_true",
     )
     parser.add_argument(
@@ -995,7 +995,7 @@ def main():
     parser.add_argument(
         "--puffin-path",
         type=str,
-        help="Path(s) to the Puffin binary to benchmark.",
+        help="Path(s) to the uv binary to benchmark.",
         action="append",
     )
 
@@ -1026,7 +1026,7 @@ def main():
     if args.pdm:
         suites.append(Pdm())
     if args.puffin:
-        suites.append(Puffin())
+        suites.append(uv())
     for path in args.pip_sync_path or []:
         suites.append(PipSync(path=path))
     for path in args.pip_compile_path or []:
@@ -1036,7 +1036,7 @@ def main():
     for path in args.pdm_path or []:
         suites.append(Pdm(path=path))
     for path in args.puffin_path or []:
-        suites.append(Puffin(path=path))
+        suites.append(uv(path=path))
 
     # If no tools were specified, benchmark all tools.
     if not suites:
@@ -1044,7 +1044,7 @@ def main():
             PipSync(),
             PipCompile(),
             Poetry(),
-            Puffin(),
+            uv(),
         ]
 
     # Determine the benchmarks to run, based on user input. If no benchmarks were
