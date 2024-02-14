@@ -19,6 +19,8 @@ struct PrioritizedDistInner {
     incompatible_wheel: Option<(DistMetadata, IncompatibleWheel)>,
     /// The hashes for each distribution.
     hashes: Vec<Hashes>,
+    /// If exclude newer filtered files from this distribution
+    exclude_newer: bool,
 }
 
 /// A distribution that can be used for both resolution and installation.
@@ -82,6 +84,7 @@ impl PrioritizedDist {
                 )),
                 incompatible_wheel: None,
                 hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
+                exclude_newer: false,
             })),
             WheelCompatibility::Incompatible(incompatibility) => {
                 Self(Box::new(PrioritizedDistInner {
@@ -96,6 +99,7 @@ impl PrioritizedDist {
                         incompatibility,
                     )),
                     hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
+                    exclude_newer: false,
                 }))
             }
         }
@@ -117,6 +121,7 @@ impl PrioritizedDist {
             compatible_wheel: None,
             incompatible_wheel: None,
             hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
+            exclude_newer: false,
         }))
     }
 
@@ -243,6 +248,16 @@ impl PrioritizedDist {
     /// Return the incompatible built distribution, if any.
     pub fn incompatible_wheel(&self) -> Option<&(DistMetadata, IncompatibleWheel)> {
         self.0.incompatible_wheel.as_ref()
+    }
+
+    /// Set the `exclude_newer` flag
+    pub fn set_exclude_newer(&mut self) {
+        self.0.exclude_newer = true;
+    }
+
+    /// Check if any distributions were excluded by the `exclude_newer` option
+    pub fn exclude_newer(&self) -> bool {
+        self.0.exclude_newer
     }
 
     /// Return the hashes for each distribution.

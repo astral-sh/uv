@@ -176,6 +176,11 @@ impl CandidateSelector {
 
         let mut prerelease = None;
         for (version, file) in versions {
+            if file.exclude_newer() && file.incompatible_wheel().is_none() && file.get().is_none() {
+                // Skip empty candidates due to exclude newer
+                continue;
+            }
+
             if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
@@ -222,6 +227,7 @@ impl CandidateSelector {
 pub(crate) enum CandidateDist<'a> {
     Compatible(CompatibleDist<'a>),
     Incompatible(Option<&'a IncompatibleWheel>),
+    ExcludeNewer,
 }
 
 impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
@@ -229,11 +235,16 @@ impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
         if let Some(dist) = value.get() {
             CandidateDist::Compatible(dist)
         } else {
-            CandidateDist::Incompatible(
-                value
-                    .incompatible_wheel()
-                    .map(|(_, incompatibility)| incompatibility),
-            )
+            if value.exclude_newer() && value.incompatible_wheel().is_none() {
+                // If empty because of exclude-newer, mark as a special case
+                CandidateDist::ExcludeNewer
+            } else {
+                CandidateDist::Incompatible(
+                    value
+                        .incompatible_wheel()
+                        .map(|(_, incompatibility)| incompatibility),
+                )
+            }
         }
     }
 }
