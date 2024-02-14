@@ -65,6 +65,7 @@ impl VersionMap {
                 if let Some(exclude_newer) = exclude_newer {
                     match file.upload_time_utc_ms.as_ref() {
                         Some(&upload_time) if upload_time >= exclude_newer.timestamp_millis() => {
+                            priority_dist.set_exclude_newer();
                             continue;
                         }
                         None => {
@@ -72,6 +73,7 @@ impl VersionMap {
                                 "{} is missing an upload date, but user provided: {exclude_newer}",
                                 file.filename,
                             );
+                            priority_dist.set_exclude_newer();
                             continue;
                         }
                         _ => {}
