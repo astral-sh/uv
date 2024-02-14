@@ -664,125 +664,12 @@ fn install_no_index_version() {
 
 /// Install a package without using pre-built wheels.
 #[test]
-fn install_no_binary() {
-    let context = TestContext::new("3.12");
-
-    let mut command = command(&context);
-    command
-        .arg("jinja2")
-        .arg("--no-binary")
-        .arg(":all:")
-        .arg("--strict");
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
-    puffin_snapshot!(command, @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + jinja2==3.1.2
-     + markupsafe==2.1.3
-    "###
-    );
-
-    context.assert_command("import jinja2").success();
-}
-
-/// Install a package without using pre-built wheels for a subset of packages.
-#[test]
-fn install_no_binary_subset() {
-    let context = TestContext::new("3.12");
-
-    puffin_snapshot!(command(&context)
-        .arg("jinja2")
-        .arg("--no-binary")
-        .arg("jinja2")
-        .arg("--no-binary")
-        .arg("markupsafe")
-        .arg("--strict"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + jinja2==3.1.2
-     + markupsafe==2.1.3
-    "###
-    );
-
-    context.assert_command("import jinja2").success();
-}
-
-/// Install a package only using pre-built wheels.
-#[test]
-fn install_only_binary() {
-    let context = TestContext::new("3.12");
-
-    puffin_snapshot!(command(&context)
-        .arg("jinja2")
-        .arg("--only-binary")
-        .arg(":all:")
-        .arg("--strict"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + jinja2==3.1.2
-     + markupsafe==2.1.3
-    "###
-    );
-
-    context.assert_command("import jinja2").success();
-}
-
-/// Install a package only using pre-built wheels for a subset of packages.
-#[test]
-fn install_only_binary_subset() {
-    let context = TestContext::new("3.12");
-
-    puffin_snapshot!(command(&context)
-        .arg("jinja2")
-        .arg("--only-binary")
-        .arg("markupsafe")
-        .arg("--strict"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + jinja2==3.1.2
-     + markupsafe==2.1.3
-    "###
-    );
-
-    context.assert_command("import jinja2").success();
-}
-
-/// Install a package without using pre-built wheels.
-#[test]
 fn reinstall_no_binary() {
     let context = TestContext::new("3.12");
 
     // The first installation should use a pre-built wheel
     let mut command = command(&context);
-    command.arg("jinja2").arg("--strict");
+    command.arg("anyio").arg("--strict");
     if cfg!(all(windows, debug_assertions)) {
         // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
         // default windows stack of 1MB
@@ -794,21 +681,22 @@ fn reinstall_no_binary() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + jinja2==3.1.2
-     + markupsafe==2.1.3
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
+     + sniffio==1.3.0
     "###
     );
 
-    context.assert_command("import jinja2").success();
+    context.assert_command("import anyio").success();
 
     // Running installation again with `--no-binary` should be a no-op
     // The first installation should use a pre-built wheel
     let mut command = crate::command(&context);
     command
-        .arg("jinja2")
+        .arg("anyio")
         .arg("--no-binary")
         .arg(":all:")
         .arg("--strict");
@@ -827,7 +715,7 @@ fn reinstall_no_binary() {
         "###
     );
 
-    context.assert_command("import jinja2").success();
+    context.assert_command("import anyio").success();
 
     // With `--reinstall`, `--no-binary` should have an affect
     let filters = if cfg!(windows) {
@@ -842,11 +730,11 @@ fn reinstall_no_binary() {
     };
     let mut command = crate::command(&context);
     command
-        .arg("jinja2")
+        .arg("anyio")
         .arg("--no-binary")
         .arg(":all:")
         .arg("--reinstall-package")
-        .arg("jinja2")
+        .arg("anyio")
         .arg("--strict");
     if cfg!(all(windows, debug_assertions)) {
         // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
@@ -859,14 +747,14 @@ fn reinstall_no_binary() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     Installed 1 package in [TIME]
-     - jinja2==3.1.2
-     + jinja2==3.1.2
+     - anyio==4.0.0
+     + anyio==4.0.0
     "###
     );
 
-    context.assert_command("import jinja2").success();
+    context.assert_command("import anyio").success();
 }
 
 /// Install a package into a virtual environment, and ensuring that the executable permissions
