@@ -126,15 +126,27 @@ impl VersionMap {
     }
 
     /// Return an iterator over the versions and distributions.
-    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (&Version, ResolvableDist)> {
+    ///
+    /// Note that the value returned in this iterator is a [`VersionMapDist`],
+    /// which can be used to lazily request a [`ResolvableDist`]. This is
+    /// useful in cases where one can skip materializing a full distribution
+    /// for each version.
+    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> {
         match self.inner {
-            VersionMapInner::Eager { ref map } => either::Either::Left(
-                map.iter()
-                    .filter_map(|(version, dist)| Some((version, dist.get()?))),
-            ),
+            VersionMapInner::Eager(ref map) => {
+                either::Either::Left(map.iter().map(|(version, dist)| {
+                    let version_map_dist = VersionMapDistHandle {
+                        inner: VersionMapDistHandleInner::Eager(dist),
+                    };
+                    (version, version_map_dist)
+                }))
+            }
             VersionMapInner::Lazy(ref lazy) => {
-                either::Either::Right(lazy.map.iter().filter_map(|(version, lazy_dist)| {
-                    Some((version, lazy.get_lazy(lazy_dist)?.get()?))
+                either::Either::Right(lazy.map.iter().map(|(version, dist)| {
+                    let version_map_dist = VersionMapDistHandle {
+                        inner: VersionMapDistHandleInner::Lazy { lazy, dist },
+                    };
+                    (version, version_map_dist)
                 }))
             }
         }
@@ -155,6 +167,9 @@ impl VersionMap {
     }
 
     /// Returns the total number of distinct versions in this map.
+    ///
+    /// Note that this may include versions of distributions that are not
+    /// usable in the current environment.
     pub(crate) fn len(&self) -> usize {
         match self.inner {
             VersionMapInner::Eager(ref map) => map.len(),
@@ -167,6 +182,40 @@ impl From<FlatDistributions> for VersionMap {
     fn from(flat_index: FlatDistributions) -> Self {
         VersionMap {
             inner: VersionMapInner::Eager(flat_index.into()),
+        }
+    }
+}
+
+/// A lazily initialized distribution.
+///
+/// This permits access to a handle that can be turned into a resolvable
+/// distribution when desired. This is coupled with a `Version` in
+/// [`VersionMap::iter`] to permit iteration over all items in a map without
+/// necessarily constructing a distribution for every version if it isn't
+/// needed.
+///
+/// Note that because of laziness, not all such items can be turned into
+/// a valid distribution. For example, if in the process of building a
+/// distribution no compatible wheel or source distribution could be found,
+/// then building a `ResolvableDist` will fail.
+pub(crate) struct VersionMapDistHandle<'a> {
+    inner: VersionMapDistHandleInner<'a>,
+}
+
+enum VersionMapDistHandleInner<'a> {
+    Eager(&'a PrioritizedDistribution),
+    Lazy {
+        lazy: &'a VersionMapLazy,
+        dist: &'a LazyPrioritizedDistribution,
+    },
+}
+
+impl<'a> VersionMapDistHandle<'a> {
+    /// Returns a resolvable distribution from this handle.
+    pub(crate) fn resolvable_dist(&self) -> Option<ResolvableDist<'a>> {
+        match self.inner {
+            VersionMapDistHandleInner::Eager(dist) => dist.get(),
+            VersionMapDistHandleInner::Lazy { lazy, dist } => Some(lazy.get_lazy(dist)?.get()?),
         }
     }
 }

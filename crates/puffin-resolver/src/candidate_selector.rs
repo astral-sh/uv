@@ -11,7 +11,7 @@ use puffin_normalize::PackageName;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::python_requirement::PythonRequirement;
 use crate::resolution_mode::ResolutionStrategy;
-use crate::version_map::VersionMap;
+use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Manifest, Options};
 
 #[derive(Debug, Clone)]
@@ -130,19 +130,6 @@ impl CandidateSelector {
             }
         };
 
-        if let Some(version) = range.as_singleton() {
-            if !version.any_prerelease() {
-                let maybe_dist_with_version = version_map.get_with_version(version);
-                tracing::trace!(
-                    "range {:?} for package {:?} has exactly one version, found? {:?}",
-                    range,
-                    package_name,
-                    maybe_dist_with_version.is_some(),
-                );
-                return maybe_dist_with_version
-                    .map(|(version, dist)| Candidate::new(package_name, version, dist));
-            }
-        }
         tracing::trace!(
             "selecting candidate for package {:?} with range {:?} with {} versions",
             package_name,
@@ -182,7 +169,7 @@ impl CandidateSelector {
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over source distributions.
     fn select_candidate<'a>(
-        versions: impl Iterator<Item = (&'a Version, ResolvableDist<'a>)>,
+        versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         allow_prerelease: AllowPreRelease,
@@ -195,12 +182,15 @@ impl CandidateSelector {
 
         let mut prerelease = None;
         let mut steps = 0;
-        for (version, file) in versions {
+        for (version, maybe_dist) in versions {
             steps += 1;
             if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
                         AllowPreRelease::Yes => {
+                            let Some(dist) = maybe_dist.resolvable_dist() else {
+                                continue;
+                            };
                             tracing::trace!(
                                 "found candidate for package {:?} with range {:?} \
                                  after {} steps: {:?} version",
@@ -211,13 +201,16 @@ impl CandidateSelector {
                             );
                             // If pre-releases are allowed, treat them equivalently
                             // to stable distributions.
-                            return Some(Candidate::new(package_name, version, file));
+                            return Some(Candidate::new(package_name, version, dist));
                         }
                         AllowPreRelease::IfNecessary => {
+                            let Some(dist) = maybe_dist.resolvable_dist() else {
+                                continue;
+                            };
                             // If pre-releases are allowed as a fallback, store the
                             // first-matching prerelease.
                             if prerelease.is_none() {
-                                prerelease = Some(PreReleaseCandidate::IfNecessary(version, file));
+                                prerelease = Some(PreReleaseCandidate::IfNecessary(version, dist));
                             }
                         }
                         AllowPreRelease::No => {
@@ -233,6 +226,9 @@ impl CandidateSelector {
 
                 // Always return the first-matching stable distribution.
                 if range.contains(version) {
+                    let Some(dist) = maybe_dist.resolvable_dist() else {
+                        continue;
+                    };
                     tracing::trace!(
                         "found candidate for package {:?} with range {:?} \
                          after {} steps: {:?} version",
@@ -241,7 +237,7 @@ impl CandidateSelector {
                         steps,
                         version,
                     );
-                    return Some(Candidate::new(package_name, version, file));
+                    return Some(Candidate::new(package_name, version, dist));
                 }
             }
         }
@@ -255,8 +251,8 @@ impl CandidateSelector {
         match prerelease {
             None => None,
             Some(PreReleaseCandidate::NotNecessary) => None,
-            Some(PreReleaseCandidate::IfNecessary(version, file)) => {
-                Some(Candidate::new(package_name, version, file))
+            Some(PreReleaseCandidate::IfNecessary(version, dist)) => {
+                Some(Candidate::new(package_name, version, dist))
             }
         }
     }
