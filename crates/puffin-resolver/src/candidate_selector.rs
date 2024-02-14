@@ -130,6 +130,12 @@ impl CandidateSelector {
             }
         };
 
+        tracing::trace!(
+            "selecting candidate for package {:?} with range {:?} with {} versions",
+            package_name,
+            range,
+            version_map.len()
+        );
         match &self.resolution_strategy {
             ResolutionStrategy::Highest => Self::select_candidate(
                 version_map.iter().rev(),
@@ -175,11 +181,21 @@ impl CandidateSelector {
         }
 
         let mut prerelease = None;
+        let mut steps = 0;
         for (version, file) in versions {
+            steps += 1;
             if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
                         AllowPreRelease::Yes => {
+                            tracing::trace!(
+                                "found candidate for package {:?} with range {:?} \
+                                 after {} steps: {:?} version",
+                                package_name,
+                                range,
+                                steps,
+                                version,
+                            );
                             // If pre-releases are allowed, treat them equivalently
                             // to stable distributions.
                             return Some(Candidate::new(package_name, version, file));
@@ -204,10 +220,25 @@ impl CandidateSelector {
 
                 // Always return the first-matching stable distribution.
                 if range.contains(version) {
+                    tracing::trace!(
+                        "found candidate for package {:?} with range {:?} \
+                         after {} steps: {:?} version",
+                        package_name,
+                        range,
+                        steps,
+                        version,
+                    );
                     return Some(Candidate::new(package_name, version, file));
                 }
             }
         }
+        tracing::trace!(
+            "exhausted all candidates for package {:?} with range {:?} \
+             after {} steps",
+            package_name,
+            range,
+            steps,
+        );
         match prerelease {
             None => None,
             Some(PreReleaseCandidate::NotNecessary) => None,
