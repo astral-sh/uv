@@ -138,16 +138,16 @@ fn install() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + markupsafe==2.1.3
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    "###
     );
 
     context.assert_command("import markupsafe").success();
@@ -174,16 +174,16 @@ fn install_copy() -> Result<()> {
         .arg("--link-mode")
         .arg("copy")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + markupsafe==2.1.3
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    "###
     );
 
     context.assert_command("import markupsafe").success();
@@ -210,16 +210,16 @@ fn install_hardlink() -> Result<()> {
         .arg("--link-mode")
         .arg("hardlink")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + markupsafe==2.1.3
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    "###
     );
 
     context.assert_command("import markupsafe").success();
@@ -244,17 +244,17 @@ fn install_many() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-        Downloaded 2 packages in [TIME]
-        Installed 2 packages in [TIME]
-         + markupsafe==2.1.3
-         + tomli==2.0.1
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + markupsafe==2.1.3
+     + tomli==2.0.1
+    "###
     );
 
     context
@@ -282,13 +282,13 @@ fn noop() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Audited 1 package in [TIME]
-        "###
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
     );
 
     context.assert_command("import markupsafe").success();
@@ -344,14 +344,14 @@ fn link() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv2.as_os_str())
         .current_dir(&context.temp_dir), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Installed 1 package in [TIME]
-         + markupsafe==2.1.3
-        "###
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    "###
     );
 
     check_command(&venv2, "import markupsafe", &context.temp_dir);
@@ -382,18 +382,18 @@ fn add_remove() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Uninstalled 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - markupsafe==2.1.3
-         + tomli==2.0.1
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - markupsafe==2.1.3
+     + tomli==2.0.1
+    "###
     );
 
     context.assert_command("import tomli").success();
@@ -425,16 +425,16 @@ fn install_sequential() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + tomli==2.0.1
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==2.0.1
+    "###
     );
 
     context
@@ -467,18 +467,18 @@ fn upgrade() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Uninstalled 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - tomli==2.0.0
-         + tomli==2.0.1
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - tomli==2.0.0
+     + tomli==2.0.1
+    "###
     );
 
     context.assert_command("import tomli").success();
@@ -498,16 +498,16 @@ fn install_url() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + werkzeug==2.0.0 (from https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + werkzeug==2.0.0 (from https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl)
+    "###
     );
 
     context.assert_command("import werkzeug").success();
@@ -528,16 +528,16 @@ fn install_git_commit() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+    "###
     );
 
     context.assert_command("import werkzeug").success();
@@ -558,16 +558,16 @@ fn install_git_tag() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@2.0.0)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@2.0.0)
+    "###
     );
 
     context.assert_command("import werkzeug").success();
@@ -588,17 +588,17 @@ fn install_git_subdirectories() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-        Downloaded 2 packages in [TIME]
-        Installed 2 packages in [TIME]
-         + example-pkg-a==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a)
-         + example-pkg-b==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b)
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + example-pkg-a==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a)
+     + example-pkg-b==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b)
+    "###
     );
 
     context.assert_command("import example_pkg").success();
@@ -620,16 +620,16 @@ fn install_sdist() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + werkzeug==0.9.6
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + werkzeug==0.9.6
+    "###
     );
 
     context.assert_command("import werkzeug").success();
@@ -649,16 +649,16 @@ fn install_sdist_url() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + werkzeug==0.9.6 (from https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + werkzeug==0.9.6 (from https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz)
+    "###
     );
 
     context.assert_command("import werkzeug").success();
@@ -685,13 +685,13 @@ fn install_url_then_install_url() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Audited 1 package in [TIME]
-        "###
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
     );
 
     context.assert_command("import werkzeug").success();
@@ -722,13 +722,13 @@ fn install_url_then_install_version() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Audited 1 package in [TIME]
-        "###
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
     );
 
     context.assert_command("import werkzeug").success();
@@ -759,18 +759,18 @@ fn install_version_then_install_url() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Uninstalled 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - werkzeug==2.0.0
-         + werkzeug==2.0.0 (from https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - werkzeug==2.0.0
+     + werkzeug==2.0.0 (from https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl)
+    "###
     );
 
     context.assert_command("import werkzeug").success();
@@ -791,16 +791,16 @@ fn install_numpy_py38() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + numpy==1.24.4
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + numpy==1.24.4
+    "###
     );
 
     context.assert_command("import numpy").success();
@@ -898,17 +898,17 @@ fn warn_on_yanked_version() -> Result<()> {
     puffin_snapshot!(INSTA_FILTERS, windows_filters=false, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install"). Refresh your lockfile to pin an un-yanked version.
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + colorama==0.4.2
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install"). Refresh your lockfile to pin an un-yanked version.
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + colorama==0.4.2
+    "###
     );
 
     Ok(())
@@ -940,16 +940,16 @@ fn install_local_wheel() -> Result<()> {
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+    "###
     );
 
     context.assert_command("import tomli").success();
@@ -962,14 +962,14 @@ fn install_local_wheel() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Installed 1 package in [TIME]
-         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+    "###
     );
 
     context.assert_command("import tomli").success();
@@ -986,16 +986,16 @@ fn install_local_wheel() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+    "###
     );
 
     context.assert_command("import tomli").success();
@@ -1007,18 +1007,18 @@ fn install_local_wheel() -> Result<()> {
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Uninstalled 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+    "###
     );
 
     context.assert_command("import tomli").success();
@@ -1052,16 +1052,16 @@ fn mismatched_version() -> Result<()> {
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        error: Failed to install: tomli-3.7.2-py3-none-any.whl (tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl))
-          Caused by: Wheel version does not match filename: 2.0.1 != 3.7.2
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    error: Failed to install: tomli-3.7.2-py3-none-any.whl (tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl))
+      Caused by: Wheel version does not match filename: 2.0.1 != 3.7.2
+    "###
     );
 
     Ok(())
@@ -1093,16 +1093,16 @@ fn mismatched_name() -> Result<()> {
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        error: Failed to install: foo-2.0.1-py3-none-any.whl (foo==2.0.1 (from file://[TEMP_DIR]/foo-2.0.1-py3-none-any.whl))
-          Caused by: Wheel package name does not match filename: tomli != foo
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    error: Failed to install: foo-2.0.1-py3-none-any.whl (foo==2.0.1 (from file://[TEMP_DIR]/foo-2.0.1-py3-none-any.whl))
+      Caused by: Wheel package name does not match filename: tomli != foo
+    "###
     );
 
     Ok(())
@@ -1134,16 +1134,16 @@ fn install_local_source_distribution() -> Result<()> {
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
+    "###
     );
 
     context.assert_command("import wheel").success();
@@ -1172,16 +1172,16 @@ fn install_ujson() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + ujson==5.7.0 (from https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ujson==5.7.0 (from https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz)
+    "###
     );
 
     context.assert_command("import ujson").success();
@@ -1212,16 +1212,16 @@ fn install_build_system_no_backend() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + build-system-no-backend==0.1.0 (from https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + build-system-no-backend==0.1.0 (from https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz)
+    "###
     );
 
     context
@@ -1251,16 +1251,16 @@ fn install_url_source_dist_cached() -> Result<()> {
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
+    "###
     );
 
     context.assert_command("import tqdm").success();
@@ -1273,14 +1273,14 @@ fn install_url_source_dist_cached() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Installed 1 package in [TIME]
-         + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
-        "###
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
+    "###
     );
 
     context.assert_command("import tqdm").success();
@@ -1296,29 +1296,29 @@ fn install_url_source_dist_cached() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
         .current_dir(&context.temp_dir), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Removed 126 files for tqdm ([SIZE])
-        "###
+    ----- stderr -----
+    Removed 126 files for tqdm ([SIZE])
+    "###
     );
 
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz)
+    "###
     );
 
     context.assert_command("import tqdm").success();
@@ -1339,16 +1339,16 @@ fn install_git_source_dist_cached() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+    "###
     );
 
     context.assert_command("import werkzeug").success();
@@ -1361,14 +1361,14 @@ fn install_git_source_dist_cached() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Installed 1 package in [TIME]
-         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-        "###
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+    "###
     );
 
     check_command(&venv, "import werkzeug", &context.temp_dir);
@@ -1392,29 +1392,29 @@ fn install_git_source_dist_cached() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
         .current_dir(&context.temp_dir), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Removed 3 files for werkzeug ([SIZE])
-        "###
+    ----- stderr -----
+    Removed 3 files for werkzeug ([SIZE])
+    "###
     );
 
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+    "###
     );
 
     context.assert_command("import werkzeug").success();
@@ -1434,16 +1434,16 @@ fn install_registry_source_dist_cached() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + future==0.18.3
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + future==0.18.3
+    "###
     );
 
     context.assert_command("import future").success();
@@ -1456,14 +1456,14 @@ fn install_registry_source_dist_cached() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Installed 1 package in [TIME]
-         + future==0.18.3
-        "###
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + future==0.18.3
+    "###
     );
 
     context.assert_command("import future").success();
@@ -1487,29 +1487,29 @@ fn install_registry_source_dist_cached() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
         .current_dir(&context.temp_dir), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Removed 616 files for future ([SIZE])
-        "###
+    ----- stderr -----
+    Removed 616 files for future ([SIZE])
+    "###
     );
 
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + future==0.18.3
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + future==0.18.3
+    "###
     );
 
     context.assert_command("import future").success();
@@ -1543,16 +1543,16 @@ fn install_path_source_dist_cached() -> Result<()> {
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
+    "###
     );
 
     context.assert_command("import wheel").success();
@@ -1565,14 +1565,14 @@ fn install_path_source_dist_cached() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Installed 1 package in [TIME]
-         + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
-        "###
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
+    "###
     );
 
     context.assert_command("import wheel").success();
@@ -1596,29 +1596,29 @@ fn install_path_source_dist_cached() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
         .current_dir(&context.temp_dir), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Removed 4 files for wheel ([SIZE])
-        "###
+    ----- stderr -----
+    Removed 4 files for wheel ([SIZE])
+    "###
     );
 
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + wheel==0.42.0 (from file://[TEMP_DIR]/wheel-0.42.0.tar.gz)
+    "###
     );
 
     context.assert_command("import wheel").success();
@@ -1654,16 +1654,16 @@ fn install_path_built_dist_cached() -> Result<()> {
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+    "###
     );
 
     context.assert_command("import tomli").success();
@@ -1676,14 +1676,14 @@ fn install_path_built_dist_cached() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Installed 1 package in [TIME]
-         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+    "###
     );
 
     check_command(&venv, "import tomli", &parent);
@@ -1710,29 +1710,29 @@ fn install_path_built_dist_cached() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
         .current_dir(&context.temp_dir), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Removed 1 file for tomli ([SIZE])
-        "###
+    ----- stderr -----
+    Removed 1 file for tomli ([SIZE])
+    "###
     );
 
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==2.0.1 (from file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl)
+    "###
     );
 
     check_command(&venv, "import tomli", &context.temp_dir);
@@ -1760,16 +1760,16 @@ fn install_url_built_dist_cached() -> Result<()> {
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
+    "###
     );
 
     context.assert_command("import tqdm").success();
@@ -1782,14 +1782,14 @@ fn install_url_built_dist_cached() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Installed 1 package in [TIME]
-         + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
+    "###
     );
 
     check_command(&venv, "import tqdm", &context.temp_dir);
@@ -1805,29 +1805,29 @@ fn install_url_built_dist_cached() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", venv.as_os_str())
         .current_dir(&context.temp_dir), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Removed 2 files for tqdm ([SIZE])
-        "###
+    ----- stderr -----
+    Removed 2 files for tqdm ([SIZE])
+    "###
     );
 
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==4.66.1 (from https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl)
+    "###
     );
 
     check_command(&venv, "import tqdm", &context.temp_dir);
@@ -1847,14 +1847,14 @@ fn duplicate_package_overlap() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        error: Failed to determine installation plan
-          Caused by: Detected duplicate package in requirements: markupsafe
-        "###
+    ----- stderr -----
+    error: Failed to determine installation plan
+      Caused by: Detected duplicate package in requirements: markupsafe
+    "###
     );
 
     Ok(())
@@ -1872,16 +1872,16 @@ fn duplicate_package_disjoint() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + markupsafe==2.1.3
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    "###
     );
 
     Ok(())
@@ -1899,17 +1899,17 @@ fn reinstall() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-        Downloaded 2 packages in [TIME]
-        Installed 2 packages in [TIME]
-         + markupsafe==2.1.3
-         + tomli==2.0.1
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + markupsafe==2.1.3
+     + tomli==2.0.1
+    "###
     );
 
     context.assert_command("import markupsafe").success();
@@ -1920,18 +1920,18 @@ fn reinstall() -> Result<()> {
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Uninstalled 2 packages in [TIME]
-        Installed 2 packages in [TIME]
-         - markupsafe==2.1.3
-         + markupsafe==2.1.3
-         - tomli==2.0.1
-         + tomli==2.0.1
-        "###
+    ----- stderr -----
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - markupsafe==2.1.3
+     + markupsafe==2.1.3
+     - tomli==2.0.1
+     + tomli==2.0.1
+    "###
     );
 
     context.assert_command("import markupsafe").success();
@@ -1952,17 +1952,17 @@ fn reinstall_package() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-        Downloaded 2 packages in [TIME]
-        Installed 2 packages in [TIME]
-         + markupsafe==2.1.3
-         + tomli==2.0.1
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + markupsafe==2.1.3
+     + tomli==2.0.1
+    "###
     );
 
     context.assert_command("import markupsafe").success();
@@ -1974,16 +1974,16 @@ fn reinstall_package() -> Result<()> {
         .arg("--reinstall-package")
         .arg("tomli")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Uninstalled 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - tomli==2.0.1
-         + tomli==2.0.1
-        "###
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - tomli==2.0.1
+     + tomli==2.0.1
+    "###
     );
 
     context.assert_command("import markupsafe").success();
@@ -2005,16 +2005,16 @@ fn reinstall_git() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+    "###
     );
 
     context.assert_command("import werkzeug").success();
@@ -2025,16 +2025,16 @@ fn reinstall_git() -> Result<()> {
         .arg("--reinstall-package")
         .arg("WerkZeug")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Uninstalled 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-         + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
-        "###
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+    "###
     );
 
     context.assert_command("import werkzeug").success();
@@ -2054,17 +2054,17 @@ fn refresh() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-        Downloaded 2 packages in [TIME]
-        Installed 2 packages in [TIME]
-         + markupsafe==2.1.3
-         + tomli==2.0.1
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + markupsafe==2.1.3
+     + tomli==2.0.1
+    "###
     );
 
     context.assert_command("import markupsafe").success();
@@ -2080,17 +2080,17 @@ fn refresh() -> Result<()> {
         .arg("--refresh")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-        Downloaded 2 packages in [TIME]
-        Installed 2 packages in [TIME]
-         + markupsafe==2.1.3
-         + tomli==2.0.1
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + markupsafe==2.1.3
+     + tomli==2.0.1
+    "###
     );
 
     check_command(&venv, "import markupsafe", &context.temp_dir);
@@ -2111,17 +2111,17 @@ fn refresh_package() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 2 packages in [TIME]
-        Downloaded 2 packages in [TIME]
-        Installed 2 packages in [TIME]
-         + markupsafe==2.1.3
-         + tomli==2.0.1
-        "###
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + markupsafe==2.1.3
+     + tomli==2.0.1
+    "###
     );
 
     context.assert_command("import markupsafe").success();
@@ -2138,17 +2138,17 @@ fn refresh_package() -> Result<()> {
         .arg("tomli")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 2 packages in [TIME]
-         + markupsafe==2.1.3
-         + tomli==2.0.1
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + markupsafe==2.1.3
+     + tomli==2.0.1
+    "###
     );
 
     context.assert_command("import markupsafe").success();
@@ -2205,20 +2205,20 @@ fn sync_editable() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Built 2 editables in [TIME]
-        Resolved 2 packages in [TIME]
-        Downloaded 2 packages in [TIME]
-        Installed 4 packages in [TIME]
-         + boltons==23.1.1
-         + maturin-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/maturin_editable)
-         + numpy==1.26.2
-         + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-        "###
+    ----- stderr -----
+    Built 2 editables in [TIME]
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + boltons==23.1.1
+     + maturin-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/maturin_editable)
+     + numpy==1.26.2
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+    "###
     );
 
     // Reinstall the editable packages.
@@ -2233,17 +2233,17 @@ fn sync_editable() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Built 1 editable in [TIME]
-        Uninstalled 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-         + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-        "###
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+    "###
     );
 
     // Make sure we have the right base case.
@@ -2293,13 +2293,13 @@ fn sync_editable() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Audited 4 packages in [TIME]
-        "###
+    ----- stderr -----
+    Audited 4 packages in [TIME]
+    "###
     );
 
     Ok(())
@@ -2341,21 +2341,21 @@ fn sync_editable_and_registry() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + black==24.1.0
-        warning: The package `black` requires `click >=8.0.0`, but it's not installed.
-        warning: The package `black` requires `mypy-extensions >=0.4.3`, but it's not installed.
-        warning: The package `black` requires `packaging >=22.0`, but it's not installed.
-        warning: The package `black` requires `pathspec >=0.9.0`, but it's not installed.
-        warning: The package `black` requires `platformdirs >=2`, but it's not installed.
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==24.1.0
+    warning: The package `black` requires `click >=8.0.0`, but it's not installed.
+    warning: The package `black` requires `mypy-extensions >=0.4.3`, but it's not installed.
+    warning: The package `black` requires `packaging >=22.0`, but it's not installed.
+    warning: The package `black` requires `pathspec >=0.9.0`, but it's not installed.
+    warning: The package `black` requires `platformdirs >=2`, but it's not installed.
+    "###
     );
 
     // Install the editable version of Black. This should remove the registry-based version.
@@ -2384,17 +2384,17 @@ fn sync_editable_and_registry() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Built 1 editable in [TIME]
-        Uninstalled 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - black==24.1.0
-         + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
-        "###
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - black==24.1.0
+     + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
+    "###
     );
 
     // Re-install the registry-based version of Black. This should be a no-op, since we have a
@@ -2423,13 +2423,13 @@ fn sync_editable_and_registry() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Audited 1 package in [TIME]
-        "###
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
     );
 
     // Re-install Black at a specific version. This should replace the editable version.
@@ -2457,23 +2457,23 @@ fn sync_editable_and_registry() -> Result<()> {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Uninstalled 1 package in [TIME]
-        Installed 1 package in [TIME]
-         - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
-         + black==23.10.0
-        warning: The package `black` requires `click >=8.0.0`, but it's not installed.
-        warning: The package `black` requires `mypy-extensions >=0.4.3`, but it's not installed.
-        warning: The package `black` requires `packaging >=22.0`, but it's not installed.
-        warning: The package `black` requires `pathspec >=0.9.0`, but it's not installed.
-        warning: The package `black` requires `platformdirs >=2`, but it's not installed.
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
+     + black==23.10.0
+    warning: The package `black` requires `click >=8.0.0`, but it's not installed.
+    warning: The package `black` requires `mypy-extensions >=0.4.3`, but it's not installed.
+    warning: The package `black` requires `packaging >=22.0`, but it's not installed.
+    warning: The package `black` requires `pathspec >=0.9.0`, but it's not installed.
+    warning: The package `black` requires `platformdirs >=2`, but it's not installed.
+    "###
     );
 
     Ok(())
@@ -2508,14 +2508,14 @@ fn incompatible_wheel() -> Result<()> {
     puffin_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        error: Failed to determine installation plan
-          Caused by: A path dependency is incompatible with the current platform: [TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl
-        "###
+    ----- stderr -----
+    error: Failed to determine installation plan
+      Caused by: A path dependency is incompatible with the current platform: [TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl
+    "###
     );
 
     Ok(())
@@ -2531,16 +2531,16 @@ fn sync_legacy_sdist_pep_517() -> Result<()> {
 
     puffin_snapshot!(command(&context)
         .arg("requirements.in"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + flake8==6.0.0 (from https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + flake8==6.0.0 (from https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz)
+    "###
     );
 
     Ok(())
@@ -2557,16 +2557,16 @@ fn sync_legacy_sdist_setuptools() -> Result<()> {
     puffin_snapshot!(command(&context)
         .arg("requirements.in")
         .arg("--legacy-setup-py"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 1 package in [TIME]
-        Downloaded 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + flake8==6.0.0 (from https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz)
-        "###
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + flake8==6.0.0 (from https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz)
+    "###
     );
 
     Ok(())
@@ -2596,19 +2596,19 @@ fn find_links() -> Result<()> {
         .arg("requirements.txt")
         .arg("--find-links")
         .arg(project_root.join("scripts/wheels/")), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 4 packages in [TIME]
-        Downloaded 4 packages in [TIME]
-        Installed 4 packages in [TIME]
-         + markupsafe==2.1.3
-         + numpy==1.26.3
-         + tqdm==1000.0.0
-         + werkzeug==3.0.1 (from https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl)
-        "###
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Downloaded 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + markupsafe==2.1.3
+     + numpy==1.26.3
+     + tqdm==1000.0.0
+     + werkzeug==3.0.1 (from https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl)
+    "###
     );
 
     Ok(())
