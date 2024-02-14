@@ -8,7 +8,7 @@ use assert_fs::prelude::*;
 use indoc::indoc;
 use url::Url;
 
-use common::{puffin_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
+use common::{uv_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
 
 use crate::common::get_bin;
 
@@ -34,7 +34,7 @@ fn missing_requirements_txt() {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -55,7 +55,7 @@ fn missing_requirements_txt() {
 fn no_solution() {
     let context = TestContext::new("3.12");
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("flask>=3.0.0")
         .arg("WerkZeug<1.0.0")
         .arg("--strict"), @r###"
@@ -79,7 +79,7 @@ fn install_package() {
     let context = TestContext::new("3.12");
 
     // Install Flask.
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("Flask")
         .arg("--strict"), @r###"
     success: true
@@ -112,7 +112,7 @@ fn install_requirements_txt() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("Flask")?;
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -140,7 +140,7 @@ fn install_requirements_txt() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("Jinja2")?;
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -168,7 +168,7 @@ fn respect_installed() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("Flask==2.3.2")?;
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -197,7 +197,7 @@ fn respect_installed() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("Flask")?;
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -227,7 +227,7 @@ fn respect_installed() -> Result<()> {
     } else {
         INSTA_FILTERS.to_vec()
     };
-    puffin_snapshot!(filters, command(&context)
+    uv_snapshot!(filters, command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -249,7 +249,7 @@ fn respect_installed() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("Flask")?;
 
-    puffin_snapshot!(filters, command(&context)
+    uv_snapshot!(filters, command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--reinstall-package")
@@ -281,7 +281,7 @@ fn allow_incompatibilities() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("Flask")?;
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -310,7 +310,7 @@ fn allow_incompatibilities() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("jinja2==2.11.3")?;
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -352,7 +352,7 @@ fn install_editable() -> Result<()> {
         .collect::<Vec<_>>();
 
     // Install the editable package.
-    puffin_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("-e")
@@ -379,7 +379,7 @@ fn install_editable() -> Result<()> {
     );
 
     // Install it again (no-op).
-    puffin_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("-e")
@@ -401,7 +401,7 @@ fn install_editable() -> Result<()> {
     );
 
     // Add another, non-editable dependency.
-    puffin_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("-e")
@@ -454,7 +454,7 @@ fn install_editable_and_registry() -> Result<()> {
         .collect();
 
     // Install the registry-based version of Black.
-    puffin_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("black")
@@ -483,7 +483,7 @@ fn install_editable_and_registry() -> Result<()> {
     );
 
     // Install the editable version of Black. This should remove the registry-based version.
-    puffin_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("-e")
@@ -510,7 +510,7 @@ fn install_editable_and_registry() -> Result<()> {
 
     // Re-install the registry-based version of Black. This should be a no-op, since we have a
     // version of Black installed (the editable version) that satisfies the requirements.
-    puffin_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("black")
@@ -539,7 +539,7 @@ fn install_editable_and_registry() -> Result<()> {
         .collect();
 
     // Re-install Black at a specific version. This should replace the editable version.
-    puffin_snapshot!(filters2, Command::new(get_bin())
+    uv_snapshot!(filters2, Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("black==23.10.0")
@@ -581,7 +581,7 @@ fn reinstall_build_system() -> Result<()> {
         "
     })?;
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("--reinstall")
         .arg("-r")
         .arg("requirements.txt")
@@ -613,7 +613,7 @@ fn reinstall_build_system() -> Result<()> {
 fn install_no_index() {
     let context = TestContext::new("3.12");
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("Flask")
         .arg("--no-index"), @r###"
     success: false
@@ -640,7 +640,7 @@ fn install_no_index() {
 fn install_no_index_version() {
     let context = TestContext::new("3.12");
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("Flask==3.0.0")
         .arg("--no-index"), @r###"
     success: false
@@ -675,7 +675,7 @@ fn reinstall_no_binary() {
         // default windows stack of 1MB
         command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
     }
-    puffin_snapshot!(command, @r###"
+    uv_snapshot!(command, @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -705,7 +705,7 @@ fn reinstall_no_binary() {
         // default windows stack of 1MB
         command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
     }
-    puffin_snapshot!(command, @r###"
+    uv_snapshot!(command, @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -741,7 +741,7 @@ fn reinstall_no_binary() {
         // default windows stack of 1MB
         command.env("PUFFIN_STACK_SIZE", (2 * 1024 * 1024).to_string());
     }
-    puffin_snapshot!(filters, command, @r###"
+    uv_snapshot!(filters, command, @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -765,7 +765,7 @@ fn reinstall_no_binary() {
 fn install_executable() {
     let context = TestContext::new("3.12");
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("pylint==3.0.0"), @r###"
     success: true
     exit_code: 0
@@ -799,7 +799,7 @@ fn install_executable() {
 fn install_executable_copy() {
     let context = TestContext::new("3.12");
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("pylint==3.0.0")
         .arg("--link-mode")
         .arg("copy"), @r###"
@@ -835,7 +835,7 @@ fn install_executable_copy() {
 fn install_executable_hardlink() {
     let context = TestContext::new("3.12");
 
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("pylint==3.0.0")
         .arg("--link-mode")
         .arg("hardlink"), @r###"
@@ -871,7 +871,7 @@ fn no_deps() {
     let context = TestContext::new("3.12");
 
     // Install Flask.
-    puffin_snapshot!(command(&context)
+    uv_snapshot!(command(&context)
         .arg("Flask")
         .arg("--no-deps")
         .arg("--strict"), @r###"

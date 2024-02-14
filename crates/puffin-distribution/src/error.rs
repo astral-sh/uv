@@ -2,7 +2,7 @@ use tokio::task::JoinError;
 use zip::result::ZipError;
 
 use distribution_filename::WheelFilenameError;
-use puffin_normalize::PackageName;
+use uv_normalize::PackageName;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -21,7 +21,7 @@ pub enum Error {
     #[error(transparent)]
     Request(#[from] reqwest::Error),
     #[error(transparent)]
-    Client(#[from] puffin_client::Error),
+    Client(#[from] uv_client::Error),
 
     // Cache writing error
     #[error("Failed to read from the distribution cache")]
@@ -54,7 +54,7 @@ pub enum Error {
     #[error("Source distribution directory contains neither readable pyproject.toml nor setup.py")]
     DirWithoutEntrypoint,
     #[error("Failed to extract source distribution: {0}")]
-    Extract(#[from] puffin_extract::Error),
+    Extract(#[from] uv_extract::Error),
 
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]

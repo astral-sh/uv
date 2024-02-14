@@ -24,8 +24,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PACKAGE_NAME: puffin_alpha
-  MODULE_NAME: puffin
+  PACKAGE_NAME: uv_alpha
+  MODULE_NAME: uv
   PYTHON_VERSION: "3.11"
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
@@ -85,11 +85,11 @@ jobs:
       - name: "Archive binary"
         run: |
           TARGET=x86_64-apple-darwin
-          ARCHIVE_NAME=puffin-$TARGET
+          ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/puffin $ARCHIVE_NAME/puffin
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -129,11 +129,11 @@ jobs:
       - name: "Archive binary"
         run: |
           TARGET=aarch64-apple-darwin
-          ARCHIVE_NAME=puffin-$TARGET
+          ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/puffin $ARCHIVE_NAME/puffin
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -183,8 +183,8 @@ jobs:
       - name: "Archive binary"
         shell: bash
         run: |
-          ARCHIVE_FILE=puffin-${{ matrix.platform.target }}.zip
-          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/puffin.exe
+          ARCHIVE_FILE=uv-${{ matrix.platform.target }}.zip
+          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/uv.exe
           sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
         uses: actions/upload-artifact@v3
@@ -249,11 +249,11 @@ jobs:
           set -euo pipefail
 
           TARGET=${{ matrix.target }}
-          ARCHIVE_NAME=puffin-$TARGET
+          ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/puffin $ARCHIVE_NAME/puffin
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -318,11 +318,11 @@ jobs:
           set -euo pipefail
 
           TARGET=${{ matrix.platform.target }}
-          ARCHIVE_NAME=puffin-$TARGET
+          ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/puffin $ARCHIVE_NAME/puffin
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -384,11 +384,11 @@ jobs:
           set -euo pipefail
 
           TARGET=${{ matrix.platform.target }}
-          ARCHIVE_NAME=puffin-$TARGET
+          ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/puffin $ARCHIVE_NAME/puffin
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -459,11 +459,11 @@ jobs:
           set -euo pipefail
 
           TARGET=${{ matrix.platform.target }}
-          ARCHIVE_NAME=puffin-$TARGET
+          ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/puffin $ARCHIVE_NAME/puffin
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -519,11 +519,11 @@ jobs:
           set -euo pipefail
 
           TARGET=${{ matrix.target }}
-          ARCHIVE_NAME=puffin-$TARGET
+          ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/puffin $ARCHIVE_NAME/puffin
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -584,11 +584,11 @@ jobs:
           set -euo pipefail
 
           TARGET=${{ matrix.platform.target }}
-          ARCHIVE_NAME=puffin-$TARGET
+          ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/puffin $ARCHIVE_NAME/puffin
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"

@@ -12,8 +12,8 @@ use tracing::{debug, instrument};
 
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
-use puffin_normalize::PackageName;
 use pypi_types::DirectUrl;
+use uv_normalize::PackageName;
 
 use crate::install_location::InstallLocation;
 use crate::wheel::{

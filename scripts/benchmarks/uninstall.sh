@@ -13,5 +13,5 @@ set -euxo pipefail
 TARGET=${1}
 
 hyperfine --runs 20 --warmup 3 --prepare "rm -rf .venv && virtualenv .venv && source activate .venv/bin/activate && pip install ${TARGET}" \
-    "./target/release/puffin uninstall ${TARGET}" \
+    "./target/release/uv uninstall ${TARGET}" \
     "pip uninstall -y ${TARGET}"

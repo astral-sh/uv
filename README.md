@@ -1,10 +1,10 @@
 # uv
 
-[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/puffin/main/assets/badge/v0.json)](https://github.com/astral-sh/puffin)
-[![image](https://img.shields.io/pypi/v/puffin-alpha.svg)](https://pypi.python.org/pypi/puffin-alpha)
-[![image](https://img.shields.io/pypi/l/puffin-alpha.svg)](https://pypi.python.org/pypi/puffin-alpha)
-[![image](https://img.shields.io/pypi/pyversions/puffin-alpha.svg)](https://pypi.python.org/pypi/puffin-alpha)
-[![Actions status](https://github.com/astral-sh/puffin/workflows/CI/badge.svg)](https://github.com/astral-sh/puffin/actions)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![image](https://img.shields.io/pypi/v/uv-alpha.svg)](https://pypi.python.org/pypi/uv-alpha)
+[![image](https://img.shields.io/pypi/l/uv-alpha.svg)](https://pypi.python.org/pypi/uv-alpha)
+[![image](https://img.shields.io/pypi/pyversions/uv-alpha.svg)](https://pypi.python.org/pypi/uv-alpha)
+[![Actions status](https://github.com/astral-sh/uv/workflows/CI/badge.svg)](https://github.com/astral-sh/uv/actions)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
 
 An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in replacement for `pip` and `pip-compile`.
@@ -29,37 +29,37 @@ uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://gith
 
 ## Getting Started
 
-uv is available as [`puffin`](https://pypi.org/project/puffin/) on PyPI:
+uv is available as [`uv`](https://pypi.org/project/uv/) on PyPI:
 
 ```shell
-pipx install puffin
+pipx install uv
 ```
 
 To create a virtual environment with uv:
 
 ```shell
-puffin venv  # Create a virtual environment at .venv.
+uv venv  # Create a virtual environment at .venv.
 ```
 
 To install a package into the virtual environment:
 
 ```shell
-puffin pip install flask                # Install Flask.
-puffin pip install -r requirements.txt  # Install from a requirements.txt file.
-puffin pip install -e .                 # Install the current project in editable mode.
+uv pip install flask                # Install Flask.
+uv pip install -r requirements.txt  # Install from a requirements.txt file.
+uv pip install -e .                 # Install the current project in editable mode.
 ```
 
 To generate a set of locked dependencies from an input file:
 
 ```shell
-puffin pip compile pyproject.toml -o requirements.txt   # Read a pyproject.toml file.
-puffin pip compile requirements.in -o requirements.txt  # Read a requirements.in file.
+uv pip compile pyproject.toml -o requirements.txt   # Read a pyproject.toml file.
+uv pip compile requirements.in -o requirements.txt  # Read a requirements.in file.
 ```
 
 To install a set of locked dependencies into the virtual environment:
 
 ```shell
-puffin pip sync requirements.txt  # Install from a requirements.txt file.
+uv pip sync requirements.txt  # Install from a requirements.txt file.
 ```
 
 uv's `pip-install` and `pip-compile` commands supports many of the same command-line arguments
@@ -95,8 +95,8 @@ following `pip` features:
 
 On the other hand, uv plans to (but does not currently) support:
 
-- [Hash-checking mode](https://github.com/astral-sh/puffin/issues/474)
-- [URL requirements without package names](https://github.com/astral-sh/puffin/issues/313)
+- [Hash-checking mode](https://github.com/astral-sh/uv/issues/474)
+- [URL requirements without package names](https://github.com/astral-sh/uv/issues/313)
   (e.g., `https://...` instead of `package @ https://...`).
 
 Like `pip-compile`, uv generates a platform-specific `requirements.txt` file (unlike, e.g.,
@@ -118,7 +118,7 @@ following order:
 - A virtual environment at `.venv` in the current directory, or in the nearest parent directory.
 
 If no virtual environment is found, uv will prompt the user to create one in the current
-directory via `puffin venv`.
+directory via `uv venv`.
 
 When running `pip compile`, uv does not _require_ a virtual environment and will search for a
 Python interpreter in the following order:
@@ -154,21 +154,21 @@ The specifics of uv's caching semantics vary based on the nature of the dependen
 - **For direct URL dependencies**, uv respects HTTP caching headers, and also caches based on
   the URL itself.
 - **For Git dependencies**, uv caches based on the fully-resolved Git commit hash. As such,
-  `puffin pip compile` will pin Git dependencies to a specific commit hash when writing the resolved
+  `uv pip compile` will pin Git dependencies to a specific commit hash when writing the resolved
   dependency set.
 - **For local dependencies**, uv caches based on the last-modified time of the `setup.py` or
   `pyproject.toml` file.
 
 If you're running into caching issues, uv includes a few escape hatches:
 
-- To force uv to ignore cached data for all dependencies, run `puffin pip install --reinstall ...`.
-- To force uv to ignore cached data for a specific dependency, run, e.g., `puffin pip install --reinstall-package flask ...`.
-- To clear the global cache entirely, run `puffin clean`. 
+- To force uv to ignore cached data for all dependencies, run `uv pip install --reinstall ...`.
+- To force uv to ignore cached data for a specific dependency, run, e.g., `uv pip install --reinstall-package flask ...`.
+- To clear the global cache entirely, run `uv clean`. 
 
 ### Resolution strategy
 
 By default, uv follows the standard Python dependency resolution strategy of preferring the
-latest compatible version of each package. For example, `puffin pip install flask>=2.0.0` will
+latest compatible version of each package. For example, `uv pip install flask>=2.0.0` will
 install the latest version of Flask (at time of writing: `3.0.0`).
 
 However, uv's resolution strategy be configured to prefer the _lowest_ compatible version of
@@ -182,11 +182,11 @@ For example, given the following `requirements.in` file:
 flask>=2.0.0
 ```
 
-Running `puffin pip compile requirements.in` would produce the following `requirements.txt` file:
+Running `uv pip compile requirements.in` would produce the following `requirements.txt` file:
 
 ```text
 # This file was autogenerated by uv v0.0.1 via the following command:
-#    puffin pip compile requirements.in
+#    uv pip compile requirements.in
 blinker==1.7.0
     # via flask
 click==8.1.7
@@ -204,11 +204,11 @@ werkzeug==3.0.1
     # via flask
 ```
 
-However, `puffin pip compile --resolution=lowest requirements.in` would instead produce:
+However, `uv pip compile --resolution=lowest requirements.in` would instead produce:
 
 ```text
 # This file was autogenerated by uv v0.0.1 via the following command:
-#    puffin pip compile requirements.in --resolution=lowest
+#    uv pip compile requirements.in --resolution=lowest
 click==7.1.2
     # via flask
 flask==2.0.0
@@ -271,7 +271,7 @@ not yet produce a machine-agnostic lockfile.
 
 However, uv _does_ support resolving for alternate Python versions via the `--python-version`
 command line argument. For example, if you're running uv on Python 3.9, but want to resolve for
-Python 3.8, you can run `puffin pip compile --python-version=3.8 requirements.in` to produce a
+Python 3.8, you can run `uv pip compile --python-version=3.8 requirements.in` to produce a
 Python 3.8-compatible resolution.
 
 ## Platform support
@@ -295,7 +295,7 @@ uv has Tier 2 support ("guaranteed to build") for the following platforms:
 - Linux (i686)
 - Linux (s390x)
 
-uv ships pre-built wheels to [PyPI](https://pypi.org/project/puffin-alpha/) for its Tier 1 and
+uv ships pre-built wheels to [PyPI](https://pypi.org/project/uv-alpha/) for its Tier 1 and
 Tier 2 platforms. However, while Tier 2 platforms are continuously built, they are not continuously
 tested or developed against, and so stability may vary in practice.
 
@@ -332,6 +332,6 @@ dually licensed as above, without any additional terms or conditions.
 
 <div align="center">
   <a target="_blank" href="https://astral.sh" style="background:none">
-    <img src="https://raw.githubusercontent.com/astral-sh/puffin/main/assets/svg/Astral.svg">
+    <img src="https://raw.githubusercontent.com/astral-sh/uv/main/assets/svg/Astral.svg">
   </a>
 </div>

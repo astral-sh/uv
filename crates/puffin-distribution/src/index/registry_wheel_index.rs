@@ -7,9 +7,9 @@ use rustc_hash::FxHashMap;
 use distribution_types::{CachedRegistryDist, FlatIndexLocation, IndexLocations, IndexUrl};
 use pep440_rs::Version;
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket, WheelCache};
-use puffin_fs::{directories, symlinks};
-use puffin_normalize::PackageName;
+use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_fs::{directories, symlinks};
+use uv_normalize::PackageName;
 
 use crate::index::cached_wheel::CachedWheel;
 use crate::source::{read_http_manifest, MANIFEST};

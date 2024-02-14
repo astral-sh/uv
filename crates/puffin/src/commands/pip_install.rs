@@ -16,24 +16,22 @@ use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_host::Platform;
 use platform_tags::Tags;
-use puffin_cache::Cache;
-use puffin_client::{
-    Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder,
-};
-use puffin_dispatch::BuildDispatch;
-use puffin_fs::Normalized;
-use puffin_installer::{
+use pypi_types::Yanked;
+use requirements_txt::EditableRequirement;
+use uv_cache::Cache;
+use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
+use uv_dispatch::BuildDispatch;
+use uv_fs::Normalized;
+use uv_installer::{
     BuiltEditable, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
-use puffin_interpreter::{Interpreter, Virtualenv};
-use puffin_normalize::PackageName;
-use puffin_resolver::{
+use uv_interpreter::{Interpreter, Virtualenv};
+use uv_normalize::PackageName;
+use uv_resolver::{
     DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     ResolutionGraph, ResolutionMode, Resolver,
 };
-use puffin_traits::{InFlight, NoBuild, SetupPyStrategy};
-use pypi_types::Yanked;
-use requirements_txt::EditableRequirement;
+use uv_traits::{InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -221,7 +219,7 @@ pub(crate) async fn pip_install(
     .await
     {
         Ok(resolution) => Resolution::from(resolution),
-        Err(Error::Resolve(puffin_resolver::ResolveError::NoSolution(err))) => {
+        Err(Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
             let report = miette::Report::msg(format!("{err}"))
                 .context("No solution found when resolving dependencies:");
             eprint!("{report:?}");
@@ -586,7 +584,7 @@ async fn install(
     // Remove any existing installations.
     if !reinstalls.is_empty() {
         for dist_info in &reinstalls {
-            let summary = puffin_installer::uninstall(dist_info).await?;
+            let summary = uv_installer::uninstall(dist_info).await?;
             debug!(
                 "Uninstalled {} ({} file{}, {} director{})",
                 dist_info.name(),
@@ -602,7 +600,7 @@ async fn install(
     let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
-        puffin_installer::Installer::new(venv)
+        uv_installer::Installer::new(venv)
             .with_link_mode(link_mode)
             .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
             .install(&wheels)?;
@@ -687,10 +685,10 @@ fn validate(resolution: &Resolution, venv: &Virtualenv, mut printer: Printer) ->
 #[derive(thiserror::Error, Debug)]
 enum Error {
     #[error(transparent)]
-    Resolve(#[from] puffin_resolver::ResolveError),
+    Resolve(#[from] uv_resolver::ResolveError),
 
     #[error(transparent)]
-    Client(#[from] puffin_client::Error),
+    Client(#[from] uv_client::Error),
 
     #[error(transparent)]
     Platform(#[from] platform_host::PlatformError),

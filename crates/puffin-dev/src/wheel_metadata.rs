@@ -7,8 +7,8 @@ use clap::Parser;
 use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, DirectUrlBuiltDist};
 use pep508_rs::VerbatimUrl;
-use puffin_cache::{Cache, CacheArgs};
-use puffin_client::RegistryClientBuilder;
+use uv_cache::{Cache, CacheArgs};
+use uv_client::RegistryClientBuilder;
 
 #[derive(Parser)]
 pub(crate) struct WheelMetadataArgs {

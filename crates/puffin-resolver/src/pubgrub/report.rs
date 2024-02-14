@@ -12,8 +12,8 @@ use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, Derived, External, ReportFormatter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
-use puffin_normalize::PackageName;
 use rustc_hash::FxHashMap;
+use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::prerelease_mode::PreReleaseStrategy;

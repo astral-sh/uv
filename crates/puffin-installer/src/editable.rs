@@ -1,8 +1,8 @@
 use distribution_types::{
     CachedDist, InstalledDist, InstalledMetadata, InstalledVersion, LocalEditable, Name,
 };
-use puffin_normalize::PackageName;
 use pypi_types::Metadata21;
+use uv_normalize::PackageName;
 
 /// An editable distribution that has been built.
 #[derive(Debug, Clone)]

@@ -1,7 +1,7 @@
 use pep440_rs::Version;
-use puffin_normalize::PackageName;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use uv_normalize::PackageName;
 
 pub use source_dist::{SourceDistExtension, SourceDistFilename, SourceDistFilenameError};
 pub use wheel::{WheelFilename, WheelFilenameError};

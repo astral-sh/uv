@@ -12,12 +12,12 @@ use distribution_types::{
 };
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
-use puffin_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Timestamp, WheelCache};
-use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
-use puffin_fs::Normalized;
-use puffin_interpreter::Virtualenv;
-use puffin_normalize::PackageName;
-use puffin_traits::NoBinary;
+use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Timestamp, WheelCache};
+use uv_distribution::{BuiltWheelIndex, RegistryWheelIndex};
+use uv_fs::Normalized;
+use uv_interpreter::Virtualenv;
+use uv_normalize::PackageName;
+use uv_traits::NoBinary;
 
 use crate::{ResolvedEditable, SitePackages};
 

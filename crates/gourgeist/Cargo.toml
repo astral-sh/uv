@@ -22,8 +22,8 @@ workspace = true
 
 [dependencies]
 platform-host = { path = "../platform-host" }
-puffin-cache = { path = "../puffin-cache" }
-puffin-interpreter = { path = "../puffin-interpreter" }
+uv-cache = { path = "../uv-cache" }
+uv-interpreter = { path = "../uv-interpreter" }
 
 anstream = { workspace = true }
 camino = { workspace = true }

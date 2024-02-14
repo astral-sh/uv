@@ -23,7 +23,7 @@ pub(crate) enum Level {
 ///
 /// The [`Level`] is used to dictate the default filters (which can be overridden by the `RUST_LOG`
 /// environment variable) along with the formatting of the output. For example, [`Level::Verbose`]
-/// includes targets and timestamps, along with all `puffin=debug` messages by default.
+/// includes targets and timestamps, along with all `uv=debug` messages by default.
 pub(crate) fn setup_logging(level: Level, duration: impl Layer<Registry> + Send + Sync) {
     match level {
         Level::Default => {
@@ -47,7 +47,7 @@ pub(crate) fn setup_logging(level: Level, duration: impl Layer<Registry> + Send 
         Level::Verbose => {
             // Show `DEBUG` messages from the CLI crate, but allow `RUST_LOG` to override.
             let filter = EnvFilter::try_from_default_env()
-                .or_else(|_| EnvFilter::try_new("puffin=debug"))
+                .or_else(|_| EnvFilter::try_new("uv=debug"))
                 .unwrap();
 
             // Regardless of the tracing level, include the uptime and target for each message.

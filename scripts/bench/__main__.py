@@ -1,7 +1,7 @@
 """Benchmark uv against other packaging tools.
 
 This script assumes that `pip`, `pip-tools`, `virtualenv`, `poetry` and `hyperfine` are
-installed, and that a uv release builds exists at `./target/release/puffin`
+installed, and that a uv release builds exists at `./target/release/uv`
 (relative to the repository root).
 
 This script assumes that Python 3.12 is installed.
@@ -9,20 +9,20 @@ This script assumes that Python 3.12 is installed.
 To set up the required environment, run:
 
     cargo build --release
-    ./target/release/puffin venv
+    ./target/release/uv venv
     source .venv/bin/activate
-    ./target/release/puffin pip sync ./scripts/bench/requirements.txt
+    ./target/release/uv pip sync ./scripts/bench/requirements.txt
 
 Example usage:
 
-    python -m scripts.bench --puffin --pip-compile requirements.in
+    python -m scripts.bench --uv --pip-compile requirements.in
 
 Multiple versions of uv can be benchmarked by specifying the path to the binary for
 each build, as in:
 
     python -m scripts.bench \
-        --puffin-path ./target/release/puffin \
-        --puffin-path ./target/release/baseline \
+        --uv-path ./target/release/uv \
+        --uv-path ./target/release/baseline \
         requirements.in
 """
 import abc
@@ -772,14 +772,14 @@ class Pdm(Suite):
 class uv(Suite):
     def __init__(self, *, path: str | None = None) -> Command | None:
         """Initialize a uv benchmark."""
-        self.name = path or "puffin"
+        self.name = path or "uv"
         self.path = path or os.path.join(
             os.path.dirname(
                 os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             ),
             "target",
             "release",
-            "puffin",
+            "uv",
         )
 
     def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
@@ -964,8 +964,8 @@ def main():
         action="store_true",
     )
     parser.add_argument(
-        "--puffin",
-        help="Whether to benchmark uv (assumes a uv binary exists at `./target/release/puffin`).",
+        "--uv",
+        help="Whether to benchmark uv (assumes a uv binary exists at `./target/release/uv`).",
         action="store_true",
     )
     parser.add_argument(
@@ -993,7 +993,7 @@ def main():
         action="append",
     )
     parser.add_argument(
-        "--puffin-path",
+        "--uv-path",
         type=str,
         help="Path(s) to the uv binary to benchmark.",
         action="append",
@@ -1025,7 +1025,7 @@ def main():
         suites.append(Poetry())
     if args.pdm:
         suites.append(Pdm())
-    if args.puffin:
+    if args.uv:
         suites.append(uv())
     for path in args.pip_sync_path or []:
         suites.append(PipSync(path=path))
@@ -1035,7 +1035,7 @@ def main():
         suites.append(Poetry(path=path))
     for path in args.pdm_path or []:
         suites.append(Pdm(path=path))
-    for path in args.puffin_path or []:
+    for path in args.uv_path or []:
         suites.append(uv(path=path))
 
     # If no tools were specified, benchmark all tools.

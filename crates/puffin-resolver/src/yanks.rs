@@ -2,7 +2,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use pep440_rs::Version;
 use pep508_rs::Requirement;
-use puffin_normalize::PackageName;
+use uv_normalize::PackageName;
 
 /// A set of package versions that are permitted, even if they're marked as yanked by the
 /// relevant index.

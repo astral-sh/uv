@@ -3,7 +3,7 @@ use async_zip::error::ZipError;
 use url::Url;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
-use puffin_normalize::PackageName;
+use uv_normalize::PackageName;
 
 use crate::html;
 use crate::middleware::OfflineError;

@@ -15,7 +15,7 @@ workspace = true
 [dependencies]
 pep440_rs = { path = "../pep440-rs", features = ["rkyv", "serde"] }
 pep508_rs = { path = "../pep508-rs", features = ["rkyv", "serde"] }
-puffin-normalize = { path = "../puffin-normalize" }
+uv-normalize = { path = "../uv-normalize" }
 
 chrono = { workspace = true, features = ["serde"] }
 mailparse = { workspace = true }

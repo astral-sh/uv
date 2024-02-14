@@ -14,16 +14,14 @@ use distribution_types::{IndexLocations, Resolution, SourceDist};
 use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
-use puffin_cache::Cache;
-use puffin_client::{FlatIndex, RegistryClientBuilder};
-use puffin_interpreter::{Interpreter, Virtualenv};
-use puffin_resolver::{
+use uv_cache::Cache;
+use uv_client::{FlatIndex, RegistryClientBuilder};
+use uv_interpreter::{Interpreter, Virtualenv};
+use uv_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     ResolutionGraph, ResolutionMode, Resolver,
 };
-use puffin_traits::{
-    BuildContext, BuildKind, NoBinary, NoBuild, SetupPyStrategy, SourceBuildTrait,
-};
+use uv_traits::{BuildContext, BuildKind, NoBinary, NoBuild, SetupPyStrategy, SourceBuildTrait};
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {

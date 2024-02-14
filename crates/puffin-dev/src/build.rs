@@ -7,14 +7,14 @@ use fs_err as fs;
 
 use distribution_types::IndexLocations;
 use platform_host::Platform;
-use puffin_build::{SourceBuild, SourceBuildContext};
-use puffin_cache::{Cache, CacheArgs};
-use puffin_client::{FlatIndex, RegistryClientBuilder};
-use puffin_dispatch::BuildDispatch;
-use puffin_installer::NoBinary;
-use puffin_interpreter::Virtualenv;
-use puffin_resolver::InMemoryIndex;
-use puffin_traits::{BuildContext, BuildKind, InFlight, NoBuild, SetupPyStrategy};
+use uv_build::{SourceBuild, SourceBuildContext};
+use uv_cache::{Cache, CacheArgs};
+use uv_client::{FlatIndex, RegistryClientBuilder};
+use uv_dispatch::BuildDispatch;
+use uv_installer::NoBinary;
+use uv_interpreter::Virtualenv;
+use uv_resolver::InMemoryIndex;
+use uv_traits::{BuildContext, BuildKind, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {

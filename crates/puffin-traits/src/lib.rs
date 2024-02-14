@@ -10,9 +10,9 @@ use anyhow::Result;
 use distribution_types::{CachedDist, DistributionId, IndexLocations, Resolution, SourceDist};
 use once_map::OnceMap;
 use pep508_rs::Requirement;
-use puffin_cache::Cache;
-use puffin_interpreter::{Interpreter, Virtualenv};
-use puffin_normalize::PackageName;
+use uv_cache::Cache;
+use uv_interpreter::{Interpreter, Virtualenv};
+use uv_normalize::PackageName;
 
 /// Avoid cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -29,27 +29,27 @@ use puffin_normalize::PackageName;
 ///
 /// ```text
 ///                    ┌────────────────┐
-///                    │puffin          │
+///                    │uv          │
 ///                    └───────▲────────┘
 ///                            │
 ///                            │
 ///                    ┌───────┴────────┐
-///         ┌─────────►│puffin-dispatch │◄─────────┐
+///         ┌─────────►│uv-dispatch │◄─────────┐
 ///         │          └───────▲────────┘          │
 ///         │                  │                   │
 ///         │                  │                   │
 /// ┌───────┴────────┐ ┌───────┴────────┐ ┌────────┴───────┐
-/// │puffin-resolver │ │puffin-installer│ │puffin-build    │
+/// │uv-resolver │ │uv-installer│ │uv-build    │
 /// └───────▲────────┘ └───────▲────────┘ └────────▲───────┘
 ///         │                  │                   │
 ///         └─────────────┐    │    ┌──────────────┘
 ///                    ┌──┴────┴────┴───┐
-///                    │puffin-traits   │
+///                    │uv-traits   │
 ///                    └────────────────┘
 /// ```
 ///
-/// Put in a different way, this trait allows `puffin-resolver` to depend on `puffin-build` and
-/// `puffin-build` to depend on `puffin-resolver` which having actual crate dependencies between
+/// Put in a different way, this trait allows `uv-resolver` to depend on `uv-build` and
+/// `uv-build` to depend on `uv-resolver` which having actual crate dependencies between
 /// them.
 
 // TODO(konstin): Proper error types
@@ -94,7 +94,7 @@ pub trait BuildContext: Sync {
     ) -> impl Future<Output = Result<()>> + Send + 'a;
 
     /// Setup a source distribution build by installing the required dependencies. A wrapper for
-    /// `puffin_build::SourceBuild::setup`.
+    /// `uv_build::SourceBuild::setup`.
     ///
     /// For PEP 517 builds, this calls `get_requires_for_build_wheel`.
     ///
@@ -110,12 +110,12 @@ pub trait BuildContext: Sync {
     ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + Send + 'a;
 }
 
-/// A wrapper for `puffin_build::SourceBuild` to avoid cyclical crate dependencies.
+/// A wrapper for `uv_build::SourceBuild` to avoid cyclical crate dependencies.
 ///
 /// You can either call only `wheel()` to build the wheel directly, call only `metadata()` to get
 /// the metadata without performing the actual or first call `metadata()` and then `wheel()`.
 pub trait SourceBuildTrait {
-    /// A wrapper for `puffin_build::SourceBuild::get_metadata_without_build`.
+    /// A wrapper for `uv_build::SourceBuild::get_metadata_without_build`.
     ///
     /// For PEP 517 builds, this calls `prepare_metadata_for_build_wheel`
     ///
@@ -123,7 +123,7 @@ pub trait SourceBuildTrait {
     /// `prepare_metadata_for_build_wheel` hook exists
     fn metadata(&mut self) -> impl Future<Output = Result<Option<PathBuf>>> + Send;
 
-    /// A wrapper for `puffin_build::SourceBuild::build`.
+    /// A wrapper for `uv_build::SourceBuild::build`.
     ///
     /// For PEP 517 builds, this calls `build_wheel`.
     ///
@@ -174,7 +174,7 @@ pub enum PackageNameSpecifier {
 }
 
 impl FromStr for PackageNameSpecifier {
-    type Err = puffin_normalize::InvalidNameError;
+    type Err = uv_normalize::InvalidNameError;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
         match name {

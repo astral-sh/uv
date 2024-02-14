@@ -164,7 +164,7 @@ struct CacheConfig {
 impl Default for CacheConfig {
     fn default() -> CacheConfig {
         CacheConfig {
-            // The caching puffin does ought to be considered
+            // The caching uv does ought to be considered
             // private.
             shared: false,
             // This is only used to heuristically guess at a freshness lifetime

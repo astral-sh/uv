@@ -3,7 +3,7 @@ use std::sync::Arc;
 use url::Url;
 
 use distribution_types::{SourceDist, VersionOrUrl};
-use puffin_normalize::PackageName;
+use uv_normalize::PackageName;
 
 pub type BuildId = usize;
 
@@ -27,12 +27,12 @@ pub trait Reporter: Send + Sync {
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
 }
 
-/// A facade for converting from [`Reporter`] to [`puffin_distribution::Reporter`].
+/// A facade for converting from [`Reporter`] to [`uv_distribution::Reporter`].
 pub(crate) struct Facade {
     pub(crate) reporter: Arc<dyn Reporter>,
 }
 
-impl puffin_distribution::Reporter for Facade {
+impl uv_distribution::Reporter for Facade {
     fn on_build_start(&self, dist: &SourceDist) -> usize {
         self.reporter.on_build_start(dist)
     }

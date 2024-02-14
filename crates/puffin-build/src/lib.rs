@@ -27,9 +27,9 @@ use tracing::{debug, info_span, instrument, Instrument};
 
 use distribution_types::Resolution;
 use pep508_rs::Requirement;
-use puffin_fs::Normalized;
-use puffin_interpreter::{Interpreter, Virtualenv};
-use puffin_traits::{BuildContext, BuildKind, SetupPyStrategy, SourceBuildTrait};
+use uv_fs::Normalized;
+use uv_interpreter::{Interpreter, Virtualenv};
+use uv_traits::{BuildContext, BuildKind, SetupPyStrategy, SourceBuildTrait};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
@@ -59,7 +59,7 @@ pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
     #[error("Failed to extract archive: {0}")]
-    Extraction(PathBuf, #[source] puffin_extract::Error),
+    Extraction(PathBuf, #[source] uv_extract::Error),
     #[error("Unsupported archive format (extension not recognized): {0}")]
     UnsupportedArchiveType(String),
     #[error("Invalid source distribution: {0}")]
@@ -301,11 +301,11 @@ impl SourceBuild {
             let extracted = temp_dir.path().join("extracted");
 
             // Unzip the archive into the temporary directory.
-            puffin_extract::archive(source, &extracted)
+            uv_extract::archive(source, &extracted)
                 .map_err(|err| Error::Extraction(extracted.clone(), err))?;
 
             // Extract the top-level directory from the archive.
-            puffin_extract::strip_component(&extracted)
+            uv_extract::strip_component(&extracted)
                 .map_err(|err| Error::Extraction(extracted.clone(), err))?
         };
         let source_tree = if let Some(subdir) = subdirectory {
@@ -542,7 +542,7 @@ impl SourceBuild {
         let wheel_dir = fs::canonicalize(wheel_dir)?;
 
         if let Some(pep517_backend) = &self.pep517_backend {
-            // Prevent clashes from two puffin processes building wheels in parallel.
+            // Prevent clashes from two uv processes building wheels in parallel.
             let tmp_dir = tempdir_in(&wheel_dir)?;
             let filename = self.pep517_build(tmp_dir.path(), pep517_backend).await?;
 

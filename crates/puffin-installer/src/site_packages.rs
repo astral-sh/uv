@@ -9,9 +9,9 @@ use url::Url;
 use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, VerbatimUrl};
-use puffin_interpreter::Virtualenv;
-use puffin_normalize::PackageName;
 use requirements_txt::EditableRequirement;
+use uv_interpreter::Virtualenv;
+use uv_normalize::PackageName;
 
 /// An index over the packages installed in an environment.
 ///

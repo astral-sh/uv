@@ -3,12 +3,12 @@ import sys
 import sysconfig
 
 
-def find_puffin_bin() -> str:
-    """Return the puffin binary path."""
+def find_uv_bin() -> str:
+    """Return the uv binary path."""
 
-    puffin_exe = "puffin" + sysconfig.get_config_var("EXE")
+    uv_exe = "uv" + sysconfig.get_config_var("EXE")
 
-    path = os.path.join(sysconfig.get_path("scripts"), puffin_exe)
+    path = os.path.join(sysconfig.get_path("scripts"), uv_exe)
     if os.path.isfile(path):
         return path
 
@@ -21,7 +21,7 @@ def find_puffin_bin() -> str:
     else:
         user_scheme = "posix_user"
 
-    path = os.path.join(sysconfig.get_path("scripts", scheme=user_scheme), puffin_exe)
+    path = os.path.join(sysconfig.get_path("scripts", scheme=user_scheme), uv_exe)
     if os.path.isfile(path):
         return path
 
@@ -29,11 +29,11 @@ def find_puffin_bin() -> str:
 
 
 if __name__ == "__main__":
-    puffin = os.fsdecode(find_puffin_bin())
+    uv = os.fsdecode(find_uv_bin())
     if sys.platform == "win32":
         import subprocess
 
-        completed_process = subprocess.run([puffin, *sys.argv[1:]])
+        completed_process = subprocess.run([uv, *sys.argv[1:]])
         sys.exit(completed_process.returncode)
     else:
-        os.execvp(puffin, [puffin, *sys.argv[1:]])
+        os.execvp(uv, [uv, *sys.argv[1:]])

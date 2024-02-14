@@ -1,5 +1,5 @@
 [package]
-name = "puffin"
+name = "uv"
 version = "0.0.4"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -8,7 +8,7 @@ documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
-default-run = "puffin"
+default-run = "uv"
 
 [lints]
 workspace = true
@@ -22,18 +22,18 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-puffin-build = { path = "../puffin-build" }
-puffin-cache = { path = "../puffin-cache", features = ["clap"] }
-puffin-client = { path = "../puffin-client" }
-puffin-dispatch = { path = "../puffin-dispatch" }
-puffin-distribution = { path = "../puffin-distribution" }
-puffin-fs = { path = "../puffin-fs" }
-puffin-installer = { path = "../puffin-installer" }
-puffin-interpreter = { path = "../puffin-interpreter" }
-puffin-normalize = { path = "../puffin-normalize" }
-puffin-resolver = { path = "../puffin-resolver", features = ["clap"] }
-puffin-traits = { path = "../puffin-traits" }
-puffin-warnings = { path = "../puffin-warnings" }
+uv-build = { path = "../uv-build" }
+uv-cache = { path = "../uv-cache", features = ["clap"] }
+uv-client = { path = "../uv-client" }
+uv-dispatch = { path = "../uv-dispatch" }
+uv-distribution = { path = "../uv-distribution" }
+uv-fs = { path = "../uv-fs" }
+uv-installer = { path = "../uv-installer" }
+uv-interpreter = { path = "../uv-interpreter" }
+uv-normalize = { path = "../uv-normalize" }
+uv-resolver = { path = "../uv-resolver", features = ["clap"] }
+uv-traits = { path = "../uv-traits" }
+uv-warnings = { path = "../uv-warnings" }
 pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt" }
 

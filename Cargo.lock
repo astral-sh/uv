@@ -836,7 +836,7 @@ dependencies = [
  "insta",
  "pep440_rs 0.4.0",
  "platform-tags",
- "puffin-normalize",
+ "uv-normalize",
  "rkyv",
  "serde",
  "thiserror",
@@ -856,9 +856,9 @@ dependencies = [
  "pep440_rs 0.4.0",
  "pep508_rs",
  "platform-tags",
- "puffin-fs",
- "puffin-git",
- "puffin-normalize",
+ "uv-fs",
+ "uv-git",
+ "uv-normalize",
  "pypi-types",
  "rkyv",
  "rustc-hash",
@@ -1240,8 +1240,8 @@ dependencies = [
  "directories",
  "fs-err",
  "platform-host",
- "puffin-cache",
- "puffin-interpreter",
+ "uv-cache",
+ "uv-interpreter",
  "serde",
  "serde_json",
  "tempfile",
@@ -1547,8 +1547,8 @@ dependencies = [
  "platform-host",
  "platform-info",
  "plist",
- "puffin-fs",
- "puffin-normalize",
+ "uv-fs",
+ "uv-normalize",
  "pyo3",
  "pypi-types",
  "rayon",
@@ -2190,8 +2190,8 @@ dependencies = [
  "log",
  "once_cell",
  "pep440_rs 0.4.0",
- "puffin-fs",
- "puffin-normalize",
+ "uv-fs",
+ "uv-normalize",
  "pyo3",
  "pyo3-log",
  "regex",
@@ -2442,7 +2442,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin"
+name = "uv"
 version = "0.0.4"
 dependencies = [
  "anstream",
@@ -2475,18 +2475,18 @@ dependencies = [
  "platform-tags",
  "predicates",
  "pubgrub",
- "puffin-build",
- "puffin-cache",
- "puffin-client",
- "puffin-dispatch",
- "puffin-distribution",
- "puffin-fs",
- "puffin-installer",
- "puffin-interpreter",
- "puffin-normalize",
- "puffin-resolver",
- "puffin-traits",
- "puffin-warnings",
+ "uv-build",
+ "uv-cache",
+ "uv-client",
+ "uv-dispatch",
+ "uv-distribution",
+ "uv-fs",
+ "uv-installer",
+ "uv-interpreter",
+ "uv-normalize",
+ "uv-resolver",
+ "uv-traits",
+ "uv-warnings",
  "pypi-types",
  "pyproject-toml",
  "regex",
@@ -2508,7 +2508,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-build"
+name = "uv-build"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2521,10 +2521,10 @@ dependencies = [
  "once_cell",
  "pep508_rs",
  "platform-host",
- "puffin-extract",
- "puffin-fs",
- "puffin-interpreter",
- "puffin-traits",
+ "uv-extract",
+ "uv-fs",
+ "uv-interpreter",
+ "uv-traits",
  "pypi-types",
  "pyproject-toml",
  "regex",
@@ -2538,7 +2538,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-cache"
+name = "uv-cache"
 version = "0.0.1"
 dependencies = [
  "cache-key",
@@ -2548,8 +2548,8 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "nanoid",
- "puffin-fs",
- "puffin-normalize",
+ "uv-fs",
+ "uv-normalize",
  "pypi-types",
  "serde",
  "tempfile",
@@ -2559,7 +2559,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-client"
+name = "uv-client"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2579,9 +2579,9 @@ dependencies = [
  "pep440_rs 0.4.0",
  "pep508_rs",
  "platform-tags",
- "puffin-cache",
- "puffin-fs",
- "puffin-normalize",
+ "uv-cache",
+ "uv-fs",
+ "uv-normalize",
  "pypi-types",
  "reqwest",
  "reqwest-middleware",
@@ -2603,7 +2603,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-dev"
+name = "uv-dev"
 version = "0.0.1"
 dependencies = [
  "anstream",
@@ -2626,16 +2626,16 @@ dependencies = [
  "platform-host",
  "platform-tags",
  "poloto",
- "puffin-build",
- "puffin-cache",
- "puffin-client",
- "puffin-dispatch",
- "puffin-distribution",
- "puffin-installer",
- "puffin-interpreter",
- "puffin-normalize",
- "puffin-resolver",
- "puffin-traits",
+ "uv-build",
+ "uv-cache",
+ "uv-client",
+ "uv-dispatch",
+ "uv-distribution",
+ "uv-installer",
+ "uv-interpreter",
+ "uv-normalize",
+ "uv-resolver",
+ "uv-traits",
  "pypi-types",
  "resvg",
  "rustc-hash",
@@ -2654,7 +2654,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-dispatch"
+name = "uv-dispatch"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2666,14 +2666,14 @@ dependencies = [
  "pep508_rs",
  "platform-host",
  "platform-tags",
- "puffin-build",
- "puffin-cache",
- "puffin-client",
- "puffin-distribution",
- "puffin-installer",
- "puffin-interpreter",
- "puffin-resolver",
- "puffin-traits",
+ "uv-build",
+ "uv-cache",
+ "uv-client",
+ "uv-distribution",
+ "uv-installer",
+ "uv-interpreter",
+ "uv-resolver",
+ "uv-traits",
  "pypi-types",
  "tempfile",
  "tokio",
@@ -2681,7 +2681,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-distribution"
+name = "uv-distribution"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2695,13 +2695,13 @@ dependencies = [
  "pep440_rs 0.4.0",
  "pep508_rs",
  "platform-tags",
- "puffin-cache",
- "puffin-client",
- "puffin-extract",
- "puffin-fs",
- "puffin-git",
- "puffin-normalize",
- "puffin-traits",
+ "uv-cache",
+ "uv-client",
+ "uv-extract",
+ "uv-fs",
+ "uv-git",
+ "uv-normalize",
+ "uv-traits",
  "pypi-types",
  "reqwest",
  "rmp-serde",
@@ -2717,7 +2717,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-extract"
+name = "uv-extract"
 version = "0.0.1"
 dependencies = [
  "async-compression",
@@ -2736,20 +2736,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-fs"
+name = "uv-fs"
 version = "0.0.1"
 dependencies = [
  "dunce",
  "fs-err",
  "fs2",
  "junction",
- "puffin-warnings",
+ "uv-warnings",
  "tempfile",
  "tracing",
 ]
 
 [[package]]
-name = "puffin-git"
+name = "uv-git"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2762,7 +2762,7 @@ dependencies = [
  "hmac",
  "home",
  "once_cell",
- "puffin-fs",
+ "uv-fs",
  "rand",
  "reqwest",
  "serde",
@@ -2773,7 +2773,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-installer"
+name = "uv-installer"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2786,15 +2786,15 @@ dependencies = [
  "pep440_rs 0.4.0",
  "pep508_rs",
  "platform-tags",
- "puffin-cache",
- "puffin-client",
- "puffin-distribution",
- "puffin-extract",
- "puffin-fs",
- "puffin-git",
- "puffin-interpreter",
- "puffin-normalize",
- "puffin-traits",
+ "uv-cache",
+ "uv-client",
+ "uv-distribution",
+ "uv-extract",
+ "uv-fs",
+ "uv-git",
+ "uv-interpreter",
+ "uv-normalize",
+ "uv-traits",
  "pypi-types",
  "rayon",
  "requirements-txt",
@@ -2807,7 +2807,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-interpreter"
+name = "uv-interpreter"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2821,8 +2821,8 @@ dependencies = [
  "pep508_rs",
  "platform-host",
  "platform-tags",
- "puffin-cache",
- "puffin-fs",
+ "uv-cache",
+ "uv-fs",
  "regex",
  "rmp-serde",
  "same-file",
@@ -2836,7 +2836,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-normalize"
+name = "uv-normalize"
 version = "0.0.1"
 dependencies = [
  "rkyv",
@@ -2844,7 +2844,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-resolver"
+name = "uv-resolver"
 version = "0.0.1"
 dependencies = [
  "anstream",
@@ -2872,14 +2872,14 @@ dependencies = [
  "platform-host",
  "platform-tags",
  "pubgrub",
- "puffin-cache",
- "puffin-client",
- "puffin-distribution",
- "puffin-git",
- "puffin-interpreter",
- "puffin-normalize",
- "puffin-traits",
- "puffin-warnings",
+ "uv-cache",
+ "uv-client",
+ "uv-distribution",
+ "uv-git",
+ "uv-interpreter",
+ "uv-normalize",
+ "uv-traits",
+ "uv-warnings",
  "pypi-types",
  "reqwest",
  "rustc-hash",
@@ -2896,21 +2896,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-traits"
+name = "uv-traits"
 version = "0.0.1"
 dependencies = [
  "anyhow",
  "distribution-types",
  "once-map",
  "pep508_rs",
- "puffin-cache",
- "puffin-interpreter",
- "puffin-normalize",
+ "uv-cache",
+ "uv-interpreter",
+ "uv-normalize",
  "tokio",
 ]
 
 [[package]]
-name = "puffin-warnings"
+name = "uv-warnings"
 version = "0.0.1"
 dependencies = [
  "anstream",
@@ -3002,7 +3002,7 @@ dependencies = [
  "once_cell",
  "pep440_rs 0.4.0",
  "pep508_rs",
- "puffin-normalize",
+ "uv-normalize",
  "regex",
  "rkyv",
  "serde",
@@ -3228,8 +3228,8 @@ dependencies = [
  "once_cell",
  "pep440_rs 0.4.0",
  "pep508_rs",
- "puffin-fs",
- "puffin-normalize",
+ "uv-fs",
+ "uv-normalize",
  "regex",
  "serde",
  "serde_json",

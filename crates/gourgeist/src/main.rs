@@ -13,8 +13,8 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 use gourgeist::{create_bare_venv, parse_python_cli};
 use platform_host::Platform;
-use puffin_cache::Cache;
-use puffin_interpreter::Interpreter;
+use uv_cache::Cache;
+use uv_interpreter::Interpreter;
 
 #[derive(Parser, Debug)]
 struct Cli {

@@ -1,5 +1,5 @@
 [package]
-name = "puffin-git"
+name = "uv-git"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 cache-key = { path = "../cache-key" }
-puffin-fs = { path = "../puffin-fs" }
+uv-fs = { path = "../uv-fs" }
 
 anyhow = { workspace = true }
 base64 = { workspace = true }

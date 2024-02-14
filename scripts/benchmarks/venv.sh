@@ -15,7 +15,7 @@ set -euxo pipefail
 ###
 hyperfine --runs 20 --warmup 3 \
     --prepare "rm -rf .venv" \
-    "./target/release/puffin venv" \
+    "./target/release/uv venv" \
     --prepare "rm -rf .venv" \
     "virtualenv --without-pip .venv" \
     --prepare "rm -rf .venv" \
@@ -26,7 +26,7 @@ hyperfine --runs 20 --warmup 3 \
 ###
 hyperfine --runs 20 --warmup 3 \
     --prepare "rm -rf .venv" \
-    "./target/release/puffin venv --seed" \
+    "./target/release/uv venv --seed" \
     --prepare "rm -rf .venv" \
     "virtualenv .venv" \
     --prepare "rm -rf .venv" \

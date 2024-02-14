@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 
 use platform_host::Platform;
-use puffin_cache::Cache;
-use puffin_fs::{LockedFile, Normalized};
+use uv_cache::Cache;
+use uv_fs::{LockedFile, Normalized};
 
 use crate::cfg::Configuration;
 use crate::python_platform::PythonPlatform;

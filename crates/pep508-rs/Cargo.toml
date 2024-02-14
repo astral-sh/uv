@@ -18,8 +18,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pep440_rs = { path = "../pep440-rs" }
-puffin-fs = { path = "../puffin-fs" }
-puffin-normalize = { path = "../puffin-normalize" }
+uv-fs = { path = "../uv-fs" }
+uv-normalize = { path = "../uv-normalize" }
 
 derivative = { workspace = true }
 once_cell = { workspace = true }

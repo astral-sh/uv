@@ -3,9 +3,9 @@ use std::fmt::Write;
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 
-use puffin_cache::Cache;
-use puffin_fs::Normalized;
-use puffin_normalize::PackageName;
+use uv_cache::Cache;
+use uv_fs::Normalized;
+use uv_normalize::PackageName;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;

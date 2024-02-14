@@ -8,10 +8,10 @@ use tracing::debug;
 
 use distribution_types::Name;
 use platform_host::Platform;
-use puffin_cache::Cache;
-use puffin_fs::Normalized;
-use puffin_installer::SitePackages;
-use puffin_interpreter::Virtualenv;
+use uv_cache::Cache;
+use uv_fs::Normalized;
+use uv_installer::SitePackages;
+use uv_interpreter::Virtualenv;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;

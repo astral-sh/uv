@@ -3,7 +3,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tracing::instrument;
 
 use distribution_types::CachedDist;
-use puffin_interpreter::Virtualenv;
+use uv_interpreter::Virtualenv;
 
 pub struct Installer<'a> {
     venv: &'a Virtualenv,
@@ -56,7 +56,7 @@ impl<'a> Installer<'a> {
                         .map(pypi_types::DirectUrl::try_from)
                         .transpose()?
                         .as_ref(),
-                    Some("puffin"),
+                    Some("uv"),
                     self.link_mode,
                 )
                 .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;

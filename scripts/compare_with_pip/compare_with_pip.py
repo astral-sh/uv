@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Compare puffin's resolution with pip-compile on a number of requirement sets and python
+Compare uv's resolution with pip-compile on a number of requirement sets and python
 versions.
 
-If the first resolution diverged, we run a second "coerced" try in which puffin gets the
+If the first resolution diverged, we run a second "coerced" try in which uv gets the
 output of pip as additional input to check if it considers this resolution possible.
 """
 import json
@@ -56,11 +56,11 @@ def resolve_pip(targets: list[str], pip_compile: Path) -> list[str]:
     return pip_deps
 
 
-def resolve_puffin(targets: list[str], venv: Path, profile: str = "dev") -> list[str]:
+def resolve_uv(targets: list[str], venv: Path, profile: str = "dev") -> list[str]:
     target_profile = profile if profile != "dev" else "debug"
     output = check_output(
         [
-            project_root.joinpath("target").joinpath(target_profile).joinpath("puffin-dev"),
+            project_root.joinpath("target").joinpath(target_profile).joinpath("uv-dev"),
             "resolve",
             "--format",
             "expanded",
@@ -73,11 +73,11 @@ def resolve_puffin(targets: list[str], venv: Path, profile: str = "dev") -> list
             "VIRTUAL_ENV": venv,
         },
     )
-    puffin_deps = []
+    uv_deps = []
     for line in output.splitlines():
-        puffin_deps.append(line.replace(" ", ""))
-    puffin_deps.sort()
-    return puffin_deps
+        uv_deps.append(line.replace(" ", ""))
+    uv_deps.sort()
+    return uv_deps
 
 
 def compare_for_python_version(
@@ -118,13 +118,13 @@ def compare_for_python_version(
 
         start = time.time()
         try:
-            puffin_result = resolve_puffin([target], pip_compile_venv, profile=profile)
+            uv_result = resolve_uv([target], pip_compile_venv, profile=profile)
         except CalledProcessError as e:
-            puffin_result = e
-        puffin_time = time.time() - start
+            uv_result = e
+        uv_time = time.time() - start
 
         if isinstance(pip_result, CalledProcessError) and isinstance(
-            puffin_result, CalledProcessError
+            uv_result, CalledProcessError
         ):
             print(f"Both failed {python_major}.{python_minor} {target}")
             continue
@@ -136,59 +136,59 @@ def compare_for_python_version(
                 f"{pip_result}\n---\n{output}\n---"
             )
             continue
-        elif isinstance(puffin_result, CalledProcessError):
+        elif isinstance(uv_result, CalledProcessError):
             # Make the output a bit more readable
-            output = "\n".join(puffin_result.output.splitlines()[:10])
+            output = "\n".join(uv_result.output.splitlines()[:10])
             print(
-                f"Only puffin failed {python_major}.{python_minor} {target}: "
-                f"{puffin_result}\n---\n{output}\n---"
+                f"Only uv failed {python_major}.{python_minor} {target}: "
+                f"{uv_result}\n---\n{output}\n---"
             )
             continue
 
-        if pip_result != puffin_result and isinstance(pip_result, list):
+        if pip_result != uv_result and isinstance(pip_result, list):
             # Maybe, both resolution are allowed? By adding all constraints from the pip
-            # resolution we check whether puffin considers this resolution possible
-            # (vs. there is a bug in puffin where we wouldn't pick those versions)
+            # resolution we check whether uv considers this resolution possible
+            # (vs. there is a bug in uv where we wouldn't pick those versions)
             start = time.time()
             try:
-                puffin_result2 = resolve_puffin(
+                uv_result2 = resolve_uv(
                     [target, *pip_result], pip_compile_venv, profile=profile
                 )
             except CalledProcessError as e:
-                puffin_result2 = e
-            puffin_time2 = time.time() - start
-            if puffin_result2 == pip_result:
+                uv_result2 = e
+            uv_time2 = time.time() - start
+            if uv_result2 == pip_result:
                 print(
                     f"Equal (coerced) {python_major}.{python_minor} "
-                    f"(pip: {pip_time:.3}s, puffin: {puffin_time2:.3}s) {target}"
+                    f"(pip: {pip_time:.3}s, uv: {uv_time2:.3}s) {target}"
                 )
                 continue
 
-        if pip_result == puffin_result:
+        if pip_result == uv_result:
             print(
                 f"Equal {python_major}.{python_minor} "
-                f"(pip: {pip_time:.3}s, puffin: {puffin_time:.3}s) {target}"
+                f"(pip: {pip_time:.3}s, uv: {uv_time:.3}s) {target}"
             )
         else:
             print(
                 f"Different {python_major}.{python_minor} "
-                f"(pip: {pip_time:.3}s, puffin: {puffin_time:.3}s) {target}"
+                f"(pip: {pip_time:.3}s, uv: {uv_time:.3}s) {target}"
             )
             print(f"pip: {pip_result}")
-            print(f"puffin: {puffin_result}")
+            print(f"uv: {uv_result}")
             while True:
-                if pip_result and puffin_result:
-                    if pip_result[0] == puffin_result[0]:
+                if pip_result and uv_result:
+                    if pip_result[0] == uv_result[0]:
                         pip_result.pop(0)
-                        puffin_result.pop(0)
-                    elif pip_result[0] < puffin_result[0]:
+                        uv_result.pop(0)
+                    elif pip_result[0] < uv_result[0]:
                         print(f"- {pip_result.pop(0)}")
                     else:
-                        print(f"+ {puffin_result.pop(0)}")
+                        print(f"+ {uv_result.pop(0)}")
                 elif pip_result:
                     print(f"- {pip_result.pop(0)}")
-                elif puffin_result:
-                    print(f"+ {puffin_result.pop(0)}")
+                elif uv_result:
+                    print(f"+ {uv_result.pop(0)}")
                 else:
                     break
 
@@ -210,7 +210,7 @@ def main():
     else:
         profile = "dev"
 
-    check_call(["cargo", "build", "--bin", "puffin-dev", "--profile", profile])
+    check_call(["cargo", "build", "--bin", "uv-dev", "--profile", profile])
 
     if args.python:
         python_major = int(args.python.split(".")[0])

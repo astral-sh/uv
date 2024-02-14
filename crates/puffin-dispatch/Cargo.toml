@@ -1,5 +1,5 @@
 [package]
-name = "puffin-dispatch"
+name = "uv-dispatch"
 version = "0.0.1"
 description = "Avoid cyclic crate dependencies between resolver, installer and builder"
 edition = { workspace = true }
@@ -19,14 +19,14 @@ gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-puffin-build = { path = "../puffin-build" }
-puffin-cache = { path = "../puffin-cache" }
-puffin-client = { path = "../puffin-client" }
-puffin-distribution = { path = "../puffin-distribution" }
-puffin-installer = { path = "../puffin-installer" }
-puffin-interpreter = { path = "../puffin-interpreter" }
-puffin-resolver = { path = "../puffin-resolver" }
-puffin-traits = { path = "../puffin-traits" }
+uv-build = { path = "../uv-build" }
+uv-cache = { path = "../uv-cache" }
+uv-client = { path = "../uv-client" }
+uv-distribution = { path = "../uv-distribution" }
+uv-installer = { path = "../uv-installer" }
+uv-interpreter = { path = "../uv-interpreter" }
+uv-resolver = { path = "../uv-resolver" }
+uv-traits = { path = "../uv-traits" }
 pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }

@@ -1,5 +1,5 @@
 [package]
-name = "puffin-installer"
+name = "uv-installer"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -20,15 +20,15 @@ once-map = { path = "../once-map" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
-puffin-cache = { path = "../puffin-cache" }
-puffin-client = { path = "../puffin-client" }
-puffin-distribution = { path = "../puffin-distribution" }
-puffin-extract = { path = "../puffin-extract" }
-puffin-fs = { path = "../puffin-fs" }
-puffin-git = { path = "../puffin-git", features = ["vendored-openssl"] }
-puffin-interpreter = { path = "../puffin-interpreter" }
-puffin-normalize = { path = "../puffin-normalize" }
-puffin-traits = { path = "../puffin-traits" }
+uv-cache = { path = "../uv-cache" }
+uv-client = { path = "../uv-client" }
+uv-distribution = { path = "../uv-distribution" }
+uv-extract = { path = "../uv-extract" }
+uv-fs = { path = "../uv-fs" }
+uv-git = { path = "../uv-git", features = ["vendored-openssl"] }
+uv-interpreter = { path = "../uv-interpreter" }
+uv-normalize = { path = "../uv-normalize" }
+uv-traits = { path = "../uv-traits" }
 pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt" }
 

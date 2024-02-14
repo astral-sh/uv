@@ -5,7 +5,7 @@ use pubgrub::type_aliases::DependencyConstraints;
 use tracing::warn;
 
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
-use puffin_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, PackageName};
 
 use crate::overrides::Overrides;
 use crate::pubgrub::specifier::PubGrubSpecifier;

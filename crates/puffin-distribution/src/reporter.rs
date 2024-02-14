@@ -18,7 +18,7 @@ pub trait Reporter: Send + Sync {
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
 }
 
-/// A facade for converting from [`Reporter`] to [`puffin_git::Reporter`].
+/// A facade for converting from [`Reporter`] to [`uv_git::Reporter`].
 pub(crate) struct Facade {
     reporter: Arc<dyn Reporter>,
 }
@@ -29,7 +29,7 @@ impl From<Arc<dyn Reporter>> for Facade {
     }
 }
 
-impl puffin_git::Reporter for Facade {
+impl uv_git::Reporter for Facade {
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }

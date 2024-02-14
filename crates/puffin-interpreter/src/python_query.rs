@@ -6,9 +6,9 @@ use std::process::Command;
 
 use once_cell::sync::Lazy;
 use platform_host::Platform;
-use puffin_cache::Cache;
 use regex::Regex;
 use tracing::{info_span, instrument};
+use uv_cache::Cache;
 
 use crate::{Error, Interpreter};
 
@@ -256,7 +256,7 @@ mod tests {
     use insta::assert_snapshot;
     use itertools::Itertools;
     use platform_host::Platform;
-    use puffin_cache::Cache;
+    use uv_cache::Cache;
 
     use crate::python_query::find_requested_python;
     use crate::Error;

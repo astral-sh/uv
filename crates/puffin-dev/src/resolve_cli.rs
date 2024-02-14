@@ -12,13 +12,13 @@ use petgraph::dot::{Config as DotConfig, Dot};
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl, Resolution};
 use pep508_rs::Requirement;
 use platform_host::Platform;
-use puffin_cache::{Cache, CacheArgs};
-use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
-use puffin_dispatch::BuildDispatch;
-use puffin_installer::NoBinary;
-use puffin_interpreter::Virtualenv;
-use puffin_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use puffin_traits::{InFlight, NoBuild, SetupPyStrategy};
+use uv_cache::{Cache, CacheArgs};
+use uv_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
+use uv_dispatch::BuildDispatch;
+use uv_installer::NoBinary;
+use uv_interpreter::Virtualenv;
+use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
+use uv_traits::{InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {

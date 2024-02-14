@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use clap::{Args, ValueEnum};
 
-use puffin_warnings::warn_user;
+use uv_warnings::warn_user;
 
 pub(crate) trait CompatArgs {
     fn validate(&self) -> Result<()>;

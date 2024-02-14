@@ -1,5 +1,5 @@
 [package]
-name = "puffin-fs"
+name = "uv-fs"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -13,7 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-puffin-warnings = { path = "../puffin-warnings" }
+uv-warnings = { path = "../uv-warnings" }
 
 dunce = { workspace = true }
 fs-err = { workspace = true }

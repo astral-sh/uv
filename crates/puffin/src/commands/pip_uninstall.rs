@@ -6,9 +6,9 @@ use tracing::debug;
 
 use distribution_types::{InstalledMetadata, Name};
 use platform_host::Platform;
-use puffin_cache::Cache;
-use puffin_fs::Normalized;
-use puffin_interpreter::Virtualenv;
+use uv_cache::Cache;
+use uv_fs::Normalized;
+use uv_interpreter::Virtualenv;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -48,7 +48,7 @@ pub(crate) async fn pip_uninstall(
     let _lock = venv.lock()?;
 
     // Index the current `site-packages` directory.
-    let site_packages = puffin_installer::SitePackages::from_executable(&venv)?;
+    let site_packages = uv_installer::SitePackages::from_executable(&venv)?;
 
     // Sort and deduplicate the packages, which are keyed by name.
     let packages = {
@@ -124,7 +124,7 @@ pub(crate) async fn pip_uninstall(
 
     // Uninstall each package.
     for distribution in &distributions {
-        let summary = puffin_installer::uninstall(distribution).await?;
+        let summary = uv_installer::uninstall(distribution).await?;
         debug!(
             "Uninstalled {} ({} file{}, {} director{})",
             distribution.name(),

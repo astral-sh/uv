@@ -3,8 +3,8 @@ use url::Url;
 
 use distribution_types::PackageId;
 use once_map::OnceMap;
-use puffin_normalize::PackageName;
 use pypi_types::Metadata21;
+use uv_normalize::PackageName;
 
 use super::provider::VersionsResponse;
 

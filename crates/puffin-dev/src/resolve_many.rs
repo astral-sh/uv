@@ -14,14 +14,14 @@ use distribution_types::IndexLocations;
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_host::Platform;
-use puffin_cache::{Cache, CacheArgs};
-use puffin_client::{FlatIndex, OwnedArchive, RegistryClient, RegistryClientBuilder};
-use puffin_dispatch::BuildDispatch;
-use puffin_installer::NoBinary;
-use puffin_interpreter::Virtualenv;
-use puffin_normalize::PackageName;
-use puffin_resolver::InMemoryIndex;
-use puffin_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
+use uv_cache::{Cache, CacheArgs};
+use uv_client::{FlatIndex, OwnedArchive, RegistryClient, RegistryClientBuilder};
+use uv_dispatch::BuildDispatch;
+use uv_installer::NoBinary;
+use uv_interpreter::Virtualenv;
+use uv_normalize::PackageName;
+use uv_resolver::InMemoryIndex;
+use uv_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct ResolveManyArgs {

@@ -12,14 +12,14 @@ use thiserror::Error;
 use distribution_types::{DistributionMetadata, IndexLocations, Name};
 use pep508_rs::Requirement;
 use platform_host::Platform;
-use puffin_cache::Cache;
-use puffin_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
-use puffin_dispatch::BuildDispatch;
-use puffin_fs::Normalized;
-use puffin_installer::NoBinary;
-use puffin_interpreter::{find_default_python, find_requested_python, Error};
-use puffin_resolver::{InMemoryIndex, OptionsBuilder};
-use puffin_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
+use uv_cache::Cache;
+use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
+use uv_dispatch::BuildDispatch;
+use uv_fs::Normalized;
+use uv_installer::NoBinary;
+use uv_interpreter::{find_default_python, find_requested_python, Error};
+use uv_resolver::{InMemoryIndex, OptionsBuilder};
+use uv_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -59,20 +59,20 @@ pub(crate) async fn venv(
 #[derive(Error, Debug, Diagnostic)]
 enum VenvError {
     #[error("Failed to create virtualenv")]
-    #[diagnostic(code(puffin::venv::creation))]
+    #[diagnostic(code(uv::venv::creation))]
     Creation(#[source] gourgeist::Error),
 
     #[error("Failed to install seed packages")]
-    #[diagnostic(code(puffin::venv::seed))]
+    #[diagnostic(code(uv::venv::seed))]
     Seed(#[source] anyhow::Error),
 
     #[error("Failed to extract interpreter tags")]
-    #[diagnostic(code(puffin::venv::tags))]
+    #[diagnostic(code(uv::venv::tags))]
     Tags(#[source] platform_tags::TagsError),
 
     #[error("Failed to resolve `--find-links` entry")]
-    #[diagnostic(code(puffin::venv::flat_index))]
-    FlatIndex(#[source] puffin_client::FlatIndexError),
+    #[diagnostic(code(uv::venv::flat_index))]
+    FlatIndex(#[source] uv_client::FlatIndexError),
 }
 
 /// Create a virtual environment.

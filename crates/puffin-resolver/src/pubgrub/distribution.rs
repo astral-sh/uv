@@ -1,7 +1,7 @@
 use distribution_types::{DistributionMetadata, Name, VersionOrUrl};
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
-use puffin_normalize::PackageName;
+use uv_normalize::PackageName;
 
 #[derive(Debug)]
 pub(crate) enum PubGrubDistribution<'a> {

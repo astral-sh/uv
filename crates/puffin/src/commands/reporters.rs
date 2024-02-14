@@ -8,7 +8,7 @@ use url::Url;
 use distribution_types::{
     CachedDist, Dist, DistributionMetadata, LocalEditable, Name, SourceDist, VersionOrUrl,
 };
-use puffin_normalize::PackageName;
+use uv_normalize::PackageName;
 
 use crate::printer::Printer;
 
@@ -36,7 +36,7 @@ impl FinderReporter {
     }
 }
 
-impl puffin_resolver::FinderReporter for FinderReporter {
+impl uv_resolver::FinderReporter for FinderReporter {
     fn on_progress(&self, dist: &Dist) {
         self.progress.set_message(format!("{dist}"));
         self.progress.inc(1);
@@ -104,7 +104,7 @@ impl DownloadReporter {
     }
 }
 
-impl puffin_installer::DownloadReporter for DownloadReporter {
+impl uv_installer::DownloadReporter for DownloadReporter {
     fn on_progress(&self, dist: &CachedDist) {
         self.progress.set_message(format!("{dist}"));
         self.progress.inc(1);
@@ -186,7 +186,7 @@ impl InstallReporter {
     }
 }
 
-impl puffin_installer::InstallReporter for InstallReporter {
+impl uv_installer::InstallReporter for InstallReporter {
     fn on_install_progress(&self, wheel: &CachedDist) {
         self.progress.set_message(format!("{wheel}"));
         self.progress.inc(1);
@@ -227,7 +227,7 @@ impl From<Printer> for ResolverReporter {
     }
 }
 
-impl puffin_resolver::ResolverReporter for ResolverReporter {
+impl uv_resolver::ResolverReporter for ResolverReporter {
     fn on_progress(&self, name: &PackageName, version_or_url: VersionOrUrl) {
         match version_or_url {
             VersionOrUrl::Version(version) => {

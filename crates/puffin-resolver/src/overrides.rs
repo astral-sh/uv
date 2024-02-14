@@ -4,7 +4,7 @@ use std::hash::BuildHasherDefault;
 use rustc_hash::FxHashMap;
 
 use pep508_rs::Requirement;
-use puffin_normalize::PackageName;
+use uv_normalize::PackageName;
 
 /// A set of overrides for a set of requirements.
 #[derive(Debug, Default, Clone)]

@@ -1,5 +1,5 @@
 [package]
-name = "puffin-trampoline"
+name = "uv-trampoline"
 version = "0.1.0"
 authors = ["Nathaniel J. Smith <njs@pobox.com>"]
 license = "MIT OR Apache-2.0"

@@ -12,8 +12,8 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
 use platform_tags::{Tags, TagsError};
-use puffin_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
-use puffin_fs::write_atomic_sync;
+use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
+use uv_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;
 use crate::virtual_env::detect_virtual_env;
@@ -436,7 +436,7 @@ mod tests {
 
     use pep440_rs::Version;
     use platform_host::Platform;
-    use puffin_cache::Cache;
+    use uv_cache::Cache;
 
     use crate::Interpreter;
 
@@ -462,7 +462,7 @@ mod tests {
                 "base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "stdlib": "/usr/lib/python3.12",
-                "sys_executable": "/home/ferris/projects/puffin/.venv/bin/python"
+                "sys_executable": "/home/ferris/projects/uv/.venv/bin/python"
             }
         "##};
 

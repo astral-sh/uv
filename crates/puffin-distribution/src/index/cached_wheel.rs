@@ -3,7 +3,7 @@ use std::path::Path;
 use distribution_filename::WheelFilename;
 use distribution_types::{CachedDirectUrlDist, CachedRegistryDist};
 use pep508_rs::VerbatimUrl;
-use puffin_cache::CacheEntry;
+use uv_cache::CacheEntry;
 
 #[derive(Debug, Clone)]
 pub struct CachedWheel {

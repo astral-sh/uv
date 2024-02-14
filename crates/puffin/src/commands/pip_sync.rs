@@ -9,20 +9,18 @@ use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, LocalEdit
 use install_wheel_rs::linker::LinkMode;
 use platform_host::Platform;
 use platform_tags::Tags;
-use puffin_cache::Cache;
-use puffin_client::{
-    Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder,
-};
-use puffin_dispatch::BuildDispatch;
-use puffin_fs::Normalized;
-use puffin_installer::{
-    Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
-};
-use puffin_interpreter::Virtualenv;
-use puffin_resolver::InMemoryIndex;
-use puffin_traits::{InFlight, NoBuild, SetupPyStrategy};
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
+use uv_cache::Cache;
+use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
+use uv_dispatch::BuildDispatch;
+use uv_fs::Normalized;
+use uv_installer::{
+    Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
+};
+use uv_interpreter::Virtualenv;
+use uv_resolver::InMemoryIndex;
+use uv_traits::{InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -179,14 +177,9 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let wheel_finder = puffin_resolver::DistFinder::new(
-            tags,
-            &client,
-            venv.interpreter(),
-            &flat_index,
-            no_binary,
-        )
-        .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
+        let wheel_finder =
+            uv_resolver::DistFinder::new(tags, &client, venv.interpreter(), &flat_index, no_binary)
+                .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
         let resolution = wheel_finder.resolve(&remote).await?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };
@@ -265,7 +258,7 @@ pub(crate) async fn pip_sync(
         let start = std::time::Instant::now();
 
         for dist_info in extraneous.iter().chain(reinstalls.iter()) {
-            let summary = puffin_installer::uninstall(dist_info).await?;
+            let summary = uv_installer::uninstall(dist_info).await?;
             debug!(
                 "Uninstalled {} ({} file{}, {} director{})",
                 dist_info.name(),
@@ -297,7 +290,7 @@ pub(crate) async fn pip_sync(
     let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
-        puffin_installer::Installer::new(&venv)
+        uv_installer::Installer::new(&venv)
             .with_link_mode(link_mode)
             .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
             .install(&wheels)?;

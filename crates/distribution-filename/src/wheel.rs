@@ -8,7 +8,7 @@ use url::Url;
 
 use pep440_rs::{Version, VersionParseError};
 use platform_tags::{TagPriority, Tags};
-use puffin_normalize::{InvalidNameError, PackageName};
+use uv_normalize::{InvalidNameError, PackageName};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(

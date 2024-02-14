@@ -19,20 +19,20 @@ use distribution_types::{IndexLocations, LocalEditable};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
-use puffin_cache::Cache;
-use puffin_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
-use puffin_dispatch::BuildDispatch;
-use puffin_fs::Normalized;
-use puffin_installer::{Downloader, NoBinary};
-use puffin_interpreter::{Interpreter, PythonVersion};
-use puffin_normalize::{ExtraName, PackageName};
-use puffin_resolver::{
+use requirements_txt::EditableRequirement;
+use uv_cache::Cache;
+use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
+use uv_dispatch::BuildDispatch;
+use uv_fs::Normalized;
+use uv_installer::{Downloader, NoBinary};
+use uv_interpreter::{Interpreter, PythonVersion};
+use uv_normalize::{ExtraName, PackageName};
+use uv_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode,
     ResolutionMode, Resolver,
 };
-use puffin_traits::{InFlight, NoBuild, SetupPyStrategy};
-use puffin_warnings::warn_user;
-use requirements_txt::EditableRequirement;
+use uv_traits::{InFlight, NoBuild, SetupPyStrategy};
+use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
@@ -299,7 +299,7 @@ pub(crate) async fn pip_compile(
     .with_reporter(ResolverReporter::from(printer));
 
     let resolution = match resolver.resolve().await {
-        Err(puffin_resolver::ResolveError::NoSolution(err)) => {
+        Err(uv_resolver::ResolveError::NoSolution(err)) => {
             let report = miette::Report::msg(format!("{err}"))
                 .context("No solution found when resolving dependencies:");
             eprint!("{report:?}");
@@ -351,7 +351,7 @@ pub(crate) async fn pip_compile(
             writer,
             "{}",
             format!(
-                "#    puffin {}",
+                "#    uv {}",
                 env::args_os()
                     .skip(1)
                     .map(|arg| arg.normalized_display().to_string())

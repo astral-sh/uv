@@ -1,5 +1,5 @@
 [package]
-name = "puffin-dev"
+name = "uv-dev"
 version = "0.0.1"
 description = "Build wheels from source distributions"
 publish = false
@@ -24,19 +24,19 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-puffin-build = { path = "../puffin-build" }
-puffin-cache = { path = "../puffin-cache", features = ["clap"] }
-puffin-client = { path = "../puffin-client" }
-puffin-dispatch = { path = "../puffin-dispatch" }
-puffin-distribution = { path = "../puffin-distribution" }
-puffin-installer = { path = "../puffin-installer" }
-puffin-interpreter = { path = "../puffin-interpreter" }
-puffin-normalize = { path = "../puffin-normalize" }
-puffin-resolver = { path = "../puffin-resolver" }
+uv-build = { path = "../uv-build" }
+uv-cache = { path = "../uv-cache", features = ["clap"] }
+uv-client = { path = "../uv-client" }
+uv-dispatch = { path = "../uv-dispatch" }
+uv-distribution = { path = "../uv-distribution" }
+uv-installer = { path = "../uv-installer" }
+uv-interpreter = { path = "../uv-interpreter" }
+uv-normalize = { path = "../uv-normalize" }
+uv-resolver = { path = "../uv-resolver" }
 pypi-types = { path = "../pypi-types" }
-puffin-traits = { path = "../puffin-traits" }
+uv-traits = { path = "../uv-traits" }
 
-# Any dependencies that are exclusively used in `puffin-dev` should be listed as non-workspace
+# Any dependencies that are exclusively used in `uv-dev` should be listed as non-workspace
 # dependencies, to ensure that we're forced to think twice before including them in other crates.
 anstream = { workspace = true }
 anyhow = { workspace = true }

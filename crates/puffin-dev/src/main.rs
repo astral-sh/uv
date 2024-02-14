@@ -55,11 +55,11 @@ enum Cli {
     ///
     /// Run `scripts/popular_packages/pypi_8k_downloads.sh` once, then
     /// ```bash
-    /// cargo run --bin puffin-dev -- resolve-many scripts/popular_packages/pypi_8k_downloads.txt
+    /// cargo run --bin uv-dev -- resolve-many scripts/popular_packages/pypi_8k_downloads.txt
     /// ```
     /// or
     /// ```bash
-    /// cargo run --bin puffin-dev -- resolve-many scripts/popular_packages/pypi_10k_most_dependents.txt
+    /// cargo run --bin uv-dev -- resolve-many scripts/popular_packages/pypi_10k_most_dependents.txt
     /// ```
     ResolveMany(ResolveManyArgs),
     InstallMany(InstallManyArgs),
@@ -130,7 +130,7 @@ async fn main() -> ExitCode {
     let filter_layer = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::builder()
             // Show only the important spans
-            .parse("puffin_dev=info,puffin_dispatch=info")
+            .parse("uv_dev=info,uv_dispatch=info")
             .unwrap()
     });
     tracing_subscriber::registry()
@@ -144,7 +144,7 @@ async fn main() -> ExitCode {
     let result = run().await;
     debug!("Took {}ms", start.elapsed().as_millis());
     if let Err(err) = result {
-        eprintln!("{}", "puffin-dev failed".red().bold());
+        eprintln!("{}", "uv-dev failed".red().bold());
         for err in err.chain() {
             eprintln!("  {}: {}", "Caused by".red().bold(), err);
         }

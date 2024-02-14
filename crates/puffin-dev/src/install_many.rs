@@ -17,15 +17,15 @@ use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheArgs};
-use puffin_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
-use puffin_dispatch::BuildDispatch;
-use puffin_distribution::RegistryWheelIndex;
-use puffin_installer::{Downloader, NoBinary};
-use puffin_interpreter::Virtualenv;
-use puffin_normalize::PackageName;
-use puffin_resolver::{DistFinder, InMemoryIndex};
-use puffin_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
+use uv_cache::{Cache, CacheArgs};
+use uv_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
+use uv_dispatch::BuildDispatch;
+use uv_distribution::RegistryWheelIndex;
+use uv_installer::{Downloader, NoBinary};
+use uv_interpreter::Virtualenv;
+use uv_normalize::PackageName;
+use uv_resolver::{DistFinder, InMemoryIndex};
+use uv_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct InstallManyArgs {
@@ -187,7 +187,7 @@ async fn install_chunk(
     }
 
     let wheels: Vec<_> = wheels.into_iter().chain(cached).collect();
-    puffin_installer::Installer::new(venv)
+    uv_installer::Installer::new(venv)
         .with_link_mode(LinkMode::default())
         .install(&wheels)
         .context("Failed to install")?;

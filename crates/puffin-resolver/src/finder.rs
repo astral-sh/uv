@@ -4,18 +4,18 @@
 
 use anyhow::Result;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
-use puffin_traits::NoBinary;
 use rustc_hash::FxHashMap;
+use uv_traits::NoBinary;
 
 use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, Resolution};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
-use puffin_client::{
+use uv_client::{
     FlatDistributions, FlatIndex, OwnedArchive, RegistryClient, SimpleMetadata, SimpleMetadatum,
 };
-use puffin_interpreter::Interpreter;
-use puffin_normalize::PackageName;
+use uv_interpreter::Interpreter;
+use uv_normalize::PackageName;
 
 use crate::error::ResolveError;
 

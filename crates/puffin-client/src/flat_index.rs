@@ -15,9 +15,9 @@ use distribution_types::{
 };
 use pep440_rs::Version;
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket};
-use puffin_normalize::PackageName;
 use pypi_types::{Hashes, Yanked};
+use uv_cache::{Cache, CacheBucket};
+use uv_normalize::PackageName;
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;

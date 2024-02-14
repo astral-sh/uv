@@ -9,11 +9,11 @@ use std::{env, str};
 use anyhow::{anyhow, Context as _, Result};
 use cargo_util::{paths, ProcessBuilder};
 use git2::{self, ErrorClass, ObjectType};
-use puffin_fs::Normalized;
 use reqwest::Client;
 use reqwest::StatusCode;
 use tracing::{debug, warn};
 use url::Url;
+use uv_fs::Normalized;
 
 use crate::util::retry;
 use crate::FetchStrategy;
@@ -1314,7 +1314,7 @@ fn github_fast_path(
         debug!("Attempting GitHub fast path for: {url}");
         let mut request = client.get(&url);
         request = request.header("Accept", "application/vnd.github.3.sha");
-        request = request.header("User-Agent", "puffin");
+        request = request.header("User-Agent", "uv");
         if let Some(local_object) = local_object {
             request = request.header("If-None-Match", local_object.to_string());
         }

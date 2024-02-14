@@ -1,5 +1,5 @@
 [package]
-name = "puffin-interpreter"
+name = "uv-interpreter"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -18,8 +18,8 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-puffin-cache = { path = "../puffin-cache" }
-puffin-fs = { path = "../puffin-fs" }
+uv-cache = { path = "../uv-cache" }
+uv-fs = { path = "../uv-fs" }
 
 fs-err = { workspace = true, features = ["tokio"] }
 once_cell = { workspace = true }

@@ -1,5 +1,5 @@
 [package]
-name = "puffin-resolver"
+name = "uv-resolver"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -22,14 +22,14 @@ pep440_rs = { path = "../pep440-rs", features = ["pubgrub"] }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-puffin-cache = { path = "../puffin-cache" }
-puffin-client = { path = "../puffin-client" }
-puffin-distribution = { path = "../puffin-distribution" }
-puffin-git = { path = "../puffin-git", features = ["vendored-openssl"] }
-puffin-interpreter = { path = "../puffin-interpreter" }
-puffin-normalize = { path = "../puffin-normalize" }
-puffin-traits = { path = "../puffin-traits" }
-puffin-warnings = { path = "../puffin-warnings" }
+uv-cache = { path = "../uv-cache" }
+uv-client = { path = "../uv-client" }
+uv-distribution = { path = "../uv-distribution" }
+uv-git = { path = "../uv-git", features = ["vendored-openssl"] }
+uv-interpreter = { path = "../uv-interpreter" }
+uv-normalize = { path = "../uv-normalize" }
+uv-traits = { path = "../uv-traits" }
+uv-warnings = { path = "../uv-warnings" }
 pypi-types = { path = "../pypi-types" }
 
 anstream = { workspace = true }
@@ -61,7 +61,7 @@ zip = { workspace = true }
 
 [dev-dependencies]
 gourgeist = { path = "../gourgeist" }
-puffin-interpreter = { path = "../puffin-interpreter" }
+uv-interpreter = { path = "../uv-interpreter" }
 
 once_cell = { version = "1.19.0" }
 insta = { version = "1.34.0" }

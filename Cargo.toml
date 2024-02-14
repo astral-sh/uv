@@ -3,16 +3,16 @@ members = ["crates/*"]
 exclude = [
     "scripts",
     # Needs nightly
-    "crates/puffin-trampoline"
+    "crates/uv-trampoline"
 ]
 resolver = "2"
 
 [workspace.package]
 edition = "2021"
 rust-version = "1.74"
-homepage = "https://pypi.org/project/puffin-alpha/"
-documentation = "https://pypi.org/project/puffin-alpha/"
-repository = "https://github.com/astral-sh/puffin"
+homepage = "https://pypi.org/project/uv-alpha/"
+documentation = "https://pypi.org/project/uv-alpha/"
+repository = "https://github.com/astral-sh/uv"
 authors = ["uv"]
 license = "MIT OR Apache-2.0"
 

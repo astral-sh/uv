@@ -6,7 +6,7 @@ use distribution_types::{Dist, DistributionMetadata, Name};
 use distribution_types::{DistMetadata, ResolvableDist};
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
-use puffin_normalize::PackageName;
+use uv_normalize::PackageName;
 
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::python_requirement::PythonRequirement;

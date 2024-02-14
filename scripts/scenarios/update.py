@@ -53,7 +53,7 @@ COMPILE_TEMPLATE = TEMPLATES / "compile.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
 REQUIREMENTS = TOOL_ROOT / "requirements.txt"
 PROJECT_ROOT = TOOL_ROOT.parent.parent
-TESTS = PROJECT_ROOT / "crates" / "puffin" / "tests"
+TESTS = PROJECT_ROOT / "crates" / "uv" / "tests"
 INSTALL_TESTS = TESTS / "pip_install_scenarios.rs"
 COMPILE_TESTS = TESTS / "pip_compile_scenarios.rs"
 

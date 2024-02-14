@@ -12,14 +12,14 @@ use owo_colors::OwoColorize;
 use tracing::instrument;
 
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
-use puffin_cache::{Cache, CacheArgs, Refresh};
-use puffin_client::Connectivity;
-use puffin_installer::{NoBinary, Reinstall};
-use puffin_interpreter::PythonVersion;
-use puffin_normalize::{ExtraName, PackageName};
-use puffin_resolver::{DependencyMode, PreReleaseMode, ResolutionMode};
-use puffin_traits::{NoBuild, PackageNameSpecifier, SetupPyStrategy};
 use requirements::ExtrasSpecification;
+use uv_cache::{Cache, CacheArgs, Refresh};
+use uv_client::Connectivity;
+use uv_installer::{NoBinary, Reinstall};
+use uv_interpreter::PythonVersion;
+use uv_normalize::{ExtraName, PackageName};
+use uv_resolver::{DependencyMode, PreReleaseMode, ResolutionMode};
+use uv_traits::{NoBuild, PackageNameSpecifier, SetupPyStrategy};
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, Upgrade};
 use crate::compat::CompatArgs;
@@ -689,31 +689,31 @@ async fn run() -> Result<ExitStatus> {
                     "compile" | "lock" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
-                            ContextValue::String("puffin pip compile".to_string()),
+                            ContextValue::String("uv pip compile".to_string()),
                         );
                     }
                     "sync" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
-                            ContextValue::String("puffin pip sync".to_string()),
+                            ContextValue::String("uv pip sync".to_string()),
                         );
                     }
                     "install" | "add" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
-                            ContextValue::String("puffin pip install".to_string()),
+                            ContextValue::String("uv pip install".to_string()),
                         );
                     }
                     "uninstall" | "remove" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
-                            ContextValue::String("puffin pip uninstall".to_string()),
+                            ContextValue::String("uv pip uninstall".to_string()),
                         );
                     }
                     "freeze" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
-                            ContextValue::String("puffin pip freeze".to_string()),
+                            ContextValue::String("uv pip freeze".to_string()),
                         );
                     }
                     _ => {}
@@ -748,7 +748,7 @@ async fn run() -> Result<ExitStatus> {
 
     // Configure the `warn!` macros, which control user-facing warnings in the CLI.
     if !cli.quiet {
-        puffin_warnings::enable();
+        uv_warnings::enable();
     }
 
     if cli.no_color {

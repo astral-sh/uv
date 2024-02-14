@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-trampoline"
+name = "uv-trampoline"
 version = "0.1.0"
 dependencies = [
  "embed-manifest",

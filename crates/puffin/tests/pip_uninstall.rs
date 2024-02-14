@@ -3,9 +3,9 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use common::{puffin_snapshot, INSTA_FILTERS};
-use puffin_fs::Normalized;
+use common::{uv_snapshot, INSTA_FILTERS};
 use url::Url;
+use uv_fs::Normalized;
 
 use crate::common::{get_bin, venv_to_interpreter, TestContext};
 
@@ -15,7 +15,7 @@ mod common;
 fn no_arguments() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    puffin_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .current_dir(&temp_dir), @r###"
@@ -27,7 +27,7 @@ fn no_arguments() -> Result<()> {
     error: the following required arguments were not provided:
       <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITABLE>>
 
-    Usage: puffin pip uninstall <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITABLE>>
+    Usage: uv pip uninstall <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITABLE>>
 
     For more information, try '--help'.
     "###
@@ -40,7 +40,7 @@ fn no_arguments() -> Result<()> {
 fn invalid_requirement() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    puffin_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .arg("flask==1.0.x")
@@ -63,7 +63,7 @@ fn invalid_requirement() -> Result<()> {
 fn missing_requirements_txt() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    puffin_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .arg("-r")
@@ -89,7 +89,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("flask==1.0.x")?;
 
-    puffin_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .arg("-r")
@@ -113,7 +113,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
 fn missing_pyproject_toml() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    puffin_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .arg("-r")
@@ -139,7 +139,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     pyproject_toml.touch()?;
     pyproject_toml.write_str("123 - 456")?;
 
-    puffin_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .arg("-r")
@@ -169,7 +169,7 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
     pyproject_toml.touch()?;
     pyproject_toml.write_str("[project]")?;
 
-    puffin_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .arg("-r")
@@ -204,7 +204,7 @@ dependencies = ["flask==1.0.x"]
 "#,
     )?;
 
-    puffin_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .arg("-r")
@@ -255,7 +255,7 @@ fn uninstall() -> Result<()> {
         .assert()
         .success();
 
-    puffin_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .arg("MarkupSafe")
@@ -341,7 +341,7 @@ fn missing_record() -> Result<()> {
     .chain(INSTA_FILTERS.to_vec())
     .collect();
 
-    puffin_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .arg("MarkupSafe")
@@ -398,7 +398,7 @@ fn uninstall_editable_by_name() -> Result<()> {
         .success();
 
     // Uninstall the editable by name.
-    puffin_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .arg("poetry-editable")
@@ -461,7 +461,7 @@ fn uninstall_editable_by_path() -> Result<()> {
         .success();
 
     // Uninstall the editable by path.
-    puffin_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .arg("-e")
@@ -525,7 +525,7 @@ fn uninstall_duplicate_editable() -> Result<()> {
         .success();
 
     // Uninstall the editable by both path and name.
-    puffin_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
         .arg("poetry-editable")

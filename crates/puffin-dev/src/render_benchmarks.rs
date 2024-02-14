@@ -22,7 +22,7 @@ pub(crate) fn render_benchmarks(args: &RenderBenchmarksArgs) -> Result<()> {
     // Replace the command with a shorter name. (The command typically includes the benchmark name,
     // but we assume we're running over a single benchmark here.)
     for result in &mut results.results {
-        if result.command.starts_with("puffin") {
+        if result.command.starts_with("uv") {
             result.command = "uv".into();
         } else if result.command.starts_with("pip-compile") {
             result.command = "pip-compile".into();

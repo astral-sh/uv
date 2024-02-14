@@ -17,8 +17,8 @@ use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name, Packag
 use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
-use puffin_normalize::{ExtraName, PackageName};
 use pypi_types::{Hashes, Metadata21};
+use uv_normalize::{ExtraName, PackageName};
 
 use crate::pins::FilePins;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority};

@@ -1,7 +1,7 @@
 use distribution_types::LocalEditable;
 use pep508_rs::Requirement;
-use puffin_normalize::PackageName;
 use pypi_types::Metadata21;
+use uv_normalize::PackageName;
 
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Debug)]

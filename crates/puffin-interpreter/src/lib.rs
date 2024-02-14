@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use pep440_rs::Version;
 use thiserror::Error;
 
-use puffin_fs::Normalized;
+use uv_fs::Normalized;
 
 pub use crate::cfg::Configuration;
 pub use crate::interpreter::Interpreter;
@@ -30,7 +30,7 @@ pub enum Error {
     Conflict,
     #[error("No versions of Python could be found. Is Python installed?")]
     PythonNotFound,
-    #[error("Failed to locate a virtualenv or Conda environment (checked: `VIRTUAL_ENV`, `CONDA_PREFIX`, and `.venv`). Run `puffin venv` to create a virtualenv.")]
+    #[error("Failed to locate a virtualenv or Conda environment (checked: `VIRTUAL_ENV`, `CONDA_PREFIX`, and `.venv`). Run `uv venv` to create a virtualenv.")]
     NotFound,
     #[error(transparent)]
     Io(#[from] io::Error),

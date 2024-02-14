@@ -21,16 +21,16 @@ use distribution_types::{
 use install_wheel_rs::read_dist_info;
 use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
-use puffin_cache::{
+use pypi_types::Metadata21;
+use uv_cache::{
     ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness, WheelCache,
 };
-use puffin_client::{
+use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use puffin_fs::{write_atomic, LockedFile};
-use puffin_git::{Fetch, GitSource};
-use puffin_traits::{BuildContext, BuildKind, NoBuild, SourceBuildTrait};
-use pypi_types::Metadata21;
+use uv_fs::{write_atomic, LockedFile};
+use uv_git::{Fetch, GitSource};
+use uv_traits::{BuildContext, BuildKind, NoBuild, SourceBuildTrait};
 
 use crate::error::Error;
 use crate::reporter::Facade;
@@ -783,11 +783,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .bytes_stream()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
             .into_async_read();
-        puffin_extract::stream::archive(reader.compat(), filename, temp_dir.path()).await?;
+        uv_extract::stream::archive(reader.compat(), filename, temp_dir.path()).await?;
         drop(span);
 
         // Extract the top-level directory.
-        let extracted = puffin_extract::strip_component(temp_dir.path())?;
+        let extracted = uv_extract::strip_component(temp_dir.path())?;
 
         // Persist it to the cache.
         fs_err::tokio::create_dir_all(cache_path.parent().expect("Cache entry to have parent"))

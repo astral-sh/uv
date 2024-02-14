@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 
 use rustc_hash::FxHashMap;
 
-use puffin_normalize::PackageName;
+use uv_normalize::PackageName;
 
 use crate::pubgrub::package::PubGrubPackage;
 
