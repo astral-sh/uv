@@ -836,11 +836,11 @@ dependencies = [
  "insta",
  "pep440_rs 0.4.0",
  "platform-tags",
- "uv-normalize",
  "rkyv",
  "serde",
  "thiserror",
  "url",
+ "uv-normalize",
 ]
 
 [[package]]
@@ -856,9 +856,6 @@ dependencies = [
  "pep440_rs 0.4.0",
  "pep508_rs",
  "platform-tags",
- "uv-fs",
- "uv-git",
- "uv-normalize",
  "pypi-types",
  "rkyv",
  "rustc-hash",
@@ -867,6 +864,9 @@ dependencies = [
  "sha2",
  "thiserror",
  "url",
+ "uv-fs",
+ "uv-git",
+ "uv-normalize",
 ]
 
 [[package]]
@@ -1240,14 +1240,14 @@ dependencies = [
  "directories",
  "fs-err",
  "platform-host",
- "uv-cache",
- "uv-interpreter",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
  "tracing",
  "tracing-subscriber",
+ "uv-cache",
+ "uv-interpreter",
  "which",
 ]
 
@@ -1547,8 +1547,6 @@ dependencies = [
  "platform-host",
  "platform-info",
  "plist",
- "uv-fs",
- "uv-normalize",
  "pyo3",
  "pypi-types",
  "rayon",
@@ -1564,6 +1562,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "uv-fs",
+ "uv-normalize",
  "walkdir",
  "zip",
 ]
@@ -2190,8 +2190,6 @@ dependencies = [
  "log",
  "once_cell",
  "pep440_rs 0.4.0",
- "uv-fs",
- "uv-normalize",
  "pyo3",
  "pyo3-log",
  "regex",
@@ -2203,6 +2201,8 @@ dependencies = [
  "tracing",
  "unicode-width",
  "url",
+ "uv-fs",
+ "uv-normalize",
 ]
 
 [[package]]
@@ -2442,484 +2442,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "uv"
-version = "0.0.4"
-dependencies = [
- "anstream",
- "anyhow",
- "assert_cmd",
- "assert_fs",
- "chrono",
- "clap",
- "console",
- "ctrlc",
- "distribution-filename",
- "distribution-types",
- "dunce",
- "filetime",
- "flate2",
- "fs-err",
- "futures",
- "gourgeist",
- "indicatif",
- "indoc",
- "insta",
- "install-wheel-rs",
- "itertools 0.12.1",
- "miette",
- "mimalloc",
- "owo-colors 4.0.0",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "platform-host",
- "platform-tags",
- "predicates",
- "pubgrub",
- "uv-build",
- "uv-cache",
- "uv-client",
- "uv-dispatch",
- "uv-distribution",
- "uv-fs",
- "uv-installer",
- "uv-interpreter",
- "uv-normalize",
- "uv-resolver",
- "uv-traits",
- "uv-warnings",
- "pypi-types",
- "pyproject-toml",
- "regex",
- "requirements-txt",
- "reqwest",
- "rustc-hash",
- "tempfile",
- "textwrap",
- "thiserror",
- "tikv-jemallocator",
- "tokio",
- "toml",
- "tracing",
- "tracing-durations-export",
- "tracing-subscriber",
- "tracing-tree",
- "url",
- "which",
-]
-
-[[package]]
-name = "uv-build"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "distribution-types",
- "fs-err",
- "gourgeist",
- "indoc",
- "insta",
- "itertools 0.12.1",
- "once_cell",
- "pep508_rs",
- "platform-host",
- "uv-extract",
- "uv-fs",
- "uv-interpreter",
- "uv-traits",
- "pypi-types",
- "pyproject-toml",
- "regex",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "toml",
- "tracing",
-]
-
-[[package]]
-name = "uv-cache"
-version = "0.0.1"
-dependencies = [
- "cache-key",
- "cachedir",
- "clap",
- "directories",
- "distribution-types",
- "fs-err",
- "nanoid",
- "uv-fs",
- "uv-normalize",
- "pypi-types",
- "serde",
- "tempfile",
- "tracing",
- "url",
- "walkdir",
-]
-
-[[package]]
-name = "uv-client"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "async_http_range_reader",
- "async_zip",
- "cache-key",
- "chrono",
- "distribution-filename",
- "distribution-types",
- "fs-err",
- "futures",
- "html-escape",
- "http",
- "insta",
- "install-wheel-rs",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "platform-tags",
- "uv-cache",
- "uv-fs",
- "uv-normalize",
- "pypi-types",
- "reqwest",
- "reqwest-middleware",
- "reqwest-retry",
- "rkyv",
- "rmp-serde",
- "rustc-hash",
- "serde",
- "serde_json",
- "sha2",
- "task-local-extensions",
- "tempfile",
- "thiserror",
- "tl",
- "tokio",
- "tokio-util",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "uv-dev"
-version = "0.0.1"
-dependencies = [
- "anstream",
- "anyhow",
- "chrono",
- "clap",
- "distribution-filename",
- "distribution-types",
- "fs-err",
- "futures",
- "gourgeist",
- "indicatif",
- "install-wheel-rs",
- "itertools 0.12.1",
- "mimalloc",
- "owo-colors 4.0.0",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "petgraph",
- "platform-host",
- "platform-tags",
- "poloto",
- "uv-build",
- "uv-cache",
- "uv-client",
- "uv-dispatch",
- "uv-distribution",
- "uv-installer",
- "uv-interpreter",
- "uv-normalize",
- "uv-resolver",
- "uv-traits",
- "pypi-types",
- "resvg",
- "rustc-hash",
- "serde",
- "serde_json",
- "tagu",
- "tempfile",
- "tikv-jemallocator",
- "tokio",
- "tracing",
- "tracing-durations-export",
- "tracing-indicatif",
- "tracing-subscriber",
- "url",
- "which",
-]
-
-[[package]]
-name = "uv-dispatch"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "distribution-types",
- "fs-err",
- "futures",
- "gourgeist",
- "itertools 0.12.1",
- "pep508_rs",
- "platform-host",
- "platform-tags",
- "uv-build",
- "uv-cache",
- "uv-client",
- "uv-distribution",
- "uv-installer",
- "uv-interpreter",
- "uv-resolver",
- "uv-traits",
- "pypi-types",
- "tempfile",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "uv-distribution"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "cache-key",
- "distribution-filename",
- "distribution-types",
- "fs-err",
- "futures",
- "install-wheel-rs",
- "nanoid",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "platform-tags",
- "uv-cache",
- "uv-client",
- "uv-extract",
- "uv-fs",
- "uv-git",
- "uv-normalize",
- "uv-traits",
- "pypi-types",
- "reqwest",
- "rmp-serde",
- "rustc-hash",
- "serde",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
- "url",
- "zip",
-]
-
-[[package]]
-name = "uv-extract"
-version = "0.0.1"
-dependencies = [
- "async-compression",
- "async_zip",
- "flate2",
- "fs-err",
- "futures",
- "rayon",
- "rustc-hash",
- "tar",
- "thiserror",
- "tokio",
- "tokio-tar",
- "tokio-util",
- "zip",
-]
-
-[[package]]
-name = "uv-fs"
-version = "0.0.1"
-dependencies = [
- "dunce",
- "fs-err",
- "fs2",
- "junction",
- "uv-warnings",
- "tempfile",
- "tracing",
-]
-
-[[package]]
-name = "uv-git"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "base64 0.21.7",
- "cache-key",
- "cargo-util",
- "git2",
- "glob",
- "hex",
- "hmac",
- "home",
- "once_cell",
- "uv-fs",
- "rand",
- "reqwest",
- "serde",
- "sha1",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "uv-installer"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "distribution-filename",
- "distribution-types",
- "fs-err",
- "futures",
- "install-wheel-rs",
- "once-map",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "platform-tags",
- "uv-cache",
- "uv-client",
- "uv-distribution",
- "uv-extract",
- "uv-fs",
- "uv-git",
- "uv-interpreter",
- "uv-normalize",
- "uv-traits",
- "pypi-types",
- "rayon",
- "requirements-txt",
- "rustc-hash",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "uv-interpreter"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "cache-key",
- "fs-err",
- "indoc",
- "insta",
- "itertools 0.12.1",
- "once_cell",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "platform-host",
- "platform-tags",
- "uv-cache",
- "uv-fs",
- "regex",
- "rmp-serde",
- "same-file",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "which",
-]
-
-[[package]]
-name = "uv-normalize"
-version = "0.0.1"
-dependencies = [
- "rkyv",
- "serde",
-]
-
-[[package]]
-name = "uv-resolver"
-version = "0.0.1"
-dependencies = [
- "anstream",
- "anyhow",
- "cache-key",
- "chrono",
- "clap",
- "dashmap",
- "derivative",
- "distribution-filename",
- "distribution-types",
- "fs-err",
- "futures",
- "gourgeist",
- "indexmap 2.2.3",
- "insta",
- "install-wheel-rs",
- "itertools 0.12.1",
- "once-map",
- "once_cell",
- "owo-colors 4.0.0",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "petgraph",
- "platform-host",
- "platform-tags",
- "pubgrub",
- "uv-cache",
- "uv-client",
- "uv-distribution",
- "uv-git",
- "uv-interpreter",
- "uv-normalize",
- "uv-traits",
- "uv-warnings",
- "pypi-types",
- "reqwest",
- "rustc-hash",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
- "url",
- "zip",
-]
-
-[[package]]
-name = "uv-traits"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "distribution-types",
- "once-map",
- "pep508_rs",
- "uv-cache",
- "uv-interpreter",
- "uv-normalize",
- "tokio",
-]
-
-[[package]]
-name = "uv-warnings"
-version = "0.0.1"
-dependencies = [
- "anstream",
- "once_cell",
- "owo-colors 4.0.0",
- "rustc-hash",
-]
-
-[[package]]
 name = "pyo3"
 version = "0.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3002,7 +2524,6 @@ dependencies = [
  "once_cell",
  "pep440_rs 0.4.0",
  "pep508_rs",
- "uv-normalize",
  "regex",
  "rkyv",
  "serde",
@@ -3012,6 +2533,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "url",
+ "uv-normalize",
 ]
 
 [[package]]
@@ -3228,8 +2750,6 @@ dependencies = [
  "once_cell",
  "pep440_rs 0.4.0",
  "pep508_rs",
- "uv-fs",
- "uv-normalize",
  "regex",
  "serde",
  "serde_json",
@@ -3239,6 +2759,8 @@ dependencies = [
  "tracing",
  "unscanny",
  "url",
+ "uv-fs",
+ "uv-normalize",
 ]
 
 [[package]]
@@ -4537,6 +4059,484 @@ name = "uuid"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
+
+[[package]]
+name = "uv"
+version = "0.0.4"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "assert_cmd",
+ "assert_fs",
+ "chrono",
+ "clap",
+ "console",
+ "ctrlc",
+ "distribution-filename",
+ "distribution-types",
+ "dunce",
+ "filetime",
+ "flate2",
+ "fs-err",
+ "futures",
+ "gourgeist",
+ "indicatif",
+ "indoc",
+ "insta",
+ "install-wheel-rs",
+ "itertools 0.12.1",
+ "miette",
+ "mimalloc",
+ "owo-colors 4.0.0",
+ "pep440_rs 0.4.0",
+ "pep508_rs",
+ "platform-host",
+ "platform-tags",
+ "predicates",
+ "pubgrub",
+ "pypi-types",
+ "pyproject-toml",
+ "regex",
+ "requirements-txt",
+ "reqwest",
+ "rustc-hash",
+ "tempfile",
+ "textwrap",
+ "thiserror",
+ "tikv-jemallocator",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-durations-export",
+ "tracing-subscriber",
+ "tracing-tree",
+ "url",
+ "uv-build",
+ "uv-cache",
+ "uv-client",
+ "uv-dispatch",
+ "uv-distribution",
+ "uv-fs",
+ "uv-installer",
+ "uv-interpreter",
+ "uv-normalize",
+ "uv-resolver",
+ "uv-traits",
+ "uv-warnings",
+ "which",
+]
+
+[[package]]
+name = "uv-build"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "distribution-types",
+ "fs-err",
+ "gourgeist",
+ "indoc",
+ "insta",
+ "itertools 0.12.1",
+ "once_cell",
+ "pep508_rs",
+ "platform-host",
+ "pypi-types",
+ "pyproject-toml",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+ "uv-extract",
+ "uv-fs",
+ "uv-interpreter",
+ "uv-traits",
+]
+
+[[package]]
+name = "uv-cache"
+version = "0.0.1"
+dependencies = [
+ "cache-key",
+ "cachedir",
+ "clap",
+ "directories",
+ "distribution-types",
+ "fs-err",
+ "nanoid",
+ "pypi-types",
+ "serde",
+ "tempfile",
+ "tracing",
+ "url",
+ "uv-fs",
+ "uv-normalize",
+ "walkdir",
+]
+
+[[package]]
+name = "uv-client"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "async_http_range_reader",
+ "async_zip",
+ "cache-key",
+ "chrono",
+ "distribution-filename",
+ "distribution-types",
+ "fs-err",
+ "futures",
+ "html-escape",
+ "http",
+ "insta",
+ "install-wheel-rs",
+ "pep440_rs 0.4.0",
+ "pep508_rs",
+ "platform-tags",
+ "pypi-types",
+ "reqwest",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "rkyv",
+ "rmp-serde",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "sha2",
+ "task-local-extensions",
+ "tempfile",
+ "thiserror",
+ "tl",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uv-cache",
+ "uv-fs",
+ "uv-normalize",
+]
+
+[[package]]
+name = "uv-dev"
+version = "0.0.1"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "chrono",
+ "clap",
+ "distribution-filename",
+ "distribution-types",
+ "fs-err",
+ "futures",
+ "gourgeist",
+ "indicatif",
+ "install-wheel-rs",
+ "itertools 0.12.1",
+ "mimalloc",
+ "owo-colors 4.0.0",
+ "pep440_rs 0.4.0",
+ "pep508_rs",
+ "petgraph",
+ "platform-host",
+ "platform-tags",
+ "poloto",
+ "pypi-types",
+ "resvg",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "tagu",
+ "tempfile",
+ "tikv-jemallocator",
+ "tokio",
+ "tracing",
+ "tracing-durations-export",
+ "tracing-indicatif",
+ "tracing-subscriber",
+ "url",
+ "uv-build",
+ "uv-cache",
+ "uv-client",
+ "uv-dispatch",
+ "uv-distribution",
+ "uv-installer",
+ "uv-interpreter",
+ "uv-normalize",
+ "uv-resolver",
+ "uv-traits",
+ "which",
+]
+
+[[package]]
+name = "uv-dispatch"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "distribution-types",
+ "fs-err",
+ "futures",
+ "gourgeist",
+ "itertools 0.12.1",
+ "pep508_rs",
+ "platform-host",
+ "platform-tags",
+ "pypi-types",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uv-build",
+ "uv-cache",
+ "uv-client",
+ "uv-distribution",
+ "uv-installer",
+ "uv-interpreter",
+ "uv-resolver",
+ "uv-traits",
+]
+
+[[package]]
+name = "uv-distribution"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "cache-key",
+ "distribution-filename",
+ "distribution-types",
+ "fs-err",
+ "futures",
+ "install-wheel-rs",
+ "nanoid",
+ "pep440_rs 0.4.0",
+ "pep508_rs",
+ "platform-tags",
+ "pypi-types",
+ "reqwest",
+ "rmp-serde",
+ "rustc-hash",
+ "serde",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uv-cache",
+ "uv-client",
+ "uv-extract",
+ "uv-fs",
+ "uv-git",
+ "uv-normalize",
+ "uv-traits",
+ "zip",
+]
+
+[[package]]
+name = "uv-extract"
+version = "0.0.1"
+dependencies = [
+ "async-compression",
+ "async_zip",
+ "flate2",
+ "fs-err",
+ "futures",
+ "rayon",
+ "rustc-hash",
+ "tar",
+ "thiserror",
+ "tokio",
+ "tokio-tar",
+ "tokio-util",
+ "zip",
+]
+
+[[package]]
+name = "uv-fs"
+version = "0.0.1"
+dependencies = [
+ "dunce",
+ "fs-err",
+ "fs2",
+ "junction",
+ "tempfile",
+ "tracing",
+ "uv-warnings",
+]
+
+[[package]]
+name = "uv-git"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "base64 0.21.7",
+ "cache-key",
+ "cargo-util",
+ "git2",
+ "glob",
+ "hex",
+ "hmac",
+ "home",
+ "once_cell",
+ "rand",
+ "reqwest",
+ "serde",
+ "sha1",
+ "tokio",
+ "tracing",
+ "url",
+ "uv-fs",
+]
+
+[[package]]
+name = "uv-installer"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "distribution-filename",
+ "distribution-types",
+ "fs-err",
+ "futures",
+ "install-wheel-rs",
+ "once-map",
+ "pep440_rs 0.4.0",
+ "pep508_rs",
+ "platform-tags",
+ "pypi-types",
+ "rayon",
+ "requirements-txt",
+ "rustc-hash",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+ "uv-cache",
+ "uv-client",
+ "uv-distribution",
+ "uv-extract",
+ "uv-fs",
+ "uv-git",
+ "uv-interpreter",
+ "uv-normalize",
+ "uv-traits",
+]
+
+[[package]]
+name = "uv-interpreter"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "cache-key",
+ "fs-err",
+ "indoc",
+ "insta",
+ "itertools 0.12.1",
+ "once_cell",
+ "pep440_rs 0.4.0",
+ "pep508_rs",
+ "platform-host",
+ "platform-tags",
+ "regex",
+ "rmp-serde",
+ "same-file",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uv-cache",
+ "uv-fs",
+ "which",
+]
+
+[[package]]
+name = "uv-normalize"
+version = "0.0.1"
+dependencies = [
+ "rkyv",
+ "serde",
+]
+
+[[package]]
+name = "uv-resolver"
+version = "0.0.1"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "cache-key",
+ "chrono",
+ "clap",
+ "dashmap",
+ "derivative",
+ "distribution-filename",
+ "distribution-types",
+ "fs-err",
+ "futures",
+ "gourgeist",
+ "indexmap 2.2.3",
+ "insta",
+ "install-wheel-rs",
+ "itertools 0.12.1",
+ "once-map",
+ "once_cell",
+ "owo-colors 4.0.0",
+ "pep440_rs 0.4.0",
+ "pep508_rs",
+ "petgraph",
+ "platform-host",
+ "platform-tags",
+ "pubgrub",
+ "pypi-types",
+ "reqwest",
+ "rustc-hash",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uv-cache",
+ "uv-client",
+ "uv-distribution",
+ "uv-git",
+ "uv-interpreter",
+ "uv-normalize",
+ "uv-traits",
+ "uv-warnings",
+ "zip",
+]
+
+[[package]]
+name = "uv-traits"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "distribution-types",
+ "once-map",
+ "pep508_rs",
+ "tokio",
+ "uv-cache",
+ "uv-interpreter",
+ "uv-normalize",
+]
+
+[[package]]
+name = "uv-warnings"
+version = "0.0.1"
+dependencies = [
+ "anstream",
+ "once_cell",
+ "owo-colors 4.0.0",
+ "rustc-hash",
+]
 
 [[package]]
 name = "valuable"
