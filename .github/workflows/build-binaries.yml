@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PACKAGE_NAME: uv_alpha
+  PACKAGE_NAME: uv
   MODULE_NAME: uv
   PYTHON_VERSION: "3.11"
   CARGO_INCREMENTAL: 0

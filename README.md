@@ -1,9 +1,9 @@
 # uv
 
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
-[![image](https://img.shields.io/pypi/v/uv-alpha.svg)](https://pypi.python.org/pypi/uv-alpha)
-[![image](https://img.shields.io/pypi/l/uv-alpha.svg)](https://pypi.python.org/pypi/uv-alpha)
-[![image](https://img.shields.io/pypi/pyversions/uv-alpha.svg)](https://pypi.python.org/pypi/uv-alpha)
+[![image](https://img.shields.io/pypi/v/uv.svg)](https://pypi.python.org/pypi/uv)
+[![image](https://img.shields.io/pypi/l/uv.svg)](https://pypi.python.org/pypi/uv)
+[![image](https://img.shields.io/pypi/pyversions/uv.svg)](https://pypi.python.org/pypi/uv)
 [![Actions status](https://github.com/astral-sh/uv/workflows/CI/badge.svg)](https://github.com/astral-sh/uv/actions)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
 
@@ -295,7 +295,7 @@ uv has Tier 2 support ("guaranteed to build") for the following platforms:
 - Linux (i686)
 - Linux (s390x)
 
-uv ships pre-built wheels to [PyPI](https://pypi.org/project/uv-alpha/) for its Tier 1 and
+uv ships pre-built wheels to [PyPI](https://pypi.org/project/uv/) for its Tier 1 and
 Tier 2 platforms. However, while Tier 2 platforms are continuously built, they are not continuously
 tested or developed against, and so stability may vary in practice.
 
