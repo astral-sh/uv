@@ -97,6 +97,8 @@ cargo run -p puffin-dev render-benchmarks install-warm.json --title "Warm Instal
 cargo run -p puffin-dev render-benchmarks install-cold.json --title "Cold Installation"
 ```
 
+You need to install the [Roboto Font](https://fonts.google.com/specimen/Roboto) if the labels are missing in the generated graph.
+
 ## Acknowledgements
 
 The inclusion of this `BENCHMARKS.md` file was inspired by the excellent benchmarking documentation
