@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "axi-alpha"
+name = "axi"
 version = "0.0.4"
 authors = [{ name = "Axi" }]
 requires-python = ">=3.8"
@@ -20,9 +20,9 @@ classifiers = [
 readme = "README.md"
 
 [project.urls]
-Repository = "https://pypi.org/project/axi-alpha/"
-Documentation = "https://pypi.org/project/axi-alpha/"
-Changelog = "https://pypi.org/project/axi-alpha/"
+Repository = "https://pypi.org/project/axi/"
+Documentation = "https://pypi.org/project/axi/"
+Changelog = "https://pypi.org/project/axi/"
 
 [tool.maturin]
 bindings = "bin"

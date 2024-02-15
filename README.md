@@ -1,9 +1,9 @@
 # Axi
 
 [![Axi](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/axi/main/assets/badge/v0.json)](https://github.com/astral-sh/axi)
-[![image](https://img.shields.io/pypi/v/axi-alpha.svg)](https://pypi.python.org/pypi/axi-alpha)
-[![image](https://img.shields.io/pypi/l/axi-alpha.svg)](https://pypi.python.org/pypi/axi-alpha)
-[![image](https://img.shields.io/pypi/pyversions/axi-alpha.svg)](https://pypi.python.org/pypi/axi-alpha)
+[![image](https://img.shields.io/pypi/v/axi.svg)](https://pypi.python.org/pypi/axi)
+[![image](https://img.shields.io/pypi/l/axi.svg)](https://pypi.python.org/pypi/axi)
+[![image](https://img.shields.io/pypi/pyversions/axi.svg)](https://pypi.python.org/pypi/axi)
 [![Actions status](https://github.com/astral-sh/axi/workflows/CI/badge.svg)](https://github.com/astral-sh/axi/actions)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
 
@@ -295,7 +295,7 @@ Axi has Tier 2 support ("guaranteed to build") for the following platforms:
 - Linux (i686)
 - Linux (s390x)
 
-Axi ships pre-built wheels to [PyPI](https://pypi.org/project/axi-alpha/) for its Tier 1 and
+Axi ships pre-built wheels to [PyPI](https://pypi.org/project/axi/) for its Tier 1 and
 Tier 2 platforms. However, while Tier 2 platforms are continuously built, they are not continuously
 tested or developed against, and so stability may vary in practice.
 

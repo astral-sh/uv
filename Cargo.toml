@@ -10,8 +10,8 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 rust-version = "1.74"
-homepage = "https://pypi.org/project/axi-alpha/"
-documentation = "https://pypi.org/project/axi-alpha/"
+homepage = "https://pypi.org/project/axi/"
+documentation = "https://pypi.org/project/axi/"
 repository = "https://github.com/astral-sh/axi"
 authors = ["Axi"]
 license = "MIT OR Apache-2.0"

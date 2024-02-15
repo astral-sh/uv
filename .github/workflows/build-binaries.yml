@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PACKAGE_NAME: axi_alpha
+  PACKAGE_NAME: axi
   MODULE_NAME: axi
   PYTHON_VERSION: "3.11"
   CARGO_INCREMENTAL: 0
