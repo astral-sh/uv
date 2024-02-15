@@ -1,6 +1,6 @@
 # Benchmarks
 
-All benchmarks were computed on macOS using Python 3.12 (for non-Puffin tools), and come with a few
+All benchmarks were computed on macOS using Python 3.12.0 (for non-Puffin tools), and come with a few
 important caveats:
 
 - Benchmark performance may vary dramatically across different operating systems and filesystems.
@@ -83,7 +83,7 @@ python -m scripts.bench \
     --puffin \
     --poetry \
     --pip-sync \
-    --benchmark resolve-warm \
+    --benchmark install-warm \
     scripts/requirements/compiled/trio.txt \
     --json
 ```
