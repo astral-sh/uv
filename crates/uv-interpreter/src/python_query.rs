@@ -157,7 +157,9 @@ pub fn find_default_python(platform: &Platform, cache: &Cache) -> Result<Interpr
             "python.exe",
             env::var_os("UV_TEST_PYTHON_PATH"),
             current_dir,
-        ) {
+        )
+        .or_else(|_| which::which("python.exe"))
+        {
             python
         } else {
             installed_pythons_windows()?
