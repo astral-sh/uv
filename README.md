@@ -91,7 +91,7 @@ On the other hand, uv plans to (but does not currently) support:
 
 - [Hash-checking mode](https://github.com/astral-sh/uv/issues/474)
 - [URL requirements without package names](https://github.com/astral-sh/uv/issues/313)
-  (e.g., `https://...` instead of `package @ https://...`).
+  (e.g., `https://...` instead of `package @ https://...`)
 
 Like `pip-compile`, uv generates a platform-specific `requirements.txt` file (unlike, e.g.,
 `poetry` and `pdm`, which generate platform-agnostic `poetry.lock` and `pdm.lock` files). As such,
@@ -323,12 +323,13 @@ uv's dependency resolver uses [PubGrub](https://github.com/pubgrub-rs/pubgrub) u
 We're grateful to the PubGrub maintainers, especially [Jacob Finkelman](https://github.com/Eh2406),
 for their support.
 
-uv's Git implementation draws on details from [Cargo](https://github.com/rust-lang/cargo).
+uv's Git implementation is based on [Cargo](https://github.com/rust-lang/cargo).
 
 Some of uv's optimizations are inspired by the great work we've seen in
-[Orogene](https://github.com/orogene/orogene) and [Bun](https://github.com/oven-sh/bun). We've also
-learned a lot from Nathaniel J. Smith's [Posy](https://github.com/njsmith/posy) and adapted its
-[trampoline](https://github.com/njsmith/posy/tree/main/src/trampolines/windows-trampolines/posy-trampoline).
+[pnpm](https://pnpm.io/), [Orogene](https://github.com/orogene/orogene), and
+[Bun](https://github.com/oven-sh/bun). We've also learned a lot from Nathaniel
+J. Smith's [Posy](https://github.com/njsmith/posy) and adapted its [trampoline](https://github.com/njsmith/posy/tree/main/src/trampolines/windows-trampolines/posy-trampoline)
+for Windows support.
 
 ## License
 
