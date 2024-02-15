@@ -798,9 +798,6 @@ where
                 );
             }
         }
-        msg.push_str("\n\n");
-        msg.push_str("if the git CLI succeeds then `net.git-fetch-with-cli` may help here\n");
-        msg.push_str("https://doc.rust-lang.org/cargo/reference/config.html#netgit-fetch-with-cli");
         err = err.context(msg);
 
         // Otherwise if we didn't even get to the authentication phase them we may
@@ -814,14 +811,7 @@ where
             | ErrorClass::FetchHead
             | ErrorClass::Ssh
             | ErrorClass::Http => {
-                let mut msg = "network failure seems to have happened\n".to_string();
-                msg.push_str(
-                    "if a proxy or similar is necessary `net.git-fetch-with-cli` may help here\n",
-                );
-                msg.push_str(
-                    "https://doc.rust-lang.org/cargo/reference/config.html#netgit-fetch-with-cli",
-                );
-                err = err.context(msg);
+                err = err.context("failed to connect to the repository");
             }
             ErrorClass::Callback => {
                 // This unwraps the git2 error. We're using the callback error

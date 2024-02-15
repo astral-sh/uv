@@ -2432,7 +2432,7 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/zanieb/pubgrub?rev=1b150cdbd1e6f93b1f465de9d08f499660d7f708#1b150cdbd1e6f93b1f465de9d08f499660d7f708"
+source = "git+https://github.com/zanieb/pubgrub?rev=9b6d89cb8a0c7902815c8b2ae99106ba322ffb14#9b6d89cb8a0c7902815c8b2ae99106ba322ffb14"
 dependencies = [
  "indexmap 2.2.3",
  "log",
@@ -2856,6 +2856,7 @@ dependencies = [
  "derivative",
  "distribution-filename",
  "distribution-types",
+ "either",
  "fs-err",
  "futures",
  "gourgeist",
@@ -2882,6 +2883,7 @@ dependencies = [
  "puffin-warnings",
  "pypi-types",
  "reqwest",
+ "rkyv",
  "rustc-hash",
  "serde_json",
  "sha2",

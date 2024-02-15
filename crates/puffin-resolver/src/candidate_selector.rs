@@ -11,7 +11,7 @@ use puffin_normalize::PackageName;
 use crate::prerelease_mode::PreReleaseStrategy;
 
 use crate::resolution_mode::ResolutionStrategy;
-use crate::version_map::VersionMap;
+use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Manifest, Options};
 
 #[derive(Debug, Clone)]
@@ -96,7 +96,7 @@ impl CandidateSelector {
     pub(crate) fn select<'a>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &'a Range<Version>,
         version_map: &'a VersionMap,
     ) -> Option<Candidate<'a>> {
         // If the package has a preference (e.g., an existing version from an existing lockfile),
@@ -130,6 +130,12 @@ impl CandidateSelector {
             }
         };
 
+        tracing::trace!(
+            "selecting candidate for package {:?} with range {:?} with {} versions",
+            package_name,
+            range,
+            version_map.len()
+        );
         match &self.resolution_strategy {
             ResolutionStrategy::Highest => Self::select_candidate(
                 version_map.iter().rev(),
@@ -163,7 +169,7 @@ impl CandidateSelector {
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over source distributions.
     fn select_candidate<'a>(
-        versions: impl Iterator<Item = (&'a Version, &'a PrioritizedDist)>,
+        versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         allow_prerelease: AllowPreRelease,
@@ -175,31 +181,46 @@ impl CandidateSelector {
         }
 
         let mut prerelease = None;
-        for (version, file) in versions {
-            if file.exclude_newer() && file.incompatible_wheel().is_none() && file.get().is_none() {
-                // Skip empty candidates due to exclude newer
-                continue;
-            }
+        let mut steps = 0;
+        for (version, maybe_dist) in versions {
+            steps += 1;
 
-            if version.any_prerelease() {
+            let dist = if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
                         AllowPreRelease::Yes => {
+                            let Some(dist) = maybe_dist.prioritized_dist() else {
+                                continue;
+                            };
+                            tracing::trace!(
+                                "found candidate for package {:?} with range {:?} \
+                                 after {} steps: {:?} version",
+                                package_name,
+                                range,
+                                steps,
+                                version,
+                            );
                             // If pre-releases are allowed, treat them equivalently
                             // to stable distributions.
-                            return Some(Candidate::new(package_name, version, file));
+                            dist
                         }
                         AllowPreRelease::IfNecessary => {
+                            let Some(dist) = maybe_dist.prioritized_dist() else {
+                                continue;
+                            };
                             // If pre-releases are allowed as a fallback, store the
                             // first-matching prerelease.
                             if prerelease.is_none() {
-                                prerelease = Some(PreReleaseCandidate::IfNecessary(version, file));
+                                prerelease = Some(PreReleaseCandidate::IfNecessary(version, dist));
                             }
+                            continue;
                         }
                         AllowPreRelease::No => {
                             continue;
                         }
                     }
+                } else {
+                    continue;
                 }
             } else {
                 // If we have at least one stable release, we shouldn't allow the "if-necessary"
@@ -209,15 +230,42 @@ impl CandidateSelector {
 
                 // Always return the first-matching stable distribution.
                 if range.contains(version) {
-                    return Some(Candidate::new(package_name, version, file));
+                    let Some(dist) = maybe_dist.prioritized_dist() else {
+                        continue;
+                    };
+                    tracing::trace!(
+                        "found candidate for package {:?} with range {:?} \
+                         after {} steps: {:?} version",
+                        package_name,
+                        range,
+                        steps,
+                        version,
+                    );
+                    dist
+                } else {
+                    continue;
                 }
+            };
+
+            // Skip empty candidates due to exclude newer
+            if dist.exclude_newer() && dist.incompatible_wheel().is_none() && dist.get().is_none() {
+                continue;
             }
+
+            return Some(Candidate::new(package_name, version, dist));
         }
+        tracing::trace!(
+            "exhausted all candidates for package {:?} with range {:?} \
+             after {} steps",
+            package_name,
+            range,
+            steps,
+        );
         match prerelease {
             None => None,
             Some(PreReleaseCandidate::NotNecessary) => None,
-            Some(PreReleaseCandidate::IfNecessary(version, file)) => {
-                Some(Candidate::new(package_name, version, file))
+            Some(PreReleaseCandidate::IfNecessary(version, dist)) => {
+                Some(Candidate::new(package_name, version, dist))
             }
         }
     }

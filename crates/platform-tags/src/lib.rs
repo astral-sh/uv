@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::sync::Arc;
 use std::{cmp, num::NonZeroU32};
 
 use rustc_hash::FxHashMap;
@@ -61,7 +62,8 @@ impl TagCompatibility {
 #[derive(Debug, Clone)]
 pub struct Tags {
     /// python_tag |--> abi_tag |--> platform_tag |--> priority
-    map: FxHashMap<String, FxHashMap<String, FxHashMap<String, TagPriority>>>,
+    #[allow(clippy::type_complexity)]
+    map: Arc<FxHashMap<String, FxHashMap<String, FxHashMap<String, TagPriority>>>>,
 }
 
 impl Tags {
@@ -79,7 +81,7 @@ impl Tags {
                 .entry(platform.to_string())
                 .or_insert(TagPriority::try_from(index).expect("valid tag priority"));
         }
-        Self { map }
+        Self { map: Arc::new(map) }
     }
 
     /// Returns the compatible tags for the given Python implementation (e.g., `cpython`), version,

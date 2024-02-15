@@ -249,7 +249,7 @@ impl<'a> FlatIndexClient<'a> {
     }
 }
 
-/// A set of [`PrioritizedDistribution`] from a `--find-links` entry, indexed by [`PackageName`]
+/// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
 /// and [`Version`].
 #[derive(Debug, Clone, Default)]
 pub struct FlatIndex {
@@ -353,7 +353,7 @@ impl FlatIndex {
     }
 }
 
-/// A set of [`PrioritizedDistribution`] from a `--find-links` entry for a single package, indexed
+/// A set of [`PrioritizedDist`] from a `--find-links` entry for a single package, indexed
 /// by [`Version`].
 #[derive(Debug, Clone, Default)]
 pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);

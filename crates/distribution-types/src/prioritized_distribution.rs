@@ -63,7 +63,7 @@ pub struct DistMetadata {
 }
 
 impl PrioritizedDist {
-    /// Create a new [`PrioritizedDistribution`] from the given wheel distribution.
+    /// Create a new [`PrioritizedDist`] from the given wheel distribution.
     pub fn from_built(
         dist: Dist,
         requires_python: Option<VersionSpecifiers>,
@@ -105,7 +105,7 @@ impl PrioritizedDist {
         }
     }
 
-    /// Create a new [`PrioritizedDistribution`] from the given source distribution.
+    /// Create a new [`PrioritizedDist`] from the given source distribution.
     pub fn from_source(
         dist: Dist,
         requires_python: Option<VersionSpecifiers>,
@@ -125,7 +125,7 @@ impl PrioritizedDist {
         }))
     }
 
-    /// Insert the given built distribution into the [`PrioritizedDistribution`].
+    /// Insert the given built distribution into the [`PrioritizedDist`].
     pub fn insert_built(
         &mut self,
         dist: Dist,
@@ -190,7 +190,7 @@ impl PrioritizedDist {
         }
     }
 
-    /// Insert the given source distribution into the [`PrioritizedDistribution`].
+    /// Insert the given source distribution into the [`PrioritizedDist`].
     pub fn insert_source(
         &mut self,
         dist: Dist,
