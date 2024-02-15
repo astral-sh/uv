@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use axi_cache::CacheShard;
+use axi_fs::files;
 use distribution_filename::WheelFilename;
 use platform_tags::Tags;
-use puffin_cache::CacheShard;
-use puffin_fs::files;
 
 /// The information about the wheel we either just built or got from the cache.
 #[derive(Debug, Clone)]

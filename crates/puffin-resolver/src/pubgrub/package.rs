@@ -1,7 +1,7 @@
 use derivative::Derivative;
 
+use axi_normalize::{ExtraName, PackageName};
 use pep508_rs::VerbatimUrl;
-use puffin_normalize::{ExtraName, PackageName};
 
 /// A PubGrub-compatible wrapper around a "Python package", with two notable characteristics:
 ///

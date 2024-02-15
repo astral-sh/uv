@@ -9,7 +9,7 @@ use fs_err as fs;
 use fs_err::File;
 use tracing::info;
 
-use puffin_interpreter::Interpreter;
+use axi_interpreter::Interpreter;
 
 /// The bash activate scripts with the venv dependent paths patches out
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[

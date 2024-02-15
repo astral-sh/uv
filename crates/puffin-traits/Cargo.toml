@@ -1,5 +1,5 @@
 [package]
-name = "puffin-traits"
+name = "axi-traits"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -16,9 +16,9 @@ workspace = true
 distribution-types = { path = "../distribution-types" }
 once-map = { path = "../once-map" }
 pep508_rs = { path = "../pep508-rs" }
-puffin-cache = { path = "../puffin-cache" }
-puffin-interpreter = { path = "../puffin-interpreter" }
-puffin-normalize = { path = "../puffin-normalize" }
+axi-cache = { path = "../axi-cache" }
+axi-interpreter = { path = "../axi-interpreter" }
+axi-normalize = { path = "../axi-normalize" }
 
 anyhow = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }

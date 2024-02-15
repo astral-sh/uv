@@ -1,7 +1,7 @@
 use rustc_hash::FxHashMap;
 
+use axi_normalize::PackageName;
 use distribution_types::Dist;
-use puffin_normalize::PackageName;
 
 use crate::candidate_selector::Candidate;
 

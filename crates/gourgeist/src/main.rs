@@ -11,10 +11,10 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
 
+use axi_cache::Cache;
+use axi_interpreter::Interpreter;
 use gourgeist::{create_bare_venv, parse_python_cli};
 use platform_host::Platform;
-use puffin_cache::Cache;
-use puffin_interpreter::Interpreter;
 
 #[derive(Parser, Debug)]
 struct Cli {

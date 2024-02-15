@@ -1,7 +1,7 @@
 use rustc_hash::FxHashSet;
 
+use axi_normalize::PackageName;
 use pep508_rs::Requirement;
-use puffin_normalize::PackageName;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]

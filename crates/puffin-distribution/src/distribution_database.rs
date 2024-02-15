@@ -8,15 +8,15 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{info_span, instrument, Instrument};
 use url::Url;
 
+use axi_cache::{Cache, CacheBucket, Timestamp, WheelCache};
+use axi_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
+use axi_fs::metadata_if_exists;
+use axi_git::GitSource;
+use axi_traits::{BuildContext, NoBinary, NoBuild};
 use distribution_types::{
     BuiltDist, DirectGitUrl, Dist, FileLocation, IndexLocations, LocalEditable, Name, SourceDist,
 };
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket, Timestamp, WheelCache};
-use puffin_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
-use puffin_fs::metadata_if_exists;
-use puffin_git::GitSource;
-use puffin_traits::{BuildContext, NoBinary, NoBuild};
 use pypi_types::Metadata21;
 
 use crate::download::{BuiltWheel, UnzippedWheel};
@@ -156,7 +156,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         // Download and unzip the wheel to a temporary directory.
                         let temp_dir =
                             tempfile::tempdir_in(self.cache.root()).map_err(Error::CacheWrite)?;
-                        puffin_extract::stream::unzip(reader.compat(), temp_dir.path()).await?;
+                        axi_extract::stream::unzip(reader.compat(), temp_dir.path()).await?;
 
                         // Persist the temporary directory to the directory store.
                         let archive = self
@@ -218,7 +218,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         // Download and unzip the wheel to a temporary directory.
                         let temp_dir =
                             tempfile::tempdir_in(self.cache.root()).map_err(Error::CacheWrite)?;
-                        puffin_extract::stream::unzip(reader.compat(), temp_dir.path()).await?;
+                        axi_extract::stream::unzip(reader.compat(), temp_dir.path()).await?;
 
                         // Persist the temporary directory to the directory store.
                         let archive = self

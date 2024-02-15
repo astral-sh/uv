@@ -10,10 +10,10 @@ use assert_fs::prelude::*;
 use indoc::indoc;
 use url::Url;
 
+use axi_fs::Normalized;
 use common::{
-    create_bin_with_executables, create_venv, puffin_snapshot, venv_to_interpreter, INSTA_FILTERS,
+    axi_snapshot, create_bin_with_executables, create_venv, venv_to_interpreter, INSTA_FILTERS,
 };
-use puffin_fs::Normalized;
 
 use crate::common::{get_bin, TestContext};
 
@@ -59,7 +59,7 @@ fn uninstall_command(context: &TestContext) -> Command {
 
 #[test]
 fn missing_pip() {
-    puffin_snapshot!(Command::new(get_bin()).arg("sync"), @r###"
+    axi_snapshot!(Command::new(get_bin()).arg("sync"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -67,9 +67,9 @@ fn missing_pip() {
     ----- stderr -----
     error: unrecognized subcommand 'sync'
 
-      tip: a similar subcommand exists: 'puffin pip sync'
+      tip: a similar subcommand exists: 'axi pip sync'
 
-    Usage: puffin [OPTIONS] <COMMAND>
+    Usage: axi [OPTIONS] <COMMAND>
 
     For more information, try '--help'.
     "###);
@@ -81,7 +81,7 @@ fn missing_requirements_txt() {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -102,7 +102,7 @@ fn missing_venv() -> Result<()> {
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    puffin_snapshot!(Command::new(get_bin())
+    axi_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("sync")
         .arg("requirements.txt")
@@ -135,7 +135,7 @@ fn install() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -169,7 +169,7 @@ fn install_copy() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--link-mode")
         .arg("copy")
@@ -205,7 +205,7 @@ fn install_hardlink() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--link-mode")
         .arg("hardlink")
@@ -241,7 +241,7 @@ fn install_many() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -279,7 +279,7 @@ fn noop() -> Result<()> {
         .assert()
         .success();
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -335,7 +335,7 @@ fn link() -> Result<()> {
         .success();
     venv2.assert(predicates::path::is_dir());
 
-    puffin_snapshot!(Command::new(get_bin())
+    axi_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("sync")
         .arg("requirements.txt")
@@ -379,7 +379,7 @@ fn add_remove() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("tomli==2.0.1")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -422,7 +422,7 @@ fn install_sequential() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -464,7 +464,7 @@ fn upgrade() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("tomli==2.0.1")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -495,7 +495,7 @@ fn install_url() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -525,7 +525,7 @@ fn install_git_commit() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -555,7 +555,7 @@ fn install_git_tag() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -585,7 +585,7 @@ fn install_git_subdirectories() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\nexample-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -617,7 +617,7 @@ fn install_sdist() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("Werkzeug==0.9.6")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -646,7 +646,7 @@ fn install_sdist_url() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("Werkzeug @ https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -682,7 +682,7 @@ fn install_url_then_install_url() -> Result<()> {
         .assert()
         .success();
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -719,7 +719,7 @@ fn install_url_then_install_version() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug==2.0.0")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -756,7 +756,7 @@ fn install_version_then_install_url() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -779,7 +779,7 @@ fn install_version_then_install_url() -> Result<()> {
 }
 
 /// Test that we select the last 3.8 compatible numpy version instead of trying to compile an
-/// incompatible sdist <https://github.com/astral-sh/puffin/issues/388>
+/// incompatible sdist <https://github.com/astral-sh/axi/issues/388>
 #[test]
 fn install_numpy_py38() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -788,7 +788,7 @@ fn install_numpy_py38() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("numpy")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -817,7 +817,7 @@ fn install_no_index() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--no-index")
         .arg("--strict"), @r###"
@@ -845,7 +845,7 @@ fn install_no_index_cached() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -867,7 +867,7 @@ fn install_no_index_cached() -> Result<()> {
         .assert()
         .success();
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--no-index")
         .arg("--strict"), @r###"
@@ -895,7 +895,7 @@ fn warn_on_yanked_version() -> Result<()> {
     // This version is yanked.
     requirements_in.write_str("colorama==0.4.2")?;
 
-    puffin_snapshot!(INSTA_FILTERS, windows_filters=false, command(&context)
+    axi_snapshot!(INSTA_FILTERS, windows_filters=false, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -937,7 +937,7 @@ fn install_local_wheel() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -958,7 +958,7 @@ fn install_local_wheel() -> Result<()> {
     let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
 
     // Reinstall. The wheel should come from the cache, so there shouldn't be a "download".
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -982,7 +982,7 @@ fn install_local_wheel() -> Result<()> {
     filetime::set_file_mtime(&archive, filetime::FileTime::now()).unwrap();
 
     // Reinstall. The wheel should be "downloaded" again.
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1004,7 +1004,7 @@ fn install_local_wheel() -> Result<()> {
     filetime::set_file_mtime(&archive, filetime::FileTime::now()).unwrap();
 
     // Reinstall into the same virtual environment. The wheel should be reinstalled.
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1049,7 +1049,7 @@ fn mismatched_version() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -1090,7 +1090,7 @@ fn mismatched_name() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -1131,7 +1131,7 @@ fn install_local_source_distribution() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1161,7 +1161,7 @@ fn install_local_source_distribution() -> Result<()> {
 /// Like `pip` and `build`, we should use PEP 517 here and respect the `requires`, but use the
 /// default build backend.
 #[test]
-#[cfg(unix)] // https://github.com/astral-sh/puffin/issues/1238
+#[cfg(unix)] // https://github.com/astral-sh/axi/issues/1238
 fn install_ujson() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1169,7 +1169,7 @@ fn install_ujson() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("ujson @ https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1209,7 +1209,7 @@ fn install_build_system_no_backend() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("build-system-no-backend @ https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1248,7 +1248,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     } else {
         INSTA_FILTERS.to_vec()
     };
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1269,7 +1269,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1289,7 +1289,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(Command::new(get_bin())
+    axi_snapshot!(Command::new(get_bin())
         .arg("clean")
         .arg("tqdm")
         .arg("--cache-dir")
@@ -1305,7 +1305,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     "###
     );
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1336,7 +1336,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1357,7 +1357,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1385,7 +1385,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     } else {
         INSTA_FILTERS.to_vec()
     };
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
         .arg("werkzeug")
         .arg("--cache-dir")
@@ -1401,7 +1401,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     "###
     );
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1431,7 +1431,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("future==0.18.3")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1452,7 +1452,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1480,7 +1480,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     } else {
         INSTA_FILTERS.to_vec()
     };
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
         .arg("future")
         .arg("--cache-dir")
@@ -1496,7 +1496,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     "###
     );
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1540,7 +1540,7 @@ fn install_path_source_dist_cached() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1561,7 +1561,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1589,7 +1589,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     } else {
         INSTA_FILTERS.to_vec()
     };
-    puffin_snapshot!(filters2, Command::new(get_bin())
+    axi_snapshot!(filters2, Command::new(get_bin())
         .arg("clean")
         .arg("wheel")
         .arg("--cache-dir")
@@ -1605,7 +1605,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     "###
     );
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1651,7 +1651,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     .chain(INSTA_FILTERS.to_vec())
     .collect();
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1672,7 +1672,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1703,7 +1703,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     } else {
         INSTA_FILTERS.to_vec()
     };
-    puffin_snapshot!(filters2, Command::new(get_bin())
+    axi_snapshot!(filters2, Command::new(get_bin())
         .arg("clean")
         .arg("tomli")
         .arg("--cache-dir")
@@ -1719,7 +1719,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     "###
     );
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1757,7 +1757,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     } else {
         INSTA_FILTERS.to_vec()
     };
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1778,7 +1778,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1798,7 +1798,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(Command::new(get_bin())
+    axi_snapshot!(Command::new(get_bin())
         .arg("clean")
         .arg("tqdm")
         .arg("--cache-dir")
@@ -1814,7 +1814,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     "###
     );
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1844,7 +1844,7 @@ fn duplicate_package_overlap() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -1869,7 +1869,7 @@ fn duplicate_package_disjoint() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2 ; python_version < '3.6'")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1896,7 +1896,7 @@ fn reinstall() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1916,7 +1916,7 @@ fn reinstall() -> Result<()> {
     context.assert_command("import tomli").success();
 
     // Re-run the installation with `--reinstall`.
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--strict"), @r###"
@@ -1949,7 +1949,7 @@ fn reinstall_package() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1969,7 +1969,7 @@ fn reinstall_package() -> Result<()> {
     context.assert_command("import tomli").success();
 
     // Re-run the installation with `--reinstall`.
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--reinstall-package")
         .arg("tomli")
@@ -2002,7 +2002,7 @@ fn reinstall_git() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -2020,7 +2020,7 @@ fn reinstall_git() -> Result<()> {
     context.assert_command("import werkzeug").success();
 
     // Re-run the installation with `--reinstall`.
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--reinstall-package")
         .arg("WerkZeug")
@@ -2051,7 +2051,7 @@ fn refresh() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -2075,7 +2075,7 @@ fn refresh() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--strict")
@@ -2108,7 +2108,7 @@ fn refresh_package() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -2132,7 +2132,7 @@ fn refresh_package() -> Result<()> {
     let parent = assert_fs::TempDir::new()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--refresh-package")
         .arg("tomli")
@@ -2196,7 +2196,7 @@ fn sync_editable() -> Result<()> {
         .collect::<Vec<_>>();
 
     // Install the editable packages.
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("sync")
         .arg(requirements_txt.path())
@@ -2222,7 +2222,7 @@ fn sync_editable() -> Result<()> {
     );
 
     // Reinstall the editable packages.
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("sync")
         .arg(requirements_txt.path())
@@ -2284,7 +2284,7 @@ fn sync_editable() -> Result<()> {
     // Don't create a git diff.
     fs_err::write(python_source_file, python_version_1)?;
 
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("sync")
         .arg(requirements_txt.path())
@@ -2332,7 +2332,7 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
             .arg("pip")
             .arg("sync")
         .arg(requirements_txt.path())
@@ -2375,7 +2375,7 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
             .arg("pip")
             .arg("sync")
         .arg(requirements_txt.path())
@@ -2414,7 +2414,7 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
             .arg("pip")
             .arg("sync")
         .arg(requirements_txt.path())
@@ -2448,7 +2448,7 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
             .arg("pip")
             .arg("sync")
         .arg(requirements_txt.path())
@@ -2505,7 +2505,7 @@ fn incompatible_wheel() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -2529,7 +2529,7 @@ fn sync_legacy_sdist_pep_517() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2554,7 +2554,7 @@ fn sync_legacy_sdist_setuptools() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.in")
         .arg("--legacy-setup-py"), @r###"
     success: true
@@ -2592,7 +2592,7 @@ fn find_links() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("requirements.txt")
         .arg("--find-links")
         .arg(project_root.join("scripts/wheels/")), @r###"
@@ -2622,7 +2622,7 @@ fn offline() -> Result<()> {
     requirements_in.write_str("black==23.10.1")?;
 
     // Install with `--offline` with an empty cache.
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.in")
         .arg("--offline"), @r###"
     success: false
@@ -2635,7 +2635,7 @@ fn offline() -> Result<()> {
     );
 
     // Populate the cache.
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2652,7 +2652,7 @@ fn offline() -> Result<()> {
     // Install with `--offline` with a populated cache.
     let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
 
-    puffin_snapshot!(command(&context)
+    axi_snapshot!(command(&context)
         .arg("requirements.in")
         .arg("--offline")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"

@@ -10,6 +10,15 @@ use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
 use tracing::info;
 
+use axi_cache::{Cache, CacheArgs};
+use axi_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
+use axi_dispatch::BuildDispatch;
+use axi_distribution::RegistryWheelIndex;
+use axi_installer::{Downloader, NoBinary};
+use axi_interpreter::Virtualenv;
+use axi_normalize::PackageName;
+use axi_resolver::{DistFinder, InMemoryIndex};
+use axi_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 use distribution_types::{
     CachedDist, Dist, DistributionMetadata, IndexLocations, Name, Resolution, VersionOrUrl,
 };
@@ -17,15 +26,6 @@ use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheArgs};
-use puffin_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
-use puffin_dispatch::BuildDispatch;
-use puffin_distribution::RegistryWheelIndex;
-use puffin_installer::{Downloader, NoBinary};
-use puffin_interpreter::Virtualenv;
-use puffin_normalize::PackageName;
-use puffin_resolver::{DistFinder, InMemoryIndex};
-use puffin_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct InstallManyArgs {
@@ -187,7 +187,7 @@ async fn install_chunk(
     }
 
     let wheels: Vec<_> = wheels.into_iter().chain(cached).collect();
-    puffin_installer::Installer::new(venv)
+    axi_installer::Installer::new(venv)
         .with_link_mode(LinkMode::default())
         .install(&wheels)
         .context("Failed to install")?;

@@ -1,5 +1,5 @@
-//! Avoid cyclic crate dependencies between [resolver][`puffin_resolver`],
-//! [installer][`puffin_installer`] and [build][`puffin_build`] through [`BuildDispatch`]
+//! Avoid cyclic crate dependencies between [resolver][`axi_resolver`],
+//! [installer][`axi_installer`] and [build][`axi_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
 use std::future::Future;
@@ -9,16 +9,16 @@ use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
+use axi_build::{SourceBuild, SourceBuildContext};
+use axi_cache::Cache;
+use axi_client::{FlatIndex, RegistryClient};
+use axi_installer::{Downloader, Installer, NoBinary, Plan, Planner, Reinstall, SitePackages};
+use axi_interpreter::{Interpreter, Virtualenv};
+use axi_resolver::{InMemoryIndex, Manifest, Options, Resolver};
+use axi_traits::{BuildContext, BuildKind, InFlight, NoBuild, SetupPyStrategy};
 use distribution_types::{IndexLocations, Name, Resolution, SourceDist};
 use futures::FutureExt;
 use pep508_rs::Requirement;
-use puffin_build::{SourceBuild, SourceBuildContext};
-use puffin_cache::Cache;
-use puffin_client::{FlatIndex, RegistryClient};
-use puffin_installer::{Downloader, Installer, NoBinary, Plan, Planner, Reinstall, SitePackages};
-use puffin_interpreter::{Interpreter, Virtualenv};
-use puffin_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use puffin_traits::{BuildContext, BuildKind, InFlight, NoBuild, SetupPyStrategy};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -208,7 +208,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             // Remove any unnecessary packages.
             if !extraneous.is_empty() || !reinstalls.is_empty() {
                 for dist_info in extraneous.iter().chain(reinstalls.iter()) {
-                    let summary = puffin_installer::uninstall(dist_info)
+                    let summary = axi_installer::uninstall(dist_info)
                         .await
                         .context("Failed to uninstall build dependencies")?;
                     debug!(

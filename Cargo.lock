@@ -836,7 +836,7 @@ dependencies = [
  "insta",
  "pep440_rs 0.4.0",
  "platform-tags",
- "puffin-normalize",
+ "axi-normalize",
  "rkyv",
  "serde",
  "thiserror",
@@ -856,9 +856,9 @@ dependencies = [
  "pep440_rs 0.4.0",
  "pep508_rs",
  "platform-tags",
- "puffin-fs",
- "puffin-git",
- "puffin-normalize",
+ "axi-fs",
+ "axi-git",
+ "axi-normalize",
  "pypi-types",
  "rkyv",
  "rustc-hash",
@@ -1240,8 +1240,8 @@ dependencies = [
  "directories",
  "fs-err",
  "platform-host",
- "puffin-cache",
- "puffin-interpreter",
+ "axi-cache",
+ "axi-interpreter",
  "serde",
  "serde_json",
  "tempfile",
@@ -1547,8 +1547,8 @@ dependencies = [
  "platform-host",
  "platform-info",
  "plist",
- "puffin-fs",
- "puffin-normalize",
+ "axi-fs",
+ "axi-normalize",
  "pyo3",
  "pypi-types",
  "rayon",
@@ -2190,8 +2190,8 @@ dependencies = [
  "log",
  "once_cell",
  "pep440_rs 0.4.0",
- "puffin-fs",
- "puffin-normalize",
+ "axi-fs",
+ "axi-normalize",
  "pyo3",
  "pyo3-log",
  "regex",
@@ -2442,7 +2442,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin"
+name = "axi"
 version = "0.0.4"
 dependencies = [
  "anstream",
@@ -2475,18 +2475,18 @@ dependencies = [
  "platform-tags",
  "predicates",
  "pubgrub",
- "puffin-build",
- "puffin-cache",
- "puffin-client",
- "puffin-dispatch",
- "puffin-distribution",
- "puffin-fs",
- "puffin-installer",
- "puffin-interpreter",
- "puffin-normalize",
- "puffin-resolver",
- "puffin-traits",
- "puffin-warnings",
+ "axi-build",
+ "axi-cache",
+ "axi-client",
+ "axi-dispatch",
+ "axi-distribution",
+ "axi-fs",
+ "axi-installer",
+ "axi-interpreter",
+ "axi-normalize",
+ "axi-resolver",
+ "axi-traits",
+ "axi-warnings",
  "pypi-types",
  "pyproject-toml",
  "regex",
@@ -2508,7 +2508,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-build"
+name = "axi-build"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2521,10 +2521,10 @@ dependencies = [
  "once_cell",
  "pep508_rs",
  "platform-host",
- "puffin-extract",
- "puffin-fs",
- "puffin-interpreter",
- "puffin-traits",
+ "axi-extract",
+ "axi-fs",
+ "axi-interpreter",
+ "axi-traits",
  "pypi-types",
  "pyproject-toml",
  "regex",
@@ -2538,7 +2538,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-cache"
+name = "axi-cache"
 version = "0.0.1"
 dependencies = [
  "cache-key",
@@ -2548,8 +2548,8 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "nanoid",
- "puffin-fs",
- "puffin-normalize",
+ "axi-fs",
+ "axi-normalize",
  "pypi-types",
  "serde",
  "tempfile",
@@ -2559,7 +2559,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-client"
+name = "axi-client"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2579,9 +2579,9 @@ dependencies = [
  "pep440_rs 0.4.0",
  "pep508_rs",
  "platform-tags",
- "puffin-cache",
- "puffin-fs",
- "puffin-normalize",
+ "axi-cache",
+ "axi-fs",
+ "axi-normalize",
  "pypi-types",
  "reqwest",
  "reqwest-middleware",
@@ -2603,7 +2603,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-dev"
+name = "axi-dev"
 version = "0.0.1"
 dependencies = [
  "anstream",
@@ -2626,16 +2626,16 @@ dependencies = [
  "platform-host",
  "platform-tags",
  "poloto",
- "puffin-build",
- "puffin-cache",
- "puffin-client",
- "puffin-dispatch",
- "puffin-distribution",
- "puffin-installer",
- "puffin-interpreter",
- "puffin-normalize",
- "puffin-resolver",
- "puffin-traits",
+ "axi-build",
+ "axi-cache",
+ "axi-client",
+ "axi-dispatch",
+ "axi-distribution",
+ "axi-installer",
+ "axi-interpreter",
+ "axi-normalize",
+ "axi-resolver",
+ "axi-traits",
  "pypi-types",
  "resvg",
  "rustc-hash",
@@ -2654,7 +2654,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-dispatch"
+name = "axi-dispatch"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2666,14 +2666,14 @@ dependencies = [
  "pep508_rs",
  "platform-host",
  "platform-tags",
- "puffin-build",
- "puffin-cache",
- "puffin-client",
- "puffin-distribution",
- "puffin-installer",
- "puffin-interpreter",
- "puffin-resolver",
- "puffin-traits",
+ "axi-build",
+ "axi-cache",
+ "axi-client",
+ "axi-distribution",
+ "axi-installer",
+ "axi-interpreter",
+ "axi-resolver",
+ "axi-traits",
  "pypi-types",
  "tempfile",
  "tokio",
@@ -2681,7 +2681,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-distribution"
+name = "axi-distribution"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2695,13 +2695,13 @@ dependencies = [
  "pep440_rs 0.4.0",
  "pep508_rs",
  "platform-tags",
- "puffin-cache",
- "puffin-client",
- "puffin-extract",
- "puffin-fs",
- "puffin-git",
- "puffin-normalize",
- "puffin-traits",
+ "axi-cache",
+ "axi-client",
+ "axi-extract",
+ "axi-fs",
+ "axi-git",
+ "axi-normalize",
+ "axi-traits",
  "pypi-types",
  "reqwest",
  "rmp-serde",
@@ -2717,7 +2717,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-extract"
+name = "axi-extract"
 version = "0.0.1"
 dependencies = [
  "async-compression",
@@ -2736,20 +2736,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-fs"
+name = "axi-fs"
 version = "0.0.1"
 dependencies = [
  "dunce",
  "fs-err",
  "fs2",
  "junction",
- "puffin-warnings",
+ "axi-warnings",
  "tempfile",
  "tracing",
 ]
 
 [[package]]
-name = "puffin-git"
+name = "axi-git"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2762,7 +2762,7 @@ dependencies = [
  "hmac",
  "home",
  "once_cell",
- "puffin-fs",
+ "axi-fs",
  "rand",
  "reqwest",
  "serde",
@@ -2773,7 +2773,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-installer"
+name = "axi-installer"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2786,15 +2786,15 @@ dependencies = [
  "pep440_rs 0.4.0",
  "pep508_rs",
  "platform-tags",
- "puffin-cache",
- "puffin-client",
- "puffin-distribution",
- "puffin-extract",
- "puffin-fs",
- "puffin-git",
- "puffin-interpreter",
- "puffin-normalize",
- "puffin-traits",
+ "axi-cache",
+ "axi-client",
+ "axi-distribution",
+ "axi-extract",
+ "axi-fs",
+ "axi-git",
+ "axi-interpreter",
+ "axi-normalize",
+ "axi-traits",
  "pypi-types",
  "rayon",
  "requirements-txt",
@@ -2807,7 +2807,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-interpreter"
+name = "axi-interpreter"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -2821,8 +2821,8 @@ dependencies = [
  "pep508_rs",
  "platform-host",
  "platform-tags",
- "puffin-cache",
- "puffin-fs",
+ "axi-cache",
+ "axi-fs",
  "regex",
  "rmp-serde",
  "same-file",
@@ -2836,7 +2836,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-normalize"
+name = "axi-normalize"
 version = "0.0.1"
 dependencies = [
  "rkyv",
@@ -2844,7 +2844,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-resolver"
+name = "axi-resolver"
 version = "0.0.1"
 dependencies = [
  "anstream",
@@ -2872,14 +2872,14 @@ dependencies = [
  "platform-host",
  "platform-tags",
  "pubgrub",
- "puffin-cache",
- "puffin-client",
- "puffin-distribution",
- "puffin-git",
- "puffin-interpreter",
- "puffin-normalize",
- "puffin-traits",
- "puffin-warnings",
+ "axi-cache",
+ "axi-client",
+ "axi-distribution",
+ "axi-git",
+ "axi-interpreter",
+ "axi-normalize",
+ "axi-traits",
+ "axi-warnings",
  "pypi-types",
  "reqwest",
  "rustc-hash",
@@ -2896,21 +2896,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "puffin-traits"
+name = "axi-traits"
 version = "0.0.1"
 dependencies = [
  "anyhow",
  "distribution-types",
  "once-map",
  "pep508_rs",
- "puffin-cache",
- "puffin-interpreter",
- "puffin-normalize",
+ "axi-cache",
+ "axi-interpreter",
+ "axi-normalize",
  "tokio",
 ]
 
 [[package]]
-name = "puffin-warnings"
+name = "axi-warnings"
 version = "0.0.1"
 dependencies = [
  "anstream",
@@ -3002,7 +3002,7 @@ dependencies = [
  "once_cell",
  "pep440_rs 0.4.0",
  "pep508_rs",
- "puffin-normalize",
+ "axi-normalize",
  "regex",
  "rkyv",
  "serde",
@@ -3228,8 +3228,8 @@ dependencies = [
  "once_cell",
  "pep440_rs 0.4.0",
  "pep508_rs",
- "puffin-fs",
- "puffin-normalize",
+ "axi-fs",
+ "axi-normalize",
  "regex",
  "serde",
  "serde_json",

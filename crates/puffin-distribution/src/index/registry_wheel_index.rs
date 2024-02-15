@@ -4,12 +4,12 @@ use std::path::Path;
 
 use rustc_hash::FxHashMap;
 
+use axi_cache::{Cache, CacheBucket, WheelCache};
+use axi_fs::{directories, symlinks};
+use axi_normalize::PackageName;
 use distribution_types::{CachedRegistryDist, FlatIndexLocation, IndexLocations, IndexUrl};
 use pep440_rs::Version;
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket, WheelCache};
-use puffin_fs::{directories, symlinks};
-use puffin_normalize::PackageName;
 
 use crate::index::cached_wheel::CachedWheel;
 use crate::source::{read_http_manifest, MANIFEST};

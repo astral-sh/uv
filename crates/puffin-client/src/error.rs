@@ -2,8 +2,8 @@ use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
 use url::Url;
 
+use axi_normalize::PackageName;
 use distribution_filename::{WheelFilename, WheelFilenameError};
-use puffin_normalize::PackageName;
 
 use crate::html;
 use crate::middleware::OfflineError;

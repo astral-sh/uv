@@ -10,18 +10,18 @@ use tokio::time::Instant;
 use tracing::{info, info_span, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
+use axi_cache::{Cache, CacheArgs};
+use axi_client::{FlatIndex, OwnedArchive, RegistryClient, RegistryClientBuilder};
+use axi_dispatch::BuildDispatch;
+use axi_installer::NoBinary;
+use axi_interpreter::Virtualenv;
+use axi_normalize::PackageName;
+use axi_resolver::InMemoryIndex;
+use axi_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 use distribution_types::IndexLocations;
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_host::Platform;
-use puffin_cache::{Cache, CacheArgs};
-use puffin_client::{FlatIndex, OwnedArchive, RegistryClient, RegistryClientBuilder};
-use puffin_dispatch::BuildDispatch;
-use puffin_installer::NoBinary;
-use puffin_interpreter::Virtualenv;
-use puffin_normalize::PackageName;
-use puffin_resolver::InMemoryIndex;
-use puffin_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct ResolveManyArgs {

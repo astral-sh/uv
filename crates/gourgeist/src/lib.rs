@@ -4,9 +4,9 @@ use std::path::Path;
 use camino::{FromPathError, Utf8Path};
 use thiserror::Error;
 
+use axi_interpreter::{Interpreter, Virtualenv};
 pub use interpreter::parse_python_cli;
 use platform_host::PlatformError;
-use puffin_interpreter::{Interpreter, Virtualenv};
 
 pub use crate::bare::create_bare_venv;
 

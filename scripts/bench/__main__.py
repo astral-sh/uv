@@ -1,7 +1,7 @@
-"""Benchmark Puffin against other packaging tools.
+"""Benchmark Axi against other packaging tools.
 
 This script assumes that `pip`, `pip-tools`, `virtualenv`, `poetry` and `hyperfine` are
-installed, and that a Puffin release builds exists at `./target/release/puffin`
+installed, and that a Axi release builds exists at `./target/release/axi`
 (relative to the repository root).
 
 This script assumes that Python 3.12 is installed.
@@ -9,20 +9,20 @@ This script assumes that Python 3.12 is installed.
 To set up the required environment, run:
 
     cargo build --release
-    ./target/release/puffin venv
+    ./target/release/axi venv
     source .venv/bin/activate
-    ./target/release/puffin pip sync ./scripts/bench/requirements.txt
+    ./target/release/axi pip sync ./scripts/bench/requirements.txt
 
 Example usage:
 
-    python -m scripts.bench --puffin --pip-compile requirements.in
+    python -m scripts.bench --axi --pip-compile requirements.in
 
-Multiple versions of Puffin can be benchmarked by specifying the path to the binary for
+Multiple versions of Axi can be benchmarked by specifying the path to the binary for
 each build, as in:
 
     python -m scripts.bench \
-        --puffin-path ./target/release/puffin \
-        --puffin-path ./target/release/baseline \
+        --axi-path ./target/release/axi \
+        --axi-path ./target/release/baseline \
         requirements.in
 """
 import abc
@@ -769,17 +769,17 @@ class Pdm(Suite):
         )
 
 
-class Puffin(Suite):
+class Axi(Suite):
     def __init__(self, *, path: str | None = None) -> Command | None:
-        """Initialize a Puffin benchmark."""
-        self.name = path or "puffin"
+        """Initialize a Axi benchmark."""
+        self.name = path or "axi"
         self.path = path or os.path.join(
             os.path.dirname(
                 os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             ),
             "target",
             "release",
-            "puffin",
+            "axi",
         )
 
     def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
@@ -909,7 +909,7 @@ class Puffin(Suite):
 def main():
     """Run the benchmark."""
     parser = argparse.ArgumentParser(
-        description="Benchmark Puffin against other packaging tools."
+        description="Benchmark Axi against other packaging tools."
     )
     parser.add_argument(
         "file",
@@ -964,8 +964,8 @@ def main():
         action="store_true",
     )
     parser.add_argument(
-        "--puffin",
-        help="Whether to benchmark Puffin (assumes a Puffin binary exists at `./target/release/puffin`).",
+        "--axi",
+        help="Whether to benchmark Axi (assumes a Axi binary exists at `./target/release/axi`).",
         action="store_true",
     )
     parser.add_argument(
@@ -993,9 +993,9 @@ def main():
         action="append",
     )
     parser.add_argument(
-        "--puffin-path",
+        "--axi-path",
         type=str,
-        help="Path(s) to the Puffin binary to benchmark.",
+        help="Path(s) to the Axi binary to benchmark.",
         action="append",
     )
 
@@ -1025,8 +1025,8 @@ def main():
         suites.append(Poetry())
     if args.pdm:
         suites.append(Pdm())
-    if args.puffin:
-        suites.append(Puffin())
+    if args.axi:
+        suites.append(Axi())
     for path in args.pip_sync_path or []:
         suites.append(PipSync(path=path))
     for path in args.pip_compile_path or []:
@@ -1035,8 +1035,8 @@ def main():
         suites.append(Poetry(path=path))
     for path in args.pdm_path or []:
         suites.append(Pdm(path=path))
-    for path in args.puffin_path or []:
-        suites.append(Puffin(path=path))
+    for path in args.axi_path or []:
+        suites.append(Axi(path=path))
 
     # If no tools were specified, benchmark all tools.
     if not suites:
@@ -1044,7 +1044,7 @@ def main():
             PipSync(),
             PipCompile(),
             Poetry(),
-            Puffin(),
+            Axi(),
         ]
 
     # Determine the benchmarks to run, based on user input. If no benchmarks were

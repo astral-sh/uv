@@ -13,11 +13,11 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::FxHashMap;
 use url::Url;
 
+use axi_normalize::{ExtraName, PackageName};
 use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim};
 use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
-use puffin_normalize::{ExtraName, PackageName};
 use pypi_types::{Hashes, Metadata21};
 
 use crate::pins::FilePins;

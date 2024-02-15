@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::ops::Bound;
 
+use axi_normalize::PackageName;
 use derivative::Derivative;
 use distribution_types::IndexLocations;
 use indexmap::{IndexMap, IndexSet};
@@ -12,7 +13,6 @@ use pubgrub::range::Range;
 use pubgrub::report::{DerivationTree, Derived, External, ReportFormatter};
 use pubgrub::term::Term;
 use pubgrub::type_aliases::Map;
-use puffin_normalize::PackageName;
 use rustc_hash::FxHashMap;
 
 use crate::candidate_selector::CandidateSelector;

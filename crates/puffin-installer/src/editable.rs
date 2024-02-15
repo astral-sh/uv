@@ -1,7 +1,7 @@
+use axi_normalize::PackageName;
 use distribution_types::{
     CachedDist, InstalledDist, InstalledMetadata, InstalledVersion, LocalEditable, Name,
 };
-use puffin_normalize::PackageName;
 use pypi_types::Metadata21;
 
 /// An editable distribution that has been built.

@@ -11,14 +11,14 @@ use clap::{Args, Parser, Subcommand};
 use owo_colors::OwoColorize;
 use tracing::instrument;
 
+use axi_cache::{Cache, CacheArgs, Refresh};
+use axi_client::Connectivity;
+use axi_installer::{NoBinary, Reinstall};
+use axi_interpreter::PythonVersion;
+use axi_normalize::{ExtraName, PackageName};
+use axi_resolver::{DependencyMode, PreReleaseMode, ResolutionMode};
+use axi_traits::{NoBuild, PackageNameSpecifier, SetupPyStrategy};
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
-use puffin_cache::{Cache, CacheArgs, Refresh};
-use puffin_client::Connectivity;
-use puffin_installer::{NoBinary, Reinstall};
-use puffin_interpreter::PythonVersion;
-use puffin_normalize::{ExtraName, PackageName};
-use puffin_resolver::{DependencyMode, PreReleaseMode, ResolutionMode};
-use puffin_traits::{NoBuild, PackageNameSpecifier, SetupPyStrategy};
 use requirements::ExtrasSpecification;
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, Upgrade};
@@ -689,31 +689,31 @@ async fn run() -> Result<ExitStatus> {
                     "compile" | "lock" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
-                            ContextValue::String("puffin pip compile".to_string()),
+                            ContextValue::String("axi pip compile".to_string()),
                         );
                     }
                     "sync" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
-                            ContextValue::String("puffin pip sync".to_string()),
+                            ContextValue::String("axi pip sync".to_string()),
                         );
                     }
                     "install" | "add" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
-                            ContextValue::String("puffin pip install".to_string()),
+                            ContextValue::String("axi pip install".to_string()),
                         );
                     }
                     "uninstall" | "remove" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
-                            ContextValue::String("puffin pip uninstall".to_string()),
+                            ContextValue::String("axi pip uninstall".to_string()),
                         );
                     }
                     "freeze" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
-                            ContextValue::String("puffin pip freeze".to_string()),
+                            ContextValue::String("axi pip freeze".to_string()),
                         );
                     }
                     _ => {}
@@ -748,7 +748,7 @@ async fn run() -> Result<ExitStatus> {
 
     // Configure the `warn!` macros, which control user-facing warnings in the CLI.
     if !cli.quiet {
-        puffin_warnings::enable();
+        axi_warnings::enable();
     }
 
     if cli.no_color {

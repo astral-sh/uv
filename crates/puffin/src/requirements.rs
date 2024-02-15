@@ -7,10 +7,10 @@ use console::Term;
 use fs_err as fs;
 use rustc_hash::FxHashSet;
 
+use axi_fs::Normalized;
+use axi_normalize::{ExtraName, PackageName};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
-use puffin_fs::Normalized;
-use puffin_normalize::{ExtraName, PackageName};
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 
 use crate::confirm;
@@ -43,7 +43,7 @@ impl RequirementsSource {
     /// directory, prompt them to correct it (if the terminal is interactive).
     pub(crate) fn from_package(name: String) -> Self {
         // If the user provided a `requirements.txt` file without `-r` (as in
-        // `puffin pip install requirements.txt`), prompt them to correct it.
+        // `axi pip install requirements.txt`), prompt them to correct it.
         #[allow(clippy::case_sensitive_file_extension_comparisons)]
         if name.ends_with(".txt") || name.ends_with(".in") {
             if Path::new(&name).is_file() {
@@ -61,7 +61,7 @@ impl RequirementsSource {
         }
 
         // If the user provided a path to a local directory without `-e` (as in
-        // `puffin pip install ../flask`), prompt them to correct it.
+        // `axi pip install ../flask`), prompt them to correct it.
         if name.contains('/') || name.contains('\\') {
             if Path::new(&name).is_dir() {
                 let term = Term::stderr();

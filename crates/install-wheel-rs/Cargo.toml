@@ -23,8 +23,8 @@ name = "install_wheel_rs"
 distribution-filename = { path = "../distribution-filename" }
 pep440_rs = { path = "../pep440-rs" }
 platform-host = { path = "../platform-host" }
-puffin-normalize = { path = "../puffin-normalize" }
-puffin-fs = { path = "../puffin-fs" }
+axi-normalize = { path = "../axi-normalize" }
+axi-fs = { path = "../axi-fs" }
 pypi-types = { path = "../pypi-types" }
 
 clap = { workspace = true, optional = true, features = ["derive", "env"] }

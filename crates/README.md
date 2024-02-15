@@ -2,7 +2,7 @@
 
 ## [bench](./bench)
 
-Functionality for benchmarking Puffin.
+Functionality for benchmarking Axi.
 
 ## [cache-key](./cache-key)
 
@@ -47,79 +47,79 @@ Functionality for detecting the current platform (operating system, architecture
 
 Functionality for parsing and inferring Python platform tags as per [PEP 425](https://peps.python.org/pep-0425/).
 
-## [puffin](./puffin)
+## [axi](./axi)
 
-Command-line interface for the Puffin package manager.
+Command-line interface for the Axi package manager.
 
-## [puffin-build](./puffin-build)
+## [axi-build](./axi-build)
 
-A [PEP 517](https://www.python.org/dev/peps/pep-0517/)-compatible build frontend for Puffin.
+A [PEP 517](https://www.python.org/dev/peps/pep-0517/)-compatible build frontend for Axi.
 
-## [puffin-cache](./puffin-cache)
+## [axi-cache](./axi-cache)
 
 Functionality for caching Python packages and associated metadata.
 
-## [puffin-client](./puffin-client)
+## [axi-client](./axi-client)
 
 Client for interacting with PyPI-compatible HTTP APIs.
 
-## [puffin-dev](./puffin-dev)
+## [axi-dev](./axi-dev)
 
-Development utilities for Puffin.
+Development utilities for Axi.
 
-## [puffin-dispatch](./puffin-dispatch)
+## [axi-dispatch](./axi-dispatch)
 
 A centralized `struct` for resolving and building source distributions in isolated environments.
-Implements the traits defined in `puffin-traits`.
+Implements the traits defined in `axi-traits`.
 
-## [puffin-distribution](./puffin-distribution)
+## [axi-distribution](./axi-distribution)
 
 Client for interacting with built distributions (wheels) and source distributions (sdists).
 Capable of fetching metadata, distribution contents, etc.
 
-## [puffin-extract](./puffin-extract)
+## [axi-extract](./axi-extract)
 
 Utilities for extracting files from archives.
 
-## [puffin-fs](./puffin-fs)
+## [axi-fs](./axi-fs)
 
 Utilities for interacting with the filesystem.
 
-## [puffin-git](./puffin-git)
+## [axi-git](./axi-git)
 
 Functionality for interacting with Git repositories.
 
-## [puffin-installer](./puffin-installer)
+## [axi-installer](./axi-installer)
 
 Functionality for installing Python packages into a virtual environment.
 
-## [puffin-interpreter](./puffin-interpreter)
+## [axi-interpreter](./axi-interpreter)
 
 Functionality for detecting and leveraging the current Python interpreter.
 
-## [puffin-normalize](./puffin-normalize)
+## [axi-normalize](./axi-normalize)
 
 Normalize package and extra names as per Python specifications.
 
-## [puffin-package](./puffin-package)
+## [axi-package](./axi-package)
 
 Types and functionality for working with Python packages, e.g., parsing wheel files.
 
-## [puffin-resolver](./puffin-resolver)
+## [axi-resolver](./axi-resolver)
 
 Functionality for resolving Python packages and their dependencies.
 
-## [puffin-traits](./puffin-traits)
+## [axi-traits](./axi-traits)
 
-Shared traits for Puffin, to avoid circular dependencies.
+Shared traits for Axi, to avoid circular dependencies.
 
 ## [pypi-types](./pypi-types)
 
 General-purpose type definitions for types used in PyPI-compatible APIs.
 
-## [puffin-warnings](./puffin-warnings)
+## [axi-warnings](./axi-warnings)
 
-User-facing warnings for Puffin.
+User-facing warnings for Axi.
 
 ## [requirements-txt](./requirements-txt)
 

@@ -3,19 +3,19 @@
 //! This is similar to running `pip install` with the `--no-deps` flag.
 
 use anyhow::Result;
+use axi_traits::NoBinary;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
-use puffin_traits::NoBinary;
 use rustc_hash::FxHashMap;
 
+use axi_client::{
+    FlatDistributions, FlatIndex, OwnedArchive, RegistryClient, SimpleMetadata, SimpleMetadatum,
+};
+use axi_interpreter::Interpreter;
+use axi_normalize::PackageName;
 use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, Resolution};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
-use puffin_client::{
-    FlatDistributions, FlatIndex, OwnedArchive, RegistryClient, SimpleMetadata, SimpleMetadatum,
-};
-use puffin_interpreter::Interpreter;
-use puffin_normalize::PackageName;
 
 use crate::error::ResolveError;
 

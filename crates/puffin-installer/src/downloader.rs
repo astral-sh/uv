@@ -7,26 +7,26 @@ use tokio::task::JoinError;
 use tracing::instrument;
 use url::Url;
 
+use axi_cache::Cache;
+use axi_client::RegistryClient;
+use axi_distribution::{DistributionDatabase, LocalWheel, Unzip};
+use axi_traits::{BuildContext, InFlight};
 use distribution_types::{CachedDist, Dist, Identifier, LocalEditable, RemoteSource, SourceDist};
 use platform_tags::Tags;
-use puffin_cache::Cache;
-use puffin_client::RegistryClient;
-use puffin_distribution::{DistributionDatabase, LocalWheel, Unzip};
-use puffin_traits::{BuildContext, InFlight};
 
 use crate::editable::BuiltEditable;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Failed to unzip wheel: {0}")]
-    Unzip(Dist, #[source] puffin_extract::Error),
+    Unzip(Dist, #[source] axi_extract::Error),
     #[error("Failed to fetch wheel: {0}")]
-    Fetch(Dist, #[source] puffin_distribution::Error),
+    Fetch(Dist, #[source] axi_distribution::Error),
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
     Join(#[from] JoinError),
     #[error(transparent)]
-    Editable(#[from] puffin_distribution::Error),
+    Editable(#[from] axi_distribution::Error),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
 }
@@ -200,7 +200,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         let archive = tokio::task::spawn_blocking({
             let download = download.clone();
             let cache = self.cache.clone();
-            move || -> Result<PathBuf, puffin_extract::Error> {
+            move || -> Result<PathBuf, axi_extract::Error> {
                 // Unzip the wheel into a temporary directory.
                 let temp_dir = tempfile::tempdir_in(cache.root())?;
                 download.unzip(temp_dir.path())?;
@@ -243,7 +243,7 @@ pub trait Reporter: Send + Sync {
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
 }
 
-/// A facade for converting from [`Reporter`] to [`puffin_git::Reporter`].
+/// A facade for converting from [`Reporter`] to [`axi_git::Reporter`].
 struct Facade {
     reporter: Arc<dyn Reporter>,
 }
@@ -254,7 +254,7 @@ impl From<Arc<dyn Reporter>> for Facade {
     }
 }
 
-impl puffin_distribution::Reporter for Facade {
+impl axi_distribution::Reporter for Facade {
     fn on_build_start(&self, dist: &SourceDist) -> usize {
         self.reporter.on_build_start(dist)
     }

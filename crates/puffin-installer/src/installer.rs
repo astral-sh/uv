@@ -2,8 +2,8 @@ use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tracing::instrument;
 
+use axi_interpreter::Virtualenv;
 use distribution_types::CachedDist;
-use puffin_interpreter::Virtualenv;
 
 pub struct Installer<'a> {
     venv: &'a Virtualenv,
@@ -56,7 +56,7 @@ impl<'a> Installer<'a> {
                         .map(pypi_types::DirectUrl::try_from)
                         .transpose()?
                         .as_ref(),
-                    Some("puffin"),
+                    Some("axi"),
                     self.link_mode,
                 )
                 .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;

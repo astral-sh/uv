@@ -10,8 +10,8 @@
 //! bogus comparisons with unintended semantics are made.
 
 use crate::{Cursor, Pep508Error, Pep508ErrorSource};
+use axi_normalize::ExtraName;
 use pep440_rs::{Version, VersionPattern, VersionSpecifier};
-use puffin_normalize::ExtraName;
 #[cfg(feature = "pyo3")]
 use pyo3::{
     basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, PyAny, PyResult, Python,
@@ -731,7 +731,7 @@ impl MarkerExpression {
     /// # use std::str::FromStr;
     /// # use pep508_rs::{MarkerTree, Pep508Error};
     /// # use pep440_rs::Version;
-    /// # use puffin_normalize::ExtraName;
+    /// # use axi_normalize::ExtraName;
     ///
     /// # fn main() -> Result<(), Pep508Error> {
     /// let marker_tree = MarkerTree::from_str(r#"("linux" in sys_platform) and extra == 'day'"#)?;

@@ -4,11 +4,11 @@ use anstream::println;
 use anyhow::Result;
 use clap::Parser;
 
+use axi_cache::{Cache, CacheArgs};
+use axi_client::RegistryClientBuilder;
 use distribution_filename::WheelFilename;
 use distribution_types::{BuiltDist, DirectUrlBuiltDist};
 use pep508_rs::VerbatimUrl;
-use puffin_cache::{Cache, CacheArgs};
-use puffin_client::RegistryClientBuilder;
 
 #[derive(Parser)]
 pub(crate) struct WheelMetadataArgs {

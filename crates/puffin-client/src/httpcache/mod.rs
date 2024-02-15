@@ -44,7 +44,7 @@ wheel.
 When a cached response exceeds the `max-age` configured on a response, then
 we call that response stale. Generally speaking, we won't return responses
 from the cache that are known to be stale. (This can be overridden in the
-request by adding a `max-stale` cache-control directive, but nothing in Puffin
+request by adding a `max-stale` cache-control directive, but nothing in Axi
 does this at time of writing.) When a response is stale, we don't necessarily
 need to give up completely. It is at this point that we can send something
 called a re-validation request.
@@ -63,7 +63,7 @@ to the behavior of caching (like a new `Age` header).
 
 # Scope
 
-In general, the cache semantics implemented below are targeted toward Puffin's
+In general, the cache semantics implemented below are targeted toward Axi's
 use case: a private client cache for custom data objects. This constraint
 results in a modest simplification in what we need to support. That is, we
 don't need to cache the entirety of the request's or response's headers (like
@@ -145,7 +145,7 @@ use self::control::CacheControl;
 
 mod control;
 
-/// Knobs to configure Puffin's cache behavior.
+/// Knobs to configure Axi's cache behavior.
 ///
 /// At time of writing, we don't expose any way of modifying these since I
 /// suspect we won't ever need to. We split them out into their own type so
@@ -164,7 +164,7 @@ struct CacheConfig {
 impl Default for CacheConfig {
     fn default() -> CacheConfig {
         CacheConfig {
-            // The caching puffin does ought to be considered
+            // The caching axi does ought to be considered
             // private.
             shared: false,
             // This is only used to heuristically guess at a freshness lifetime
@@ -234,7 +234,7 @@ impl CachePolicyBuilder {
 }
 
 /// A value encapsulating the data needed to implement HTTP caching behavior
-/// for Puffin.
+/// for Axi.
 ///
 /// A cache policy is meant to be stored and persisted with the data being
 /// cached. It is specifically meant to capture the smallest amount of
@@ -242,7 +242,7 @@ impl CachePolicyBuilder {
 /// and the information required to issue a re-validation request.
 ///
 /// This does not provide a complete set of HTTP cache semantics. Notably
-/// absent from this (among other things that Puffin probably doesn't care
+/// absent from this (among other things that Axi probably doesn't care
 /// about it) are proxy cache semantics.
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[archive(check_bytes)]

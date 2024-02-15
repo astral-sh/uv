@@ -6,7 +6,7 @@
 //! ```
 //! use std::str::FromStr;
 //! use pep508_rs::Requirement;
-//! use puffin_normalize::ExtraName;
+//! use axi_normalize::ExtraName;
 //!
 //! let marker = r#"requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8""#;
 //! let dependency_specification = Requirement::from_str(marker).unwrap();
@@ -37,15 +37,15 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 
+use axi_fs::normalize_url_path;
+#[cfg(feature = "pyo3")]
+use axi_normalize::InvalidNameError;
+use axi_normalize::{ExtraName, PackageName};
 pub use marker::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
     MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringVersion,
 };
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
-use puffin_fs::normalize_url_path;
-#[cfg(feature = "pyo3")]
-use puffin_normalize::InvalidNameError;
-use puffin_normalize::{ExtraName, PackageName};
 pub use verbatim_url::{split_scheme, VerbatimUrl};
 
 mod marker;
@@ -1007,8 +1007,8 @@ mod tests {
 
     use indoc::indoc;
 
+    use axi_normalize::{ExtraName, PackageName};
     use pep440_rs::{Operator, Version, VersionPattern, VersionSpecifier};
-    use puffin_normalize::{ExtraName, PackageName};
 
     use crate::marker::{
         parse_markers_impl, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,

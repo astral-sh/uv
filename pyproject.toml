@@ -3,9 +3,9 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "puffin-alpha"
+name = "axi-alpha"
 version = "0.0.4"
-authors = [{ name = "Puffin" }]
+authors = [{ name = "Axi" }]
 requires-python = ">=3.8"
 keywords = []
 classifiers = [
@@ -20,14 +20,14 @@ classifiers = [
 readme = "README.md"
 
 [project.urls]
-Repository = "https://pypi.org/project/puffin-alpha/"
-Documentation = "https://pypi.org/project/puffin-alpha/"
-Changelog = "https://pypi.org/project/puffin-alpha/"
+Repository = "https://pypi.org/project/axi-alpha/"
+Documentation = "https://pypi.org/project/axi-alpha/"
+Changelog = "https://pypi.org/project/axi-alpha/"
 
 [tool.maturin]
 bindings = "bin"
-manifest-path = "crates/puffin/Cargo.toml"
-module-name = "puffin"
+manifest-path = "crates/axi/Cargo.toml"
+module-name = "axi"
 python-source = "python"
 strip = true
 include = ["rust-toolchain.toml"]

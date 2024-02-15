@@ -45,9 +45,9 @@ use tracing::warn;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
+use axi_fs::{normalize_url_path, Normalized};
+use axi_normalize::ExtraName;
 use pep508_rs::{split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, VerbatimUrl};
-use puffin_fs::{normalize_url_path, Normalized};
-use puffin_normalize::ExtraName;
 
 /// We emit one of those for each requirements.txt entry
 enum RequirementsTxtStatement {
@@ -933,10 +933,10 @@ mod test {
 
     use anyhow::Result;
     use assert_fs::prelude::*;
+    use axi_fs::Normalized;
     use fs_err as fs;
     use indoc::indoc;
     use itertools::Itertools;
-    use puffin_fs::Normalized;
     use tempfile::tempdir;
     use test_case::test_case;
 

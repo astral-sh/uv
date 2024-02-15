@@ -1,5 +1,5 @@
+use axi_normalize::PackageName;
 use pep440_rs::Version;
-use puffin_normalize::PackageName;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 

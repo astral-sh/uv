@@ -1,5 +1,5 @@
 [package]
-name = "puffin"
+name = "axi"
 version = "0.0.4"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -8,7 +8,7 @@ documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
-default-run = "puffin"
+default-run = "axi"
 
 [lints]
 workspace = true
@@ -22,18 +22,18 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-puffin-build = { path = "../puffin-build" }
-puffin-cache = { path = "../puffin-cache", features = ["clap"] }
-puffin-client = { path = "../puffin-client" }
-puffin-dispatch = { path = "../puffin-dispatch" }
-puffin-distribution = { path = "../puffin-distribution" }
-puffin-fs = { path = "../puffin-fs" }
-puffin-installer = { path = "../puffin-installer" }
-puffin-interpreter = { path = "../puffin-interpreter" }
-puffin-normalize = { path = "../puffin-normalize" }
-puffin-resolver = { path = "../puffin-resolver", features = ["clap"] }
-puffin-traits = { path = "../puffin-traits" }
-puffin-warnings = { path = "../puffin-warnings" }
+axi-build = { path = "../axi-build" }
+axi-cache = { path = "../axi-cache", features = ["clap"] }
+axi-client = { path = "../axi-client" }
+axi-dispatch = { path = "../axi-dispatch" }
+axi-distribution = { path = "../axi-distribution" }
+axi-fs = { path = "../axi-fs" }
+axi-installer = { path = "../axi-installer" }
+axi-interpreter = { path = "../axi-interpreter" }
+axi-normalize = { path = "../axi-normalize" }
+axi-resolver = { path = "../axi-resolver", features = ["clap"] }
+axi-traits = { path = "../axi-traits" }
+axi-warnings = { path = "../axi-warnings" }
 pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt" }
 

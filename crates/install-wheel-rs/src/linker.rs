@@ -10,9 +10,9 @@ use fs_err::{DirEntry, File};
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
 
+use axi_normalize::PackageName;
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
-use puffin_normalize::PackageName;
 use pypi_types::DirectUrl;
 
 use crate::install_location::InstallLocation;

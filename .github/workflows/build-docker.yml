@@ -19,7 +19,7 @@ on:
 
 jobs:
   docker-publish:
-    name: Build Docker image (ghcr.io/astral-sh/puffin)
+    name: Build Docker image (ghcr.io/astral-sh/axi)
     runs-on: ubuntu-latest
     environment:
       name: release
@@ -40,7 +40,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/astral-sh/puffin
+          images: ghcr.io/astral-sh/axi
 
       - name: Check tag consistency
         if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
@@ -64,5 +64,5 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           push: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
-          tags: ghcr.io/astral-sh/puffin:latest,ghcr.io/astral-sh/puffin:${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || 'dry-run' }}
+          tags: ghcr.io/astral-sh/axi:latest,ghcr.io/astral-sh/axi:${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || 'dry-run' }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -7,9 +7,9 @@ use mailparse::{MailHeaderMap, MailParseError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use axi_normalize::{ExtraName, InvalidNameError, PackageName};
 use pep440_rs::{Version, VersionParseError, VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Requirement};
-use puffin_normalize::{ExtraName, InvalidNameError, PackageName};
 
 use crate::lenient_requirement::LenientRequirement;
 use crate::LenientVersionSpecifiers;
@@ -144,8 +144,8 @@ impl FromStr for Metadata21 {
 mod tests {
     use std::str::FromStr;
 
+    use axi_normalize::PackageName;
     use pep440_rs::Version;
-    use puffin_normalize::PackageName;
 
     use crate::Error;
 

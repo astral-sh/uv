@@ -6,12 +6,12 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use axi_cache::Cache;
+use axi_fs::Normalized;
+use axi_installer::SitePackages;
+use axi_interpreter::Virtualenv;
 use distribution_types::Name;
 use platform_host::Platform;
-use puffin_cache::Cache;
-use puffin_fs::Normalized;
-use puffin_installer::SitePackages;
-use puffin_interpreter::Virtualenv;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;

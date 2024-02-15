@@ -10,15 +10,15 @@ use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
+use axi_cache::Cache;
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
 use fs_err::os::windows::fs::symlink_file;
 use platform_host::Platform;
-use puffin_cache::Cache;
 use regex::Regex;
 
-use puffin_interpreter::find_requested_python;
+use axi_interpreter::find_requested_python;
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
@@ -27,13 +27,13 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir [^\s]+", "--cache-dir [CACHE_DIR]"),
     // Operation times
     (r"(\d+m )?(\d+\.)?\d+(ms|s)", "[TIME]"),
-    // Puffin versions
+    // Axi versions
     (r"v\d+\.\d+\.\d+", "v[VERSION]"),
     // File sizes
     (r"(\d+\.)?\d+([KM]i)?B", "[SIZE]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d])", "/$1"),
-    (r"puffin.exe", "puffin"),
+    (r"axi.exe", "axi"),
     // The exact message is host language dependent
     (
         r"Caused by: .* \(os error 2\)",
@@ -109,7 +109,7 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
 ///
 /// Python versions are sorted from newest to oldest.
 pub fn bootstrapped_pythons() -> Option<Vec<PathBuf>> {
-    // Current dir is `<project root>/crates/puffin`.
+    // Current dir is `<project root>/crates/axi`.
     let bootstrapped_pythons = std::env::current_dir()
         .unwrap()
         .parent()
@@ -179,11 +179,11 @@ pub fn create_venv(
     venv.to_path_buf()
 }
 
-/// Returns the puffin binary that cargo built before launching the tests.
+/// Returns the axi binary that cargo built before launching the tests.
 ///
 /// <https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates>
 pub fn get_bin() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_puffin"))
+    PathBuf::from(env!("CARGO_BIN_EXE_axi"))
 }
 
 /// Create a directory with the requested Python binaries available.
@@ -211,7 +211,7 @@ pub fn create_bin_with_executables(
             &Platform::current().unwrap(),
             &Cache::temp().unwrap(),
         )?
-        .ok_or(puffin_interpreter::Error::NoSuchPython(request.to_string()))?;
+        .ok_or(axi_interpreter::Error::NoSuchPython(request.to_string()))?;
         let name = interpreter
             .sys_executable()
             .file_name()
@@ -288,9 +288,9 @@ pub fn run_and_format<'a>(
 /// By default, the filters will search for the generally windows-only deps colorama and tzdata,
 /// filter them out and decrease the package counts by one for each match.
 #[allow(unused_macros)]
-macro_rules! puffin_snapshot {
+macro_rules! axi_snapshot {
     ($spawnable:expr, @$snapshot:literal) => {{
-        puffin_snapshot!($crate::common::INSTA_FILTERS.to_vec(), $spawnable, @$snapshot)
+        axi_snapshot!($crate::common::INSTA_FILTERS.to_vec(), $spawnable, @$snapshot)
     }};
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
@@ -308,4 +308,4 @@ macro_rules! puffin_snapshot {
 
 /// <https://stackoverflow.com/a/31749071/3549270>
 #[allow(unused_imports)]
-pub(crate) use puffin_snapshot;
+pub(crate) use axi_snapshot;

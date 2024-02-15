@@ -9,11 +9,11 @@ use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
 use rustc_hash::FxHashMap;
 use url::Url;
 
+use axi_normalize::PackageName;
 use distribution_types::{BuiltDist, IndexLocations, PathBuiltDist, PathSourceDist, SourceDist};
 use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::Requirement;
-use puffin_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
@@ -26,7 +26,7 @@ pub enum ResolveError {
     NotFound(Requirement),
 
     #[error(transparent)]
-    Client(#[from] puffin_client::Error),
+    Client(#[from] axi_client::Error),
 
     #[error("The channel is closed, was there a panic?")]
     ChannelClosed,
@@ -59,16 +59,16 @@ pub enum ResolveError {
     DistributionType(#[from] distribution_types::Error),
 
     #[error("Failed to download: {0}")]
-    Fetch(Box<BuiltDist>, #[source] puffin_distribution::Error),
+    Fetch(Box<BuiltDist>, #[source] axi_distribution::Error),
 
     #[error("Failed to download and build: {0}")]
-    FetchAndBuild(Box<SourceDist>, #[source] puffin_distribution::Error),
+    FetchAndBuild(Box<SourceDist>, #[source] axi_distribution::Error),
 
     #[error("Failed to read: {0}")]
-    Read(Box<PathBuiltDist>, #[source] puffin_distribution::Error),
+    Read(Box<PathBuiltDist>, #[source] axi_distribution::Error),
 
     #[error("Failed to build: {0}")]
-    Build(Box<PathSourceDist>, #[source] puffin_distribution::Error),
+    Build(Box<PathSourceDist>, #[source] axi_distribution::Error),
 
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),

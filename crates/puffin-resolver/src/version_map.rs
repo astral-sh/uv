@@ -3,14 +3,14 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use tracing::{instrument, warn};
 
+use axi_client::{FlatDistributions, OwnedArchive, SimpleMetadata, SimpleMetadatum};
+use axi_normalize::PackageName;
+use axi_traits::NoBinary;
+use axi_warnings::warn_user_once;
 use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, PrioritizedDistribution, ResolvableDist};
 use pep440_rs::Version;
 use platform_tags::Tags;
-use puffin_client::{FlatDistributions, OwnedArchive, SimpleMetadata, SimpleMetadatum};
-use puffin_normalize::PackageName;
-use puffin_traits::NoBinary;
-use puffin_warnings::warn_user_once;
 use pypi_types::{Hashes, Yanked};
 
 use crate::python_requirement::PythonRequirement;

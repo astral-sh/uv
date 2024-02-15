@@ -53,7 +53,7 @@ use crate::{Error, ErrorKind};
 ///
 /// Note that this type makes a number of assumptions about the specific
 /// serializer, deserializer and validator used. This type could be made
-/// more generic, but it's not clear we need that in puffin. By making our
+/// more generic, but it's not clear we need that in axi. By making our
 /// choices concrete here, we make use of this type much simpler to understand.
 /// Unfortunately, AG couldn't find a way of making the trait bounds simpler,
 /// so if `OwnedVec` is being used in trait implementations, the traits bounds

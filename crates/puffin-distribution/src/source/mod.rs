@@ -13,6 +13,15 @@ use tracing::{debug, info_span, instrument, Instrument};
 use url::Url;
 use zip::ZipArchive;
 
+use axi_cache::{
+    ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness, WheelCache,
+};
+use axi_client::{
+    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
+};
+use axi_fs::{write_atomic, LockedFile};
+use axi_git::{Fetch, GitSource};
+use axi_traits::{BuildContext, BuildKind, NoBuild, SourceBuildTrait};
 use distribution_filename::WheelFilename;
 use distribution_types::{
     DirectArchiveUrl, DirectGitUrl, Dist, FileLocation, GitSourceDist, LocalEditable, Name,
@@ -21,15 +30,6 @@ use distribution_types::{
 use install_wheel_rs::read_dist_info;
 use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
-use puffin_cache::{
-    ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness, WheelCache,
-};
-use puffin_client::{
-    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
-};
-use puffin_fs::{write_atomic, LockedFile};
-use puffin_git::{Fetch, GitSource};
-use puffin_traits::{BuildContext, BuildKind, NoBuild, SourceBuildTrait};
 use pypi_types::Metadata21;
 
 use crate::error::Error;
@@ -783,11 +783,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .bytes_stream()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
             .into_async_read();
-        puffin_extract::stream::archive(reader.compat(), filename, temp_dir.path()).await?;
+        axi_extract::stream::archive(reader.compat(), filename, temp_dir.path()).await?;
         drop(span);
 
         // Extract the top-level directory.
-        let extracted = puffin_extract::strip_component(temp_dir.path())?;
+        let extracted = axi_extract::strip_component(temp_dir.path())?;
 
         // Persist it to the cache.
         fs_err::tokio::create_dir_all(cache_path.parent().expect("Cache entry to have parent"))

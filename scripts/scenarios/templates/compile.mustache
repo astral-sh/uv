@@ -13,7 +13,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use predicates::prelude::predicate;
 
-use common::{create_bin_with_executables, get_bin, puffin_snapshot, TestContext, INSTA_FILTERS};
+use common::{create_bin_with_executables, get_bin, axi_snapshot, TestContext, INSTA_FILTERS};
 
 mod common;
 
@@ -71,7 +71,7 @@ fn {{module_name}}() -> Result<()> {
     {{#expected.explanation_lines}}
     // {{.}}
     {{/expected.explanation_lines}}
-    let output = puffin_snapshot!(filters, command(&context, python_versions)
+    let output = axi_snapshot!(filters, command(&context, python_versions)
         {{#resolver_options.prereleases}}
         .arg("--prerelease=allow")
         {{/resolver_options.prereleases}}

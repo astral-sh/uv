@@ -7,13 +7,13 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+use axi_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
+use axi_fs::write_atomic_sync;
 use cache_key::digest;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
 use platform_tags::{Tags, TagsError};
-use puffin_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
-use puffin_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;
 use crate::virtual_env::detect_virtual_env;
@@ -434,9 +434,9 @@ mod tests {
     use indoc::{formatdoc, indoc};
     use tempfile::tempdir;
 
+    use axi_cache::Cache;
     use pep440_rs::Version;
     use platform_host::Platform;
-    use puffin_cache::Cache;
 
     use crate::Interpreter;
 
@@ -462,7 +462,7 @@ mod tests {
                 "base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "stdlib": "/usr/lib/python3.12",
-                "sys_executable": "/home/ferris/projects/puffin/.venv/bin/python"
+                "sys_executable": "/home/ferris/projects/axi/.venv/bin/python"
             }
         "##};
 

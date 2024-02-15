@@ -19,10 +19,10 @@ use zip::result::ZipError;
 use zip::write::FileOptions;
 use zip::{ZipArchive, ZipWriter};
 
+use axi_fs::Normalized;
+use axi_normalize::PackageName;
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
-use puffin_fs::Normalized;
-use puffin_normalize::PackageName;
 use pypi_types::DirectUrl;
 
 use crate::install_location::{InstallLocation, LockedDir};
@@ -35,19 +35,19 @@ pub const SHEBANG_PYTHON: &str = "#!/usr/bin/env python";
 
 #[cfg(all(windows, target_arch = "x86_64"))]
 const LAUNCHER_X86_64_GUI: &[u8] =
-    include_bytes!("../../puffin-trampoline/trampolines/puffin-trampoline-x86_64-gui.exe");
+    include_bytes!("../../axi-trampoline/trampolines/axi-trampoline-x86_64-gui.exe");
 
 #[cfg(all(windows, target_arch = "x86_64"))]
 const LAUNCHER_X86_64_CONSOLE: &[u8] =
-    include_bytes!("../../puffin-trampoline/trampolines/puffin-trampoline-x86_64-console.exe");
+    include_bytes!("../../axi-trampoline/trampolines/axi-trampoline-x86_64-console.exe");
 
 #[cfg(all(windows, target_arch = "aarch64"))]
 const LAUNCHER_AARCH64_GUI: &[u8] =
-    include_bytes!("../../puffin-trampoline/trampolines/puffin-trampoline-aarch64-gui.exe");
+    include_bytes!("../../axi-trampoline/trampolines/axi-trampoline-aarch64-gui.exe");
 
 #[cfg(all(windows, target_arch = "aarch64"))]
 const LAUNCHER_AARCH64_CONSOLE: &[u8] =
-    include_bytes!("../../puffin-trampoline/trampolines/puffin-trampoline-aarch64-console.exe");
+    include_bytes!("../../axi-trampoline/trampolines/axi-trampoline-aarch64-console.exe");
 
 /// Wrapper script template function
 ///

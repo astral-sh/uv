@@ -13,7 +13,7 @@ use assert_cmd::prelude::*;
 
 use common::{venv_to_interpreter, INSTA_FILTERS};
 
-use crate::common::{get_bin, puffin_snapshot, TestContext};
+use crate::common::{axi_snapshot, get_bin, TestContext};
 
 mod common;
 
@@ -75,7 +75,7 @@ fn requires_package_does_not_exist() {
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((r"-5a1a4a35", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-5a1a4a35")
         , @r###"
     success: false
@@ -113,7 +113,7 @@ fn requires_exact_version_does_not_exist() {
     filters.push((r"a-7cff23d9", "albatross"));
     filters.push((r"-7cff23d9", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-7cff23d9==2.0.0")
         , @r###"
     success: false
@@ -153,7 +153,7 @@ fn requires_greater_version_does_not_exist() {
     filters.push((r"a-63569c9e", "albatross"));
     filters.push((r"-63569c9e", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-63569c9e>1.0.0")
         , @r###"
     success: false
@@ -194,7 +194,7 @@ fn requires_less_version_does_not_exist() {
     filters.push((r"a-2af6fa02", "albatross"));
     filters.push((r"-2af6fa02", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-2af6fa02<2.0.0")
         , @r###"
     success: false
@@ -234,7 +234,7 @@ fn transitive_requires_package_does_not_exist() {
     filters.push((r"a-64b04b2b", "albatross"));
     filters.push((r"-64b04b2b", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-64b04b2b")
         , @r###"
     success: false
@@ -274,7 +274,7 @@ fn excluded_only_version() {
     filters.push((r"a-72f0d052", "albatross"));
     filters.push((r"-72f0d052", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-72f0d052!=1.0.0")
         , @r###"
     success: false
@@ -333,7 +333,7 @@ fn excluded_only_compatible_version() {
     filters.push((r"b-d6ce69da", "bluebird"));
     filters.push((r"-d6ce69da", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-d6ce69da!=2.0.0")
                 .arg("b-d6ce69da<3.0.0,>=2.0.0")
         , @r###"
@@ -432,7 +432,7 @@ fn dependency_excludes_range_of_compatible_versions() {
     filters.push((r"c-5824fb81", "crow"));
     filters.push((r"-5824fb81", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-5824fb81")
                 .arg("b-5824fb81<3.0.0,>=2.0.0")
                 .arg("c-5824fb81")
@@ -547,7 +547,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
     filters.push((r"c-119f929b", "crow"));
     filters.push((r"-119f929b", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-119f929b")
                 .arg("b-119f929b<3.0.0,>=2.0.0")
                 .arg("c-119f929b")
@@ -616,7 +616,7 @@ fn extra_required() {
     filters.push((r"b-c1e0ed38", "bluebird"));
     filters.push((r"-c1e0ed38", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-c1e0ed38[extra]")
         , @r###"
     success: true
@@ -659,7 +659,7 @@ fn missing_extra() {
     filters.push((r"a-de25a6db", "albatross"));
     filters.push((r"-de25a6db", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-de25a6db[extra]")
         , @r###"
     success: true
@@ -714,7 +714,7 @@ fn multiple_extras_required() {
     filters.push((r"c-502cbb59", "crow"));
     filters.push((r"-502cbb59", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-502cbb59[extra_b,extra_c]")
         , @r###"
     success: true
@@ -771,7 +771,7 @@ fn extra_incompatible_with_extra() {
     filters.push((r"b-a5547b80", "bluebird"));
     filters.push((r"-a5547b80", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-a5547b80[extra_b,extra_c]")
         , @r###"
     success: false
@@ -825,7 +825,7 @@ fn extra_incompatible_with_extra_not_requested() {
     filters.push((r"b-8bb31c23", "bluebird"));
     filters.push((r"-8bb31c23", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-8bb31c23[extra_c]")
         , @r###"
     success: true
@@ -880,7 +880,7 @@ fn extra_incompatible_with_root() {
     filters.push((r"b-aca6971b", "bluebird"));
     filters.push((r"-aca6971b", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-aca6971b[extra]")
                 .arg("b-aca6971b==2.0.0")
         , @r###"
@@ -935,7 +935,7 @@ fn extra_does_not_exist_backtrack() {
     filters.push((r"b-c4307e58", "bluebird"));
     filters.push((r"-c4307e58", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-c4307e58[extra]")
         , @r###"
     success: true
@@ -980,7 +980,7 @@ fn direct_incompatible_versions() {
     filters.push((r"a-c0e7adfa", "albatross"));
     filters.push((r"-c0e7adfa", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-c0e7adfa==1.0.0")
                 .arg("a-c0e7adfa==2.0.0")
         , @r###"
@@ -1029,7 +1029,7 @@ fn transitive_incompatible_with_root_version() {
     filters.push((r"b-a13da883", "bluebird"));
     filters.push((r"-a13da883", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-a13da883")
                 .arg("b-a13da883==1.0.0")
         , @r###"
@@ -1084,7 +1084,7 @@ fn transitive_incompatible_with_transitive() {
     filters.push((r"c-ec82e315", "crow"));
     filters.push((r"-ec82e315", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-ec82e315")
                 .arg("b-ec82e315")
         , @r###"
@@ -1127,7 +1127,7 @@ fn package_only_prereleases() {
     filters.push((r"a-472fcc7e", "albatross"));
     filters.push((r"-472fcc7e", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-472fcc7e")
         , @r###"
     success: true
@@ -1171,7 +1171,7 @@ fn package_only_prereleases_in_range() {
     filters.push((r"a-1017748b", "albatross"));
     filters.push((r"-1017748b", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-1017748b>0.1.0")
         , @r###"
     success: false
@@ -1216,7 +1216,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
     filters.push((r"a-95140069", "albatross"));
     filters.push((r"-95140069", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("--prerelease=allow")
         .arg("a-95140069>0.1.0")
         , @r###"
@@ -1259,7 +1259,7 @@ fn requires_package_prerelease_and_final_any() {
     filters.push((r"a-909975d8", "albatross"));
     filters.push((r"-909975d8", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-909975d8")
         , @r###"
     success: true
@@ -1306,7 +1306,7 @@ fn package_prerelease_specified_only_final_available() {
     filters.push((r"a-6f8bea9f", "albatross"));
     filters.push((r"-6f8bea9f", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-6f8bea9f>=0.1.0a1")
         , @r###"
     success: true
@@ -1352,7 +1352,7 @@ fn package_prerelease_specified_only_prerelease_available() {
     filters.push((r"a-48d4bba0", "albatross"));
     filters.push((r"-48d4bba0", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-48d4bba0>=0.1.0a1")
         , @r###"
     success: true
@@ -1400,7 +1400,7 @@ fn package_prerelease_specified_mixed_available() {
     filters.push((r"a-2b1193a7", "albatross"));
     filters.push((r"-2b1193a7", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-2b1193a7>=0.1.0a1")
         , @r###"
     success: true
@@ -1447,7 +1447,7 @@ fn package_multiple_prereleases_kinds() {
     filters.push((r"a-72919cf7", "albatross"));
     filters.push((r"-72919cf7", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-72919cf7>=1.0.0a1")
         , @r###"
     success: true
@@ -1492,7 +1492,7 @@ fn package_multiple_prereleases_numbers() {
     filters.push((r"a-cecdb92d", "albatross"));
     filters.push((r"-cecdb92d", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-cecdb92d>=1.0.0a1")
         , @r###"
     success: true
@@ -1539,7 +1539,7 @@ fn transitive_package_only_prereleases() {
     filters.push((r"b-e3c94488", "bluebird"));
     filters.push((r"-e3c94488", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-e3c94488")
         , @r###"
     success: true
@@ -1590,7 +1590,7 @@ fn transitive_package_only_prereleases_in_range() {
     filters.push((r"b-20238f1b", "bluebird"));
     filters.push((r"-20238f1b", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-20238f1b")
         , @r###"
     success: false
@@ -1644,7 +1644,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
     filters.push((r"b-d65d5fdf", "bluebird"));
     filters.push((r"-d65d5fdf", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-d65d5fdf")
                 .arg("b-d65d5fdf>0.0.0a1")
         , @r###"
@@ -1703,7 +1703,7 @@ fn transitive_prerelease_and_stable_dependency() {
     filters.push((r"c-d62255d0", "crow"));
     filters.push((r"-d62255d0", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-d62255d0")
                 .arg("b-d62255d0")
         , @r###"
@@ -1765,7 +1765,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
     filters.push((r"c-0778b0eb", "crow"));
     filters.push((r"-0778b0eb", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-0778b0eb")
                 .arg("b-0778b0eb")
                 .arg("c-0778b0eb>=0.0.0a1")
@@ -1851,7 +1851,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
     filters.push((r"c-cc6a6eac", "crow"));
     filters.push((r"-cc6a6eac", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-cc6a6eac")
                 .arg("b-cc6a6eac")
         , @r###"
@@ -1929,7 +1929,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     filters.push((r"c-041e36bc", "crow"));
     filters.push((r"-041e36bc", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-041e36bc")
                 .arg("b-041e36bc")
         , @r###"
@@ -1987,7 +1987,7 @@ fn requires_python_version_does_not_exist() {
     filters.push((r"a-4486c0e5", "albatross"));
     filters.push((r"-4486c0e5", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-4486c0e5==1.0.0")
         , @r###"
     success: false
@@ -2028,7 +2028,7 @@ fn requires_python_version_less_than_current() {
     filters.push((r"a-d4ea58de", "albatross"));
     filters.push((r"-d4ea58de", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-d4ea58de==1.0.0")
         , @r###"
     success: false
@@ -2069,7 +2069,7 @@ fn requires_python_version_greater_than_current() {
     filters.push((r"a-741c8854", "albatross"));
     filters.push((r"-741c8854", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-741c8854==1.0.0")
         , @r###"
     success: false
@@ -2110,7 +2110,7 @@ fn requires_python_version_greater_than_current_patch() {
     filters.push((r"a-0044ac94", "albatross"));
     filters.push((r"-0044ac94", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-0044ac94==1.0.0")
         , @r###"
     success: false
@@ -2173,7 +2173,7 @@ fn requires_python_version_greater_than_current_many() {
     filters.push((r"a-da5bd150", "albatross"));
     filters.push((r"-da5bd150", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-da5bd150==1.0.0")
         , @r###"
     success: false
@@ -2221,7 +2221,7 @@ fn requires_python_version_greater_than_current_backtrack() {
     filters.push((r"a-3204bc0a", "albatross"));
     filters.push((r"-3204bc0a", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-3204bc0a")
         , @r###"
     success: true
@@ -2270,7 +2270,7 @@ fn requires_python_version_greater_than_current_excluded() {
     filters.push((r"a-874cae6d", "albatross"));
     filters.push((r"-874cae6d", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-874cae6d>=2.0.0")
         , @r###"
     success: false
@@ -2325,7 +2325,7 @@ fn specific_tag_and_default() {
     filters.push((r"a-8f7a81f1", "albatross"));
     filters.push((r"-8f7a81f1", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-8f7a81f1")
         , @r###"
     success: true
@@ -2363,7 +2363,7 @@ fn only_wheels() {
     filters.push((r"a-a874f41e", "albatross"));
     filters.push((r"-a874f41e", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-a874f41e")
         , @r###"
     success: true
@@ -2401,7 +2401,7 @@ fn no_wheels() {
     filters.push((r"a-0278f343", "albatross"));
     filters.push((r"-0278f343", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-0278f343")
         , @r###"
     success: true
@@ -2439,7 +2439,7 @@ fn no_wheels_with_matching_platform() {
     filters.push((r"a-f1a1f15c", "albatross"));
     filters.push((r"-f1a1f15c", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-f1a1f15c")
         , @r###"
     success: true
@@ -2478,7 +2478,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
     filters.push((r"a-af6bcec1", "albatross"));
     filters.push((r"-af6bcec1", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-af6bcec1")
         , @r###"
     success: false
@@ -2517,7 +2517,7 @@ fn no_sdist_no_wheels_with_matching_python() {
     filters.push((r"a-40fe677d", "albatross"));
     filters.push((r"-40fe677d", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-40fe677d")
         , @r###"
     success: false
@@ -2556,7 +2556,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
     filters.push((r"a-8727a9b9", "albatross"));
     filters.push((r"-8727a9b9", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-8727a9b9")
         , @r###"
     success: false
@@ -2595,7 +2595,7 @@ fn no_wheels_no_build() {
     filters.push((r"a-662cbd94", "albatross"));
     filters.push((r"-662cbd94", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("--only-binary")
         .arg("a-662cbd94")
         .arg("a-662cbd94")
@@ -2636,7 +2636,7 @@ fn only_wheels_no_binary() {
     filters.push((r"a-dd137625", "albatross"));
     filters.push((r"-dd137625", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("--no-binary")
         .arg("a-dd137625")
         .arg("a-dd137625")
@@ -2677,7 +2677,7 @@ fn no_build() {
     filters.push((r"a-9ff1e173", "albatross"));
     filters.push((r"-9ff1e173", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("--only-binary")
         .arg("a-9ff1e173")
         .arg("a-9ff1e173")
@@ -2720,7 +2720,7 @@ fn no_binary() {
     filters.push((r"a-10e961b8", "albatross"));
     filters.push((r"-10e961b8", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("--no-binary")
         .arg("a-10e961b8")
         .arg("a-10e961b8")
@@ -2763,7 +2763,7 @@ fn package_only_yanked() {
     filters.push((r"a-e3de7eb4", "albatross"));
     filters.push((r"-e3de7eb4", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-e3de7eb4")
         , @r###"
     success: false
@@ -2805,7 +2805,7 @@ fn package_only_yanked_in_range() {
     filters.push((r"a-84b3720e", "albatross"));
     filters.push((r"-84b3720e", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-84b3720e>0.1.0")
         , @r###"
     success: false
@@ -2851,7 +2851,7 @@ fn requires_package_yanked_and_unyanked_any() {
     filters.push((r"a-93eac6d7", "albatross"));
     filters.push((r"-93eac6d7", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-93eac6d7")
         , @r###"
     success: true
@@ -2897,7 +2897,7 @@ fn package_yanked_specified_mixed_available() {
     filters.push((r"a-3325916e", "albatross"));
     filters.push((r"-3325916e", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-3325916e>=0.1.0")
         , @r###"
     success: true
@@ -2944,7 +2944,7 @@ fn transitive_package_only_yanked() {
     filters.push((r"b-9ec30fe2", "bluebird"));
     filters.push((r"-9ec30fe2", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-9ec30fe2")
         , @r###"
     success: false
@@ -2993,7 +2993,7 @@ fn transitive_package_only_yanked_in_range() {
     filters.push((r"b-872d714e", "bluebird"));
     filters.push((r"-872d714e", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-872d714e")
         , @r###"
     success: false
@@ -3048,7 +3048,7 @@ fn transitive_package_only_yanked_in_range_opt_in() {
     filters.push((r"b-1bbd5d1b", "bluebird"));
     filters.push((r"-1bbd5d1b", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-1bbd5d1b")
                 .arg("b-1bbd5d1b==1.0.0")
         , @r###"
@@ -3108,7 +3108,7 @@ fn transitive_yanked_and_unyanked_dependency() {
     filters.push((r"c-eb1ba5f5", "crow"));
     filters.push((r"-eb1ba5f5", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-eb1ba5f5")
                 .arg("b-eb1ba5f5")
         , @r###"
@@ -3167,7 +3167,7 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
     filters.push((r"c-f0760ee9", "crow"));
     filters.push((r"-f0760ee9", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    axi_snapshot!(filters, command(&context)
         .arg("a-f0760ee9")
                 .arg("b-f0760ee9")
                 .arg("c-f0760ee9==2.0.0")

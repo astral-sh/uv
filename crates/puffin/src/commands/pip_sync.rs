@@ -5,22 +5,20 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use axi_cache::Cache;
+use axi_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
+use axi_dispatch::BuildDispatch;
+use axi_fs::Normalized;
+use axi_installer::{
+    Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
+};
+use axi_interpreter::Virtualenv;
+use axi_resolver::InMemoryIndex;
+use axi_traits::{InFlight, NoBuild, SetupPyStrategy};
 use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name};
 use install_wheel_rs::linker::LinkMode;
 use platform_host::Platform;
 use platform_tags::Tags;
-use puffin_cache::Cache;
-use puffin_client::{
-    Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder,
-};
-use puffin_dispatch::BuildDispatch;
-use puffin_fs::Normalized;
-use puffin_installer::{
-    Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
-};
-use puffin_interpreter::Virtualenv;
-use puffin_resolver::InMemoryIndex;
-use puffin_traits::{InFlight, NoBuild, SetupPyStrategy};
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 
@@ -179,7 +177,7 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let wheel_finder = puffin_resolver::DistFinder::new(
+        let wheel_finder = axi_resolver::DistFinder::new(
             tags,
             &client,
             venv.interpreter(),
@@ -265,7 +263,7 @@ pub(crate) async fn pip_sync(
         let start = std::time::Instant::now();
 
         for dist_info in extraneous.iter().chain(reinstalls.iter()) {
-            let summary = puffin_installer::uninstall(dist_info).await?;
+            let summary = axi_installer::uninstall(dist_info).await?;
             debug!(
                 "Uninstalled {} ({} file{}, {} director{})",
                 dist_info.name(),
@@ -297,7 +295,7 @@ pub(crate) async fn pip_sync(
     let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
-        puffin_installer::Installer::new(&venv)
+        axi_installer::Installer::new(&venv)
             .with_link_mode(link_mode)
             .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
             .install(&wheels)?;

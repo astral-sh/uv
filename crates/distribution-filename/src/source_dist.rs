@@ -5,8 +5,8 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use axi_normalize::{InvalidNameError, PackageName};
 use pep440_rs::{Version, VersionParseError};
-use puffin_normalize::{InvalidNameError, PackageName};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -196,7 +196,7 @@ enum SourceDistFilenameErrorKind {
 mod tests {
     use std::str::FromStr;
 
-    use puffin_normalize::PackageName;
+    use axi_normalize::PackageName;
 
     use crate::SourceDistFilename;
 

@@ -1,5 +1,5 @@
 [package]
-name = "puffin-dev"
+name = "axi-dev"
 version = "0.0.1"
 description = "Build wheels from source distributions"
 publish = false
@@ -24,19 +24,19 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-puffin-build = { path = "../puffin-build" }
-puffin-cache = { path = "../puffin-cache", features = ["clap"] }
-puffin-client = { path = "../puffin-client" }
-puffin-dispatch = { path = "../puffin-dispatch" }
-puffin-distribution = { path = "../puffin-distribution" }
-puffin-installer = { path = "../puffin-installer" }
-puffin-interpreter = { path = "../puffin-interpreter" }
-puffin-normalize = { path = "../puffin-normalize" }
-puffin-resolver = { path = "../puffin-resolver" }
+axi-build = { path = "../axi-build" }
+axi-cache = { path = "../axi-cache", features = ["clap"] }
+axi-client = { path = "../axi-client" }
+axi-dispatch = { path = "../axi-dispatch" }
+axi-distribution = { path = "../axi-distribution" }
+axi-installer = { path = "../axi-installer" }
+axi-interpreter = { path = "../axi-interpreter" }
+axi-normalize = { path = "../axi-normalize" }
+axi-resolver = { path = "../axi-resolver" }
 pypi-types = { path = "../pypi-types" }
-puffin-traits = { path = "../puffin-traits" }
+axi-traits = { path = "../axi-traits" }
 
-# Any dependencies that are exclusively used in `puffin-dev` should be listed as non-workspace
+# Any dependencies that are exclusively used in `axi-dev` should be listed as non-workspace
 # dependencies, to ensure that we're forced to think twice before including them in other crates.
 anstream = { workspace = true }
 anyhow = { workspace = true }

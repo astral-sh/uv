@@ -6,7 +6,7 @@ use fs_err as fs;
 use tempfile::NamedTempFile;
 use tracing::{error, warn};
 
-use puffin_warnings::warn_user;
+use axi_warnings::warn_user;
 
 pub use crate::path::*;
 

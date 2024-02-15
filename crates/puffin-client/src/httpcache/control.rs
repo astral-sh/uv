@@ -160,7 +160,7 @@ impl FromIterator<CacheControlDirective> for CacheControl {
 /// server before using anything in case.
 ///
 /// This parser handles a bit more than what we actually need in
-/// `puffin-client`. For example, we don't need to handle quoted values at all
+/// `axi-client`. For example, we don't need to handle quoted values at all
 /// since either don't use or care about values that require quoted. With that
 /// said, the parser handles these because it wasn't that much extra work to do
 /// so and just generally seemed like good sense. (If we didn't handle them and

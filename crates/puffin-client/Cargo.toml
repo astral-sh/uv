@@ -1,5 +1,5 @@
 [package]
-name = "puffin-client"
+name = "axi-client"
 version = "0.0.1"
 edition = "2021"
 
@@ -11,9 +11,9 @@ install-wheel-rs = { path = "../install-wheel-rs" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
-puffin-cache = { path = "../puffin-cache" }
-puffin-fs = { path = "../puffin-fs", features = ["tokio"] }
-puffin-normalize = { path = "../puffin-normalize" }
+axi-cache = { path = "../axi-cache" }
+axi-fs = { path = "../axi-fs", features = ["tokio"] }
+axi-normalize = { path = "../axi-normalize" }
 pypi-types = { path = "../pypi-types" }
 
 async-trait = { workspace = true }

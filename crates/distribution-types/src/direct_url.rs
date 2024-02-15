@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Error, Result};
 use url::Url;
 
-use puffin_git::{GitSha, GitUrl};
+use axi_git::{GitSha, GitUrl};
 
 #[derive(Debug)]
 pub enum DirectUrl {

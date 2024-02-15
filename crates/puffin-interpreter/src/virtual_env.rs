@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 
 use tracing::debug;
 
+use axi_cache::Cache;
+use axi_fs::{LockedFile, Normalized};
 use platform_host::Platform;
-use puffin_cache::Cache;
-use puffin_fs::{LockedFile, Normalized};
 
 use crate::cfg::Configuration;
 use crate::python_platform::PythonPlatform;

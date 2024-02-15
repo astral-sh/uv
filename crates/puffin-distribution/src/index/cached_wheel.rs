@@ -1,9 +1,9 @@
 use std::path::Path;
 
+use axi_cache::CacheEntry;
 use distribution_filename::WheelFilename;
 use distribution_types::{CachedDirectUrlDist, CachedRegistryDist};
 use pep508_rs::VerbatimUrl;
-use puffin_cache::CacheEntry;
 
 #[derive(Debug, Clone)]
 pub struct CachedWheel {

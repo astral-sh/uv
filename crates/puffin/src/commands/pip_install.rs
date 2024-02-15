@@ -9,6 +9,20 @@ use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
 use tracing::debug;
 
+use axi_cache::Cache;
+use axi_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
+use axi_dispatch::BuildDispatch;
+use axi_fs::Normalized;
+use axi_installer::{
+    BuiltEditable, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
+};
+use axi_interpreter::{Interpreter, Virtualenv};
+use axi_normalize::PackageName;
+use axi_resolver::{
+    DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
+    ResolutionGraph, ResolutionMode, Resolver,
+};
+use axi_traits::{InFlight, NoBuild, SetupPyStrategy};
 use distribution_types::{
     IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name, Resolution,
 };
@@ -16,22 +30,6 @@ use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_host::Platform;
 use platform_tags::Tags;
-use puffin_cache::Cache;
-use puffin_client::{
-    Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder,
-};
-use puffin_dispatch::BuildDispatch;
-use puffin_fs::Normalized;
-use puffin_installer::{
-    BuiltEditable, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
-};
-use puffin_interpreter::{Interpreter, Virtualenv};
-use puffin_normalize::PackageName;
-use puffin_resolver::{
-    DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
-    ResolutionGraph, ResolutionMode, Resolver,
-};
-use puffin_traits::{InFlight, NoBuild, SetupPyStrategy};
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 
@@ -221,7 +219,7 @@ pub(crate) async fn pip_install(
     .await
     {
         Ok(resolution) => Resolution::from(resolution),
-        Err(Error::Resolve(puffin_resolver::ResolveError::NoSolution(err))) => {
+        Err(Error::Resolve(axi_resolver::ResolveError::NoSolution(err))) => {
             let report = miette::Report::msg(format!("{err}"))
                 .context("No solution found when resolving dependencies:");
             eprint!("{report:?}");
@@ -586,7 +584,7 @@ async fn install(
     // Remove any existing installations.
     if !reinstalls.is_empty() {
         for dist_info in &reinstalls {
-            let summary = puffin_installer::uninstall(dist_info).await?;
+            let summary = axi_installer::uninstall(dist_info).await?;
             debug!(
                 "Uninstalled {} ({} file{}, {} director{})",
                 dist_info.name(),
@@ -602,7 +600,7 @@ async fn install(
     let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
-        puffin_installer::Installer::new(venv)
+        axi_installer::Installer::new(venv)
             .with_link_mode(link_mode)
             .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
             .install(&wheels)?;
@@ -687,10 +685,10 @@ fn validate(resolution: &Resolution, venv: &Virtualenv, mut printer: Printer) ->
 #[derive(thiserror::Error, Debug)]
 enum Error {
     #[error(transparent)]
-    Resolve(#[from] puffin_resolver::ResolveError),
+    Resolve(#[from] axi_resolver::ResolveError),
 
     #[error(transparent)]
-    Client(#[from] puffin_client::Error),
+    Client(#[from] axi_client::Error),
 
     #[error(transparent)]
     Platform(#[from] platform_host::PlatformError),

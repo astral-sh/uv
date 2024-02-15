@@ -1,5 +1,5 @@
 [package]
-name = "puffin-dispatch"
+name = "axi-dispatch"
 version = "0.0.1"
 description = "Avoid cyclic crate dependencies between resolver, installer and builder"
 edition = { workspace = true }
@@ -19,14 +19,14 @@ gourgeist = { path = "../gourgeist" }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-puffin-build = { path = "../puffin-build" }
-puffin-cache = { path = "../puffin-cache" }
-puffin-client = { path = "../puffin-client" }
-puffin-distribution = { path = "../puffin-distribution" }
-puffin-installer = { path = "../puffin-installer" }
-puffin-interpreter = { path = "../puffin-interpreter" }
-puffin-resolver = { path = "../puffin-resolver" }
-puffin-traits = { path = "../puffin-traits" }
+axi-build = { path = "../axi-build" }
+axi-cache = { path = "../axi-cache" }
+axi-client = { path = "../axi-client" }
+axi-distribution = { path = "../axi-distribution" }
+axi-installer = { path = "../axi-installer" }
+axi-interpreter = { path = "../axi-interpreter" }
+axi-resolver = { path = "../axi-resolver" }
+axi-traits = { path = "../axi-traits" }
 pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }

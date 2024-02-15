@@ -26,7 +26,7 @@ impl TryFrom<CacheArgs> for Cache {
     /// 1. A temporary cache directory, if the user requested `--no-cache`.
     /// 2. The specific cache directory specified by the user via `--cache-dir` or `PUFFIN_CACHE_DIR`.
     /// 3. The system-appropriate cache directory.
-    /// 4. A `.puffin_cache` directory in the current working directory.
+    /// 4. A `.axi_cache` directory in the current working directory.
     ///
     /// Returns an absolute cache dir.
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
@@ -34,10 +34,10 @@ impl TryFrom<CacheArgs> for Cache {
             Cache::temp()
         } else if let Some(cache_dir) = value.cache_dir {
             Cache::from_path(cache_dir)
-        } else if let Some(project_dirs) = ProjectDirs::from("", "", "puffin") {
+        } else if let Some(project_dirs) = ProjectDirs::from("", "", "axi") {
             Cache::from_path(project_dirs.cache_dir())
         } else {
-            Cache::from_path(".puffin_cache")
+            Cache::from_path(".axi_cache")
         }
     }
 }

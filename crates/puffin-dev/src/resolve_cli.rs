@@ -9,16 +9,16 @@ use fs_err::File;
 use itertools::Itertools;
 use petgraph::dot::{Config as DotConfig, Dot};
 
+use axi_cache::{Cache, CacheArgs};
+use axi_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
+use axi_dispatch::BuildDispatch;
+use axi_installer::NoBinary;
+use axi_interpreter::Virtualenv;
+use axi_resolver::{InMemoryIndex, Manifest, Options, Resolver};
+use axi_traits::{InFlight, NoBuild, SetupPyStrategy};
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl, Resolution};
 use pep508_rs::Requirement;
 use platform_host::Platform;
-use puffin_cache::{Cache, CacheArgs};
-use puffin_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
-use puffin_dispatch::BuildDispatch;
-use puffin_installer::NoBinary;
-use puffin_interpreter::Virtualenv;
-use puffin_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use puffin_traits::{InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {

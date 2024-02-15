@@ -5,16 +5,16 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use fs_err as fs;
 
+use axi_build::{SourceBuild, SourceBuildContext};
+use axi_cache::{Cache, CacheArgs};
+use axi_client::{FlatIndex, RegistryClientBuilder};
+use axi_dispatch::BuildDispatch;
+use axi_installer::NoBinary;
+use axi_interpreter::Virtualenv;
+use axi_resolver::InMemoryIndex;
+use axi_traits::{BuildContext, BuildKind, InFlight, NoBuild, SetupPyStrategy};
 use distribution_types::IndexLocations;
 use platform_host::Platform;
-use puffin_build::{SourceBuild, SourceBuildContext};
-use puffin_cache::{Cache, CacheArgs};
-use puffin_client::{FlatIndex, RegistryClientBuilder};
-use puffin_dispatch::BuildDispatch;
-use puffin_installer::NoBinary;
-use puffin_interpreter::Virtualenv;
-use puffin_resolver::InMemoryIndex;
-use puffin_traits::{BuildContext, BuildKind, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {

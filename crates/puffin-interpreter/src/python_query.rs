@@ -4,9 +4,9 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
+use axi_cache::Cache;
 use once_cell::sync::Lazy;
 use platform_host::Platform;
-use puffin_cache::Cache;
 use regex::Regex;
 use tracing::{info_span, instrument};
 
@@ -251,12 +251,12 @@ pub(crate) fn find_python_windows(major: u8, minor: u8) -> Result<Option<PathBuf
 mod tests {
     use std::fmt::Debug;
 
+    use axi_cache::Cache;
     use insta::assert_display_snapshot;
     #[cfg(unix)]
     use insta::assert_snapshot;
     use itertools::Itertools;
     use platform_host::Platform;
-    use puffin_cache::Cache;
 
     use crate::python_query::find_requested_python;
     use crate::Error;

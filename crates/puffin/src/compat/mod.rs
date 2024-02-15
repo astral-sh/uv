@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use clap::{Args, ValueEnum};
 
-use puffin_warnings::warn_user;
+use axi_warnings::warn_user;
 
 pub(crate) trait CompatArgs {
     fn validate(&self) -> Result<()>;
@@ -9,8 +9,8 @@ pub(crate) trait CompatArgs {
 
 /// Arguments for `pip-compile` compatibility.
 ///
-/// These represent a subset of the `pip-compile` interface that Puffin supports by default.
-/// For example, users often pass `--allow-unsafe`, which is unnecessary with Puffin. But it's a
+/// These represent a subset of the `pip-compile` interface that Axi supports by default.
+/// For example, users often pass `--allow-unsafe`, which is unnecessary with Axi. But it's a
 /// nice user experience to warn, rather than fail, when users pass `--allow-unsafe`.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
@@ -91,39 +91,39 @@ pub(crate) struct PipCompileCompatArgs {
 impl CompatArgs for PipCompileCompatArgs {
     /// Validate the arguments passed for `pip-compile` compatibility.
     ///
-    /// This method will warn when an argument is passed that has no effect but matches Puffin's
-    /// behavior. If an argument is passed that does _not_ match Puffin's behavior (e.g.,
+    /// This method will warn when an argument is passed that has no effect but matches Axi's
+    /// behavior. If an argument is passed that does _not_ match Axi's behavior (e.g.,
     /// `--no-build-isolation`), this method will return an error.
     fn validate(&self) -> Result<()> {
         if self.allow_unsafe {
             warn_user!(
-                "pip-compile's `--allow-unsafe` has no effect (Puffin can safely pin `pip` and other packages)."
+                "pip-compile's `--allow-unsafe` has no effect (Axi can safely pin `pip` and other packages)."
             );
         }
 
         if self.no_allow_unsafe {
-            warn_user!("pip-compile's `--no-allow-unsafe` has no effect (Puffin can safely pin `pip` and other packages).");
+            warn_user!("pip-compile's `--no-allow-unsafe` has no effect (Axi can safely pin `pip` and other packages).");
         }
 
         if self.reuse_hashes {
             return Err(anyhow!(
-                "pip-compile's `--reuse-hashes` is unsupported (Puffin doesn't reuse hashes)."
+                "pip-compile's `--reuse-hashes` is unsupported (Axi doesn't reuse hashes)."
             ));
         }
 
         if self.no_reuse_hashes {
             warn_user!(
-                "pip-compile's `--no-reuse-hashes` has no effect (Puffin doesn't reuse hashes)."
+                "pip-compile's `--no-reuse-hashes` has no effect (Axi doesn't reuse hashes)."
             );
         }
 
         if self.build_isolation {
-            warn_user!("pip-compile's `--build-isolation` has no effect (Puffin always uses build isolation).");
+            warn_user!("pip-compile's `--build-isolation` has no effect (Axi always uses build isolation).");
         }
 
         if self.no_build_isolation {
             return Err(anyhow!(
-                "pip-compile's `--no-build-isolation` is unsupported (Puffin always uses build isolation)."
+                "pip-compile's `--no-build-isolation` is unsupported (Axi always uses build isolation)."
             ));
         }
 
@@ -131,12 +131,12 @@ impl CompatArgs for PipCompileCompatArgs {
             match resolver {
                 Resolver::Backtracking => {
                     warn_user!(
-                        "pip-compile's `--resolver=backtracking` has no effect (Puffin always backtracks)."
+                        "pip-compile's `--resolver=backtracking` has no effect (Axi always backtracks)."
                     );
                 }
                 Resolver::Legacy => {
                     return Err(anyhow!(
-                        "pip-compile's `--resolver=legacy` is unsupported (Puffin always backtracks)."
+                        "pip-compile's `--resolver=legacy` is unsupported (Axi always backtracks)."
                     ));
                 }
             }
@@ -146,12 +146,12 @@ impl CompatArgs for PipCompileCompatArgs {
             match annotation_style {
                 AnnotationStyle::Split => {
                     warn_user!(
-                        "pip-compile's `--annotation-style=split` has no effect (Puffin always emits split annotations)."
+                        "pip-compile's `--annotation-style=split` has no effect (Axi always emits split annotations)."
                     );
                 }
                 AnnotationStyle::Line => {
                     return Err(anyhow!(
-                        "pip-compile's `--annotation-style=line` is unsupported (Puffin always emits split annotations)."
+                        "pip-compile's `--annotation-style=line` is unsupported (Axi always emits split annotations)."
                     ));
                 }
             }
@@ -159,31 +159,31 @@ impl CompatArgs for PipCompileCompatArgs {
 
         if self.max_rounds.is_some() {
             return Err(anyhow!(
-                "pip-compile's `--max-rounds` is unsupported (Puffin always resolves until convergence)."
+                "pip-compile's `--max-rounds` is unsupported (Axi always resolves until convergence)."
             ));
         }
 
         if self.client_cert.is_some() {
             return Err(anyhow!(
-                "pip-compile's `--client-cert` is unsupported (Puffin doesn't support dedicated client certificates)."
+                "pip-compile's `--client-cert` is unsupported (Axi doesn't support dedicated client certificates)."
             ));
         }
 
         if self.trusted_host.is_some() {
             return Err(anyhow!(
-                "pip-compile's `--trusted-host` is unsupported (Puffin always requires HTTPS)."
+                "pip-compile's `--trusted-host` is unsupported (Axi always requires HTTPS)."
             ));
         }
 
         if self.emit_trusted_host {
             return Err(anyhow!(
-                "pip-compile's `--emit-trusted-host` is unsupported (Puffin always requires HTTPS)."
+                "pip-compile's `--emit-trusted-host` is unsupported (Axi always requires HTTPS)."
             ));
         }
 
         if self.no_emit_trusted_host {
             warn_user!(
-                "pip-compile's `--no-emit-trusted-host` has no effect (Puffin never emits trusted hosts)."
+                "pip-compile's `--no-emit-trusted-host` has no effect (Axi never emits trusted hosts)."
             );
         }
 
@@ -195,55 +195,53 @@ impl CompatArgs for PipCompileCompatArgs {
 
         if self.config.is_some() {
             return Err(anyhow!(
-                "pip-compile's `--config` is unsupported (Puffin does not use a configuration file)."
+                "pip-compile's `--config` is unsupported (Axi does not use a configuration file)."
             ));
         }
 
         if self.no_config {
             warn_user!(
-                "pip-compile's `--no-config` has no effect (Puffin does not use a configuration file)."
+                "pip-compile's `--no-config` has no effect (Axi does not use a configuration file)."
             );
         }
 
         if self.no_emit_index_url {
             warn_user!(
-                "pip-compile's `--no-emit-index-url` has no effect (Puffin excludes index URLs by default)."
+                "pip-compile's `--no-emit-index-url` has no effect (Axi excludes index URLs by default)."
             );
         }
 
         if self.no_emit_find_links {
             warn_user!(
-                "pip-compile's `--no-emit-find-links` has no effect (Puffin excludes `--find-links` URLs by default)."
+                "pip-compile's `--no-emit-find-links` has no effect (Axi excludes `--find-links` URLs by default)."
             );
         }
 
         if self.emit_options {
             return Err(anyhow!(
-                "pip-compile's `--emit-options` is unsupported (Puffin never emits options)."
+                "pip-compile's `--emit-options` is unsupported (Axi never emits options)."
             ));
         }
 
         if self.no_emit_options {
             warn_user!(
-                "pip-compile's `--no-emit-options` has no effect (Puffin never emits options)."
+                "pip-compile's `--no-emit-options` has no effect (Axi never emits options)."
             );
         }
 
         if self.strip_extras {
-            warn_user!(
-                "pip-compile's `--strip-extras` has no effect (Puffin always strips extras)."
-            );
+            warn_user!("pip-compile's `--strip-extras` has no effect (Axi always strips extras).");
         }
 
         if self.no_strip_extras {
             return Err(anyhow!(
-                "pip-compile's `--no-strip-extras` is unsupported (Puffin always strips extras)."
+                "pip-compile's `--no-strip-extras` is unsupported (Axi always strips extras)."
             ));
         }
 
         if self.pip_args.is_some() {
             return Err(anyhow!(
-                "pip-compile's `--pip-args` is unsupported (try passing arguments to Puffin directly)."
+                "pip-compile's `--pip-args` is unsupported (try passing arguments to Axi directly)."
             ));
         }
 
@@ -253,7 +251,7 @@ impl CompatArgs for PipCompileCompatArgs {
 
 /// Arguments for `pip-sync` compatibility.
 ///
-/// These represent a subset of the `pip-sync` interface that Puffin supports by default.
+/// These represent a subset of the `pip-sync` interface that Axi supports by default.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct PipSyncCompatArgs {
@@ -288,13 +286,13 @@ pub(crate) struct PipSyncCompatArgs {
 impl CompatArgs for PipSyncCompatArgs {
     /// Validate the arguments passed for `pip-sync` compatibility.
     ///
-    /// This method will warn when an argument is passed that has no effect but matches Puffin's
-    /// behavior. If an argument is passed that does _not_ match Puffin's behavior, this method will
+    /// This method will warn when an argument is passed that has no effect but matches Axi's
+    /// behavior. If an argument is passed that does _not_ match Axi's behavior, this method will
     /// return an error.
     fn validate(&self) -> Result<()> {
         if self.ask {
             return Err(anyhow!(
-                "pip-sync's `--ask` is unsupported (Puffin never asks for confirmation)."
+                "pip-sync's `--ask` is unsupported (Axi never asks for confirmation)."
             ));
         }
 
@@ -310,31 +308,31 @@ impl CompatArgs for PipSyncCompatArgs {
 
         if self.client_cert.is_some() {
             return Err(anyhow!(
-                "pip-sync's `--client-cert` is unsupported (Puffin doesn't support dedicated client certificates)."
+                "pip-sync's `--client-cert` is unsupported (Axi doesn't support dedicated client certificates)."
             ));
         }
 
         if self.trusted_host.is_some() {
             return Err(anyhow!(
-                "pip-sync's `--trusted-host` is unsupported (Puffin always requires HTTPS)."
+                "pip-sync's `--trusted-host` is unsupported (Axi always requires HTTPS)."
             ));
         }
 
         if self.config.is_some() {
             return Err(anyhow!(
-                "pip-sync's `--config` is unsupported (Puffin does not use a configuration file)."
+                "pip-sync's `--config` is unsupported (Axi does not use a configuration file)."
             ));
         }
 
         if self.no_config {
             warn_user!(
-                "pip-sync's `--no-config` has no effect (Puffin does not use a configuration file)."
+                "pip-sync's `--no-config` has no effect (Axi does not use a configuration file)."
             );
         }
 
         if self.pip_args.is_some() {
             return Err(anyhow!(
-                "pip-sync's `--pip-args` is unsupported (try passing arguments to Puffin directly)."
+                "pip-sync's `--pip-args` is unsupported (try passing arguments to Axi directly)."
             ));
         }
 
@@ -356,7 +354,7 @@ enum AnnotationStyle {
 
 /// Arguments for `venv` compatibility.
 ///
-/// These represent a subset of the `virtualenv` interface that Puffin supports by default.
+/// These represent a subset of the `virtualenv` interface that Axi supports by default.
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct VenvCompatArgs {
@@ -379,36 +377,34 @@ pub(crate) struct VenvCompatArgs {
 impl CompatArgs for VenvCompatArgs {
     /// Validate the arguments passed for `venv` compatibility.
     ///
-    /// This method will warn when an argument is passed that has no effect but matches Puffin's
-    /// behavior. If an argument is passed that does _not_ match Puffin's behavior, this method will
+    /// This method will warn when an argument is passed that has no effect but matches Axi's
+    /// behavior. If an argument is passed that does _not_ match Axi's behavior, this method will
     /// return an error.
     fn validate(&self) -> Result<()> {
         if self.clear {
             warn_user!(
-                "virtualenv's `--clear` has no effect (Puffin always clears the virtual environment)."
+                "virtualenv's `--clear` has no effect (Axi always clears the virtual environment)."
             );
         }
 
         if self.no_seed {
             warn_user!(
-                "virtualenv's `--no-seed` has no effect (Puffin omits seed packages by default)."
+                "virtualenv's `--no-seed` has no effect (Axi omits seed packages by default)."
             );
         }
 
         if self.no_pip {
-            warn_user!("virtualenv's `--no-pip` has no effect (Puffin omits `pip` by default).");
+            warn_user!("virtualenv's `--no-pip` has no effect (Axi omits `pip` by default).");
         }
 
         if self.no_setuptools {
             warn_user!(
-                "virtualenv's `--no-setuptools` has no effect (Puffin omits `setuptools` by default)."
+                "virtualenv's `--no-setuptools` has no effect (Axi omits `setuptools` by default)."
             );
         }
 
         if self.no_wheel {
-            warn_user!(
-                "virtualenv's `--no-wheel` has no effect (Puffin omits `wheel` by default)."
-            );
+            warn_user!("virtualenv's `--no-wheel` has no effect (Axi omits `wheel` by default).");
         }
 
         Ok(())

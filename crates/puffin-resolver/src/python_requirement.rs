@@ -1,6 +1,6 @@
+use axi_interpreter::Interpreter;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use puffin_interpreter::Interpreter;
 
 #[derive(Debug, Clone)]
 pub struct PythonRequirement {

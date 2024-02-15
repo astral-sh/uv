@@ -218,7 +218,7 @@ fn clear_app_starting_state(child_handle: HANDLE) {
         let hwnd = CreateWindowExA(
             0,
             c!("STATIC").as_ptr() as *const _,
-            c!("Puffin Python Trampoline").as_ptr() as *const _,
+            c!("Axi Python Trampoline").as_ptr() as *const _,
             0,
             0,
             0,

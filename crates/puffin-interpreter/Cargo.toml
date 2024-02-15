@@ -1,5 +1,5 @@
 [package]
-name = "puffin-interpreter"
+name = "axi-interpreter"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -18,8 +18,8 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-puffin-cache = { path = "../puffin-cache" }
-puffin-fs = { path = "../puffin-fs" }
+axi-cache = { path = "../axi-cache" }
+axi-fs = { path = "../axi-fs" }
 
 fs-err = { workspace = true, features = ["tokio"] }
 once_cell = { workspace = true }

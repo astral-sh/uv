@@ -8,8 +8,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 
-use puffin_cache::{CacheEntry, Freshness};
-use puffin_fs::write_atomic;
+use axi_cache::{CacheEntry, Freshness};
+use axi_fs::write_atomic;
 
 use crate::{
     httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder},

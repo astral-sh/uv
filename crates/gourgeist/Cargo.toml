@@ -22,8 +22,8 @@ workspace = true
 
 [dependencies]
 platform-host = { path = "../platform-host" }
-puffin-cache = { path = "../puffin-cache" }
-puffin-interpreter = { path = "../puffin-interpreter" }
+axi-cache = { path = "../axi-cache" }
+axi-interpreter = { path = "../axi-interpreter" }
 
 anstream = { workspace = true }
 camino = { workspace = true }

@@ -1,7 +1,7 @@
 use rustc_hash::FxHashMap;
 
+use axi_normalize::PackageName;
 use pep508_rs::Requirement;
-use puffin_normalize::PackageName;
 
 use crate::{BuiltDist, Dist, PathSourceDist, SourceDist};
 

@@ -6,18 +6,18 @@ use anyhow::{bail, Result};
 use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 
+use axi_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Timestamp, WheelCache};
+use axi_distribution::{BuiltWheelIndex, RegistryWheelIndex};
+use axi_fs::Normalized;
+use axi_interpreter::Virtualenv;
+use axi_normalize::PackageName;
+use axi_traits::NoBinary;
 use distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations, InstalledDirectUrlDist,
     InstalledDist, Name, SourceDist,
 };
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
-use puffin_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Timestamp, WheelCache};
-use puffin_distribution::{BuiltWheelIndex, RegistryWheelIndex};
-use puffin_fs::Normalized;
-use puffin_interpreter::Virtualenv;
-use puffin_normalize::PackageName;
-use puffin_traits::NoBinary;
 
 use crate::{ResolvedEditable, SitePackages};
 
@@ -357,7 +357,7 @@ impl<'a> Planner<'a> {
 
         // Remove any unnecessary packages.
         if !site_packages.is_empty() {
-            // If Puffin created the virtual environment, then remove all packages, regardless of
+            // If Axi created the virtual environment, then remove all packages, regardless of
             // whether they're considered "seed" packages.
             let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_gourgeist());
             for dist_info in site_packages {

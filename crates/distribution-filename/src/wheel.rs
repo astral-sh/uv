@@ -6,9 +6,9 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
+use axi_normalize::{InvalidNameError, PackageName};
 use pep440_rs::{Version, VersionParseError};
 use platform_tags::{TagPriority, Tags};
-use puffin_normalize::{InvalidNameError, PackageName};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(

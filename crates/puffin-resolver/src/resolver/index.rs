@@ -1,9 +1,9 @@
 use dashmap::DashMap;
 use url::Url;
 
+use axi_normalize::PackageName;
 use distribution_types::PackageId;
 use once_map::OnceMap;
-use puffin_normalize::PackageName;
 use pypi_types::Metadata21;
 
 use super::provider::VersionsResponse;

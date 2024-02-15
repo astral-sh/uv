@@ -3,8 +3,8 @@ use std::hash::BuildHasherDefault;
 
 use rustc_hash::FxHashMap;
 
+use axi_normalize::PackageName;
 use pep508_rs::Requirement;
-use puffin_normalize::PackageName;
 
 /// A set of overrides for a set of requirements.
 #[derive(Debug, Default, Clone)]

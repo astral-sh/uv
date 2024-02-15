@@ -1,7 +1,7 @@
+use axi_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, WheelCache};
+use axi_fs::symlinks;
 use distribution_types::{git_reference, DirectUrlSourceDist, GitSourceDist, Name, PathSourceDist};
 use platform_tags::Tags;
-use puffin_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, WheelCache};
-use puffin_fs::symlinks;
 
 use crate::index::cached_wheel::CachedWheel;
 use crate::source::{read_http_manifest, read_timestamp_manifest, MANIFEST};

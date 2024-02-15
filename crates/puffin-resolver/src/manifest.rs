@@ -1,6 +1,6 @@
+use axi_normalize::PackageName;
 use distribution_types::LocalEditable;
 use pep508_rs::Requirement;
-use puffin_normalize::PackageName;
 use pypi_types::Metadata21;
 
 /// A manifest of requirements, constraints, and preferences.

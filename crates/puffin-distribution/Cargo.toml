@@ -1,5 +1,5 @@
 [package]
-name = "puffin-distribution"
+name = "axi-distribution"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -20,13 +20,13 @@ install-wheel-rs = { path = "../install-wheel-rs" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path =     "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
-puffin-cache = { path = "../puffin-cache" }
-puffin-client = { path = "../puffin-client" }
-puffin-extract = { path = "../puffin-extract" }
-puffin-fs = { path = "../puffin-fs", features = ["tokio"] }
-puffin-git = { path = "../puffin-git", features = ["vendored-openssl"] }
-puffin-normalize = { path = "../puffin-normalize" }
-puffin-traits = { path = "../puffin-traits" }
+axi-cache = { path = "../axi-cache" }
+axi-client = { path = "../axi-client" }
+axi-extract = { path = "../axi-extract" }
+axi-fs = { path = "../axi-fs", features = ["tokio"] }
+axi-git = { path = "../axi-git", features = ["vendored-openssl"] }
+axi-normalize = { path = "../axi-normalize" }
+axi-traits = { path = "../axi-traits" }
 pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }

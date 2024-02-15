@@ -5,9 +5,9 @@ use std::process::Command;
 use anyhow::Result;
 use assert_fs::prelude::*;
 
-use puffin_fs::Normalized;
+use axi_fs::Normalized;
 
-use crate::common::{create_bin_with_executables, get_bin, puffin_snapshot, EXCLUDE_NEWER};
+use crate::common::{axi_snapshot, create_bin_with_executables, get_bin, EXCLUDE_NEWER};
 
 mod common;
 
@@ -27,7 +27,7 @@ fn create_venv() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
@@ -59,7 +59,7 @@ fn create_venv() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
@@ -101,7 +101,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg("--python")
         .arg("3.12")
@@ -142,7 +142,7 @@ fn seed() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--seed")
@@ -194,7 +194,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         .env("PUFFIN_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir);
     if cfg!(windows) {
-        puffin_snapshot!(&mut command, @r###"
+        axi_snapshot!(&mut command, @r###"
         success: false
         exit_code: 1
         ----- stdout -----
@@ -204,7 +204,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         "###
         );
     } else {
-        puffin_snapshot!(&mut command, @r###"
+        axi_snapshot!(&mut command, @r###"
         success: false
         exit_code: 1
         ----- stdout -----
@@ -236,7 +236,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
@@ -277,7 +277,7 @@ fn create_venv_python_patch() -> Result<()> {
         (r"interpreter at .+", "interpreter at [PATH]"),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
@@ -322,7 +322,7 @@ fn file_exists() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
@@ -341,7 +341,7 @@ fn file_exists() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
-    puffin::venv::creation
+    axi::venv::creation
 
       × Failed to create virtualenv
       ╰─▶ File exists at `/home/ferris/project/.venv`
@@ -369,7 +369,7 @@ fn empty_dir_exists() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
@@ -415,7 +415,7 @@ fn non_empty_dir_exists() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
@@ -434,7 +434,7 @@ fn non_empty_dir_exists() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
-    puffin::venv::creation
+    axi::venv::creation
 
       × Failed to create virtualenv
       ╰─▶ The directory `/home/ferris/project/.venv` exists, but it's not a virtualenv
@@ -460,7 +460,7 @@ fn virtualenv_compatibility() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
-    puffin_snapshot!(filters, Command::new(get_bin())
+    axi_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--clear")
@@ -477,7 +477,7 @@ fn virtualenv_compatibility() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: virtualenv's `--clear` has no effect (Puffin always clears the virtual environment).
+    warning: virtualenv's `--clear` has no effect (Axi always clears the virtual environment).
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
     "###

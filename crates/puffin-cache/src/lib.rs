@@ -8,8 +8,8 @@ use std::sync::Arc;
 use fs_err as fs;
 use tempfile::{tempdir, TempDir};
 
-use puffin_fs::directories;
-use puffin_normalize::PackageName;
+use axi_fs::directories;
+use axi_normalize::PackageName;
 
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
@@ -219,7 +219,7 @@ impl Cache {
 
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
-        puffin_fs::replace_symlink(archive_entry.path(), path.as_ref())?;
+        axi_fs::replace_symlink(archive_entry.path(), path.as_ref())?;
 
         Ok(archive_entry.into_path_buf())
     }
@@ -283,7 +283,7 @@ pub enum CacheBucket {
     ///  * `wheel-metadata-v0/<digest(index-url)>/foo/{foo-1.0.0-py3-none-any.msgpack, foo-1.0.0-py3-none-any.whl}`
     ///  * `wheel-metadata-v0/url/<digest(url)>/foo/{foo-1.0.0-py3-none-any.msgpack, foo-1.0.0-py3-none-any.whl}`
     ///
-    /// See `puffin_client::RegistryClient::wheel_metadata` for information on how wheel metadata
+    /// See `axi_client::RegistryClient::wheel_metadata` for information on how wheel metadata
     /// is fetched.
     ///
     /// # Example
@@ -478,7 +478,7 @@ pub enum CacheBucket {
     ///     },
     ///     "base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
     ///     "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
-    ///     "sys_executable": "/home/ferris/projects/puffin/.venv/bin/python"
+    ///     "sys_executable": "/home/ferris/projects/axi/.venv/bin/python"
     ///   }
     /// }
     /// ```
@@ -491,7 +491,7 @@ pub enum CacheBucket {
     ///  * `simple-v0/pypi/<package_name>.rkyv`
     ///  * `simple-v0/<digest(index_url)>/<package_name>.rkyv`
     ///
-    /// The response is parsed into `puffin_client::SimpleMetadata` before storage.
+    /// The response is parsed into `axi_client::SimpleMetadata` before storage.
     Simple,
     /// A cache of unzipped wheels, stored as directories. This is used internally within the cache.
     /// When other buckets need to store directories, they should persist them to

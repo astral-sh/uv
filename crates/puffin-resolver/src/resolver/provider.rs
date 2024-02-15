@@ -6,19 +6,19 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use url::Url;
 
+use axi_client::{FlatIndex, RegistryClient};
+use axi_distribution::DistributionDatabase;
+use axi_normalize::PackageName;
+use axi_traits::{BuildContext, NoBinary};
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
-use puffin_client::{FlatIndex, RegistryClient};
-use puffin_distribution::DistributionDatabase;
-use puffin_normalize::PackageName;
-use puffin_traits::{BuildContext, NoBinary};
 use pypi_types::Metadata21;
 
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 
-type PackageVersionsResult = Result<VersionsResponse, puffin_client::Error>;
-type WheelMetadataResult = Result<(Metadata21, Option<Url>), puffin_distribution::Error>;
+type PackageVersionsResult = Result<VersionsResponse, axi_client::Error>;
+type WheelMetadataResult = Result<(Metadata21, Option<Url>), axi_distribution::Error>;
 
 /// The response when requesting versions for a package
 #[derive(Debug)]
@@ -52,9 +52,9 @@ pub trait ResolverProvider: Send + Sync {
 
     fn index_locations(&self) -> &IndexLocations;
 
-    /// Set the [`puffin_distribution::Reporter`] to use for this installer.
+    /// Set the [`axi_distribution::Reporter`] to use for this installer.
     #[must_use]
-    fn with_reporter(self, reporter: impl puffin_distribution::Reporter + 'static) -> Self;
+    fn with_reporter(self, reporter: impl axi_distribution::Reporter + 'static) -> Self;
 }
 
 /// The main IO backend for the resolver, which does cached requests network requests using the
@@ -143,14 +143,14 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                 .expect("Tokio executor failed, was there a panic?"))
             }
             Err(err) => match err.into_kind() {
-                puffin_client::ErrorKind::PackageNotFound(_) => {
+                axi_client::ErrorKind::PackageNotFound(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
                         Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
                     } else {
                         Ok(VersionsResponse::NotFound)
                     }
                 }
-                puffin_client::ErrorKind::NoIndex(_) => {
+                axi_client::ErrorKind::NoIndex(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
                         Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
                     } else if self.flat_index.offline() {
@@ -159,7 +159,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                         Ok(VersionsResponse::NoIndex)
                     }
                 }
-                puffin_client::ErrorKind::Offline(_) => {
+                axi_client::ErrorKind::Offline(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
                         Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
                     } else {
@@ -179,9 +179,9 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
         self.fetcher.index_locations()
     }
 
-    /// Set the [`puffin_distribution::Reporter`] to use for this installer.
+    /// Set the [`axi_distribution::Reporter`] to use for this installer.
     #[must_use]
-    fn with_reporter(self, reporter: impl puffin_distribution::Reporter + 'static) -> Self {
+    fn with_reporter(self, reporter: impl axi_distribution::Reporter + 'static) -> Self {
         Self {
             fetcher: self.fetcher.with_reporter(reporter),
             ..self

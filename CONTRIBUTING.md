@@ -2,7 +2,7 @@
 
 ## Setup
 
-[Rust](https://rustup.rs/), a C compiler, and CMake are required to build Puffin.
+[Rust](https://rustup.rs/), a C compiler, and CMake are required to build Axi.
 
 ### Linux
 
@@ -35,7 +35,7 @@ You can install CMake from the [installers](https://cmake.org/download/) or with
 
 ## Testing
 
-Testing Puffin requires multiple specific Python versions. You can install them into
+Testing Axi requires multiple specific Python versions. You can install them into
 `<project root>/bin` via our bootstrapping script:
 
 ```shell
@@ -55,10 +55,10 @@ For running tests, we recommend [nextest](https://nexte.st/).
 Source distributions can run arbitrary code on build and can make unwanted modifications to your system (https://moyix.blogspot.com/2022/09/someones-been-messing-with-my-subnormals.html, https://pypi.org/project/nvidia-pyindex/), which can even occur when just resolving requirements. To prevent this, there's a Docker container you can run commands in:
 
 ```bash
-docker buildx build -t puffin-builder -f builder.dockerfile --load .
+docker buildx build -t axi-builder -f builder.dockerfile --load .
 # Build for musl to avoid glibc errors, might not be required with your OS version
 cargo build --target x86_64-unknown-linux-musl --profile profiling --features vendored-openssl
-docker run --rm -it -v $(pwd):/app puffin-builder /app/target/x86_64-unknown-linux-musl/profiling/puffin-dev resolve-many --cache-dir /app/cache-docker /app/scripts/popular_packages/pypi_10k_most_dependents.txt
+docker run --rm -it -v $(pwd):/app axi-builder /app/target/x86_64-unknown-linux-musl/profiling/axi-dev resolve-many --cache-dir /app/cache-docker /app/scripts/popular_packages/pypi_10k_most_dependents.txt
 ```
 
 We recommend using this container if you don't trust the dependency tree of the package(s) you are trying to resolve or install. 
@@ -66,16 +66,16 @@ We recommend using this container if you don't trust the dependency tree of the 
 
 ## Profiling
 
-Please refer to Ruff's [Profiling Guide](https://github.com/astral-sh/ruff/blob/main/CONTRIBUTING.md#profiling-projects), it applies to Puffin, too.
+Please refer to Ruff's [Profiling Guide](https://github.com/astral-sh/ruff/blob/main/CONTRIBUTING.md#profiling-projects), it applies to Axi, too.
 
 ### Analysing concurrency
 
-You can use [tracing-durations-export](https://github.com/konstin/tracing-durations-export) to visualize parallel requests and find any spots where Puffin is CPU-bound. Example usage, with `puffin` and `puffin-dev` respectively:
+You can use [tracing-durations-export](https://github.com/konstin/tracing-durations-export) to visualize parallel requests and find any spots where Axi is CPU-bound. Example usage, with `axi` and `axi-dev` respectively:
 
 ```bash
-RUST_LOG=puffin=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --profile profiling -- pip compile scripts/requirements/jupyter.in
+RUST_LOG=axi=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --profile profiling -- pip compile scripts/requirements/jupyter.in
 ```
 
 ```bash
-RUST_LOG=puffin=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --bin puffin-dev --profile profiling -- resolve jupyter
+RUST_LOG=axi=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --bin axi-dev --profile profiling -- resolve jupyter
 ```

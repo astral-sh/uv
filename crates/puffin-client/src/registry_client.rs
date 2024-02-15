@@ -16,12 +16,12 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
+use axi_cache::{Cache, CacheBucket, WheelCache};
+use axi_normalize::PackageName;
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
 use install_wheel_rs::find_dist_info;
 use pep440_rs::Version;
-use puffin_cache::{Cache, CacheBucket, WheelCache};
-use puffin_normalize::PackageName;
 use pypi_types::{Metadata21, SimpleJson};
 
 use crate::cached_client::CacheControl;
@@ -80,7 +80,7 @@ impl RegistryClientBuilder {
         let client_raw = {
             // Disallow any connections.
             let client_core = ClientBuilder::new()
-                .user_agent("puffin")
+                .user_agent("axi")
                 .pool_max_idle_per_host(20)
                 .timeout(std::time::Duration::from_secs(60 * 5));
 
@@ -501,7 +501,7 @@ impl RegistryClient {
     }
 }
 
-/// It doesn't really fit into `puffin_client`, but it avoids cyclical crate dependencies.
+/// It doesn't really fit into `axi_client`, but it avoids cyclical crate dependencies.
 async fn read_metadata_async(
     filename: &WheelFilename,
     debug_source: String,
@@ -695,7 +695,7 @@ pub enum Connectivity {
 mod tests {
     use std::str::FromStr;
 
-    use puffin_normalize::PackageName;
+    use axi_normalize::PackageName;
     use pypi_types::SimpleJson;
 
     use crate::{SimpleMetadata, SimpleMetadatum};

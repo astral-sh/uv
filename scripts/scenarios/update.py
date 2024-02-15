@@ -22,7 +22,7 @@ Usage:
         $ packse build scenarios/*
         $ packse publish dist/* --index-url http://localhost:3141/packages/local --anonymous
 
-        Override the default PyPI index for Puffin and update the scenarios
+        Override the default PyPI index for Axi and update the scenarios
 
         $ PUFFIN_INDEX_URL="http://localhost:3141/packages/all/+simple" ./scripts/scenarios/update.py
 
@@ -53,7 +53,7 @@ COMPILE_TEMPLATE = TEMPLATES / "compile.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
 REQUIREMENTS = TOOL_ROOT / "requirements.txt"
 PROJECT_ROOT = TOOL_ROOT.parent.parent
-TESTS = PROJECT_ROOT / "crates" / "puffin" / "tests"
+TESTS = PROJECT_ROOT / "crates" / "axi" / "tests"
 INSTALL_TESTS = TESTS / "pip_install_scenarios.rs"
 COMPILE_TESTS = TESTS / "pip_compile_scenarios.rs"
 

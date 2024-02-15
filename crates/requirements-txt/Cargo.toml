@@ -15,8 +15,8 @@ workspace = true
 [dependencies]
 pep440_rs = { path = "../pep440-rs", features = ["rkyv", "serde"] }
 pep508_rs = { path = "../pep508-rs", features = ["rkyv", "serde"] }
-puffin-fs = { path = "../puffin-fs" }
-puffin-normalize = { path = "../puffin-normalize" }
+axi-fs = { path = "../axi-fs" }
+axi-normalize = { path = "../axi-normalize" }
 
 fs-err = { workspace = true }
 once_cell = { workspace = true }

@@ -4,11 +4,11 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use axi_cache::Cache;
+use axi_fs::Normalized;
+use axi_interpreter::Virtualenv;
 use distribution_types::{InstalledMetadata, Name};
 use platform_host::Platform;
-use puffin_cache::Cache;
-use puffin_fs::Normalized;
-use puffin_interpreter::Virtualenv;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -48,7 +48,7 @@ pub(crate) async fn pip_uninstall(
     let _lock = venv.lock()?;
 
     // Index the current `site-packages` directory.
-    let site_packages = puffin_installer::SitePackages::from_executable(&venv)?;
+    let site_packages = axi_installer::SitePackages::from_executable(&venv)?;
 
     // Sort and deduplicate the packages, which are keyed by name.
     let packages = {
@@ -124,7 +124,7 @@ pub(crate) async fn pip_uninstall(
 
     // Uninstall each package.
     for distribution in &distributions {
-        let summary = puffin_installer::uninstall(distribution).await?;
+        let summary = axi_installer::uninstall(distribution).await?;
         debug!(
             "Uninstalled {} ({} file{}, {} director{})",
             distribution.name(),

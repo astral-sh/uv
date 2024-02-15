@@ -8,6 +8,8 @@ use rustc_hash::FxHashMap;
 use tracing::{debug, info_span, instrument, warn, Instrument};
 use url::Url;
 
+use axi_cache::{Cache, CacheBucket};
+use axi_normalize::PackageName;
 use distribution_filename::DistFilename;
 use distribution_types::{
     BuiltDist, Dist, File, FileLocation, FlatIndexLocation, IndexUrl, PrioritizedDistribution,
@@ -15,8 +17,6 @@ use distribution_types::{
 };
 use pep440_rs::Version;
 use platform_tags::Tags;
-use puffin_cache::{Cache, CacheBucket};
-use puffin_normalize::PackageName;
 use pypi_types::{Hashes, Yanked};
 
 use crate::cached_client::{CacheControl, CachedClientError};
