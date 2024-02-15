@@ -191,6 +191,11 @@ struct PipCompileArgs {
     #[clap(long, conflicts_with = "extra")]
     all_extras: bool,
 
+    /// Ignore package dependencies, instead only add those packages explicitly listed
+    /// on the command line to the resulting the requirements file.
+    #[clap(long)]
+    no_deps: bool,
+
     #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
     resolution: ResolutionMode,
 
@@ -807,6 +812,11 @@ async fn run() -> Result<ExitStatus> {
             };
             let upgrade = Upgrade::from_args(args.upgrade, args.upgrade_package);
             let no_build = NoBuild::from_args(args.only_binary, args.no_build);
+            let dependency_mode = if args.no_deps {
+                DependencyMode::Direct
+            } else {
+                DependencyMode::Transitive
+            };
             commands::pip_compile(
                 &requirements,
                 &constraints,
@@ -815,6 +825,7 @@ async fn run() -> Result<ExitStatus> {
                 args.output_file.as_deref(),
                 args.resolution,
                 args.prerelease,
+                dependency_mode,
                 upgrade,
                 args.generate_hashes,
                 !args.no_annotate,

@@ -27,8 +27,8 @@ use puffin_installer::{Downloader, NoBinary};
 use puffin_interpreter::{Interpreter, PythonVersion};
 use puffin_normalize::{ExtraName, PackageName};
 use puffin_resolver::{
-    DisplayResolutionGraph, InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode,
-    ResolutionMode, Resolver,
+    DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest, OptionsBuilder,
+    PreReleaseMode, ResolutionMode, Resolver,
 };
 use puffin_traits::{InFlight, NoBuild, SetupPyStrategy};
 use puffin_warnings::warn_user;
@@ -51,6 +51,7 @@ pub(crate) async fn pip_compile(
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
+    dependency_mode: DependencyMode,
     upgrade: Upgrade,
     generate_hashes: bool,
     include_annotations: bool,
@@ -212,6 +213,7 @@ pub(crate) async fn pip_compile(
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
         .prerelease_mode(prerelease_mode)
+        .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
         .build();
 
