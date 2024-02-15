@@ -15,7 +15,7 @@ pub struct CacheArgs {
     no_cache: bool,
 
     /// Path to the cache directory.
-    #[arg(global = true, long, env = "PUFFIN_CACHE_DIR")]
+    #[arg(global = true, long, env = "UV_CACHE_DIR")]
     cache_dir: Option<PathBuf>,
 }
 
@@ -24,7 +24,7 @@ impl TryFrom<CacheArgs> for Cache {
 
     /// Prefer, in order:
     /// 1. A temporary cache directory, if the user requested `--no-cache`.
-    /// 2. The specific cache directory specified by the user via `--cache-dir` or `PUFFIN_CACHE_DIR`.
+    /// 2. The specific cache directory specified by the user via `--cache-dir` or `UV_CACHE_DIR`.
     /// 3. The system-appropriate cache directory.
     /// 4. A `.uv_cache` directory in the current working directory.
     ///

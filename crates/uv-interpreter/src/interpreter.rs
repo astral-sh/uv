@@ -136,7 +136,7 @@ impl Interpreter {
     /// - If a python version is given: `pythonx.y`
     /// - `python3` (unix) or `python.exe` (windows)
     ///
-    /// If `PUFFIN_TEST_PYTHON_PATH` is set, we will not check for Python versions in the
+    /// If `UV_TEST_PYTHON_PATH` is set, we will not check for Python versions in the
     /// global PATH, instead we will search using the provided path. Virtual environments
     /// will still be respected.
     ///
@@ -204,13 +204,13 @@ impl Interpreter {
         Ok(None)
     }
 
-    /// Find the Python interpreter in `PATH`, respecting `PUFFIN_PYTHON_PATH`.
+    /// Find the Python interpreter in `PATH`, respecting `UV_PYTHON_PATH`.
     ///
     /// Returns `Ok(None)` if not found.
     pub fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
         requested: R,
     ) -> Result<Option<PathBuf>, Error> {
-        let result = if let Some(isolated) = std::env::var_os("PUFFIN_TEST_PYTHON_PATH") {
+        let result = if let Some(isolated) = std::env::var_os("UV_TEST_PYTHON_PATH") {
             which::which_in(requested, Some(isolated), std::env::current_dir()?)
         } else {
             which::which(requested)

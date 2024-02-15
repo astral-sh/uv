@@ -43,7 +43,7 @@ pub(crate) struct ResolveCliArgs {
     cache_args: CacheArgs,
     #[arg(long)]
     exclude_newer: Option<DateTime<Utc>>,
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "PUFFIN_INDEX_URL")]
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
     index_url: IndexUrl,
     #[clap(long)]
     extra_index_url: Vec<IndexUrl>,

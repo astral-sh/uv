@@ -68,7 +68,7 @@ pub fn find_requested_python(
                 Interpreter::query(&executable, platform, cache)?
             }
         } else if cfg!(windows) {
-            if let Some(python_overwrite) = env::var_os("PUFFIN_TEST_PYTHON_PATH") {
+            if let Some(python_overwrite) = env::var_os("UV_TEST_PYTHON_PATH") {
                 let executable_dir = env::split_paths(&python_overwrite).find(|path| {
                     path.as_os_str()
                         .to_str()
@@ -140,25 +140,21 @@ pub fn find_requested_python(
 
 /// Pick a sensible default for the python a user wants when they didn't specify a version.
 ///
-/// We prefer the test overwrite `PUFFIN_TEST_PYTHON_PATH` if it is set, otherwise `python3`/`python` or
+/// We prefer the test overwrite `UV_TEST_PYTHON_PATH` if it is set, otherwise `python3`/`python` or
 /// `python.exe` respectively.
 #[instrument]
 pub fn find_default_python(platform: &Platform, cache: &Cache) -> Result<Interpreter, Error> {
     let current_dir = env::current_dir()?;
     let python = if cfg!(unix) {
-        which::which_in(
-            "python3",
-            env::var_os("PUFFIN_TEST_PYTHON_PATH"),
-            current_dir,
-        )
-        .or_else(|_| which::which("python"))
-        .map_err(|_| Error::NoPythonInstalledUnix)?
+        which::which_in("python3", env::var_os("UV_TEST_PYTHON_PATH"), current_dir)
+            .or_else(|_| which::which("python"))
+            .map_err(|_| Error::NoPythonInstalledUnix)?
     } else if cfg!(windows) {
         // TODO(konstin): Is that the right order, or should we look for `py --list-paths` first? With the current way
         // it works even if the python launcher is not installed.
         if let Ok(python) = which::which_in(
             "python.exe",
-            env::var_os("PUFFIN_TEST_PYTHON_PATH"),
+            env::var_os("UV_TEST_PYTHON_PATH"),
             current_dir,
         ) {
             python
@@ -182,7 +178,7 @@ pub fn find_default_python(platform: &Platform, cache: &Cache) -> Result<Interpr
 /// The command takes 8ms on my machine. TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python
 /// installations from the registry instead.
 fn installed_pythons_windows() -> Result<Vec<(u8, u8, PathBuf)>, Error> {
-    // TODO(konstin): We're not checking PUFFIN_TEST_PYTHON_PATH here, no test currently depends on it.
+    // TODO(konstin): We're not checking UV_TEST_PYTHON_PATH here, no test currently depends on it.
 
     // TODO(konstin): Special case the not found error
     let output = info_span!("py_list_paths")
@@ -223,7 +219,7 @@ fn installed_pythons_windows() -> Result<Vec<(u8, u8, PathBuf)>, Error> {
 }
 
 pub(crate) fn find_python_windows(major: u8, minor: u8) -> Result<Option<PathBuf>, Error> {
-    if let Some(python_overwrite) = env::var_os("PUFFIN_TEST_PYTHON_PATH") {
+    if let Some(python_overwrite) = env::var_os("UV_TEST_PYTHON_PATH") {
         let executable_dir = env::split_paths(&python_overwrite).find(|path| {
             path.as_os_str()
                 .to_str()

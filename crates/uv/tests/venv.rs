@@ -36,7 +36,7 @@ fn create_venv() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("PUFFIN_TEST_PYTHON_PATH", bin.clone())
+        .env("UV_TEST_PYTHON_PATH", bin.clone())
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
@@ -68,8 +68,8 @@ fn create_venv() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("PUFFIN_NO_WRAP", "1")
-        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
@@ -109,8 +109,8 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("PUFFIN_NO_WRAP", "1")
-        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
@@ -152,8 +152,8 @@ fn seed() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("PUFFIN_NO_WRAP", "1")
-        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
@@ -190,8 +190,8 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("PUFFIN_NO_WRAP", "1")
-        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir);
     if cfg!(windows) {
         uv_snapshot!(&mut command, @r###"
@@ -245,8 +245,8 @@ fn create_venv_unknown_python_patch() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("PUFFIN_NO_WRAP", "1")
-        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 1
@@ -286,8 +286,8 @@ fn create_venv_python_patch() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("PUFFIN_NO_WRAP", "1")
-        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
@@ -331,8 +331,8 @@ fn file_exists() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("PUFFIN_NO_WRAP", "1")
-        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 1
@@ -378,8 +378,8 @@ fn empty_dir_exists() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("PUFFIN_NO_WRAP", "1")
-        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
@@ -424,8 +424,8 @@ fn non_empty_dir_exists() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("PUFFIN_NO_WRAP", "1")
-        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: false
     exit_code: 1
@@ -470,7 +470,7 @@ fn virtualenv_compatibility() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("PUFFIN_TEST_PYTHON_PATH", bin.clone())
+        .env("UV_TEST_PYTHON_PATH", bin.clone())
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
