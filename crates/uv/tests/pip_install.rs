@@ -900,100 +900,92 @@ fn no_deps() {
 fn install_upgrade() {
     let context = TestContext::new("3.12");
 
-    // Install an old version of flask and trio.
+    // Install an old version of anyio and httpcore.
     uv_snapshot!(command(&context)
-        .arg("Flask==2.3.2")
-        .arg("trio==0.22.0")
+        .arg("anyio==3.6.2")
+        .arg("httpcore==0.16.3")
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 14 packages in [TIME]
-    Downloaded 14 packages in [TIME]
-    Installed 14 packages in [TIME]
-     + async-generator==1.10
-     + attrs==23.1.0
-     + blinker==1.7.0
-     + click==8.1.7
-     + flask==2.3.2
+    Resolved 6 packages in [TIME]
+    Downloaded 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + anyio==3.6.2
+     + certifi==2023.11.17
+     + h11==0.14.0
+     + httpcore==0.16.3
      + idna==3.4
-     + itsdangerous==2.1.2
-     + jinja2==3.1.2
-     + markupsafe==2.1.3
-     + outcome==1.3.0.post0
      + sniffio==1.3.0
-     + sortedcontainers==2.4.0
-     + trio==0.22.0
-     + werkzeug==3.0.1
     "###
     );
 
-    context.assert_command("import flask").success();
+    context.assert_command("import anyio").success();
 
-    // Upgrade flask.
+    // Upgrade anyio.
     uv_snapshot!(command(&context)
-        .arg("Flask")
+        .arg("anyio")
         .arg("--upgrade-package")
-        .arg("Flask"), @r###"
+        .arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved 3 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     - flask==2.3.2
-     + flask==3.0.0
+     - anyio==3.6.2
+     + anyio==4.0.0
     "###
     );
 
-    // Upgrade flask again, should not reinstall.
+    // Upgrade anyio again, should not reinstall.
     uv_snapshot!(command(&context)
-        .arg("Flask")
+        .arg("anyio")
         .arg("--upgrade-package")
-        .arg("Flask"), @r###"
+        .arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
-    Audited 7 packages in [TIME]
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
     "###
     );
 
-    // Install trio, request flask upgrade should not reinstall
+    // Install httpcore, request anyio upgrade should not reinstall
     uv_snapshot!(command(&context)
-        .arg("trio")
+        .arg("httpcore")
         .arg("--upgrade-package")
-        .arg("Flask"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 7 packages in [TIME]
-    Audited 7 packages in [TIME]
-    "###
-    );
-
-    // Upgrade trio with global flag
-    uv_snapshot!(command(&context)
-        .arg("trio")
-        .arg("--upgrade"), @r###"
+        .arg("anyio"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    Audited 6 packages in [TIME]
+    "###
+    );
+
+    // Upgrade httpcore with global flag
+    uv_snapshot!(command(&context)
+        .arg("httpcore")
+        .arg("--upgrade"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     - trio==0.22.0
-     + trio==0.23.1
+     - httpcore==0.16.3
+     + httpcore==1.0.2
     "###
     );
 }
