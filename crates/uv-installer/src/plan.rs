@@ -467,4 +467,9 @@ impl Reinstall {
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
+
+    /// Returns `true` if all packages should be reinstalled.
+    pub fn is_all(&self) -> bool {
+        matches!(self, Self::All)
+    }
 }

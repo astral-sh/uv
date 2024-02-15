@@ -425,6 +425,11 @@ impl Upgrade {
         }
     }
 
+    /// Returns `true` if no packages should be upgraded.
+    pub(crate) fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+
     /// Returns `true` if all packages should be upgraded.
     pub(crate) fn is_all(&self) -> bool {
         matches!(self, Self::All)

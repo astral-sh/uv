@@ -894,3 +894,106 @@ fn no_deps() {
 
     context.assert_command("import flask").failure();
 }
+
+/// Upgrade a package.
+#[test]
+fn install_upgrade() {
+    let context = TestContext::new("3.12");
+
+    // Install an old version of flask and trio.
+    uv_snapshot!(command(&context)
+        .arg("Flask==2.3.2")
+        .arg("trio==0.22.0")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 14 packages in [TIME]
+    Downloaded 14 packages in [TIME]
+    Installed 14 packages in [TIME]
+     + async-generator==1.10
+     + attrs==23.1.0
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==2.3.2
+     + idna==3.4
+     + itsdangerous==2.1.2
+     + jinja2==3.1.2
+     + markupsafe==2.1.3
+     + outcome==1.3.0.post0
+     + sniffio==1.3.0
+     + sortedcontainers==2.4.0
+     + trio==0.22.0
+     + werkzeug==3.0.1
+    "###
+    );
+
+    context.assert_command("import flask").success();
+
+    // Upgrade flask.
+    uv_snapshot!(command(&context)
+        .arg("Flask")
+        .arg("--upgrade-package")
+        .arg("Flask"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - flask==2.3.2
+     + flask==3.0.0
+    "###
+    );
+
+    // Upgrade flask again, should not reinstall.
+    uv_snapshot!(command(&context)
+        .arg("Flask")
+        .arg("--upgrade-package")
+        .arg("Flask"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Audited 7 packages in [TIME]
+    "###
+    );
+
+    // Install trio, request flask upgrade should not reinstall
+    uv_snapshot!(command(&context)
+        .arg("trio")
+        .arg("--upgrade-package")
+        .arg("Flask"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Audited 7 packages in [TIME]
+    "###
+    );
+
+    // Upgrade trio with global flag
+    uv_snapshot!(command(&context)
+        .arg("trio")
+        .arg("--upgrade"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - trio==0.22.0
+     + trio==0.23.1
+    "###
+    );
+}

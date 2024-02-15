@@ -1,4 +1,6 @@
+use std::collections::HashSet;
 use std::fmt::Write;
+
 use std::path::Path;
 
 use anstream::eprint;
@@ -38,6 +40,8 @@ use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
+use super::Upgrade;
+
 /// Install packages into the current environment.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn pip_install(
@@ -48,6 +52,7 @@ pub(crate) async fn pip_install(
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
     dependency_mode: DependencyMode,
+    upgrade: Upgrade,
     index_locations: IndexLocations,
     reinstall: &Reinstall,
     link_mode: LinkMode,
@@ -115,7 +120,10 @@ pub(crate) async fn pip_install(
     // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
     // enough to let us remove this check. But right now, for large environments, it's an order of
     // magnitude faster to validate the environment than to resolve the requirements.
-    if reinstall.is_none() && site_packages.satisfies(&requirements, &editables, &constraints)? {
+    if reinstall.is_none()
+        && upgrade.is_none()
+        && site_packages.satisfies(&requirements, &editables, &constraints)?
+    {
         let num_requirements = requirements.len() + editables.len();
         let s = if num_requirements == 1 { "" } else { "s" };
         writeln!(
@@ -206,6 +214,7 @@ pub(crate) async fn pip_install(
         &editables,
         &site_packages,
         reinstall,
+        &upgrade,
         &interpreter,
         tags,
         markers,
@@ -378,6 +387,7 @@ async fn resolve(
     editables: &[BuiltEditable],
     site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
+    upgrade: &Upgrade,
     interpreter: &Interpreter,
     tags: &Tags,
     markers: &MarkerEnvironment,
@@ -390,14 +400,25 @@ async fn resolve(
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
-    // Respect preferences from the existing environments.
-    let preferences: Vec<Requirement> = match reinstall {
-        Reinstall::All => vec![],
-        Reinstall::None => site_packages.requirements().collect(),
-        Reinstall::Packages(packages) => site_packages
+    let preferences = if upgrade.is_all() || reinstall.is_all() {
+        vec![]
+    } else {
+        // Combine upgrade and reinstall lists
+        let mut exclusions: HashSet<&PackageName> = if let Reinstall::Packages(packages) = reinstall
+        {
+            HashSet::from_iter(packages)
+        } else {
+            HashSet::default()
+        };
+        if let Upgrade::Packages(packages) = upgrade {
+            exclusions.extend(packages);
+        };
+
+        // Prefer current site packages, unless in the upgrade or reinstall lists
+        site_packages
             .requirements()
-            .filter(|requirement| !packages.contains(&requirement.name))
-            .collect(),
+            .filter(|requirement| !exclusions.contains(&requirement.name))
+            .collect()
     };
 
     // Map the editables to their metadata.
