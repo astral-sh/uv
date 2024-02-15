@@ -160,7 +160,7 @@ fn install_requirements_txt() -> Result<()> {
 
 /// Respect installed versions when resolving.
 #[test]
-fn respect_installed() -> Result<()> {
+fn respect_installed_and_reinstall() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Install Flask.
@@ -264,6 +264,29 @@ fn respect_installed() -> Result<()> {
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      - flask==2.3.3
+     + flask==3.0.0
+    "###
+    );
+
+    // Re-install Flask. We should install even though the version is current
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("Flask")?;
+
+    uv_snapshot!(filters, command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--reinstall-package")
+        .arg("Flask")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Installed 1 package in [TIME]
+     - flask==3.0.0
      + flask==3.0.0
     "###
     );
