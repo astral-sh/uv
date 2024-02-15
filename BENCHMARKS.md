@@ -26,7 +26,7 @@ Benchmarking package installation (e.g., `uv pip sync`) with a warm cache. This 
 to removing and recreating a virtual environment, and then populating it with dependencies that
 you've installed previously on the same machine.
 
-![install-warm](https://github.com/astral-sh/ruff/assets/1309177/b6cb8d48-52e0-45c2-ae15-0a3f69ec3263)
+![install-warm](./assets/png/resolve-cold.png)
 
 ## Cold Installation
 
@@ -34,7 +34,7 @@ Benchmarking package installation (e.g., `uv pip sync`) with a cold cache. This 
 to running `uv pip sync` on a new machine or in CI (assuming that the package manager cache is
 not shared across runs).
 
-![install-cold](https://github.com/astral-sh/ruff/assets/1309177/ed86c193-582f-4163-b369-f12ec3905c3c)
+![install-cold](./assets/png/resolve-cold.png)
 
 ## Warm Resolution
 
@@ -42,7 +42,7 @@ Benchmarking dependency resolution (e.g., `uv pip compile`) with a warm cache, b
 lockfile. This is equivalent to blowing away an existing `requirements.txt` file to regenerate it
 from a `requirements.in` file.
 
-![resolve-warm](https://github.com/astral-sh/ruff/assets/1309177/a4ca9d23-1148-4103-abe7-a35fa488409d)
+![resolve-warm](./assets/png/resolve-cold.png)
 
 ## Cold Resolution
 
@@ -50,7 +50,7 @@ Benchmarking dependency resolution (e.g., `uv pip compile`) with a cold cache. T
 equivalent to running `uv pip compile` on a new machine or in CI (assuming that the package
 manager cache is not shared across runs).
 
-![resolve-cold](https://github.com/astral-sh/ruff/assets/1309177/556ac7aa-0a6a-4f94-b0d9-90b25461de7b)
+![resolve-cold](./assets/png/resolve-cold.png)
 
 ## Reproduction
 
