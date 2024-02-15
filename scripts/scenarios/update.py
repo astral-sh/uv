@@ -24,7 +24,7 @@ Usage:
 
         Override the default PyPI index for uv and update the scenarios
 
-        $ PUFFIN_INDEX_URL="http://localhost:3141/packages/all/+simple" ./scripts/scenarios/update.py
+        $ UV_INDEX_URL="http://localhost:3141/packages/all/+simple" ./scripts/scenarios/update.py
 
 Requirements:
 

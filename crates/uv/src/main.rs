@@ -234,7 +234,7 @@ struct PipCompileArgs {
     refresh_package: Vec<PackageName>,
 
     /// The URL of the Python Package Index.
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "PUFFIN_INDEX_URL")]
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
@@ -358,7 +358,7 @@ struct PipSyncArgs {
     link_mode: install_wheel_rs::linker::LinkMode,
 
     /// The URL of the Python Package Index.
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "PUFFIN_INDEX_URL")]
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
@@ -515,7 +515,7 @@ struct PipInstallArgs {
     output_file: Option<PathBuf>,
 
     /// The URL of the Python Package Index.
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "PUFFIN_INDEX_URL")]
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
@@ -644,7 +644,7 @@ struct VenvArgs {
     name: PathBuf,
 
     /// The URL of the Python Package Index.
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "PUFFIN_INDEX_URL")]
+    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
@@ -770,7 +770,7 @@ async fn run() -> Result<ExitStatus> {
                 .break_words(false)
                 .word_separator(textwrap::WordSeparator::AsciiSpace)
                 .word_splitter(textwrap::WordSplitter::NoHyphenation)
-                .wrap_lines(env::var("PUFFIN_NO_WRAP").map(|_| false).unwrap_or(true))
+                .wrap_lines(env::var("UV_NO_WRAP").map(|_| false).unwrap_or(true))
                 .build(),
         )
     }))?;
@@ -1022,7 +1022,7 @@ async fn run() -> Result<ExitStatus> {
 }
 
 fn main() -> ExitCode {
-    let result = if let Ok(stack_size) = env::var("PUFFIN_STACK_SIZE") {
+    let result = if let Ok(stack_size) = env::var("UV_STACK_SIZE") {
         // Artificially limit the stack size to test for stack overflows. Windows has a default stack size of 1MB,
         // which is lower than the linux and mac default.
         // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170

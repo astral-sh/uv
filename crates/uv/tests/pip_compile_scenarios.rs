@@ -31,8 +31,8 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("PUFFIN_NO_WRAP", "1")
-        .env("PUFFIN_TEST_PYTHON_PATH", bin)
+        .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", bin)
         .current_dir(&context.temp_dir);
     command
 }
