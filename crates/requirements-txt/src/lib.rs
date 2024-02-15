@@ -298,12 +298,11 @@ impl RequirementsTxt {
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtFileError> {
-        let content = puffin_fs::read_to_string(&requirements_txt).map_err(|err| {
-            RequirementsTxtFileError {
+        let content =
+            uv_fs::read_to_string(&requirements_txt).map_err(|err| RequirementsTxtFileError {
                 file: requirements_txt.as_ref().to_path_buf(),
                 error: RequirementsTxtParserError::IO(err),
-            }
-        })?;
+            })?;
         let data = Self::parse_inner(&content, working_dir.as_ref()).map_err(|err| {
             RequirementsTxtFileError {
                 file: requirements_txt.as_ref().to_path_buf(),

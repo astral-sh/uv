@@ -1303,9 +1303,9 @@ checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
 name = "hermit-abi"
-version = "0.3.5"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0c62115964e08cb8039170eb33c1d0e2388a256930279edca206fff675f82c3"
+checksum = "bd5256b483761cd23699d0da46cc6fd2ee3be420bbe6d020ae4a091e70b7e9fd"
 
 [[package]]
 name = "hex"
@@ -2261,9 +2261,9 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "pkg-config"
-version = "0.3.29"
+version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2900ede94e305130c13ddd391e0ab7cbaeb783945ae07a279c268cb05109c6cb"
+checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
 name = "plain"
@@ -2439,486 +2439,6 @@ dependencies = [
  "priority-queue",
  "rustc-hash",
  "thiserror",
-]
-
-[[package]]
-name = "puffin"
-version = "0.0.4"
-dependencies = [
- "anstream",
- "anyhow",
- "assert_cmd",
- "assert_fs",
- "chrono",
- "clap",
- "console",
- "ctrlc",
- "distribution-filename",
- "distribution-types",
- "dunce",
- "filetime",
- "flate2",
- "fs-err",
- "futures",
- "gourgeist",
- "indicatif",
- "indoc",
- "insta",
- "install-wheel-rs",
- "itertools 0.12.1",
- "miette",
- "mimalloc",
- "owo-colors 4.0.0",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "platform-host",
- "platform-tags",
- "predicates",
- "pubgrub",
- "puffin-build",
- "puffin-cache",
- "puffin-client",
- "puffin-dispatch",
- "puffin-distribution",
- "puffin-fs",
- "puffin-installer",
- "puffin-interpreter",
- "puffin-normalize",
- "puffin-resolver",
- "puffin-traits",
- "puffin-warnings",
- "pypi-types",
- "pyproject-toml",
- "regex",
- "requirements-txt",
- "reqwest",
- "rustc-hash",
- "tempfile",
- "textwrap",
- "thiserror",
- "tikv-jemallocator",
- "tokio",
- "toml",
- "tracing",
- "tracing-durations-export",
- "tracing-subscriber",
- "tracing-tree",
- "url",
- "which",
-]
-
-[[package]]
-name = "puffin-build"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "distribution-types",
- "fs-err",
- "gourgeist",
- "indoc",
- "insta",
- "itertools 0.12.1",
- "once_cell",
- "pep508_rs",
- "platform-host",
- "puffin-extract",
- "puffin-fs",
- "puffin-interpreter",
- "puffin-traits",
- "pypi-types",
- "pyproject-toml",
- "regex",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "toml",
- "tracing",
-]
-
-[[package]]
-name = "puffin-cache"
-version = "0.0.1"
-dependencies = [
- "cache-key",
- "cachedir",
- "clap",
- "directories",
- "distribution-types",
- "fs-err",
- "nanoid",
- "puffin-fs",
- "puffin-normalize",
- "pypi-types",
- "serde",
- "tempfile",
- "tracing",
- "url",
- "walkdir",
-]
-
-[[package]]
-name = "puffin-client"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "async_http_range_reader",
- "async_zip",
- "cache-key",
- "chrono",
- "distribution-filename",
- "distribution-types",
- "fs-err",
- "futures",
- "html-escape",
- "http",
- "insta",
- "install-wheel-rs",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "platform-tags",
- "puffin-cache",
- "puffin-fs",
- "puffin-normalize",
- "pypi-types",
- "reqwest",
- "reqwest-middleware",
- "reqwest-retry",
- "rkyv",
- "rmp-serde",
- "rustc-hash",
- "serde",
- "serde_json",
- "sha2",
- "task-local-extensions",
- "tempfile",
- "thiserror",
- "tl",
- "tokio",
- "tokio-util",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "puffin-dev"
-version = "0.0.1"
-dependencies = [
- "anstream",
- "anyhow",
- "chrono",
- "clap",
- "distribution-filename",
- "distribution-types",
- "fs-err",
- "futures",
- "gourgeist",
- "indicatif",
- "install-wheel-rs",
- "itertools 0.12.1",
- "mimalloc",
- "owo-colors 4.0.0",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "petgraph",
- "platform-host",
- "platform-tags",
- "poloto",
- "puffin-build",
- "puffin-cache",
- "puffin-client",
- "puffin-dispatch",
- "puffin-distribution",
- "puffin-installer",
- "puffin-interpreter",
- "puffin-normalize",
- "puffin-resolver",
- "puffin-traits",
- "pypi-types",
- "resvg",
- "rustc-hash",
- "serde",
- "serde_json",
- "tagu",
- "tempfile",
- "tikv-jemallocator",
- "tokio",
- "tracing",
- "tracing-durations-export",
- "tracing-indicatif",
- "tracing-subscriber",
- "url",
- "which",
-]
-
-[[package]]
-name = "puffin-dispatch"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "distribution-types",
- "fs-err",
- "futures",
- "gourgeist",
- "itertools 0.12.1",
- "pep508_rs",
- "platform-host",
- "platform-tags",
- "puffin-build",
- "puffin-cache",
- "puffin-client",
- "puffin-distribution",
- "puffin-installer",
- "puffin-interpreter",
- "puffin-resolver",
- "puffin-traits",
- "pypi-types",
- "tempfile",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "puffin-distribution"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "cache-key",
- "distribution-filename",
- "distribution-types",
- "fs-err",
- "futures",
- "install-wheel-rs",
- "nanoid",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "platform-tags",
- "puffin-cache",
- "puffin-client",
- "puffin-extract",
- "puffin-fs",
- "puffin-git",
- "puffin-normalize",
- "puffin-traits",
- "pypi-types",
- "reqwest",
- "rmp-serde",
- "rustc-hash",
- "serde",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
- "url",
- "zip",
-]
-
-[[package]]
-name = "puffin-extract"
-version = "0.0.1"
-dependencies = [
- "async-compression",
- "async_zip",
- "flate2",
- "fs-err",
- "futures",
- "rayon",
- "rustc-hash",
- "tar",
- "thiserror",
- "tokio",
- "tokio-tar",
- "tokio-util",
- "zip",
-]
-
-[[package]]
-name = "puffin-fs"
-version = "0.0.1"
-dependencies = [
- "dunce",
- "fs-err",
- "fs2",
- "junction",
- "puffin-warnings",
- "tempfile",
- "tracing",
-]
-
-[[package]]
-name = "puffin-git"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "base64 0.21.7",
- "cache-key",
- "cargo-util",
- "git2",
- "glob",
- "hex",
- "hmac",
- "home",
- "once_cell",
- "puffin-fs",
- "rand",
- "reqwest",
- "serde",
- "sha1",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "puffin-installer"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "distribution-filename",
- "distribution-types",
- "fs-err",
- "futures",
- "install-wheel-rs",
- "once-map",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "platform-tags",
- "puffin-cache",
- "puffin-client",
- "puffin-distribution",
- "puffin-extract",
- "puffin-fs",
- "puffin-git",
- "puffin-interpreter",
- "puffin-normalize",
- "puffin-traits",
- "pypi-types",
- "rayon",
- "requirements-txt",
- "rustc-hash",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "puffin-interpreter"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "cache-key",
- "fs-err",
- "indoc",
- "insta",
- "itertools 0.12.1",
- "once_cell",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "platform-host",
- "platform-tags",
- "puffin-cache",
- "puffin-fs",
- "regex",
- "rmp-serde",
- "same-file",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "which",
-]
-
-[[package]]
-name = "puffin-normalize"
-version = "0.0.1"
-dependencies = [
- "rkyv",
- "serde",
-]
-
-[[package]]
-name = "puffin-resolver"
-version = "0.0.1"
-dependencies = [
- "anstream",
- "anyhow",
- "cache-key",
- "chrono",
- "clap",
- "dashmap",
- "derivative",
- "distribution-filename",
- "distribution-types",
- "either",
- "fs-err",
- "futures",
- "gourgeist",
- "indexmap 2.2.3",
- "insta",
- "install-wheel-rs",
- "itertools 0.12.1",
- "once-map",
- "once_cell",
- "owo-colors 4.0.0",
- "pep440_rs 0.4.0",
- "pep508_rs",
- "petgraph",
- "platform-host",
- "platform-tags",
- "pubgrub",
- "puffin-cache",
- "puffin-client",
- "puffin-distribution",
- "puffin-git",
- "puffin-interpreter",
- "puffin-normalize",
- "puffin-traits",
- "puffin-warnings",
- "pypi-types",
- "reqwest",
- "rkyv",
- "rustc-hash",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
- "url",
- "zip",
-]
-
-[[package]]
-name = "puffin-traits"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "distribution-types",
- "once-map",
- "pep508_rs",
- "puffin-cache",
- "puffin-interpreter",
- "puffin-normalize",
- "tokio",
-]
-
-[[package]]
-name = "puffin-warnings"
-version = "0.0.1"
-dependencies = [
- "anstream",
- "once_cell",
- "owo-colors 4.0.0",
- "rustc-hash",
 ]
 
 [[package]]
@@ -4248,9 +3768,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.22.4"
+version = "0.22.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c9ffdf896f8daaabf9b66ba8e77ea1ed5ed0f72821b398aba62352e95062951"
+checksum = "99e68c159e8f5ba8a28c4eb7b0c0c190d77bb479047ca713270048145a9ad28a"
 dependencies = [
  "indexmap 2.2.3",
  "serde",
@@ -4955,6 +4475,7 @@ dependencies = [
  "derivative",
  "distribution-filename",
  "distribution-types",
+ "either",
  "fs-err",
  "futures",
  "gourgeist",
@@ -4973,6 +4494,7 @@ dependencies = [
  "pubgrub",
  "pypi-types",
  "reqwest",
+ "rkyv",
  "rustc-hash",
  "serde_json",
  "sha2",
@@ -5416,9 +4938,9 @@ checksum = "dff9641d1cd4be8d1a070daf9e3773c5f67e78b4d9d42263020c057706765c04"
 
 [[package]]
 name = "winnow"
-version = "0.5.39"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5389a154b01683d28c77f8f68f49dea75f0a4da32557a58f68ee51ebba472d29"
+checksum = "d90f4e0f530c4c69f62b80d839e9ef3855edc9cba471a160c4d692deed62b401"
 dependencies = [
  "memchr",
 ]

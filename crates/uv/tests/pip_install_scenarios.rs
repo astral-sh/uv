@@ -2478,7 +2478,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
     filters.push((r"a-94e293e5", "albatross"));
     filters.push((r"-94e293e5", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    uv_snapshot!(filters, command(&context)
         .arg("a-94e293e5")
         , @r###"
     success: false

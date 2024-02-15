@@ -26,18 +26,12 @@ use distribution_types::{
 use pep440_rs::{Version, VersionSpecifiers, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::{IncompatibleTag, Tags};
-use puffin_client::{FlatIndex, RegistryClient};
-use puffin_distribution::DistributionDatabase;
-use puffin_interpreter::Interpreter;
-use puffin_normalize::PackageName;
-use puffin_traits::BuildContext;
 use pypi_types::{Metadata21, Yanked};
 use uv_client::{FlatIndex, RegistryClient};
 use uv_distribution::DistributionDatabase;
 use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
 use uv_traits::BuildContext;
-
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::error::ResolveError;
 use crate::manifest::Manifest;

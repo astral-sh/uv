@@ -192,7 +192,7 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
-                let contents = puffin_fs::read_to_string(path)?;
+                let contents = uv_fs::read_to_string(path)?;
                 let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
                     .with_context(|| format!("Failed to parse `{}`", path.normalized_display()))?;
                 let mut used_extras = FxHashSet::default();

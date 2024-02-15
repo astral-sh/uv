@@ -15,10 +15,10 @@ uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://gith
 ## Highlights
 
 - ⚖️ Drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands.
-- ⚡️ [10-100x faster](https://github.com/astral-sh/puffin/blob/main/BENCHMARKS.md) than `pip`
+- ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`
   and `pip-tools` (`pip-compile` and `pip-sync`).
 - 💾 Disk-space efficient, with a global cache for dependency deduplication.
-- 🐍 Installable via `curl`, `pip`, `pipx`, etc. Puffin is a static binary that can be installed
+- 🐍 Installable via `curl`, `pip`, `pipx`, etc. uv is a static binary that can be installed
   without Rust or Python.
 - 🧪 Tested at-scale against the top 10,000 PyPI packages.
 - 🖥️ Support for macOS, Linux, and Windows.
@@ -31,20 +31,20 @@ uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://gith
 
 ## Getting Started
 
-Install Puffin with our standalone installers, or from [PyPI](https://pypi.org/project/puffin/):
+Install uv with our standalone installers, or from [PyPI](https://pypi.org/project/uv/):
 
 ```shell
 # On macOS and Linux.
-curl -LsSf https://astral.sh/puffin/install.sh | sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # On Windows.
-irm https://astral.sh/puffin/install.ps1 | iex
+irm https://astral.sh/uv/install.ps1 | iex
 
 # With pip.
-pip install puffin
+pip install uv
 
 # With pipx.
-pipx install puffin
+pipx install uv
 ```
 
 To create a virtual environment:
@@ -80,7 +80,7 @@ installs), `--index-url`, and more.
 
 ## Limitations
 
-Puffin does not support the entire `pip` feature set. Namely, Puffin does not (and does not plan to)
+uv does not support the entire `pip` feature set. Namely, uv does not (and does not plan to)
 support the following `pip` features:
 
 - `.egg` dependencies
@@ -99,17 +99,17 @@ uv's `requirements.txt` files may not be portable across platforms and Python ve
 
 ## Roadmap
 
-Puffin is an extremely fast Python package resolver and installer, designed as a drop-in
+uv is an extremely fast Python package resolver and installer, designed as a drop-in
 replacement for `pip`, `pip-tools` (`pip-compile` and `pip-sync`), and `virtualenv`.
 
-Puffin represents an intermediary goal in our pursuit of a ["Cargo for Python"](https://blog.rust-lang.org/2016/05/05/cargo-pillars.html#pillars-of-cargo):
+uv represents an intermediary goal in our pursuit of a ["Cargo for Python"](https://blog.rust-lang.org/2016/05/05/cargo-pillars.html#pillars-of-cargo):
 a comprehensive project and package manager that is extremely fast, reliable, and easy to use.
 
 Think: a single binary that bootstraps your Python installation and gives you everything you need to
 be productive with Python, bundling not only `pip`, `pip-tools`, and `virtualenv`, but also `pipx`,
 `tox`, `poetry`, `pyenv`, `ruff`, and more.
 
-Our goal is to evolve Puffin into such a tool.
+Our goal is to evolve uv into such a tool.
 
 In the meantime, though, the narrower `pip-tools` scope allows us to solve the low-level problems
 involved in building such a tool (like package installation) while shipping something immediately
@@ -173,10 +173,10 @@ The specifics of uv's caching semantics vary based on the nature of the dependen
 
 If you're running into caching issues, uv includes a few escape hatches:
 
-- To force Puffin to revalidate cached data for all dependencies, run `puffin pip install --refresh ...`.
-- To force Puffin to revalidate cached data for a specific dependency, run, e.g., `puffin pip install --refresh-package flask ...`.
-- To force Puffin to ignore existing installed versions, run `puffin pip install --reinstall ...`.
-- To clear the global cache entirely, run `puffin clean`. 
+- To force uv to revalidate cached data for all dependencies, run `uv pip install --refresh ...`.
+- To force uv to revalidate cached data for a specific dependency, run, e.g., `uv pip install --refresh-package flask ...`.
+- To force uv to ignore existing installed versions, run `uv pip install --reinstall ...`.
+- To clear the global cache entirely, run `uv clean`. 
 
 ### Resolution strategy
 
@@ -299,7 +299,7 @@ uv has Tier 1 support for the following platforms:
 uv is continuously built, tested, and developed against its Tier 1 platforms. Inspired by the
 Rust project, Tier 1 can be thought of as ["guaranteed to work"](https://doc.rust-lang.org/beta/rustc/platform-support.html).
 
-Puffin has Tier 2 support (["guaranteed to build"](https://doc.rust-lang.org/beta/rustc/platform-support.html)) for the following platforms:
+uv has Tier 2 support (["guaranteed to build"](https://doc.rust-lang.org/beta/rustc/platform-support.html)) for the following platforms:
 
 - Linux (PPC64)
 - Linux (PPC64LE)

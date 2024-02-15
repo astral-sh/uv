@@ -11,7 +11,7 @@ use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, Resolution};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::{TagCompatibility, Tags};
-use puffin_client::{
+use uv_client::{
     FlatDistributions, FlatIndex, OwnedArchive, RegistryClient, SimpleMetadata, SimpleMetadatum,
 };
 use uv_interpreter::Interpreter;

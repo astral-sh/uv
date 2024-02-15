@@ -1,6 +1,6 @@
 # Benchmarks
 
-All benchmarks were computed on macOS using Python 3.12.0 (for non-Puffin tools), and come with a few
+All benchmarks were computed on macOS using Python 3.12.0 (for non-uv tools), and come with a few
 important caveats:
 
 - Benchmark performance may vary dramatically across different operating systems and filesystems.

@@ -8,12 +8,12 @@ use distribution_filename::DistFilename;
 use distribution_types::{Dist, IncompatibleWheel, IndexUrl, PrioritizedDist, WheelCompatibility};
 use pep440_rs::Version;
 use platform_tags::Tags;
-use puffin_client::{FlatDistributions, OwnedArchive, SimpleMetadata, VersionFiles};
-use puffin_normalize::PackageName;
-use puffin_traits::NoBinary;
-use puffin_warnings::warn_user_once;
 use pypi_types::Hashes;
 use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
+use uv_client::{FlatDistributions, OwnedArchive, SimpleMetadata, VersionFiles};
+use uv_normalize::PackageName;
+use uv_traits::NoBinary;
+use uv_warnings::warn_user_once;
 
 use crate::python_requirement::PythonRequirement;
 

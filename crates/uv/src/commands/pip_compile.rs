@@ -19,19 +19,20 @@ use distribution_types::{IndexLocations, LocalEditable};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
-use puffin_cache::Cache;
-use puffin_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
-use puffin_dispatch::BuildDispatch;
-use puffin_fs::Normalized;
-use puffin_installer::{Downloader, NoBinary};
-use puffin_interpreter::{Interpreter, PythonVersion};
-use puffin_normalize::{ExtraName, PackageName};
-use puffin_resolver::{
+use uv_cache::Cache;
+use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
+use uv_dispatch::BuildDispatch;
+use uv_fs::Normalized;
+use uv_installer::{Downloader, NoBinary};
+use uv_interpreter::{Interpreter, PythonVersion};
+use uv_normalize::{ExtraName, PackageName};
+use uv_resolver::{
     DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest, OptionsBuilder,
     PreReleaseMode, ResolutionMode, Resolver,
 };
 use uv_traits::{InFlight, NoBuild, SetupPyStrategy};
 use uv_warnings::warn_user;
+use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
