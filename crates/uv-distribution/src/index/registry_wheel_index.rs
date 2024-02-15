@@ -139,7 +139,7 @@ impl<'a> RegistryWheelIndex<'a> {
                         if compatibility > existing.filename.compatibility(tags) {
                             *existing = dist_info;
                         }
-                    } else if compatibility.is_some() {
+                    } else if compatibility.is_compatible() {
                         versions.insert(dist_info.filename.version.clone(), dist_info);
                     }
                 }

@@ -39,7 +39,6 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 
-use fs_err as fs;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use unscanny::{Pattern, Scanner};
@@ -299,11 +298,12 @@ impl RequirementsTxt {
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtFileError> {
-        let content =
-            fs::read_to_string(&requirements_txt).map_err(|err| RequirementsTxtFileError {
+        let content = puffin_fs::read_to_string(&requirements_txt).map_err(|err| {
+            RequirementsTxtFileError {
                 file: requirements_txt.as_ref().to_path_buf(),
                 error: RequirementsTxtParserError::IO(err),
-            })?;
+            }
+        })?;
         let data = Self::parse_inner(&content, working_dir.as_ref()).map_err(|err| {
             RequirementsTxtFileError {
                 file: requirements_txt.as_ref().to_path_buf(),

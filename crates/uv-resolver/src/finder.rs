@@ -10,8 +10,8 @@ use uv_traits::NoBinary;
 use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, Resolution};
 use pep508_rs::{Requirement, VersionOrUrl};
-use platform_tags::Tags;
-use uv_client::{
+use platform_tags::{TagCompatibility, Tags};
+use puffin_client::{
     FlatDistributions, FlatIndex, OwnedArchive, RegistryClient, SimpleMetadata, SimpleMetadatum,
 };
 use uv_interpreter::Interpreter;
@@ -192,7 +192,9 @@ impl<'a> DistFinder<'a> {
                     }
 
                     best_version = Some(version.clone());
-                    if let Some(priority) = version_wheel.name.compatibility(self.tags) {
+                    if let TagCompatibility::Compatible(priority) =
+                        version_wheel.name.compatibility(self.tags)
+                    {
                         if best_wheel
                             .as_ref()
                             .map_or(true, |(.., existing)| priority > *existing)

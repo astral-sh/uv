@@ -1,6 +1,6 @@
 # Benchmarks
 
-All benchmarks were computed on macOS using Python 3.12 (for non-uv tools), and come with a few
+All benchmarks were computed on macOS using Python 3.12.0 (for non-Puffin tools), and come with a few
 important caveats:
 
 - Benchmark performance may vary dramatically across different operating systems and filesystems.
@@ -83,7 +83,7 @@ python -m scripts.bench \
     --uv \
     --poetry \
     --pip-sync \
-    --benchmark resolve-warm \
+    --benchmark install-warm \
     scripts/requirements/compiled/trio.txt \
     --json
 ```
@@ -96,6 +96,8 @@ cargo run -p uv-dev render-benchmarks resolve-cold.json --title "Cold Resolution
 cargo run -p uv-dev render-benchmarks install-warm.json --title "Warm Installation"
 cargo run -p uv-dev render-benchmarks install-cold.json --title "Cold Installation"
 ```
+
+You need to install the [Roboto Font](https://fonts.google.com/specimen/Roboto) if the labels are missing in the generated graph.
 
 ## Acknowledgements
 

@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use console::Term;
-use fs_err as fs;
 use rustc_hash::FxHashSet;
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
@@ -193,7 +192,7 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
-                let contents = fs::read_to_string(path)?;
+                let contents = puffin_fs::read_to_string(path)?;
                 let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
                     .with_context(|| format!("Failed to parse `{}`", path.normalized_display()))?;
                 let mut used_extras = FxHashSet::default();

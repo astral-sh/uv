@@ -38,6 +38,7 @@ chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 dashmap = { workspace = true }
 derivative = { workspace = true }
+either = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indexmap = { workspace = true }
@@ -47,6 +48,7 @@ owo-colors = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }
 reqwest = { workspace = true }
+rkyv = { workspace = true, features = ["strict", "validation"] }
 rustc-hash = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

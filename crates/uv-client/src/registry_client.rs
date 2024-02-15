@@ -658,6 +658,16 @@ impl IntoIterator for SimpleMetadata {
     }
 }
 
+impl ArchivedSimpleMetadata {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &rkyv::Archived<SimpleMetadatum>> {
+        self.0.iter()
+    }
+
+    pub fn datum(&self, i: usize) -> Option<&rkyv::Archived<SimpleMetadatum>> {
+        self.0.get(i)
+    }
+}
+
 #[derive(Debug)]
 enum MediaType {
     Json,

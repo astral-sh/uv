@@ -7,17 +7,19 @@
 [![Actions status](https://github.com/astral-sh/uv/workflows/CI/badge.svg)](https://github.com/astral-sh/uv/actions)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
 
-An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in replacement for `pip` and `pip-compile`.
+An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in
+replacement for `pip` and `pip-compile`.
 
 uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://github.com/astral-sh/ruff).
 
 ## Highlights
 
 - ⚖️ Drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands.
-- ⚡️ 10-100x faster than `pip` and `pip-tools` (`pip-compile` and `pip-sync`).
+- ⚡️ [10-100x faster](https://github.com/astral-sh/puffin/blob/main/BENCHMARKS.md) than `pip`
+  and `pip-tools` (`pip-compile` and `pip-sync`).
 - 💾 Disk-space efficient, with a global cache for dependency deduplication.
-- 🐍 Installable via `pip`, `pipx`, `brew` etc. uv is a static binary that can be installed without Rust or
-  Python.
+- 🐍 Installable via `curl`, `pip`, `pipx`, etc. Puffin is a static binary that can be installed
+  without Rust or Python.
 - 🧪 Tested at-scale against the top 10,000 PyPI packages.
 - 🖥️ Support for macOS, Linux, and Windows.
 - 🧰 Novel features such as [dependency version overrides](#dependency-overrides) and
@@ -29,13 +31,23 @@ uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://gith
 
 ## Getting Started
 
-uv is available as [`uv`](https://pypi.org/project/uv/) on PyPI:
+Install Puffin with our standalone installers, or from [PyPI](https://pypi.org/project/puffin/):
 
 ```shell
-pipx install uv
+# On macOS and Linux.
+curl -LsSf https://astral.sh/puffin/install.sh | sh
+
+# On Windows.
+irm https://astral.sh/puffin/install.ps1 | iex
+
+# With pip.
+pip install puffin
+
+# With pipx.
+pipx install puffin
 ```
 
-To create a virtual environment with uv:
+To create a virtual environment:
 
 ```shell
 uv venv  # Create a virtual environment at .venv.
@@ -56,7 +68,7 @@ uv pip compile pyproject.toml -o requirements.txt   # Read a pyproject.toml file
 uv pip compile requirements.in -o requirements.txt  # Read a requirements.in file.
 ```
 
-To install a set of locked dependencies into the virtual environment:
+To sync a set of locked dependencies with the virtual environment:
 
 ```shell
 uv pip sync requirements.txt  # Install from a requirements.txt file.
@@ -66,28 +78,10 @@ uv's `pip-install` and `pip-compile` commands supports many of the same command-
 as existing tools, including `-r requirements.txt`, `-c constraints.txt`, `-e .` (for editable
 installs), `--index-url`, and more.
 
-## Roadmap
-
-uv is an extremely fast Python package resolver and installer, designed as a drop-in
-replacement for `pip` and `pip-tools` (`pip-compile` and `pip-sync`).
-
-uv is not a complete package manager. Instead, it represents an intermediary goal in our
-pursuit of a "Cargo for Python": a Python package and project manager that is extremely fast,
-reliable, and easy to use — a single tool capable of unifying not only `pip` and `pip-tools`, but
-also `pipx`, `virtualenv`, `tox`, `setuptools`, `poetry`, `pyenv`, `rye`, and more.
-
-In the future, uv will be used as the foundation for such a tool: a single binary that
-bootstraps your Python installation and gives you everything you need to be productive with Python.
-
-In the meantime, though, uv's narrower scope allows us to solve many of the low-level problems
-that are required to build such a package manager (like package installation) while shipping an
-immediately useful tool with a minimal barrier to adoption. Try it today in lieu of `pip` and
-`pip-compile`.
-
 ## Limitations
 
-uv does not support the entire `pip` feature set. Namely, uv does not plan to support the
-following `pip` features:
+Puffin does not support the entire `pip` feature set. Namely, Puffin does not (and does not plan to)
+support the following `pip` features:
 
 - `.egg` dependencies
 - Editable installs for Git and direct URL dependencies (editable installs _are_ supported for local
@@ -102,6 +96,24 @@ On the other hand, uv plans to (but does not currently) support:
 Like `pip-compile`, uv generates a platform-specific `requirements.txt` file (unlike, e.g.,
 `poetry` and `pdm`, which generate platform-agnostic `poetry.lock` and `pdm.lock` files). As such,
 uv's `requirements.txt` files may not be portable across platforms and Python versions.
+
+## Roadmap
+
+Puffin is an extremely fast Python package resolver and installer, designed as a drop-in
+replacement for `pip`, `pip-tools` (`pip-compile` and `pip-sync`), and `virtualenv`.
+
+Puffin represents an intermediary goal in our pursuit of a ["Cargo for Python"](https://blog.rust-lang.org/2016/05/05/cargo-pillars.html#pillars-of-cargo):
+a comprehensive project and package manager that is extremely fast, reliable, and easy to use.
+
+Think: a single binary that bootstraps your Python installation and gives you everything you need to
+be productive with Python, bundling not only `pip`, `pip-tools`, and `virtualenv`, but also `pipx`,
+`tox`, `poetry`, `pyenv`, `ruff`, and more.
+
+Our goal is to evolve Puffin into such a tool.
+
+In the meantime, though, the narrower `pip-tools` scope allows us to solve the low-level problems
+involved in building such a tool (like package installation) while shipping something immediately
+useful with minimal barrier to adoption.
 
 ## Advanced Usage
 
@@ -161,9 +173,10 @@ The specifics of uv's caching semantics vary based on the nature of the dependen
 
 If you're running into caching issues, uv includes a few escape hatches:
 
-- To force uv to ignore cached data for all dependencies, run `uv pip install --reinstall ...`.
-- To force uv to ignore cached data for a specific dependency, run, e.g., `uv pip install --reinstall-package flask ...`.
-- To clear the global cache entirely, run `uv clean`. 
+- To force Puffin to revalidate cached data for all dependencies, run `puffin pip install --refresh ...`.
+- To force Puffin to revalidate cached data for a specific dependency, run, e.g., `puffin pip install --refresh-package flask ...`.
+- To force Puffin to ignore existing installed versions, run `puffin pip install --reinstall ...`.
+- To clear the global cache entirely, run `puffin clean`. 
 
 ### Resolution strategy
 
@@ -286,7 +299,7 @@ uv has Tier 1 support for the following platforms:
 uv is continuously built, tested, and developed against its Tier 1 platforms. Inspired by the
 Rust project, Tier 1 can be thought of as ["guaranteed to work"](https://doc.rust-lang.org/beta/rustc/platform-support.html).
 
-uv has Tier 2 support ("guaranteed to build") for the following platforms:
+Puffin has Tier 2 support (["guaranteed to build"](https://doc.rust-lang.org/beta/rustc/platform-support.html)) for the following platforms:
 
 - Linux (PPC64)
 - Linux (PPC64LE)

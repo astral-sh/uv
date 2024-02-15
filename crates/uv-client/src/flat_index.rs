@@ -10,7 +10,7 @@ use url::Url;
 
 use distribution_filename::DistFilename;
 use distribution_types::{
-    BuiltDist, Dist, File, FileLocation, FlatIndexLocation, IndexUrl, PrioritizedDistribution,
+    BuiltDist, Dist, File, FileLocation, FlatIndexLocation, IndexUrl, PrioritizedDist,
     RegistryBuiltDist, RegistrySourceDist, SourceDist,
 };
 use pep440_rs::Version;
@@ -249,7 +249,7 @@ impl<'a> FlatIndexClient<'a> {
     }
 }
 
-/// A set of [`PrioritizedDistribution`] from a `--find-links` entry, indexed by [`PackageName`]
+/// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
 /// and [`Version`].
 #[derive(Debug, Clone, Default)]
 pub struct FlatIndex {
@@ -288,7 +288,7 @@ impl FlatIndex {
         // for wheels, we read it lazily only when selected.
         match filename {
             DistFilename::WheelFilename(filename) => {
-                let priority = filename.compatibility(tags);
+                let compatibility = filename.compatibility(tags);
                 let version = filename.version.clone();
 
                 let dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
@@ -298,17 +298,21 @@ impl FlatIndex {
                 }));
                 match distributions.0.entry(version) {
                     Entry::Occupied(mut entry) => {
-                        entry
-                            .get_mut()
-                            .insert_built(dist, None, Yanked::default(), None, priority);
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDistribution::from_built(
+                        entry.get_mut().insert_built(
                             dist,
                             None,
                             Yanked::default(),
                             None,
-                            priority,
+                            compatibility.into(),
+                        );
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(PrioritizedDist::from_built(
+                            dist,
+                            None,
+                            Yanked::default(),
+                            None,
+                            compatibility.into(),
                         ));
                     }
                 }
@@ -326,7 +330,7 @@ impl FlatIndex {
                             .insert_source(dist, None, Yanked::default(), None);
                     }
                     Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDistribution::from_source(
+                        entry.insert(PrioritizedDist::from_source(
                             dist,
                             None,
                             Yanked::default(),
@@ -349,31 +353,31 @@ impl FlatIndex {
     }
 }
 
-/// A set of [`PrioritizedDistribution`] from a `--find-links` entry for a single package, indexed
+/// A set of [`PrioritizedDist`] from a `--find-links` entry for a single package, indexed
 /// by [`Version`].
 #[derive(Debug, Clone, Default)]
-pub struct FlatDistributions(BTreeMap<Version, PrioritizedDistribution>);
+pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
 
 impl FlatDistributions {
-    pub fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDistribution)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDist)> {
         self.0.iter()
     }
 
-    pub fn remove(&mut self, version: &Version) -> Option<PrioritizedDistribution> {
+    pub fn remove(&mut self, version: &Version) -> Option<PrioritizedDist> {
         self.0.remove(version)
     }
 }
 
 impl IntoIterator for FlatDistributions {
-    type Item = (Version, PrioritizedDistribution);
-    type IntoIter = std::collections::btree_map::IntoIter<Version, PrioritizedDistribution>;
+    type Item = (Version, PrioritizedDist);
+    type IntoIter = std::collections::btree_map::IntoIter<Version, PrioritizedDist>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl From<FlatDistributions> for BTreeMap<Version, PrioritizedDistribution> {
+impl From<FlatDistributions> for BTreeMap<Version, PrioritizedDist> {
     fn from(distributions: FlatDistributions) -> Self {
         distributions.0
     }

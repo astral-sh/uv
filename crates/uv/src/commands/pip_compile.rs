@@ -19,17 +19,16 @@ use distribution_types::{IndexLocations, LocalEditable};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
-use requirements_txt::EditableRequirement;
-use uv_cache::Cache;
-use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
-use uv_dispatch::BuildDispatch;
-use uv_fs::Normalized;
-use uv_installer::{Downloader, NoBinary};
-use uv_interpreter::{Interpreter, PythonVersion};
-use uv_normalize::{ExtraName, PackageName};
-use uv_resolver::{
-    DisplayResolutionGraph, InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode,
-    ResolutionMode, Resolver,
+use puffin_cache::Cache;
+use puffin_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
+use puffin_dispatch::BuildDispatch;
+use puffin_fs::Normalized;
+use puffin_installer::{Downloader, NoBinary};
+use puffin_interpreter::{Interpreter, PythonVersion};
+use puffin_normalize::{ExtraName, PackageName};
+use puffin_resolver::{
+    DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest, OptionsBuilder,
+    PreReleaseMode, ResolutionMode, Resolver,
 };
 use uv_traits::{InFlight, NoBuild, SetupPyStrategy};
 use uv_warnings::warn_user;
@@ -51,6 +50,7 @@ pub(crate) async fn pip_compile(
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
+    dependency_mode: DependencyMode,
     upgrade: Upgrade,
     generate_hashes: bool,
     include_annotations: bool,
@@ -212,6 +212,7 @@ pub(crate) async fn pip_compile(
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
         .prerelease_mode(prerelease_mode)
+        .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
         .build();
 
