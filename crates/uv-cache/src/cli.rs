@@ -11,7 +11,7 @@ use crate::Cache;
 #[derive(Parser, Debug, Clone)]
 pub struct CacheArgs {
     /// Avoid reading from or writing to the cache.
-    #[arg(global = true, long, short)]
+    #[arg(global = true, long, short, alias = "no-cache-dir")]
     no_cache: bool,
 
     /// Path to the cache directory.
