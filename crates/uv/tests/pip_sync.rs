@@ -2186,10 +2186,6 @@ fn sync_editable() -> Result<()> {
         .iter()
         .chain(&[
             (filter_path.as_str(), "requirements.txt"),
-            (
-                r"file://.*/../../scripts/editable-installs/poetry_editable",
-                "file://[TEMP_DIR]/../../scripts/editable-installs/poetry_editable",
-            ),
             (&workspace_url, "file://[WORKSPACE_DIR]"),
         ])
         .copied()
