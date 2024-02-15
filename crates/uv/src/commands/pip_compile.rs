@@ -19,6 +19,7 @@ use distribution_types::{IndexLocations, LocalEditable};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
+use requirements_txt::EditableRequirement;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -32,7 +33,6 @@ use uv_resolver::{
 };
 use uv_traits::{InFlight, NoBuild, SetupPyStrategy};
 use uv_warnings::warn_user;
-use requirements_txt::EditableRequirement;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};

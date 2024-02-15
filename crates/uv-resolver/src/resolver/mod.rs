@@ -18,20 +18,6 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
-use distribution_filename::WheelFilename;
-use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IncompatibleWheel, LocalEditable, Name, RemoteSource,
-    SourceDist, VersionOrUrl,
-};
-use pep440_rs::{Version, VersionSpecifiers, MIN_VERSION};
-use pep508_rs::{MarkerEnvironment, Requirement};
-use platform_tags::{IncompatibleTag, Tags};
-use pypi_types::{Metadata21, Yanked};
-use uv_client::{FlatIndex, RegistryClient};
-use uv_distribution::DistributionDatabase;
-use uv_interpreter::Interpreter;
-use uv_normalize::PackageName;
-use uv_traits::BuildContext;
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::error::ResolveError;
 use crate::manifest::Manifest;
@@ -52,6 +38,20 @@ use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Options};
+use distribution_filename::WheelFilename;
+use distribution_types::{
+    BuiltDist, Dist, DistributionMetadata, IncompatibleWheel, LocalEditable, Name, RemoteSource,
+    SourceDist, VersionOrUrl,
+};
+use pep440_rs::{Version, VersionSpecifiers, MIN_VERSION};
+use pep508_rs::{MarkerEnvironment, Requirement};
+use platform_tags::{IncompatibleTag, Tags};
+use pypi_types::{Metadata21, Yanked};
+use uv_client::{FlatIndex, RegistryClient};
+use uv_distribution::DistributionDatabase;
+use uv_interpreter::Interpreter;
+use uv_normalize::PackageName;
+use uv_traits::BuildContext;
 
 mod allowed_urls;
 mod index;
