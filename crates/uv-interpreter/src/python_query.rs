@@ -147,6 +147,7 @@ pub fn find_default_python(platform: &Platform, cache: &Cache) -> Result<Interpr
     let current_dir = env::current_dir()?;
     let python = if cfg!(unix) {
         which::which_in("python3", env::var_os("UV_TEST_PYTHON_PATH"), current_dir)
+            .or_else(|_| which::which("python3"))
             .or_else(|_| which::which("python"))
             .map_err(|_| Error::NoPythonInstalledUnix)?
     } else if cfg!(windows) {
