@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap;
 
-use distribution_types::Dist;
+use distribution_types::{CompatibleDist, Dist};
 use puffin_normalize::PackageName;
 
 use crate::candidate_selector::Candidate;
@@ -14,10 +14,10 @@ pub(crate) struct FilePins(FxHashMap<PackageName, FxHashMap<pep440_rs::Version, 
 
 impl FilePins {
     /// Pin a candidate package.
-    pub(crate) fn insert(&mut self, candidate: &Candidate) {
+    pub(crate) fn insert(&mut self, candidate: &Candidate, dist: &CompatibleDist) {
         self.0.entry(candidate.name().clone()).or_default().insert(
             candidate.version().clone(),
-            candidate.installation_dist().dist.clone(),
+            dist.for_installation().dist.clone(),
         );
     }
 

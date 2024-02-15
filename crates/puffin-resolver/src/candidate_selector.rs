@@ -1,15 +1,15 @@
 use pubgrub::range::Range;
-use pypi_types::Yanked;
+
 use rustc_hash::FxHashMap;
 
-use distribution_types::{Dist, DistributionMetadata, Name};
-use distribution_types::{DistMetadata, ResolvableDist};
-use pep440_rs::{Version, VersionSpecifiers};
+use distribution_types::CompatibleDist;
+use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
+use pep440_rs::Version;
 use pep508_rs::{Requirement, VersionOrUrl};
 use puffin_normalize::PackageName;
 
 use crate::prerelease_mode::PreReleaseStrategy;
-use crate::python_requirement::PythonRequirement;
+
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Manifest, Options};
@@ -177,18 +177,19 @@ impl CandidateSelector {
         #[derive(Debug)]
         enum PreReleaseCandidate<'a> {
             NotNecessary,
-            IfNecessary(&'a Version, ResolvableDist<'a>),
+            IfNecessary(&'a Version, &'a PrioritizedDist),
         }
 
         let mut prerelease = None;
         let mut steps = 0;
         for (version, maybe_dist) in versions {
             steps += 1;
-            if version.any_prerelease() {
+
+            let dist = if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
                         AllowPreRelease::Yes => {
-                            let Some(dist) = maybe_dist.resolvable_dist() else {
+                            let Some(dist) = maybe_dist.prioritized_dist() else {
                                 continue;
                             };
                             tracing::trace!(
@@ -201,10 +202,10 @@ impl CandidateSelector {
                             );
                             // If pre-releases are allowed, treat them equivalently
                             // to stable distributions.
-                            return Some(Candidate::new(package_name, version, dist));
+                            dist
                         }
                         AllowPreRelease::IfNecessary => {
-                            let Some(dist) = maybe_dist.resolvable_dist() else {
+                            let Some(dist) = maybe_dist.prioritized_dist() else {
                                 continue;
                             };
                             // If pre-releases are allowed as a fallback, store the
@@ -212,11 +213,14 @@ impl CandidateSelector {
                             if prerelease.is_none() {
                                 prerelease = Some(PreReleaseCandidate::IfNecessary(version, dist));
                             }
+                            continue;
                         }
                         AllowPreRelease::No => {
                             continue;
                         }
                     }
+                } else {
+                    continue;
                 }
             } else {
                 // If we have at least one stable release, we shouldn't allow the "if-necessary"
@@ -226,7 +230,7 @@ impl CandidateSelector {
 
                 // Always return the first-matching stable distribution.
                 if range.contains(version) {
-                    let Some(dist) = maybe_dist.resolvable_dist() else {
+                    let Some(dist) = maybe_dist.prioritized_dist() else {
                         continue;
                     };
                     tracing::trace!(
@@ -237,9 +241,18 @@ impl CandidateSelector {
                         steps,
                         version,
                     );
-                    return Some(Candidate::new(package_name, version, dist));
+                    dist
+                } else {
+                    continue;
                 }
+            };
+
+            // Skip empty candidates due to exclude newer
+            if dist.exclude_newer() && dist.incompatible_wheel().is_none() && dist.get().is_none() {
+                continue;
             }
+
+            return Some(Candidate::new(package_name, version, dist));
         }
         tracing::trace!(
             "exhausted all candidates for package {:?} with range {:?} \
@@ -259,21 +272,47 @@ impl CandidateSelector {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) enum CandidateDist<'a> {
+    Compatible(CompatibleDist<'a>),
+    Incompatible(Option<&'a IncompatibleWheel>),
+    ExcludeNewer,
+}
+
+impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
+    fn from(value: &'a PrioritizedDist) -> Self {
+        if let Some(dist) = value.get() {
+            CandidateDist::Compatible(dist)
+        } else {
+            if value.exclude_newer() && value.incompatible_wheel().is_none() {
+                // If empty because of exclude-newer, mark as a special case
+                CandidateDist::ExcludeNewer
+            } else {
+                CandidateDist::Incompatible(
+                    value
+                        .incompatible_wheel()
+                        .map(|(_, incompatibility)| incompatibility),
+                )
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct Candidate<'a> {
     /// The name of the package.
     name: &'a PackageName,
     /// The version of the package.
     version: &'a Version,
-    /// The file to use for resolving and installing the package.
-    dist: ResolvableDist<'a>,
+    /// The distributions to use for resolving and installing the package.
+    dist: CandidateDist<'a>,
 }
 
 impl<'a> Candidate<'a> {
-    fn new(name: &'a PackageName, version: &'a Version, dist: ResolvableDist<'a>) -> Self {
+    fn new(name: &'a PackageName, version: &'a Version, dist: &'a PrioritizedDist) -> Self {
         Self {
             name,
             version,
-            dist,
+            dist: CandidateDist::from(dist),
         }
     }
 
@@ -287,57 +326,18 @@ impl<'a> Candidate<'a> {
         self.version
     }
 
-    /// Return the [`DistFile`] to use when resolving the package.
-    pub(crate) fn resolution_dist(&self) -> &DistMetadata {
-        self.dist.for_resolution()
+    /// Return the distribution for the package, if compatible.
+    pub(crate) fn compatible(&self) -> Option<&CompatibleDist<'a>> {
+        if let CandidateDist::Compatible(ref dist) = self.dist {
+            Some(dist)
+        } else {
+            None
+        }
     }
 
-    /// Return the [`DistFile`] to use when installing the package.
-    pub(crate) fn installation_dist(&self) -> &DistMetadata {
-        self.dist.for_installation()
-    }
-
-    /// If the candidate doesn't match the given Python requirement, return the version specifiers.
-    pub(crate) fn validate_python(
-        &self,
-        requirement: &PythonRequirement,
-    ) -> Option<&VersionSpecifiers> {
-        // Validate the _installed_ file.
-        let requires_python = self.installation_dist().requires_python.as_ref()?;
-
-        // If the candidate doesn't support the target Python version, return the failing version
-        // specifiers.
-        if !requires_python.contains(requirement.target()) {
-            return Some(requires_python);
-        }
-
-        // If the candidate is a source distribution, and doesn't support the installed Python
-        // version, return the failing version specifiers, since we won't be able to build it.
-        if matches!(self.installation_dist().dist, Dist::Source(_)) {
-            if !requires_python.contains(requirement.installed()) {
-                return Some(requires_python);
-            }
-        }
-
-        // Validate the resolved file.
-        let requires_python = self.resolution_dist().requires_python.as_ref()?;
-
-        // If the candidate is a source distribution, and doesn't support the installed Python
-        // version, return the failing version specifiers, since we won't be able to build it.
-        // This isn't strictly necessary, since if `self.resolve()` is a source distribution, it
-        // should be the same file as `self.install()` (validated above).
-        if matches!(self.resolution_dist().dist, Dist::Source(_)) {
-            if !requires_python.contains(requirement.installed()) {
-                return Some(requires_python);
-            }
-        }
-
-        None
-    }
-
-    /// If the distribution that would be installed is yanked.
-    pub(crate) fn yanked(&self) -> &Yanked {
-        self.dist.yanked()
+    /// Return the distribution for the candidate.
+    pub(crate) fn dist(&self) -> &CandidateDist<'a> {
+        &self.dist
     }
 }
 
