@@ -1,0 +1,38 @@
+[package]
+name = "uv-git"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+cache-key = { path = "../cache-key" }
+uv-fs = { path = "../uv-fs" }
+
+anyhow = { workspace = true }
+base64 = { workspace = true }
+cargo-util = { workspace = true }
+git2 = { workspace = true }
+glob = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+home = { workspace = true }
+once_cell = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true, features = ["blocking"] }
+serde = { workspace = true }
+sha1 = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+[features]
+vendored-libgit2 = ["git2/vendored-libgit2"]
+vendored-openssl = ["git2/vendored-openssl"]

@@ -9,7 +9,7 @@ use thiserror::Error;
 
 use pep440_rs::{Version, VersionParseError, VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Requirement};
-use puffin_normalize::{ExtraName, InvalidNameError, PackageName};
+use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 
 use crate::lenient_requirement::LenientRequirement;
 use crate::LenientVersionSpecifiers;
@@ -145,7 +145,7 @@ mod tests {
     use std::str::FromStr;
 
     use pep440_rs::Version;
-    use puffin_normalize::PackageName;
+    use uv_normalize::PackageName;
 
     use crate::Error;
 

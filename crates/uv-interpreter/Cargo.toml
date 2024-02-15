@@ -1,0 +1,41 @@
+[package]
+name = "uv-interpreter"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+cache-key = { path = "../cache-key" }
+pep440_rs = { path = "../pep440-rs" }
+pep508_rs = { path = "../pep508-rs", features = ["serde"] }
+platform-host = { path = "../platform-host" }
+platform-tags = { path = "../platform-tags" }
+uv-cache = { path = "../uv-cache" }
+uv-fs = { path = "../uv-fs" }
+
+fs-err = { workspace = true, features = ["tokio"] }
+once_cell = { workspace = true }
+regex = { workspace = true }
+rmp-serde = { workspace = true }
+same-file = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+which = { workspace = true}
+
+[dev-dependencies]
+anyhow = { version = "1.0.79" }
+indoc = { version = "2.0.4" }
+insta = { version = "1.34.0" }
+itertools = { version = "0.12.0" }
+tempfile = { version = "3.9.0" }

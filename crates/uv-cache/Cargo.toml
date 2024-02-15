@@ -1,0 +1,32 @@
+[package]
+name = "uv-cache"
+version = "0.0.1"
+description = "Generate stable hash digests across versions and platforms."
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+cache-key = { path = "../cache-key" }
+distribution-types = { path = "../distribution-types" }
+uv-fs = { path = "../uv-fs" }
+uv-normalize = { path = "../uv-normalize" }
+pypi-types = { path = "../pypi-types" }
+
+cachedir = { workspace = true }
+clap = { workspace = true, features = ["derive"], optional = true }
+directories = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
+nanoid = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tempfile = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+walkdir = { workspace = true }

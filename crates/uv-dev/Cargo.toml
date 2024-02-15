@@ -1,0 +1,70 @@
+[package]
+name = "uv-dev"
+version = "0.0.1"
+description = "Build wheels from source distributions"
+publish = false
+
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+distribution-filename = { path = "../distribution-filename" }
+distribution-types = { path = "../distribution-types" }
+gourgeist = { path = "../gourgeist" }
+install-wheel-rs = { path = "../install-wheel-rs" }
+pep440_rs = { path = "../pep440-rs" }
+pep508_rs = { path = "../pep508-rs" }
+platform-host = { path = "../platform-host" }
+platform-tags = { path = "../platform-tags" }
+uv-build = { path = "../uv-build" }
+uv-cache = { path = "../uv-cache", features = ["clap"] }
+uv-client = { path = "../uv-client" }
+uv-dispatch = { path = "../uv-dispatch" }
+uv-distribution = { path = "../uv-distribution" }
+uv-installer = { path = "../uv-installer" }
+uv-interpreter = { path = "../uv-interpreter" }
+uv-normalize = { path = "../uv-normalize" }
+uv-resolver = { path = "../uv-resolver" }
+pypi-types = { path = "../pypi-types" }
+uv-traits = { path = "../uv-traits" }
+
+# Any dependencies that are exclusively used in `uv-dev` should be listed as non-workspace
+# dependencies, to ensure that we're forced to think twice before including them in other crates.
+anstream = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+fs-err = { workspace = true, features = ["tokio"] }
+futures = { workspace = true }
+indicatif = { workspace = true }
+itertools = { workspace = true }
+owo-colors = { workspace = true }
+petgraph = { workspace = true }
+poloto = { version = "19.1.2" }
+resvg = { version = "0.29.0" }
+rustc-hash = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tagu = { version = "0.1.6" }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-durations-export = { workspace = true, features = ["plot"] }
+tracing-indicatif = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
+which = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+mimalloc = { version = "0.1.39" }
+
+[target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
+tikv-jemallocator = { version = "0.5.4" }

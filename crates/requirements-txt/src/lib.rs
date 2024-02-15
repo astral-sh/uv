@@ -45,8 +45,8 @@ use unscanny::{Pattern, Scanner};
 use url::Url;
 
 use pep508_rs::{split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, VerbatimUrl};
-use puffin_fs::{normalize_url_path, Normalized};
-use puffin_normalize::ExtraName;
+use uv_fs::{normalize_url_path, Normalized};
+use uv_normalize::ExtraName;
 
 /// We emit one of those for each requirements.txt entry
 enum RequirementsTxtStatement {
@@ -298,12 +298,11 @@ impl RequirementsTxt {
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtFileError> {
-        let content = puffin_fs::read_to_string(&requirements_txt).map_err(|err| {
-            RequirementsTxtFileError {
+        let content =
+            uv_fs::read_to_string(&requirements_txt).map_err(|err| RequirementsTxtFileError {
                 file: requirements_txt.as_ref().to_path_buf(),
                 error: RequirementsTxtParserError::IO(err),
-            }
-        })?;
+            })?;
         let data = Self::parse_inner(&content, working_dir.as_ref()).map_err(|err| {
             RequirementsTxtFileError {
                 file: requirements_txt.as_ref().to_path_buf(),
@@ -936,9 +935,9 @@ mod test {
     use fs_err as fs;
     use indoc::indoc;
     use itertools::Itertools;
-    use puffin_fs::Normalized;
     use tempfile::tempdir;
     use test_case::test_case;
+    use uv_fs::Normalized;
 
     use crate::{EditableRequirement, RequirementsTxt};
 

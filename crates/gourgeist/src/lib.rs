@@ -6,7 +6,7 @@ use thiserror::Error;
 
 pub use interpreter::parse_python_cli;
 use platform_host::PlatformError;
-use puffin_interpreter::{Interpreter, Virtualenv};
+use uv_interpreter::{Interpreter, Virtualenv};
 
 pub use crate::bare::create_bare_venv;
 

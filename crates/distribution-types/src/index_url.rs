@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use pep508_rs::split_scheme;
-use puffin_fs::normalize_url_path;
+use uv_fs::normalize_url_path;
 
 static PYPI_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://pypi.org/simple").unwrap());
 

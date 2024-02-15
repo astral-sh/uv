@@ -1,9 +1,0 @@
-[package]
-name = "puffin-normalize"
-version = "0.0.1"
-edition = "2021"
-description = "Normalization for distribution, package and extra anmes"
-
-[dependencies]
-serde = { workspace = true, features = ["derive"] }
-rkyv = { workspace = true, features = ["strict", "validation"] }

@@ -5,7 +5,7 @@ use fs2::FileExt;
 use fs_err::File;
 use tracing::{error, warn};
 
-use puffin_fs::Normalized;
+use uv_fs::Normalized;
 
 const INSTALL_LOCKFILE: &str = "install-wheel-rs.lock";
 

@@ -1,4 +1,4 @@
-use puffin_normalize::PackageName;
+use uv_normalize::PackageName;
 
 use crate::cached::CachedDist;
 use crate::installed::InstalledDist;

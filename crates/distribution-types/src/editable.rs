@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use url::Url;
 
 use pep508_rs::VerbatimUrl;
-use puffin_normalize::ExtraName;
+use uv_normalize::ExtraName;
 
 use crate::Verbatim;
 

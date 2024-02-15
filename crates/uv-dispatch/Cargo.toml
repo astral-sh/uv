@@ -1,0 +1,38 @@
+[package]
+name = "uv-dispatch"
+version = "0.0.1"
+description = "Avoid cyclic crate dependencies between resolver, installer and builder"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+distribution-types = { path = "../distribution-types" }
+gourgeist = { path = "../gourgeist" }
+pep508_rs = { path = "../pep508-rs" }
+platform-host = { path = "../platform-host" }
+platform-tags = { path = "../platform-tags" }
+uv-build = { path = "../uv-build" }
+uv-cache = { path = "../uv-cache" }
+uv-client = { path = "../uv-client" }
+uv-distribution = { path = "../uv-distribution" }
+uv-installer = { path = "../uv-installer" }
+uv-interpreter = { path = "../uv-interpreter" }
+uv-resolver = { path = "../uv-resolver" }
+uv-traits = { path = "../uv-traits" }
+pypi-types = { path = "../pypi-types" }
+
+anyhow = { workspace = true }
+fs-err = { workspace = true }
+futures = { workspace = true }
+itertools = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

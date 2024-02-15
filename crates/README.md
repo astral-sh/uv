@@ -2,7 +2,7 @@
 
 ## [bench](./bench)
 
-Functionality for benchmarking Puffin.
+Functionality for benchmarking uv.
 
 ## [cache-key](./cache-key)
 
@@ -47,79 +47,79 @@ Functionality for detecting the current platform (operating system, architecture
 
 Functionality for parsing and inferring Python platform tags as per [PEP 425](https://peps.python.org/pep-0425/).
 
-## [puffin](./puffin)
+## [uv](./uv)
 
-Command-line interface for the Puffin package manager.
+Command-line interface for the uv package manager.
 
-## [puffin-build](./puffin-build)
+## [uv-build](./uv-build)
 
-A [PEP 517](https://www.python.org/dev/peps/pep-0517/)-compatible build frontend for Puffin.
+A [PEP 517](https://www.python.org/dev/peps/pep-0517/)-compatible build frontend for uv.
 
-## [puffin-cache](./puffin-cache)
+## [uv-cache](./uv-cache)
 
 Functionality for caching Python packages and associated metadata.
 
-## [puffin-client](./puffin-client)
+## [uv-client](./uv-client)
 
 Client for interacting with PyPI-compatible HTTP APIs.
 
-## [puffin-dev](./puffin-dev)
+## [uv-dev](./uv-dev)
 
-Development utilities for Puffin.
+Development utilities for uv.
 
-## [puffin-dispatch](./puffin-dispatch)
+## [uv-dispatch](./uv-dispatch)
 
 A centralized `struct` for resolving and building source distributions in isolated environments.
-Implements the traits defined in `puffin-traits`.
+Implements the traits defined in `uv-traits`.
 
-## [puffin-distribution](./puffin-distribution)
+## [uv-distribution](./uv-distribution)
 
 Client for interacting with built distributions (wheels) and source distributions (sdists).
 Capable of fetching metadata, distribution contents, etc.
 
-## [puffin-extract](./puffin-extract)
+## [uv-extract](./uv-extract)
 
 Utilities for extracting files from archives.
 
-## [puffin-fs](./puffin-fs)
+## [uv-fs](./uv-fs)
 
 Utilities for interacting with the filesystem.
 
-## [puffin-git](./puffin-git)
+## [uv-git](./uv-git)
 
 Functionality for interacting with Git repositories.
 
-## [puffin-installer](./puffin-installer)
+## [uv-installer](./uv-installer)
 
 Functionality for installing Python packages into a virtual environment.
 
-## [puffin-interpreter](./puffin-interpreter)
+## [uv-interpreter](./uv-interpreter)
 
 Functionality for detecting and leveraging the current Python interpreter.
 
-## [puffin-normalize](./puffin-normalize)
+## [uv-normalize](./uv-normalize)
 
 Normalize package and extra names as per Python specifications.
 
-## [puffin-package](./puffin-package)
+## [uv-package](./uv-package)
 
 Types and functionality for working with Python packages, e.g., parsing wheel files.
 
-## [puffin-resolver](./puffin-resolver)
+## [uv-resolver](./uv-resolver)
 
 Functionality for resolving Python packages and their dependencies.
 
-## [puffin-traits](./puffin-traits)
+## [uv-traits](./uv-traits)
 
-Shared traits for Puffin, to avoid circular dependencies.
+Shared traits for uv, to avoid circular dependencies.
 
 ## [pypi-types](./pypi-types)
 
 General-purpose type definitions for types used in PyPI-compatible APIs.
 
-## [puffin-warnings](./puffin-warnings)
+## [uv-warnings](./uv-warnings)
 
-User-facing warnings for Puffin.
+User-facing warnings for uv.
 
 ## [requirements-txt](./requirements-txt)
 

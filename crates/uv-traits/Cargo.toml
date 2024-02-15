@@ -1,0 +1,24 @@
+[package]
+name = "uv-traits"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+distribution-types = { path = "../distribution-types" }
+once-map = { path = "../once-map" }
+pep508_rs = { path = "../pep508-rs" }
+uv-cache = { path = "../uv-cache" }
+uv-interpreter = { path = "../uv-interpreter" }
+uv-normalize = { path = "../uv-normalize" }
+
+anyhow = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }

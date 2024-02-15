@@ -3,9 +3,9 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "puffin-alpha"
-version = "0.0.4"
-authors = [{ name = "Puffin" }]
+name = "uv"
+version = "0.1.0rc1"
+authors = [{ name = "uv" }]
 requires-python = ">=3.8"
 keywords = []
 classifiers = [
@@ -20,14 +20,12 @@ classifiers = [
 readme = "README.md"
 
 [project.urls]
-Repository = "https://pypi.org/project/puffin-alpha/"
-Documentation = "https://pypi.org/project/puffin-alpha/"
-Changelog = "https://pypi.org/project/puffin-alpha/"
+Repository = "https://github.com/astral-sh/uv"
 
 [tool.maturin]
 bindings = "bin"
-manifest-path = "crates/puffin/Cargo.toml"
-module-name = "puffin"
+manifest-path = "crates/uv/Cargo.toml"
+module-name = "uv"
 python-source = "python"
 strip = true
 include = ["rust-toolchain.toml"]

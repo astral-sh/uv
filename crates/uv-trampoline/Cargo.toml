@@ -1,0 +1,59 @@
+[package]
+name = "uv-trampoline"
+version = "0.1.0"
+authors = ["Nathaniel J. Smith <njs@pobox.com>"]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+autotests = false
+
+
+# Need to optimize etc. or else build fails
+[profile.dev]
+lto = true
+codegen-units = 1
+opt-level = 1
+panic = "abort"
+debug-assertions = false
+overflow-checks = false
+debug = true
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
+panic = "abort"
+debug = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+windows-sys = { version = "0.52.0", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Environment",
+    "Win32_System_IO",
+    "Win32_System_JobObjects",
+    "Win32_System_JobObjects",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_System_WindowsProgramming",
+    "Win32_UI_WindowsAndMessaging",
+] }
+# This provides implementations of memcpy, memset, etc., which the compiler assumes
+# are available. But there's also a hidden copy of this crate inside `core`/`alloc`,
+# and they may or may not conflict depending on how clever the linker is feeling.
+# The issue is that the hidden copy doesn't have the "mem" feature enabled, and we
+# need it. So two options:
+# - Uncomment this, and cross fingers that it doesn't cause conflicts
+# - Use -Zbuild-std=... -Zbuild-std-features=compiler-builtins-mem, which enables
+#   the mem feature on the built-in builtins.
+#compiler_builtins = { version = "*", features = ["mem"]}
+ufmt-write = "0.1.0"
+ufmt = "0.2.0"
+
+[build-dependencies]
+embed-manifest = "1.4.0"

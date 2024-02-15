@@ -1,0 +1,662 @@
+use std::{borrow::Cow, future::Future, path::Path};
+
+use futures::FutureExt;
+use reqwest::{Request, Response};
+use reqwest_middleware::ClientWithMiddleware;
+use rkyv::util::AlignedVec;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use tracing::{debug, info_span, instrument, trace, warn, Instrument};
+
+use uv_cache::{CacheEntry, Freshness};
+use uv_fs::write_atomic;
+
+use crate::{
+    httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder},
+    rkyvutil::OwnedArchive,
+    Error, ErrorKind,
+};
+
+/// A trait the generalizes (de)serialization at a high level.
+///
+/// The main purpose of this trait is to make the `CachedClient` work for
+/// either serde or other mechanisms of serialization such as `rkyv`.
+///
+/// If you're using Serde, then unless you want to control the format, callers
+/// should just use `CachedClient::get_serde`. This will use a default
+/// implementation of `Cacheable` internally.
+///
+/// Alternatively, callers using `rkyv` should use
+/// `CachedClient::get_cacheable`. If your types fit into the
+/// `rkyvutil::OwnedArchive` mold, then an implementation of `Cacheable` is
+/// already provided for that type.
+pub trait Cacheable: Sized + Send {
+    /// This associated type permits customizing what the "output" type of
+    /// deserialization is. It can be identical to `Self`.
+    ///
+    /// Typical use of this is for wrapper types used to proviate blanket trait
+    /// impls without hitting overlapping impl problems.
+    type Target;
+
+    /// Deserialize a value from bytes aligned to a 16-byte boundary.
+    fn from_aligned_bytes(bytes: AlignedVec) -> Result<Self::Target, crate::Error>;
+    /// Serialize bytes to a possibly owned byte buffer.
+    fn to_bytes(&self) -> Result<Cow<'_, [u8]>, crate::Error>;
+    /// Convert this type into its final form.
+    fn into_target(self) -> Self::Target;
+}
+
+/// A wrapper type that makes anything with Serde support automatically
+/// implement `Cacheable`.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct SerdeCacheable<T> {
+    inner: T,
+}
+
+impl<T: Send + Serialize + DeserializeOwned> Cacheable for SerdeCacheable<T> {
+    type Target = T;
+
+    fn from_aligned_bytes(bytes: AlignedVec) -> Result<T, Error> {
+        Ok(rmp_serde::from_slice::<T>(&bytes).map_err(ErrorKind::Decode)?)
+    }
+
+    fn to_bytes(&self) -> Result<Cow<'_, [u8]>, Error> {
+        Ok(Cow::from(
+            rmp_serde::to_vec(&self.inner).map_err(ErrorKind::Encode)?,
+        ))
+    }
+
+    fn into_target(self) -> Self::Target {
+        self.inner
+    }
+}
+
+/// All `OwnedArchive` values are cacheable.
+impl<A> Cacheable for OwnedArchive<A>
+where
+    A: rkyv::Archive + rkyv::Serialize<crate::rkyvutil::Serializer<4096>> + Send,
+    A::Archived: for<'a> rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'a>>
+        + rkyv::Deserialize<A, rkyv::de::deserializers::SharedDeserializeMap>,
+{
+    type Target = OwnedArchive<A>;
+
+    fn from_aligned_bytes(bytes: AlignedVec) -> Result<OwnedArchive<A>, Error> {
+        OwnedArchive::new(bytes)
+    }
+
+    fn to_bytes(&self) -> Result<Cow<'_, [u8]>, Error> {
+        Ok(Cow::from(OwnedArchive::as_bytes(self)))
+    }
+
+    fn into_target(self) -> Self::Target {
+        self
+    }
+}
+
+/// Either a cached client error or a (user specified) error from the callback
+#[derive(Debug)]
+pub enum CachedClientError<CallbackError> {
+    Client(Error),
+    Callback(CallbackError),
+}
+
+impl<CallbackError> From<Error> for CachedClientError<CallbackError> {
+    fn from(error: Error) -> Self {
+        CachedClientError::Client(error)
+    }
+}
+
+impl<CallbackError> From<ErrorKind> for CachedClientError<CallbackError> {
+    fn from(error: ErrorKind) -> Self {
+        CachedClientError::Client(error.into())
+    }
+}
+
+impl<E: Into<Error>> From<CachedClientError<E>> for Error {
+    fn from(error: CachedClientError<E>) -> Error {
+        match error {
+            CachedClientError::Client(error) => error,
+            CachedClientError::Callback(error) => error.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CacheControl {
+    /// Respect the `cache-control` header from the response.
+    None,
+    /// Apply `max-age=0, must-revalidate` to the request.
+    MustRevalidate,
+    /// Allow the client to return stale responses.
+    AllowStale,
+}
+
+impl From<Freshness> for CacheControl {
+    fn from(value: Freshness) -> Self {
+        match value {
+            Freshness::Fresh => CacheControl::None,
+            Freshness::Stale => CacheControl::MustRevalidate,
+            Freshness::Missing => CacheControl::None,
+        }
+    }
+}
+
+/// Custom caching layer over [`reqwest::Client`].
+///
+/// The implementation takes inspiration from the `http-cache` crate, but adds support for running
+/// an async callback on the response before caching. We use this to e.g. store a
+/// parsed version of the wheel metadata and for our remote zip reader. In the latter case, we want
+/// to read a single file from a remote zip using range requests (so we don't have to download the
+/// entire file). We send a HEAD request in the caching layer to check if the remote file has
+/// changed (and if range requests are supported), and in the callback we make the actual range
+/// requests if required.
+///
+/// Unlike `http-cache`, all outputs must be serializable/deserializable in some way, by
+/// implementing the `Cacheable` trait.
+///
+/// Again unlike `http-cache`, the caller gets full control over the cache key with the assumption
+/// that it's a file.
+#[derive(Debug, Clone)]
+pub struct CachedClient(ClientWithMiddleware);
+
+impl CachedClient {
+    pub fn new(client: ClientWithMiddleware) -> Self {
+        Self(client)
+    }
+
+    /// The middleware is the retry strategy
+    pub fn uncached(&self) -> ClientWithMiddleware {
+        self.0.clone()
+    }
+
+    /// Make a cached request with a custom response transformation
+    /// while using serde to (de)serialize cached responses.
+    ///
+    /// If a new response was received (no prior cached response or modified
+    /// on the remote), the response is passed through `response_callback` and
+    /// only the result is cached and returned. The `response_callback` is
+    /// allowed to make subsequent requests, e.g. through the uncached client.
+    #[instrument(skip_all)]
+    pub async fn get_serde<
+        Payload: Serialize + DeserializeOwned + Send + 'static,
+        CallBackError,
+        Callback,
+        CallbackReturn,
+    >(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+        response_callback: Callback,
+    ) -> Result<Payload, CachedClientError<CallBackError>>
+    where
+        Callback: FnOnce(Response) -> CallbackReturn + Send,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
+    {
+        let payload = self
+            .get_cacheable(req, cache_entry, cache_control, move |resp| async {
+                let payload = response_callback(resp).await?;
+                Ok(SerdeCacheable { inner: payload })
+            })
+            .await?;
+        Ok(payload)
+    }
+
+    /// Make a cached request with a custom response transformation while using
+    /// the `Cacheable` trait to (de)serialize cached responses.
+    ///
+    /// The purpose of this routine is the use of `Cacheable`. Namely, it
+    /// generalizes over (de)serialization such that mechanisms other than
+    /// serde (such as rkyv) can be used to manage (de)serialization of cached
+    /// data.
+    ///
+    /// If a new response was received (no prior cached response or modified
+    /// on the remote), the response is passed through `response_callback` and
+    /// only the result is cached and returned. The `response_callback` is
+    /// allowed to make subsequent requests, e.g. through the uncached client.
+    #[instrument(skip_all)]
+    pub async fn get_cacheable<Payload: Cacheable, CallBackError, Callback, CallbackReturn>(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+        response_callback: Callback,
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>>
+    where
+        Callback: FnOnce(Response) -> CallbackReturn,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
+    {
+        let cached_response = match Self::read_cache(cache_entry).await {
+            Some(cached) => self.send_cached(req, cache_control, cached).boxed().await?,
+            None => {
+                debug!("No cache entry for: {}", req.url());
+                self.fresh_request(req).await?
+            }
+        };
+        match cached_response {
+            CachedResponse::FreshCache(cached) => Ok(Payload::from_aligned_bytes(cached.data)?),
+            CachedResponse::NotModified { cached, new_policy } => {
+                let refresh_cache =
+                    info_span!("refresh_cache", file = %cache_entry.path().display());
+                async {
+                    let data_with_cache_policy_bytes =
+                        DataWithCachePolicy::serialize(&new_policy, &cached.data)?;
+                    write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
+                        .await
+                        .map_err(ErrorKind::CacheWrite)?;
+                    Ok(Payload::from_aligned_bytes(cached.data)?)
+                }
+                .instrument(refresh_cache)
+                .await
+            }
+            CachedResponse::ModifiedOrNew {
+                response,
+                cache_policy,
+            } => {
+                let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
+                let data = response_callback(response)
+                    .boxed()
+                    .await
+                    .map_err(|err| CachedClientError::Callback(err))?;
+                let Some(cache_policy) = cache_policy else {
+                    return Ok(data.into_target());
+                };
+                async {
+                    fs_err::tokio::create_dir_all(cache_entry.dir())
+                        .await
+                        .map_err(ErrorKind::CacheWrite)?;
+                    let data_with_cache_policy_bytes =
+                        DataWithCachePolicy::serialize(&cache_policy, &data.to_bytes()?)?;
+                    write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
+                        .await
+                        .map_err(ErrorKind::CacheWrite)?;
+                    Ok(data.into_target())
+                }
+                .instrument(new_cache)
+                .await
+            }
+        }
+    }
+
+    async fn read_cache(cache_entry: &CacheEntry) -> Option<DataWithCachePolicy> {
+        let span = info_span!("read_and_parse_cache", file = %cache_entry.path().display());
+        match span
+            .in_scope(|| DataWithCachePolicy::from_path_async(cache_entry.path()))
+            .await
+        {
+            Ok(data) => Some(data),
+            Err(err) => {
+                warn!(
+                    "Broken cache entry at {}, removing: {err}",
+                    cache_entry.path().display()
+                );
+                let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
+                None
+            }
+        }
+    }
+
+    /// Send a request given that we have a (possibly) stale cached response.
+    ///
+    /// If the cached response is valid but stale, then this will attempt a
+    /// revalidation request.
+    async fn send_cached(
+        &self,
+        mut req: Request,
+        cache_control: CacheControl,
+        cached: DataWithCachePolicy,
+    ) -> Result<CachedResponse, Error> {
+        // Apply the cache control header, if necessary.
+        match cache_control {
+            CacheControl::None | CacheControl::AllowStale => {}
+            CacheControl::MustRevalidate => {
+                req.headers_mut().insert(
+                    http::header::CACHE_CONTROL,
+                    http::HeaderValue::from_static("no-cache"),
+                );
+            }
+        }
+        Ok(match cached.cache_policy.before_request(&mut req) {
+            BeforeRequest::Fresh => {
+                debug!("Found fresh response for: {}", req.url());
+                CachedResponse::FreshCache(cached)
+            }
+            BeforeRequest::Stale(new_cache_policy_builder) => match cache_control {
+                CacheControl::None | CacheControl::MustRevalidate => {
+                    debug!("Found stale response for: {}", req.url());
+                    self.send_cached_handle_stale(req, cached, new_cache_policy_builder)
+                        .await?
+                }
+                CacheControl::AllowStale => {
+                    debug!("Found stale (but allowed) response for: {}", req.url());
+                    CachedResponse::FreshCache(cached)
+                }
+            },
+            BeforeRequest::NoMatch => {
+                // This shouldn't happen; if it does, we'll override the cache.
+                warn!(
+                    "Cached request doesn't match current request for: {}",
+                    req.url()
+                );
+                self.fresh_request(req).await?
+            }
+        })
+    }
+
+    async fn send_cached_handle_stale(
+        &self,
+        req: Request,
+        cached: DataWithCachePolicy,
+        new_cache_policy_builder: CachePolicyBuilder,
+    ) -> Result<CachedResponse, Error> {
+        let url = req.url().clone();
+        debug!("Sending revalidation request for: {url}");
+        let response = self
+            .0
+            .execute(req)
+            .instrument(info_span!("revalidation_request", url = url.as_str()))
+            .await
+            .map_err(ErrorKind::from_middleware)?
+            .error_for_status()
+            .map_err(ErrorKind::RequestError)?;
+        match cached
+            .cache_policy
+            .after_response(new_cache_policy_builder, &response)
+        {
+            AfterResponse::NotModified(new_policy) => {
+                debug!("Found not-modified response for: {url}");
+                Ok(CachedResponse::NotModified {
+                    cached,
+                    new_policy: Box::new(new_policy),
+                })
+            }
+            AfterResponse::Modified(new_policy) => {
+                debug!("Found modified response for: {url}");
+                Ok(CachedResponse::ModifiedOrNew {
+                    response,
+                    cache_policy: new_policy
+                        .to_archived()
+                        .is_storable()
+                        .then(|| Box::new(new_policy)),
+                })
+            }
+        }
+    }
+
+    #[instrument(skip_all, fields(url = req.url().as_str()))]
+    async fn fresh_request(&self, req: Request) -> Result<CachedResponse, Error> {
+        trace!("Sending fresh {} request for {}", req.method(), req.url());
+        let cache_policy_builder = CachePolicyBuilder::new(&req);
+        let response = self
+            .0
+            .execute(req)
+            .await
+            .map_err(ErrorKind::from_middleware)?
+            .error_for_status()
+            .map_err(ErrorKind::RequestError)?;
+        let cache_policy = cache_policy_builder.build(&response);
+        Ok(CachedResponse::ModifiedOrNew {
+            response,
+            cache_policy: cache_policy
+                .to_archived()
+                .is_storable()
+                .then(|| Box::new(cache_policy)),
+        })
+    }
+}
+
+#[derive(Debug)]
+enum CachedResponse {
+    /// The cached response is fresh without an HTTP request (e.g. age < max-age).
+    FreshCache(DataWithCachePolicy),
+    /// The cached response is fresh after an HTTP request (e.g. 304 not modified)
+    NotModified {
+        /// The cached response (with its old cache policy).
+        cached: DataWithCachePolicy,
+        /// The new [`CachePolicy`] is used to determine if the response
+        /// is fresh or stale when making subsequent requests for the same
+        /// resource. This policy should overwrite the old policy associated
+        /// with the cached response. In particular, this new policy is derived
+        /// from data received in a revalidation response, which might change
+        /// the parameters of cache behavior.
+        ///
+        /// The policy is large (352 bytes at time of writing), so we reduce
+        /// the stack size by boxing it.
+        new_policy: Box<CachePolicy>,
+    },
+    /// There was no prior cached response or the cache was outdated
+    ///
+    /// The cache policy is `None` if it isn't storable
+    ModifiedOrNew {
+        /// The response received from the server.
+        response: Response,
+        /// The [`CachePolicy`] is used to determine if the response is fresh or
+        /// stale when making subsequent requests for the same resource.
+        ///
+        /// The policy is large (352 bytes at time of writing), so we reduce
+        /// the stack size by boxing it.
+        cache_policy: Option<Box<CachePolicy>>,
+    },
+}
+
+/// Represents an arbitrary data blob with an associated HTTP cache policy.
+///
+/// The cache policy is used to determine whether the data blob is stale or
+/// not.
+///
+/// # Format
+///
+/// This type encapsulates the format for how blobs of data are stored on
+/// disk. The format is very simple. First, the blob of data is written as-is.
+/// Second, the archived representation of a `CachePolicy` is written. Thirdly,
+/// the length, in bytes, of the archived `CachePolicy` is written as a 64-bit
+/// little endian integer.
+///
+/// Reading the format is done via an `AlignedVec` so that `rkyv` can correctly
+/// read the archived representation of the data blob. The cache policy is
+/// split into its own `AlignedVec` allocation.
+///
+/// # Future ideas
+///
+/// This format was also chosen because it should in theory permit rewriting
+/// the cache policy without needing to rewrite the data blob if the blob has
+/// not changed. For example, this case occurs when a revalidation request
+/// responds with HTTP 304 NOT MODIFIED. At time of writing, this is not yet
+/// implemented because 1) the synchronization specifics of mutating a cache
+/// file have not been worked out and 2) it's not clear if it's a win.
+///
+/// An alternative format would be to write the cache policy and the
+/// blob in two distinct files. This would avoid needing to worry about
+/// synchronization, but it means reading two files instead of one for every
+/// cached response in the fast path. It's unclear whether it's worth it.
+/// (Experiments have not yet been done.)
+///
+/// Another approach here would be to memory map the file and rejigger
+/// `OwnedArchive` (or create a new type) that works with a memory map instead
+/// of an `AlignedVec`. This will require care to ensure alignment is handled
+/// correctly. This approach has not been litigated yet. I did not start with
+/// it because experiments with ripgrep have tended to show that (on Linux)
+/// memory mapping a bunch of small files ends up being quite a bit slower than
+/// just reading them on to the heap.
+#[derive(Debug)]
+pub struct DataWithCachePolicy {
+    pub data: AlignedVec,
+    cache_policy: OwnedArchive<CachePolicy>,
+}
+
+impl DataWithCachePolicy {
+    /// Loads cached data and its associated HTTP cache policy from the given
+    /// file path in an asynchronous fashion (via `spawn_blocking`).
+    ///
+    /// # Errors
+    ///
+    /// If the given byte buffer is not in a valid format or if reading the
+    /// file given fails, then this returns an error.
+    async fn from_path_async(path: &Path) -> Result<DataWithCachePolicy, Error> {
+        let path = path.to_path_buf();
+        tokio::task::spawn_blocking(move || DataWithCachePolicy::from_path_sync(&path))
+            .await
+            // This just forwards panics from the closure.
+            .unwrap()
+    }
+
+    /// Loads cached data and its associated HTTP cache policy from the given
+    /// file path in a synchronous fashion.
+    ///
+    /// # Errors
+    ///
+    /// If the given byte buffer is not in a valid format or if reading the
+    /// file given fails, then this returns an error.
+    fn from_path_sync(path: &Path) -> Result<DataWithCachePolicy, Error> {
+        let file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
+        // Note that we don't wrap our file in a buffer because it will just
+        // get passed to AlignedVec::extend_from_reader, which doesn't benefit
+        // from an intermediary buffer. In effect, the AlignedVec acts as the
+        // buffer.
+        DataWithCachePolicy::from_reader(file)
+    }
+
+    /// Loads cached data and its associated HTTP cache policy from the given
+    /// reader.
+    ///
+    /// # Errors
+    ///
+    /// If the given byte buffer is not in a valid format or if the reader
+    /// fails, then this returns an error.
+    pub fn from_reader(mut rdr: impl std::io::Read) -> Result<DataWithCachePolicy, Error> {
+        let mut aligned_bytes = rkyv::util::AlignedVec::new();
+        aligned_bytes
+            .extend_from_reader(&mut rdr)
+            .map_err(ErrorKind::Io)?;
+        DataWithCachePolicy::from_aligned_bytes(aligned_bytes)
+    }
+
+    /// Loads cached data and its associated HTTP cache policy form an in
+    /// memory byte buffer.
+    ///
+    /// # Errors
+    ///
+    /// If the given byte buffer is not in a valid format, then this
+    /// returns an error.
+    fn from_aligned_bytes(mut bytes: AlignedVec) -> Result<DataWithCachePolicy, Error> {
+        let cache_policy = DataWithCachePolicy::deserialize_cache_policy(&mut bytes)?;
+        Ok(DataWithCachePolicy {
+            data: bytes,
+            cache_policy,
+        })
+    }
+
+    /// Serializes the given cache policy and arbitrary data blob to an in
+    /// memory byte buffer.
+    ///
+    /// # Errors
+    ///
+    /// If there was a problem converting the given cache policy to its
+    /// serialized representation, then this routine will return an error.
+    fn serialize(cache_policy: &CachePolicy, data: &[u8]) -> Result<Vec<u8>, Error> {
+        let mut buf = vec![];
+        DataWithCachePolicy::serialize_to_writer(cache_policy, data, &mut buf)?;
+        Ok(buf)
+    }
+
+    /// Serializes the given cache policy and arbitrary data blob to the given
+    /// writer.
+    ///
+    /// # Errors
+    ///
+    /// If there was a problem converting the given cache policy to its
+    /// serialized representation or if the writer returns an error, then
+    /// this routine will return an error.
+    fn serialize_to_writer(
+        cache_policy: &CachePolicy,
+        data: &[u8],
+        mut wtr: impl std::io::Write,
+    ) -> Result<(), Error> {
+        let cache_policy_archived = OwnedArchive::from_unarchived(cache_policy)?;
+        let cache_policy_bytes = OwnedArchive::as_bytes(&cache_policy_archived);
+        wtr.write_all(data).map_err(ErrorKind::Io)?;
+        wtr.write_all(cache_policy_bytes).map_err(ErrorKind::Io)?;
+        let len = u64::try_from(cache_policy_bytes.len()).map_err(|_| {
+            let msg = format!(
+                "failed to represent {} (length of cache policy) in a u64",
+                cache_policy_bytes.len()
+            );
+            ErrorKind::Io(std::io::Error::other(msg))
+        })?;
+        wtr.write_all(&len.to_le_bytes()).map_err(ErrorKind::Io)?;
+        Ok(())
+    }
+
+    /// Deserializes a `OwnedArchive<CachePolicy>` off the end of the given
+    /// aligned bytes. Upon success, the given bytes will only contain the
+    /// data itself. The bytes representing the cached policy will have been
+    /// removed.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the cache policy could not be deserialized
+    /// from the end of the given bytes.
+    fn deserialize_cache_policy(
+        bytes: &mut AlignedVec,
+    ) -> Result<OwnedArchive<CachePolicy>, Error> {
+        let len = DataWithCachePolicy::deserialize_cache_policy_len(bytes)?;
+        let cache_policy_bytes_start = bytes.len() - (len + 8);
+        let cache_policy_bytes = &bytes[cache_policy_bytes_start..][..len];
+        let mut cache_policy_bytes_aligned = AlignedVec::with_capacity(len);
+        cache_policy_bytes_aligned.extend_from_slice(cache_policy_bytes);
+        assert!(
+            cache_policy_bytes_start <= bytes.len(),
+            "slicing cache policy should result in a truncation"
+        );
+        // Technically this will keep the extra capacity used to store the
+        // cache policy around. But it should be pretty small, and it saves a
+        // realloc. (It's unclear whether that matters more or less than the
+        // extra memory usage.)
+        bytes.resize(cache_policy_bytes_start, 0);
+        OwnedArchive::new(cache_policy_bytes_aligned)
+    }
+
+    /// Deserializes the length, in bytes, of the cache policy given a complete
+    /// serialized byte buffer of a `DataWithCachePolicy`.
+    ///
+    /// Upon success, callers are guaranteed that
+    /// `&bytes[bytes.len() - (len + 8)..][..len]` will not panic.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error if the length could not be read as a `usize` or is
+    /// otherwise known to be invalid. (For example, it is a length that is bigger
+    /// than `bytes.len()`.)
+    fn deserialize_cache_policy_len(bytes: &[u8]) -> Result<usize, Error> {
+        let Some(cache_policy_len_start) = bytes.len().checked_sub(8) else {
+            let msg = format!(
+                "data-with-cache-policy buffer should be at least 8 bytes \
+                 in length, but is {} bytes",
+                bytes.len(),
+            );
+            return Err(ErrorKind::ArchiveRead(msg).into());
+        };
+        let cache_policy_len_bytes = <[u8; 8]>::try_from(&bytes[cache_policy_len_start..])
+            .expect("cache policy length is 8 bytes");
+        let len_u64 = u64::from_le_bytes(cache_policy_len_bytes);
+        let Ok(len_usize) = usize::try_from(len_u64) else {
+            let msg = format!(
+                "data-with-cache-policy has cache policy length of {}, \
+                 but overflows usize",
+                len_u64,
+            );
+            return Err(ErrorKind::ArchiveRead(msg).into());
+        };
+        if bytes.len() < len_usize + 8 {
+            let msg = format!(
+                "invalid cache entry: data-with-cache-policy has cache policy length of {}, \
+                 but total buffer size is {}",
+                len_usize,
+                bytes.len(),
+            );
+            return Err(ErrorKind::ArchiveRead(msg).into());
+        }
+        Ok(len_usize)
+    }
+}

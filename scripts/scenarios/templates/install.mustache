@@ -13,7 +13,7 @@ use assert_cmd::prelude::*;
 
 use common::{venv_to_interpreter, INSTA_FILTERS};
 
-use crate::common::{get_bin, puffin_snapshot, TestContext};
+use crate::common::{get_bin, uv_snapshot, TestContext};
 
 mod common;
 
@@ -81,7 +81,7 @@ fn {{module_name}}() {
     {{/packages}}
     filters.push((r"-{{version}}", ""));
 
-    puffin_snapshot!(filters, command(&context)
+    uv_snapshot!(filters, command(&context)
         {{#resolver_options.prereleases}}
         .arg("--prerelease=allow")
         {{/resolver_options.prereleases}}

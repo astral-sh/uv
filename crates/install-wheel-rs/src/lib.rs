@@ -14,11 +14,11 @@ use distribution_filename::WheelFilename;
 pub use install_location::{normalize_name, InstallLocation, LockedDir};
 use pep440_rs::Version;
 use platform_host::{Arch, Os};
-use puffin_fs::Normalized;
-use puffin_normalize::PackageName;
 pub use record::RecordEntry;
 pub use script::Script;
 pub use uninstall::{uninstall_wheel, Uninstall};
+use uv_fs::Normalized;
+use uv_normalize::PackageName;
 pub use wheel::{
     install_wheel, parse_key_value_file, read_record_file, relative_to, SHEBANG_PYTHON,
 };
@@ -86,7 +86,7 @@ pub enum Error {
     #[error("Invalid wheel size")]
     InvalidSize,
     #[error("Invalid package name")]
-    InvalidName(#[from] puffin_normalize::InvalidNameError),
+    InvalidName(#[from] uv_normalize::InvalidNameError),
     #[error("Invalid package version")]
     InvalidVersion(#[from] pep440_rs::VersionParseError),
     #[error("Wheel package name does not match filename: {0} != {1}")]

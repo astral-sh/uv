@@ -1,0 +1,43 @@
+[package]
+name = "uv-build"
+version = "0.0.1"
+description = "Build wheels from source distributions"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+distribution-types = { path = "../distribution-types" }
+gourgeist = { path = "../gourgeist" }
+pep508_rs = { path = "../pep508-rs" }
+platform-host = { path = "../platform-host" }
+uv-extract = { path = "../uv-extract" }
+uv-fs = { path = "../uv-fs" }
+uv-interpreter = { path = "../uv-interpreter" }
+uv-traits = { path = "../uv-traits" }
+pypi-types = { path = "../pypi-types" }
+
+anyhow = { workspace = true }
+fs-err = { workspace = true }
+indoc = { workspace = true }
+itertools = { workspace = true }
+once_cell = { workspace = true }
+pyproject-toml = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync", "process"] }
+toml = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+insta = { version = "1.34.0" }

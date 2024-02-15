@@ -1,0 +1,44 @@
+[package]
+name = "uv-installer"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+distribution-filename = { path = "../distribution-filename" }
+distribution-types = { path = "../distribution-types" }
+install-wheel-rs = { path = "../install-wheel-rs", default-features = false }
+once-map = { path = "../once-map" }
+pep440_rs = { path = "../pep440-rs" }
+pep508_rs = { path = "../pep508-rs" }
+platform-tags = { path = "../platform-tags" }
+uv-cache = { path = "../uv-cache" }
+uv-client = { path = "../uv-client" }
+uv-distribution = { path = "../uv-distribution" }
+uv-extract = { path = "../uv-extract" }
+uv-fs = { path = "../uv-fs" }
+uv-git = { path = "../uv-git", features = ["vendored-openssl"] }
+uv-interpreter = { path = "../uv-interpreter" }
+uv-normalize = { path = "../uv-normalize" }
+uv-traits = { path = "../uv-traits" }
+pypi-types = { path = "../pypi-types" }
+requirements-txt = { path = "../requirements-txt" }
+
+anyhow = { workspace = true }
+fs-err = { workspace = true }
+futures = { workspace = true }
+rayon = { workspace = true }
+rustc-hash = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }

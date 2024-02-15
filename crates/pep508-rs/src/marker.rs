@@ -11,7 +11,6 @@
 
 use crate::{Cursor, Pep508Error, Pep508ErrorSource};
 use pep440_rs::{Version, VersionPattern, VersionSpecifier};
-use puffin_normalize::ExtraName;
 #[cfg(feature = "pyo3")]
 use pyo3::{
     basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, PyAny, PyResult, Python,
@@ -23,6 +22,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
 use tracing::warn;
+use uv_normalize::ExtraName;
 
 /// Ways in which marker evaluation can fail
 #[derive(Debug, Eq, Hash, Ord, PartialOrd, PartialEq, Clone, Copy)]
@@ -731,7 +731,7 @@ impl MarkerExpression {
     /// # use std::str::FromStr;
     /// # use pep508_rs::{MarkerTree, Pep508Error};
     /// # use pep440_rs::Version;
-    /// # use puffin_normalize::ExtraName;
+    /// # use uv_normalize::ExtraName;
     ///
     /// # fn main() -> Result<(), Pep508Error> {
     /// let marker_tree = MarkerTree::from_str(r#"("linux" in sys_platform) and extra == 'day'"#)?;
