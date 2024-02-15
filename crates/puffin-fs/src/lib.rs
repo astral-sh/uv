@@ -12,6 +12,38 @@ pub use crate::path::*;
 
 mod path;
 
+/// Reads the contents of the file path given into memory.
+///
+/// If the file path is `-`, then contents are read from stdin instead.
+pub fn read(path: impl AsRef<Path>) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+
+    let path = path.as_ref();
+    if path == Path::new("-") {
+        let mut buf = Vec::with_capacity(1024);
+        std::io::stdin().read_to_end(&mut buf)?;
+        Ok(buf)
+    } else {
+        fs::read(path)
+    }
+}
+
+/// Reads the contents of the file path given into memory as a `String`.
+///
+/// If the file path is `-`, then contents are read from stdin instead.
+pub fn read_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
+    use std::io::Read;
+
+    let path = path.as_ref();
+    if path == Path::new("-") {
+        let mut buf = String::with_capacity(1024);
+        std::io::stdin().read_to_string(&mut buf)?;
+        Ok(buf)
+    } else {
+        fs::read_to_string(path)
+    }
+}
+
 /// Create a symlink from `src` to `dst`, replacing any existing symlink.
 ///
 /// On Windows, this uses the `junction` crate to create a junction point.
