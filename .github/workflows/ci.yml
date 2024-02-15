@@ -81,7 +81,15 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Cargo Test"
-        run: cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+        run: |
+          cargo nextest run --all --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+      - name: "Integration test"
+        run: |
+          alias uv="./target/debug/uv"
+          uv --help
+          uv venv
+          source .venv/bin/activate
+          uv install trio
 
   # Separate job for the nightly crate
   windows-trampoline:
