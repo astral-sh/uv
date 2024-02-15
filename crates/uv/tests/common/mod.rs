@@ -28,6 +28,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     // Operation times
     (r"(\d+m )?(\d+\.)?\d+(ms|s)", "[TIME]"),
     // uv versions
+    (r"v\d+\.\d+\.\d+-prerelease\.\d+", "v[VERSION]"),
     (r"v\d+\.\d+\.\d+", "v[VERSION]"),
     // File sizes
     (r"(\d+\.)?\d+([KM]i)?B", "[SIZE]"),
