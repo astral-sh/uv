@@ -21,7 +21,7 @@ uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://gith
   without Rust or Python.
 - 🧪 Tested at-scale against the top 10,000 PyPI packages.
 - 🖥️ Support for macOS, Linux, and Windows.
-- 🧰 Novel features such as [dependency version overrides](#dependency-overrides) and
+- 🧰 Advanced features such as [dependency version overrides](#dependency-overrides) and
    [alternative resolution strategies](#resolution-strategy).
 - ⁉️ Best-in-class error messages with a conflict-tracking resolver.
 - 🤝 Support for a wide range of advanced `pip` features, including: editable installs, Git
