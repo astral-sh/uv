@@ -158,6 +158,8 @@ fn date_or_datetime(input: &str) -> Result<DateTime<Utc>, String> {
 #[allow(clippy::struct_excessive_bools)]
 struct PipCompileArgs {
     /// Include all packages listed in the given `requirements.in` files.
+    ///
+    /// When the path is `-`, then requirements are read from stdin.
     #[clap(required(true))]
     src_file: Vec<PathBuf>,
 
