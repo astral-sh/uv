@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/de58b3e3f998486b6c0f3dd67b7341c880eb54b2/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/64b4451b832cece378f6e773d326ea09efe8903d/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
