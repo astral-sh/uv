@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "axi"
-version = "0.0.4"
+version = "0.0.0a1"
 authors = [{ name = "Axi" }]
 requires-python = ">=3.8"
 keywords = []
