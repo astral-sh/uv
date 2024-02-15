@@ -73,7 +73,7 @@ To sync a set of locked dependencies with the virtual environment:
 uv pip sync requirements.txt  # Install from a requirements.txt file.
 ```
 
-uv's `pip-install` and `pip-compile` commands supports many of the same command-line arguments
+uv's `pip-install` and `pip-compile` commands support many of the same command-line arguments
 as existing tools, including `-r requirements.txt`, `-c constraints.txt`, `-e .` (for editable
 installs), `--index-url`, and more.
 
