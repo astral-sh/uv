@@ -115,12 +115,8 @@ impl VersionMap {
         version: &Version,
     ) -> Option<(&'a Version, &'a PrioritizedDist)> {
         match self.inner {
-            VersionMapInner::Eager(ref map) => map
-                .get_key_value(version)
-                .and_then(|(version, dist)| Some((version, dist))),
-            VersionMapInner::Lazy(ref lazy) => lazy
-                .get_with_version(version)
-                .and_then(|(version, dist)| Some((version, dist))),
+            VersionMapInner::Eager(ref map) => map.get_key_value(version),
+            VersionMapInner::Lazy(ref lazy) => lazy.get_with_version(version),
         }
     }
 
