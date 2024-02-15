@@ -26,7 +26,7 @@ Benchmarking package installation (e.g., `uv pip sync`) with a warm cache. This 
 to removing and recreating a virtual environment, and then populating it with dependencies that
 you've installed previously on the same machine.
 
-![install-warm](./assets/png/resolve-cold.png)
+![install-warm](./assets/png/install-warm.png)
 
 ## Cold Installation
 
@@ -34,7 +34,7 @@ Benchmarking package installation (e.g., `uv pip sync`) with a cold cache. This 
 to running `uv pip sync` on a new machine or in CI (assuming that the package manager cache is
 not shared across runs).
 
-![install-cold](./assets/png/resolve-cold.png)
+![install-cold](./assets/png/install-cold.png)
 
 ## Warm Resolution
 
@@ -42,7 +42,7 @@ Benchmarking dependency resolution (e.g., `uv pip compile`) with a warm cache, b
 lockfile. This is equivalent to blowing away an existing `requirements.txt` file to regenerate it
 from a `requirements.in` file.
 
-![resolve-warm](./assets/png/resolve-cold.png)
+![resolve-warm](./assets/png/resolve-warm.png)
 
 ## Cold Resolution
 
@@ -64,27 +64,28 @@ The benchmark script itself has a several requirements:
 - A virtual environment with the script's own dependencies installed (`uv venv && uv pip sync scripts/bench/requirements.txt`).
 - The [`hyperfine`](https://github.com/sharkdp/hyperfine) command-line tool installed on your system.
 
-To benchmark uv's resolution against pip-compile and Poetry:
+To benchmark resolution against pip-compile, Poetry, and PDM:
 
 ```shell
 python -m scripts.bench \
     --uv \
     --poetry \
+    --pdm \
     --pip-compile \
-    --benchmark resolve-warm \
+    --benchmark resolve-warm --benchmark resolve-cold \
     scripts/requirements/trio.in \
     --json
 ```
 
-To benchmark uv's installation against pip-sync and Poetry:
+To benchmark installation against pip-sync, Poetry, and PDM:
 
 ```shell
 python -m scripts.bench \
     --uv \
     --poetry \
+    --pdm \
     --pip-sync \
-    --benchmark install-warm \
-    scripts/requirements/compiled/trio.txt \
+    --benchmark install-warm --benchmark install-cold \
     --json
 ```
 
