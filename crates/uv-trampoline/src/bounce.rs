@@ -1,10 +1,10 @@
-use alloc::{ffi::CString, vec, vec::Vec};
 use core::mem::MaybeUninit;
 use core::{
     ffi::CStr,
     ptr::{addr_of, addr_of_mut, null, null_mut},
 };
 
+use alloc::{ffi::CString, vec, vec::Vec};
 use windows_sys::Win32::{
     Foundation::*,
     System::{
@@ -37,32 +37,50 @@ fn getenv(name: &CStr) -> Option<CString> {
     }
 }
 
+/// Transform `<command> <arguments>` to `python <command> <arguments>`.
 fn make_child_cmdline(is_gui: bool) -> Vec<u8> {
-    unsafe {
-        let python_exe = find_python_exe(is_gui);
+    let executable_name: CString = executable_filename();
+    let python_exe = find_python_exe(is_gui, &executable_name);
+    let mut child_cmdline = Vec::<u8>::new();
 
-        let my_cmdline = CStr::from_ptr(GetCommandLineA() as _);
-        let mut child_cmdline = Vec::<u8>::new();
-        child_cmdline.push(b'"');
-        for byte in python_exe.as_bytes() {
-            if *byte == b'"' {
-                // 3 double quotes: one to end the quoted span, one to become a literal double-quote,
-                // and one to start a new quoted span.
-                child_cmdline.extend(br#"""""#);
-            } else {
-                child_cmdline.push(*byte);
-            }
-        }
-        child_cmdline.extend(br#"" "#);
-        child_cmdline.extend(my_cmdline.to_bytes_with_nul());
-        //eprintln!("new_cmdline: {}", core::str::from_utf8_unchecked(new_cmdline.as_slice()));
-        child_cmdline
-    }
+    push_quoted_path(&python_exe, &mut child_cmdline);
+    child_cmdline.push(b' ');
+
+    // Use the full executable name because CMD only passes the name of the executable (but not the path)
+    // when e.g. invoking `black` instead of `<PATH_TO_VENV>/Scripts/black` and Python then fails
+    // to find the file. Unfortunately, this complicates things because we now need to split the executable
+    // from the arguments string...
+    push_quoted_path(&executable_name, &mut child_cmdline);
+
+    push_arguments(&mut child_cmdline);
+    child_cmdline.push(b'\0');
+
+    eprintln!(
+        "executable_name: '{}'\nnew_cmdline: {}",
+        unsafe { core::str::from_utf8_unchecked(executable_name.to_bytes()) },
+        unsafe { core::str::from_utf8_unchecked(child_cmdline.as_slice()) }
+    );
+
+    child_cmdline
 }
 
-/// The scripts are in the same directory as the Python interpreter, so we can find Python by getting the locations of
-/// the current .exe and replacing the filename with `python[w].exe`.
-fn find_python_exe(is_gui: bool) -> CString {
+fn push_quoted_path(path: &CStr, command: &mut Vec<u8>) {
+    command.push(b'"');
+    for byte in path.to_bytes() {
+        if *byte == b'"' {
+            // 3 double quotes: one to end the quoted span, one to become a literal double-quote,
+            // and one to start a new quoted span.
+            command.extend(br#"""""#);
+        } else {
+            command.push(*byte);
+        }
+    }
+    command.extend(br#"""#);
+}
+
+/// Returns the full path of the executable.
+/// See https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulefilenamea
+fn executable_filename() -> CString {
     unsafe {
         // MAX_PATH is a lie, Windows paths can be longer.
         // https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#maximum-path-length-limitation
@@ -91,25 +109,80 @@ fn find_python_exe(is_gui: bool) -> CString {
                 break;
             }
         }
-        // Replace the filename (the last segment of the path) with "python.exe"
-        // Assumption: We are not in an encoding where a backslash byte can be part of a larger character.
-        let Some(last_backslash) = buffer.iter().rposition(|byte| *byte == b'\\') else {
-            eprintln!(
-                "Invalid current exe path (missing backslash): `{}`",
-                CString::from_vec_with_nul_unchecked(buffer)
-                    .to_string_lossy()
-                    .as_ref()
-            );
-            ExitProcess(1);
-        };
-        buffer.truncate(last_backslash + 1);
-        buffer.extend_from_slice(if is_gui {
-            b"pythonw.exe\0"
-        } else {
-            b"python.exe\0"
-        });
         CString::from_vec_with_nul_unchecked(buffer)
     }
+}
+
+/// The scripts are in the same directory as the Python interpreter, so we can find Python by getting the locations of
+/// the current .exe and replacing the filename with `python[w].exe`.
+fn find_python_exe(is_gui: bool, executable_name: &CStr) -> CString {
+    // Replace the filename (the last segment of the path) with "python.exe"
+    // Assumption: We are not in an encoding where a backslash byte can be part of a larger character.
+    let bytes = executable_name.to_bytes();
+    let Some(last_backslash) = bytes.iter().rposition(|byte| *byte == b'\\') else {
+        eprintln!(
+            "Invalid current exe path (missing backslash): `{}`",
+            &*executable_name.to_string_lossy()
+        );
+        unsafe {
+            ExitProcess(1);
+        }
+    };
+
+    let mut buffer = bytes[..last_backslash + 1].to_vec();
+    buffer.extend_from_slice(if is_gui {
+        b"pythonw.exe"
+    } else {
+        b"python.exe"
+    });
+    buffer.push(b'\0');
+
+    unsafe { CString::from_vec_with_nul_unchecked(buffer) }
+}
+
+fn push_arguments(output: &mut Vec<u8>) {
+    let arguments_as_str = unsafe { CStr::from_ptr(GetCommandLineA() as _) };
+
+    // Skip over the executable name and then push the rest of the arguments
+    let after_executable = skip_one_argument(arguments_as_str.to_bytes());
+
+    output.extend_from_slice(after_executable)
+}
+
+// TODO copy tests from MSDN for parsing
+fn skip_one_argument(arguments: &[u8]) -> &[u8] {
+    let mut quoted = false;
+    let mut offset = 0;
+    let mut bytes_iter = arguments.iter().peekable();
+
+    // Implements https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments?view=msvc-170
+    while let Some(byte) = bytes_iter.next().copied() {
+        match byte {
+            b'"' => {
+                if quoted {
+                    offset += 1;
+                    break;
+                } else {
+                    quoted = true;
+                }
+            }
+            b'\\' => {
+                if bytes_iter.peek().copied() == Some(&b'\"') {
+                    offset += 1;
+                    bytes_iter.next();
+                }
+            }
+            byte => {
+                if byte.is_ascii_whitespace() && !quoted {
+                    break;
+                }
+            }
+        }
+
+        offset += 1;
+    }
+
+    &arguments[offset..]
 }
 
 fn make_job_object() -> HANDLE {
