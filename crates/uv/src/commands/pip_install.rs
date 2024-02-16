@@ -65,6 +65,7 @@ pub(crate) async fn pip_install(
     exclude_newer: Option<DateTime<Utc>>,
     cache: Cache,
     mut printer: Printer,
+    dry_run: bool,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -238,6 +239,14 @@ pub(crate) async fn pip_install(
         }
         Err(err) => return Err(err.into()),
     };
+
+    if dry_run {
+        println!("Would have installed:");
+        for package in resolution.packages() {
+            println!("  {}", package);
+        }
+        return Ok(ExitStatus::Success);
+    }
 
     // Re-initialize the in-flight map.
     let in_flight = InFlight::default();
