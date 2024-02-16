@@ -108,10 +108,17 @@ impl SimpleHtml {
             .ok_or(Error::MissingHref)?;
         let href = std::str::from_utf8(href.as_bytes())?;
 
+        // Extract the hash, which should be in the fragment.
         let decoded = html_escape::decode_html_entities(href);
         let (path, hashes) = if let Some((path, fragment)) = decoded.split_once('#') {
-            // Extract the hash, which should be in the fragment.
-            (path, Self::parse_hash(fragment)?)
+            (
+                path,
+                if fragment.trim().is_empty() {
+                    Hashes::default()
+                } else {
+                    Self::parse_hash(fragment)?
+                },
+            )
         } else {
             (href, Hashes::default())
         };
@@ -453,6 +460,57 @@ mod tests {
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
         insta::assert_display_snapshot!(result, @"Missing href attribute on anchor link");
+    }
+
+    #[test]
+    fn parse_empty_fragment() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+  <body>
+    <h1>Links for jinja2</h1>
+    <a href="/whl/Jinja2-3.1.2-py3-none-any.whl#">Jinja2-3.1.2-py3-none-any.whl</a><br/>
+  </body>
+</html>
+<!--TIMESTAMP 1703347410-->
+        "#;
+        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleHtml::parse(text, &base).unwrap();
+        insta::assert_debug_snapshot!(result, @r###"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [
+                File {
+                    dist_info_metadata: None,
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl#",
+                    yanked: None,
+                },
+            ],
+        }
+        "###);
     }
 
     #[test]
