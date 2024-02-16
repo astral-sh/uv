@@ -45,7 +45,7 @@ pub(crate) struct ResolveCliArgs {
     exclude_newer: Option<DateTime<Utc>>,
     #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
     index_url: IndexUrl,
-    #[clap(long)]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
     #[clap(long)]
     find_links: Vec<FlatIndexLocation>,

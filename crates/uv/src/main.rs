@@ -238,7 +238,7 @@ struct PipCompileArgs {
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
-    #[clap(long)]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
@@ -362,7 +362,7 @@ struct PipSyncArgs {
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
-    #[clap(long)]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
@@ -527,7 +527,7 @@ struct PipInstallArgs {
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
-    #[clap(long)]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
@@ -656,7 +656,7 @@ struct VenvArgs {
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
-    #[clap(long)]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
