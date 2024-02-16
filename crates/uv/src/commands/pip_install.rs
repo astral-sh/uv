@@ -241,9 +241,30 @@ pub(crate) async fn pip_install(
     };
 
     if dry_run {
-        println!("Would have installed:");
-        for package in resolution.packages() {
-            println!("  {}", package);
+        writeln!(
+            printer,
+            "{}",
+            format!(
+                "Would install {}",
+                format!("{} packages", resolution.len()).bold(),
+            )
+            .dimmed()
+        )?;
+
+        for package_name in resolution.packages() {
+            if let Some(dist) = resolution.get(package_name) {
+                let version = dist
+                    .version()
+                    .map_or_else(String::new, |version| format!("=={version}"));
+
+                writeln!(
+                    printer,
+                    " {} {}{}",
+                    "-".blue(),
+                    package_name.as_ref().white().bold(),
+                    version.dimmed()
+                )?;
+            }
         }
         return Ok(ExitStatus::Success);
     }
