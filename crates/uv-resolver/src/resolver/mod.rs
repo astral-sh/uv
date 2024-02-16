@@ -861,8 +861,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     &metadata.requires_dist,
                     &self.constraints,
                     &self.overrides,
-                    extra.as_ref(),
                     Some(package_name),
+                    extra.as_ref(),
                     self.markers,
                 )?;
 
