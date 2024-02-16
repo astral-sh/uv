@@ -4,6 +4,7 @@ use tl::HTMLTag;
 use tracing::instrument;
 use url::Url;
 
+use pep440_rs::VersionSpecifiers;
 use pypi_types::LenientVersionSpecifiers;
 use pypi_types::{BaseUrl, DistInfoMetadata, File, Hashes, Yanked};
 
@@ -137,7 +138,7 @@ impl SimpleHtml {
         {
             let requires_python = std::str::from_utf8(requires_python.as_bytes())?;
             let requires_python = html_escape::decode_html_entities(requires_python);
-            Some(LenientVersionSpecifiers::from_str(&requires_python).map(Into::into))
+            Some(LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from))
         } else {
             None
         };
@@ -713,8 +714,6 @@ mod tests {
         "###);
     }
 
-    /// Test trailing comma in requires-python
-    /// From https://github.com/astral-sh/uv/pull/1507
     #[test]
     fn parse_file_requires_python_trailing_comma() {
         let text = r#"
