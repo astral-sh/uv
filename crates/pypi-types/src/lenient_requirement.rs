@@ -14,7 +14,7 @@ static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").u
 static NOT_EQUAL_TILDE: Lazy<Regex> = Lazy::new(|| Regex::new(r"!=~((?:\d\.)*\d)").unwrap());
 /// Ex) `>=1.9.*`, `<3.4.*`
 static INVALID_TRAILING_DOT_STAR: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(<=|>=|<|>)(\d+\.\d+)\.\*").unwrap());
+    Lazy::new(|| Regex::new(r"(<=|>=|<|>)(\d+(\.\d+)?)\.\*").unwrap());
 /// Ex) `!=3.0*`
 static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
 /// Ex) `>=3.6,`
@@ -215,6 +215,10 @@ mod tests {
             .unwrap()
             .into();
         let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=1.9").unwrap();
+        assert_eq!(actual, expected);
+
+        let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(">=1.*").unwrap().into();
+        let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=1").unwrap();
         assert_eq!(actual, expected);
     }
 
