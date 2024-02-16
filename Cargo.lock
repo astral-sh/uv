@@ -2761,6 +2761,7 @@ dependencies = [
  "url",
  "uv-fs",
  "uv-normalize",
+ "uv-warnings",
 ]
 
 [[package]]

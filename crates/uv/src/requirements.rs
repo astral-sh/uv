@@ -9,6 +9,7 @@ use rustc_hash::FxHashSet;
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
+use tracing::{instrument, Level};
 use uv_fs::Normalized;
 use uv_normalize::{ExtraName, PackageName};
 
@@ -79,6 +80,18 @@ impl RequirementsSource {
     }
 }
 
+impl std::fmt::Display for RequirementsSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Editable(path) => write!(f, "-e {path}"),
+            Self::RequirementsTxt(path) | Self::PyprojectToml(path) => {
+                write!(f, "{}", path.display())
+            }
+            Self::Package(package) => write!(f, "{package}"),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub(crate) enum ExtrasSpecification<'a> {
     #[default]
@@ -124,6 +137,7 @@ pub(crate) struct RequirementsSpecification {
 
 impl RequirementsSpecification {
     /// Read the requirements and constraints from a source.
+    #[instrument(skip_all, level = Level::DEBUG, fields(source = % source))]
     pub(crate) fn from_source(
         source: &RequirementsSource,
         extras: &ExtrasSpecification,

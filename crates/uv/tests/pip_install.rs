@@ -52,6 +52,29 @@ fn missing_requirements_txt() {
 }
 
 #[test]
+fn empty_requirements_txt() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Requirements file requirements.txt does not contain any dependencies
+    Audited 0 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn no_solution() {
     let context = TestContext::new("3.12");
 

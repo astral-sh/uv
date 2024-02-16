@@ -40,9 +40,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{instrument, warn};
 use unscanny::{Pattern, Scanner};
 use url::Url;
+use uv_warnings::warn_user;
 
 use pep508_rs::{split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, VerbatimUrl};
 use uv_fs::{normalize_url_path, Normalized};
@@ -294,6 +295,7 @@ pub struct RequirementsTxt {
 
 impl RequirementsTxt {
     /// See module level documentation
+    #[instrument(skip_all, fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str()))]
     pub fn parse(
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
@@ -313,11 +315,12 @@ impl RequirementsTxt {
             }
         })?;
         if data == Self::default() {
-            warn!(
+            warn_user!(
                 "Requirements file {} does not contain any dependencies",
                 requirements_txt.as_ref().display()
             );
         }
+
         Ok(data)
     }
 
