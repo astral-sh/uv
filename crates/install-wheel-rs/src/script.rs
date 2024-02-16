@@ -39,7 +39,11 @@ impl Script {
         value: &str,
         extras: Option<&[String]>,
     ) -> Result<Option<Script>, Error> {
-        let script_regex = Regex::new(r"^(?P<module>[\w\d_\-.]+):(?P<function>[\w\d_\-.]+)(?:\s+\[(?P<extras>(?:[^,]+,?\s*)+)\])?$").unwrap();
+        // "Within a value, readers must accept and ignore spaces (including multiple consecutive spaces) before or after the colon,
+        //  between the object reference and the left square bracket, between the extra names and the square brackets and colons delimiting them,
+        //  and after the right square bracket."
+        // – https://packaging.python.org/en/latest/specifications/entry-points/#file-format
+        let script_regex = Regex::new(r"^(?P<module>[\w\d_\-.]+)\s*:\s*(?P<function>[\w\d_\-.]+)(?:\s*\[\s*(?P<extras>(?:[^,]+,?\s*)+)\])?\s*$").unwrap();
 
         let captures = script_regex
             .captures(value)
@@ -62,5 +66,36 @@ impl Script {
             module: captures.name("module").unwrap().as_str().to_string(),
             function: captures.name("function").unwrap().as_str().to_string(),
         }))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::Script;
+
+    #[test]
+    fn test_valid_script_names() {
+        for case in [
+            "foomod:main",
+            "foomod:main_bar [bar,baz]",
+            "pylutron_caseta.cli:lap_pair[cli]",
+        ] {
+            assert!(Script::from_value("script", case, None).is_ok());
+        }
+    }
+    #[test]
+    fn test_invalid_script_names() {
+        for case in [
+            "",                     // Empty
+            ":weh",                 // invalid module
+            "foomod:main_bar [bar", // extras malformed
+            "pylutron_caseta",      // missing function part
+            "weh:",                 // invalid function
+        ] {
+            assert!(
+                Script::from_value("script", case, None).is_err(),
+                "case: {case}"
+            );
+        }
     }
 }
