@@ -416,11 +416,12 @@ fn hardlink_wheel_files(
                         // Removing and recreating would lead to race conditions.
                         let tempdir = tempdir_in(&site_packages)?;
                         let tempfile = tempdir.path().join(entry.file_name());
-                        if fs::hard_link(path, &tempfile).is_err() {
+                        if fs::hard_link(path, &tempfile).is_ok() {
+                            fs_err::rename(&tempfile, &out_path)?;
+                        } else {
                             fs::copy(path, &out_path)?;
                             attempt = Attempt::UseCopyFallback;
                         }
-                        fs_err::rename(&tempfile, &out_path)?;
                     } else {
                         fs::copy(path, &out_path)?;
                         attempt = Attempt::UseCopyFallback;
