@@ -184,7 +184,7 @@ By default, uv follows the standard Python dependency resolution strategy of pre
 latest compatible version of each package. For example, `uv pip install flask>=2.0.0` will
 install the latest version of Flask (at time of writing: `3.0.0`).
 
-However, uv's resolution strategy be configured to prefer the _lowest_ compatible version of
+However, uv's resolution strategy can be configured to prefer the _lowest_ compatible version of
 each package (`--resolution=lowest`), or even the lowest compatible version of any _direct_
 dependencies (`--resolution=lowest-direct`), both of which can be useful for library authors looking
 to test their packages against the oldest supported versions of their dependencies.
