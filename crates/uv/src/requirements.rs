@@ -9,6 +9,7 @@ use rustc_hash::FxHashSet;
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
+use tracing::{instrument, Level};
 use uv_fs::Normalized;
 use uv_normalize::{ExtraName, PackageName};
 
@@ -124,6 +125,7 @@ pub(crate) struct RequirementsSpecification {
 
 impl RequirementsSpecification {
     /// Read the requirements and constraints from a source.
+    #[instrument(level = Level::DEBUG)]
     pub(crate) fn from_source(
         source: &RequirementsSource,
         extras: &ExtrasSpecification,
