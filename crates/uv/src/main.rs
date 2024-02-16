@@ -256,12 +256,12 @@ struct PipCompileArgs {
     find_links: Vec<FlatIndexLocation>,
 
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
-    #[clap(long)]
+    #[clap(long, short = 'U')]
     upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in the existing output
     /// file.
-    #[clap(long)]
+    #[clap(long, short = 'P')]
     upgrade_package: Vec<PackageName>,
 
     /// Include distribution hashes in the output file.
@@ -471,11 +471,11 @@ struct PipInstallArgs {
     all_extras: bool,
 
     /// Allow package upgrades.
-    #[clap(long)]
+    #[clap(long, short = 'U')]
     upgrade: bool,
 
     /// Allow upgrade of a specific package.
-    #[clap(long)]
+    #[clap(long, short = 'P')]
     upgrade_package: Vec<PackageName>,
 
     /// Reinstall all packages, regardless of whether they're already installed.
