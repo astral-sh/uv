@@ -55,7 +55,6 @@ uv venv  # Create a virtual environment at .venv.
 
 To activate the virtual environment
 
-
 ```shell
 # On macOS and Linux.
 source .venv/bin/activate
