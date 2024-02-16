@@ -1097,3 +1097,35 @@ fn install_constraints_inline() -> Result<()> {
 
     Ok(())
 }
+
+/// Tests that we can install `polars==0.14.0`, which has this odd dependency
+/// requirement in its wheel metadata: `pyarrow>=4.0.*; extra == 'pyarrow'`.
+///
+/// The `>=4.0.*` is invalid, but is something we "fix" because it is out
+/// of the control of the end user. However, our fix for this case ends up
+/// stripping the quotes around `pyarrow` and thus produces an irrevocably
+/// invalid dependency requirement.
+///
+/// See: <https://github.com/astral-sh/uv/issues/1477>
+#[test]
+fn install_pinned_polars_invalid_metadata() {
+    let context = TestContext::new("3.12");
+
+    // Install Flask.
+    uv_snapshot!(command(&context)
+        .arg("polars==0.14.0"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + polars==0.14.0
+    "###
+    );
+
+    context.assert_command("import polars").success();
+}

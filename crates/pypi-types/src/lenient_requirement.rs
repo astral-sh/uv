@@ -15,13 +15,13 @@ static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").u
 static NOT_EQUAL_TILDE: Lazy<Regex> = Lazy::new(|| Regex::new(r"!=~((?:\d\.)*\d)").unwrap());
 /// Ex) `>=1.9.*`, `<3.4.*`
 static INVALID_TRAILING_DOT_STAR: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(<=|>=|<|>)(\d+(\.\d+)?)\.\*").unwrap());
+    Lazy::new(|| Regex::new(r"(<=|>=|<|>)(\d+(\.\d+)*)\.\*").unwrap());
 /// Ex) `!=3.0*`
 static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
 /// Ex) `>=3.6,`
 static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r",\s*$").unwrap());
 /// Ex) `>= '2.7'`, `>=3.6'`
-static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]"#).unwrap());
+static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]([*\d])|([*\d])['"]"#).unwrap());
 
 /// Regex to match the invalid specifier, replacement to fix it and message about was wrong and
 /// fixed
@@ -45,7 +45,7 @@ static FIXUPS: &[(&Lazy<Regex>, &str, &str)] = &[
     // Given `>=3.6,`, rewrite to `>=3.6`
     (&TRAILING_COMMA, r"${1}", "removing trailing comma"),
     // Given `>= '2.7'`, rewrite to `>= 2.7`
-    (&STRAY_QUOTES, r"", "removing stray quotes"),
+    (&STRAY_QUOTES, r"$1$2", "removing stray quotes"),
 ];
 
 fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -> Result<T, Err> {
