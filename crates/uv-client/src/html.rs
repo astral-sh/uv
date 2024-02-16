@@ -120,7 +120,7 @@ impl SimpleHtml {
                 },
             )
         } else {
-            (href, Hashes::default())
+            (decoded.as_ref(), Hashes::default())
         };
 
         // Extract the filename from the body text, which MUST match that of
@@ -129,6 +129,10 @@ impl SimpleHtml {
             .split('/')
             .last()
             .ok_or_else(|| Error::MissingFilename(href.to_string()))?;
+
+        // Unquote the filename.
+        let filename = urlencoding::decode(filename)
+            .map_err(|_| Error::UnsupportedFilename(filename.to_string()))?;
 
         // Extract the `requires-python` field, which should be set on the
         // `data-requires-python` attribute.
@@ -197,6 +201,9 @@ pub enum Error {
 
     #[error("Expected distribution filename as last path component of URL: {0}")]
     MissingFilename(String),
+
+    #[error("Expected distribution filename to be UTF-8: {0}")]
+    UnsupportedFilename(String),
 
     #[error("Missing hash attribute on URL: {0}")]
     MissingHash(String),
@@ -370,6 +377,57 @@ mod tests {
                     size: None,
                     upload_time: None,
                     url: "/whl/Jinja2-3.1.2&#43;233fca715f49-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                    yanked: None,
+                },
+            ],
+        }
+        "###);
+    }
+
+    #[test]
+    fn parse_quoted_filepath() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+  <body>
+    <h1>Links for jinja2</h1>
+    <a href="cpu/torchtext-0.17.0%2Bcpu-cp39-cp39-win_amd64.whl">cpu/torchtext-0.17.0%2Bcpu-cp39-cp39-win_amd64.whl</a><br/>
+  </body>
+</html>
+<!--TIMESTAMP 1703347410-->
+        "#;
+        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleHtml::parse(text, &base).unwrap();
+        insta::assert_debug_snapshot!(result, @r###"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [
+                File {
+                    dist_info_metadata: None,
+                    filename: "torchtext-0.17.0+cpu-cp39-cp39-win_amd64.whl",
+                    hashes: Hashes {
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "cpu/torchtext-0.17.0%2Bcpu-cp39-cp39-win_amd64.whl",
                     yanked: None,
                 },
             ],

@@ -4267,6 +4267,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
+ "urlencoding",
  "uv-cache",
  "uv-fs",
  "uv-normalize",
