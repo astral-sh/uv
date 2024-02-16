@@ -127,8 +127,8 @@ fn get_musl_version(ld_path: impl AsRef<Path>) -> std::io::Result<Option<(u16, u
 
 /// Find musl libc path from executable's ELF header.
 fn find_libc() -> Result<PathBuf, PlatformError> {
-    let buffer = fs::read("/bin/ls")?;
-    let error_str = "Couldn't parse /bin/ls for detecting the ld version";
+    let buffer = fs::read("/bin/sh")?;
+    let error_str = "Couldn't parse /bin/sh for detecting the ld version";
     let elf = Elf::parse(&buffer)
         .map_err(|err| PlatformError::OsVersionDetectionError(format!("{error_str}: {err}")))?;
     if let Some(elf_interpreter) = elf.interpreter {
