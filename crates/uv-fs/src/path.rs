@@ -31,14 +31,18 @@ impl<T: AsRef<Path>> Normalized for T {
 ///
 /// On other platforms, this is a no-op.
 pub fn normalize_url_path(path: &str) -> Cow<'_, str> {
+    // Apply percent-decoding to the URL.
+    let path = urlencoding::decode(path).unwrap_or(Cow::Borrowed(path));
+
+    // Return the path.
     if cfg!(windows) {
         Cow::Owned(
             path.strip_prefix('/')
-                .unwrap_or(path)
+                .unwrap_or(&path)
                 .replace('/', std::path::MAIN_SEPARATOR_STR),
         )
     } else {
-        Cow::Borrowed(path)
+        path
     }
 }
 
@@ -69,6 +73,18 @@ mod tests {
             assert_eq!(
                 normalize_url_path("./ferris/wheel-0.42.0.tar.gz"),
                 "./ferris/wheel-0.42.0.tar.gz"
+            );
+        }
+
+        if cfg!(windows) {
+            assert_eq!(
+                normalize_url_path("./wheel%20cache/wheel-0.42.0.tar.gz"),
+                ".\\wheel cache\\wheel-0.42.0.tar.gz"
+            );
+        } else {
+            assert_eq!(
+                normalize_url_path("./wheel%20cache/wheel-0.42.0.tar.gz"),
+                "./wheel cache/wheel-0.42.0.tar.gz"
             );
         }
     }

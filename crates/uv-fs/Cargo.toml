@@ -21,6 +21,7 @@ fs2 = { workspace = true }
 junction = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
+urlencoding = { workspace = true }
 
 [features]
 default = []
