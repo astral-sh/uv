@@ -792,10 +792,12 @@ fn all_extras_required() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + albatross==1.0.0
+     + bluebird==1.0.0
+     + crow==1.0.0
     "###);
 
     assert_installed(&context.venv, "a_4cf56e90", "1.0.0", &context.temp_dir);
