@@ -591,6 +591,11 @@ struct PipInstallArgs {
     /// format (e.g., `2006-12-02`).
     #[arg(long, value_parser = date_or_datetime, hide = true)]
     exclude_newer: Option<DateTime<Utc>>,
+
+    /// Perform a dry run, i.e., don't actually install anything but resolve the dependencies and
+    /// print the resulting plan.
+    #[clap(long)]
+    dry_run: bool,
 }
 
 #[derive(Args)]
@@ -979,6 +984,7 @@ async fn run() -> Result<ExitStatus> {
                 args.exclude_newer,
                 cache,
                 printer,
+                args.dry_run,
             )
             .await
         }
