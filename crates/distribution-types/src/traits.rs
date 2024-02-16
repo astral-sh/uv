@@ -31,14 +31,12 @@ pub trait DistributionMetadata: Name {
     /// registry-based distributions (e.g., different wheels for the same package and version)
     /// will return the same package ID, but different distribution IDs.
     fn package_id(&self) -> PackageId {
-        PackageId::new(match self.version_or_url() {
+        match self.version_or_url() {
             VersionOrUrl::Version(version) => {
-                // https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-dist-info-directory
-                // `version` is normalized by its `ToString` impl
-                format!("{}-{}", self.name(), version)
+                PackageId::from_registry(self.name().clone(), version.clone())
             }
-            VersionOrUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
-        })
+            VersionOrUrl::Url(url) => PackageId::from_url(url),
+        }
     }
 }
 

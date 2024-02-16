@@ -3376,3 +3376,31 @@ fn compile_none_extra() -> Result<()> {
 
     Ok(())
 }
+
+/// Resolve a package (`pytz`) with a preference that omits a trailing zero.
+///
+/// See: <https://github.com/astral-sh/uv/issues/1536>
+#[test]
+fn compile_types_pytz() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("types-pytz")?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("types-pytz==2021.1")?;
+
+    uv_snapshot!(context
+        .compile()
+        .arg("requirements.in")
+        .arg("-o")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
