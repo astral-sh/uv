@@ -53,7 +53,7 @@ pub enum Error {
     Zip(#[from] ZipError),
     #[error("Source distribution directory contains neither readable pyproject.toml nor setup.py")]
     DirWithoutEntrypoint,
-    #[error("Failed to extract source distribution: {0}")]
+    #[error("Failed to extract source distribution")]
     Extract(#[from] uv_extract::Error),
 
     /// Should not occur; only seen when another task panicked.

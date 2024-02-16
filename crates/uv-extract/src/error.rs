@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 use zip::result::ZipError;
 
@@ -15,5 +15,5 @@ pub enum Error {
     #[error(
         "The top level of the archive must only contain a list directory, but it contains: {0:?}"
     )]
-    InvalidArchive(Vec<fs_err::DirEntry>),
+    InvalidArchive(Vec<OsString>),
 }
