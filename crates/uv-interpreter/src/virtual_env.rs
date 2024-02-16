@@ -7,6 +7,7 @@ use tracing::debug;
 use platform_host::Platform;
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Normalized};
+use uv_warnings::warn_user;
 
 use crate::cfg::Configuration;
 use crate::python_platform::PythonPlatform;
@@ -129,6 +130,7 @@ pub(crate) fn detect_virtual_env(target: &PythonPlatform) -> Result<Option<PathB
                 return Err(Error::BrokenVenv(dot_venv, python));
             }
             debug!("Found a virtualenv named .venv at: {}", dot_venv.display());
+            warn_user!("A virtualenv was found, but it is not active.");
             return Ok(Some(dot_venv));
         }
     }

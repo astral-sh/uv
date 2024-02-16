@@ -4451,6 +4451,7 @@ dependencies = [
  "tracing",
  "uv-cache",
  "uv-fs",
+ "uv-warnings",
  "which",
 ]
 

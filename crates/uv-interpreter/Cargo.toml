@@ -20,6 +20,7 @@ platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
 uv-cache = { path = "../uv-cache" }
 uv-fs = { path = "../uv-fs" }
+uv-warnings = { path = "../uv-warnings" }
 
 fs-err = { workspace = true, features = ["tokio"] }
 once_cell = { workspace = true }
