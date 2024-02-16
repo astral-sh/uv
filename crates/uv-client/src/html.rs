@@ -4,7 +4,7 @@ use tl::HTMLTag;
 use tracing::instrument;
 use url::Url;
 
-use pep440_rs::VersionSpecifiers;
+use pypi_types::LenientVersionSpecifiers;
 use pypi_types::{BaseUrl, DistInfoMetadata, File, Hashes, Yanked};
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
@@ -137,7 +137,7 @@ impl SimpleHtml {
         {
             let requires_python = std::str::from_utf8(requires_python.as_bytes())?;
             let requires_python = html_escape::decode_html_entities(requires_python);
-            Some(VersionSpecifiers::from_str(&requires_python))
+            Some(LenientVersionSpecifiers::from_str(&requires_python).map(Into::into))
         } else {
             None
         };
@@ -706,6 +706,71 @@ mod tests {
                     size: None,
                     upload_time: None,
                     url: "3.0.1/flask-3.0.1.tar.gz#sha256=6489f51bb3666def6f314e15f19d50a1869a19ae0e8c9a3641ffe66c77d42403",
+                    yanked: None,
+                },
+            ],
+        }
+        "###);
+    }
+
+    /// Test trailing comma in requires-python
+    /// From https://github.com/astral-sh/uv/pull/1507
+    #[test]
+    fn parse_file_requires_python_trailing_comma() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+  <body>
+    <h1>Links for jinja2</h1>
+    <a href="/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61" data-requires-python="&gt;=3.8,">Jinja2-3.1.2-py3-none-any.whl</a><br/>
+  </body>
+</html>
+        "#;
+        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleHtml::parse(text, &base).unwrap();
+        insta::assert_debug_snapshot!(result, @r###"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [
+                File {
+                    dist_info_metadata: None,
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        sha256: Some(
+                            "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                        ),
+                    },
+                    requires_python: Some(
+                        Ok(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: GreaterThanEqual,
+                                        version: "3.8",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
                     yanked: None,
                 },
             ],
