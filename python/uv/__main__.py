@@ -3,6 +3,26 @@ import sys
 import sysconfig
 
 
+def detect_virtualenv() -> str:
+    """
+    Find the virtual environment path for the current Python executable.
+    """
+
+    # If it's already set, then just use it
+    value = os.getenv("VIRTUAL_ENV")
+    if value:
+        return value
+
+    # Otherwise, check if we're in a venv
+    maybe_venv_dir = os.path.dirname(os.path.dirname(sys.executable))
+    venv_marker = os.path.join(maybe_venv_dir, "pyvenv.cfg")
+
+    if os.path.exists(venv_marker):
+        return maybe_venv_dir
+
+    return ""
+
+
 def find_uv_bin() -> str:
     """Return the uv binary path."""
 
@@ -30,10 +50,16 @@ def find_uv_bin() -> str:
 
 if __name__ == "__main__":
     uv = os.fsdecode(find_uv_bin())
+
+    env = {}
+    venv = detect_virtualenv()
+    if venv:
+        env["VIRTUAL_ENV"] = venv
+
     if sys.platform == "win32":
         import subprocess
 
-        completed_process = subprocess.run([uv, *sys.argv[1:]])
+        completed_process = subprocess.run([uv, *sys.argv[1:]], env=env)
         sys.exit(completed_process.returncode)
     else:
-        os.execvp(uv, [uv, *sys.argv[1:]])
+        os.execvpe(uv, [uv, *sys.argv[1:]], env=env)
