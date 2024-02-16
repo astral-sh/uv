@@ -256,7 +256,7 @@ struct PipCompileArgs {
     find_links: Vec<FlatIndexLocation>,
 
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
-    #[clap(long)]
+    #[clap(long, short = 'U')]
     upgrade: bool,
 
     /// Allow upgrades for a specific package, ignoring pinned versions in the existing output
@@ -471,7 +471,7 @@ struct PipInstallArgs {
     all_extras: bool,
 
     /// Allow package upgrades.
-    #[clap(long)]
+    #[clap(long, short = 'U')]
     upgrade: bool,
 
     /// Allow upgrade of a specific package.
