@@ -163,7 +163,7 @@ impl<'a> FlatIndexClient<'a> {
                         match File::try_from(file, base.as_url().as_str()) {
                             Ok(file) => Some(file),
                             Err(err) => {
-                                // Ignore files with unparseable version specifiers.
+                                // Ignore files with unparsable version specifiers.
                                 warn!("Skipping file in {url}: {err}");
                                 None
                             }

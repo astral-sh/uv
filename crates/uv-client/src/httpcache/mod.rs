@@ -21,7 +21,7 @@ think we can do a quick overview here.
 Let's start with the obvious. HTTP caching exists to avoid network requests,
 and, if a request is unavoidable, bandwidth. The central actor in HTTP
 caching is the `Cache-Control` header, which can exist on *both* requests and
-resonses. The value of this header is a list of directives that control caching
+responses. The value of this header is a list of directives that control caching
 behavior. They can outright disable it (`no-store`), force cache invalidation
 (`no-cache`) or even permit the cache to return responses that are explicitly
 stale (`max-stale`).

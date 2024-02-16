@@ -146,7 +146,7 @@ impl FromIterator<CacheControlDirective> for CacheControl {
 /// The parser is mostly defined across multiple parts of multiple RFCs.
 /// Namely, [RFC 9110 S5.6.2] says how to parse the names (or "keys") of each
 /// directive (whose format is a "token"). [RFC 9110 S5.6.4] says how to parse
-/// quoted values. And finally, [RFC 9111 Appendex A] gives the ABNF for the
+/// quoted values. And finally, [RFC 9111 Appendix A] gives the ABNF for the
 /// overall header value.
 ///
 /// This parser accepts an iterator of anything that can be cheaply converted

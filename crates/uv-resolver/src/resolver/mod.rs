@@ -683,7 +683,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 let dist = match candidate.dist() {
                     CandidateDist::Compatible(dist) => dist,
                     CandidateDist::ExcludeNewer => {
-                        // If the version is incomatible because of `exclude_newer`, pretend the versions do not exist
+                        // If the version is incompatible because of `exclude_newer`, pretend the versions do not exist
                         return Ok(None);
                     }
                     CandidateDist::Incompatible(incompatibility) => {
