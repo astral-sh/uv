@@ -14,11 +14,10 @@ def detect_virtualenv() -> str:
         return value
 
     # Otherwise, check if we're in a venv
-    maybe_venv_dir = os.path.dirname(os.path.dirname(sys.executable))
-    venv_marker = os.path.join(maybe_venv_dir, "pyvenv.cfg")
+    venv_marker = os.path.join(sys.prefix, "pyvenv.cfg")
 
     if os.path.exists(venv_marker):
-        return maybe_venv_dir
+        return sys.prefix
 
     return ""
 
