@@ -53,7 +53,7 @@ To create a virtual environment:
 uv venv  # Create a virtual environment at .venv.
 ```
 
-To activate the virtual environment
+To activate the virtual environment:
 
 ```shell
 # On macOS and Linux.
