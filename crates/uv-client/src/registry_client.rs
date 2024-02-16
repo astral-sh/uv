@@ -189,7 +189,10 @@ impl RegistryClient {
         url.path_segments_mut()
             .unwrap()
             .pop_if_empty()
-            .push(package_name.as_ref());
+            .push(package_name.as_ref())
+            // The URL *must* end in a trailing slash for proper relative path behavior
+            // ref https://github.com/servo/rust-url/issues/333
+            .push("");
 
         trace!("Fetching metadata for {package_name} from {url}");
 
