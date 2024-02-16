@@ -54,9 +54,11 @@ jobs:
           - { os: "ubuntu", runner: "ubuntu-latest-large" }
           - { os: "windows", runner: "windows-latest-large" }
           - { os: "macos", runner: "macos-14" }
+          - { os: "ubuntu", runner: "ubuntu-latest-large", container: "docker://amazonlinux:2023" }
     runs-on:
       labels: ${{ matrix.runner }}
-    name: "cargo test | ${{ matrix.os }}"
+    container: ${{ matrix.container }}
+    name: "cargo test | ${{ matrix.os }} ${{ matrix.container }}"
     steps:
       - uses: actions/checkout@v4
       - if: ${{ matrix.os == 'macos' }}
