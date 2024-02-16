@@ -13,16 +13,19 @@ pub fn base_url_join_relative(base: &str, maybe_relative: &str) -> Result<Url, J
         Ok(absolute) => Ok(absolute),
         Err(err) => {
             if err == url::ParseError::RelativeUrlWithoutBase {
-                let base = Url::parse(base).map_err(|err| JoinRelativeError {
+                let base_url = Url::parse(base).map_err(|err| JoinRelativeError::ParseError {
                     original: base.to_string(),
                     source: err,
                 })?;
-                base.join(maybe_relative).map_err(|err| JoinRelativeError {
-                    original: format!("{base}/{maybe_relative}"),
-                    source: err,
-                })
+
+                base_url
+                    .join(maybe_relative)
+                    .map_err(|_| JoinRelativeError::ParseError {
+                        original: format!("{base}/{maybe_relative}"),
+                        source: err,
+                    })
             } else {
-                Err(JoinRelativeError {
+                Err(JoinRelativeError::ParseError {
                     original: maybe_relative.to_string(),
                     source: err,
                 })
@@ -36,10 +39,12 @@ pub fn base_url_join_relative(base: &str, maybe_relative: &str) -> Result<Url, J
 /// The error message includes the URL (`base` or `maybe_relative`) passed to
 /// `base_url_join_relative` that provoked the error.
 #[derive(Clone, Debug, thiserror::Error)]
-#[error("Failed to parse URL: `{original}`")]
-pub struct JoinRelativeError {
-    original: String,
-    source: url::ParseError,
+pub enum JoinRelativeError {
+    #[error("Failed to parse URL: `{original}`")]
+    ParseError {
+        original: String,
+        source: url::ParseError,
+    },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
