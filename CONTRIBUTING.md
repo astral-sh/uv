@@ -31,10 +31,14 @@ See the [Python](#python) section for instructions on installing the Python vers
 
 ### Windows
 
-You can install CMake from the [installers](https://cmake.org/download/) or with `pipx install cmake` (make sure that the pipx install path is in `PATH`, pipx complains if it isn't).
+You can install CMake from the [installers](https://cmake.org/download/) or with `pipx install cmake` 
+(make sure that the pipx install path is in `PATH`, pipx complains if it isn't).
 
 ## Testing
 
+For running tests, we recommend [nextest](https://nexte.st/).
+
+### Python
 Testing uv requires multiple specific Python versions. You can install them into
 `<project root>/bin` via our bootstrapping script:
 
@@ -48,8 +52,6 @@ Alternatively, you can install `zstandard` from PyPI, then run:
 python3.12 scripts/bootstrap/install.py
 ```
 
-For running tests, we recommend [nextest](https://nexte.st/).
-
 ## Running inside a docker container
 
 Source distributions can run arbitrary code on build and can make unwanted modifications to your system (https://moyix.blogspot.com/2022/09/someones-been-messing-with-my-subnormals.html, https://pypi.org/project/nvidia-pyindex/), which can even occur when just resolving requirements. To prevent this, there's a Docker container you can run commands in:
@@ -61,8 +63,7 @@ cargo build --target x86_64-unknown-linux-musl --profile profiling --features ve
 docker run --rm -it -v $(pwd):/app uv-builder /app/target/x86_64-unknown-linux-musl/profiling/uv-dev resolve-many --cache-dir /app/cache-docker /app/scripts/popular_packages/pypi_10k_most_dependents.txt
 ```
 
-We recommend using this container if you don't trust the dependency tree of the package(s) you are trying to resolve or install. 
-
+We recommend using this container if you don't trust the dependency tree of the package(s) you are trying to resolve or install.
 
 ## Profiling
 
