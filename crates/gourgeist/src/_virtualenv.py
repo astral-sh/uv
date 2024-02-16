@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import sys
-from contextlib import suppress
 
 VIRTUALENV_PATCH_FILE = os.path.join(__file__)
 
@@ -78,8 +77,10 @@ class _Finder:
                         old = getattr(spec.loader, func_name)
                         func = self.exec_module if is_new_api else self.load_module
                         if old is not func:
-                            with suppress(AttributeError):  # C-Extension loaders are r/o such as zipimporter with <3.7
+                            try:  # noqa: SIM105
                                 setattr(spec.loader, func_name, partial(func, old))
+                            except AttributeError:
+                                pass  # C-Extension loaders are r/o such as zipimporter with <3.7
                         return spec
                 finally:
                     self.fullname = None
