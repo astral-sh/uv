@@ -1,18 +1,35 @@
 use std::fmt::{Display, Formatter};
 
+use url::Url;
+
+use pep440_rs::Version;
+use uv_normalize::PackageName;
+
 /// A unique identifier for a package (e.g., `black==23.10.0`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct PackageId(String);
+pub enum PackageId {
+    NameVersion(PackageName, Version),
+    Url(String),
+}
 
 impl PackageId {
-    pub fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
+    /// Create a new [`PackageId`] from a package name and version.
+    pub fn from_registry(name: PackageName, version: Version) -> Self {
+        Self::NameVersion(name, version)
+    }
+
+    /// Create a new [`PackageId`] from a URL.
+    pub fn from_url(url: &Url) -> Self {
+        Self::Url(cache_key::digest(&cache_key::CanonicalUrl::new(url)))
     }
 }
 
 impl Display for PackageId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        match self {
+            PackageId::NameVersion(name, version) => write!(f, "{name}-{version}"),
+            PackageId::Url(url) => write!(f, "{url}"),
+        }
     }
 }
 
