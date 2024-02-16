@@ -25,7 +25,7 @@ uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://gith
 - 🧰 Advanced features such as [dependency version overrides](#dependency-overrides) and
    [alternative resolution strategies](#resolution-strategy).
 - ⁉️ Best-in-class error messages with a conflict-tracking resolver.
-- 🤝 Support for a wide range of advanced `pip` features, including: editable installs, Git
+- 🤝 Support for a wide range of advanced `pip` features, including editable installs, Git
   dependencies, direct URL dependencies, local dependencies, constraints, source distributions,
   HTML and JSON indexes, and more.
 
@@ -123,7 +123,7 @@ Our goal is to evolve uv into such a tool.
 
 In the meantime, though, the narrower `pip-tools` scope allows us to solve the low-level problems
 involved in building such a tool (like package installation) while shipping something immediately
-useful with minimal barrier to adoption.
+useful with a minimal barrier to adoption.
 
 ## Advanced Usage
 
@@ -356,6 +356,6 @@ dually licensed as above, without any additional terms or conditions.
 
 <div align="center">
   <a target="_blank" href="https://astral.sh" style="background:none">
-    <img src="https://raw.githubusercontent.com/astral-sh/uv/main/assets/svg/Astral.svg">
+    <img src="https://raw.githubusercontent.com/astral-sh/uv/main/assets/svg/Astral.svg" alt="Made by Astral Badge">
   </a>
 </div>
