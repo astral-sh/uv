@@ -919,6 +919,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "etcetera"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "136d1b5283a1ab77bd9257427ffd09d8667ced0570b6f938942bc7568ed5b943"
+dependencies = [
+ "cfg-if",
+ "home",
+ "windows-sys 0.48.0",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4075,6 +4086,7 @@ dependencies = [
  "distribution-filename",
  "distribution-types",
  "dunce",
+ "etcetera",
  "filetime",
  "flate2",
  "fs-err",
@@ -4106,6 +4118,7 @@ dependencies = [
  "tikv-jemallocator",
  "tokio",
  "toml",
+ "toml_edit",
  "tracing",
  "tracing-durations-export",
  "tracing-subscriber",

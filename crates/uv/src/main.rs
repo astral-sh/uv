@@ -47,6 +47,7 @@ mod confirm;
 mod logging;
 mod printer;
 mod requirements;
+mod settings;
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -647,9 +648,8 @@ struct VenvArgs {
     #[clap(long)]
     seed: bool,
 
-    /// The path to the virtual environment to create.
-    #[clap(default_value = ".venv")]
-    name: PathBuf,
+    /// The path to the virtual environment to create. Defaults to .venv.
+    name: Option<PathBuf>,
 
     /// The URL of the Python Package Index.
     #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
@@ -1003,6 +1003,9 @@ async fn run() -> Result<ExitStatus> {
         }) => commands::freeze(&cache, args.strict, printer),
         Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
         Commands::Venv(args) => {
+            let mut settings = settings::Settings::read()?;
+            settings.set_venv_name(args.name);
+
             args.compat_args.validate()?;
 
             let index_locations = IndexLocations::from_args(
@@ -1013,7 +1016,7 @@ async fn run() -> Result<ExitStatus> {
                 args.no_index,
             );
             commands::venv(
-                &args.name,
+                &settings.venv_name,
                 args.python.as_deref(),
                 &index_locations,
                 if args.offline {
