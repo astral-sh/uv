@@ -260,7 +260,7 @@ pub(crate) async fn pip_install(
                 writeln!(
                     printer,
                     " {} {}{}",
-                    "-".blue(),
+                    "~".blue(),
                     package_name.as_ref().white().bold(),
                     version.dimmed()
                 )?;
