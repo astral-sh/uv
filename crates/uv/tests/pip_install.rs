@@ -1012,3 +1012,38 @@ fn install_upgrade() {
     "###
     );
 }
+
+#[test]
+fn dry_run_install() -> Result<(), Box<dyn std::error::Error>> {
+    let context = TestContext::new("3.12");
+
+    // Set up a requirements.txt with some packages
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("Flask==2.3.2")?;
+
+    // Run the installation command with our dry-run and strict flags set
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--dry-run")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Would install 7 packages
+     ~ jinja2==3.1.2
+     ~ itsdangerous==2.1.2
+     ~ blinker==1.7.0
+     ~ markupsafe==2.1.3
+     ~ flask==2.3.2
+     ~ werkzeug==3.0.1
+     ~ click==8.1.7
+    "###
+    );
+
+    Ok(())
+}
