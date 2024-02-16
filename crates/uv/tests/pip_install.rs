@@ -1012,3 +1012,61 @@ fn install_upgrade() {
     "###
     );
 }
+
+/// Install a package from a `requirements.txt` file, with a `constraints.txt` file.
+#[test]
+fn install_constraints_txt() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirementstxt = context.temp_dir.child("requirements.txt");
+    requirementstxt.write_str("django==5.0b1")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("sqlparse<0.4.4")?;
+
+    uv_snapshot!(command(&context)
+            .arg("-r")
+            .arg("requirements.txt")
+            .arg("--constraint")
+            .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + asgiref==3.7.2
+     + django==5.0b1
+     + sqlparse==0.4.3
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install a package from a `requirements.txt` file, with an inline constraint.
+#[test]
+fn install_constraints_inline() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirementstxt = context.temp_dir.child("requirements.txt");
+    requirementstxt.write_str("django==5.0b1")?;
+    requirementstxt.write_str("-c constraints.txt")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("sqlparse<0.4.4")?;
+
+    uv_snapshot!(command(&context)
+            .arg("-r")
+            .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 0 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
