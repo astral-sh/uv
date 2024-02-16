@@ -1,9 +1,9 @@
 # uv
 
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
-[![image](https://img.shields.io/pypi/v/uv/0.1.1.svg)](https://pypi.python.org/pypi/uv)
-[![image](https://img.shields.io/pypi/l/uv/0.1.1.svg)](https://pypi.python.org/pypi/uv)
-[![image](https://img.shields.io/pypi/pyversions/uv/0.1.1.svg)](https://pypi.python.org/pypi/uv)
+[![image](https://img.shields.io/pypi/v/uv/0.1.2.svg)](https://pypi.python.org/pypi/uv)
+[![image](https://img.shields.io/pypi/l/uv/0.1.2.svg)](https://pypi.python.org/pypi/uv)
+[![image](https://img.shields.io/pypi/pyversions/uv/0.1.2.svg)](https://pypi.python.org/pypi/uv)
 [![Actions status](https://github.com/astral-sh/uv/workflows/CI/badge.svg)](https://github.com/astral-sh/uv/actions)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
 
