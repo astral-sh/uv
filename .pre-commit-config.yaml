@@ -31,5 +31,9 @@ repos:
       - id: prettier
         types: [yaml]
 
-ci:
-  skip: [cargo-fmt, dev-generate-all]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.2.1
+    hooks:
+      - id: ruff-format
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
