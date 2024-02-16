@@ -303,7 +303,10 @@ impl RequirementsTxt {
                 file: requirements_txt.as_ref().to_path_buf(),
                 error: RequirementsTxtParserError::IO(err),
             })?;
-        let data = Self::parse_inner(&content, working_dir.as_ref()).map_err(|err| {
+
+        let working_dir = working_dir.as_ref();
+        let requirements_dir = requirements_txt.as_ref().parent().unwrap_or(working_dir);
+        let data = Self::parse_inner(&content, working_dir, requirements_dir).map_err(|err| {
             RequirementsTxtFileError {
                 file: requirements_txt.as_ref().to_path_buf(),
                 error: err,
@@ -318,13 +321,16 @@ impl RequirementsTxt {
         Ok(data)
     }
 
-    /// See module level documentation
+    /// See module level documentation.
     ///
-    /// Note that all relative paths are dependent on the current working dir, not on the location
-    /// of the file
+    /// When parsing, relative paths to requirements (e.g., `-e ../editable/`) are resolved against
+    /// the current working directory. However, relative paths to sub-files (e.g., `-r ../requirements.txt`)
+    /// are resolved against the directory of the containing `requirements.txt` file, to match
+    /// `pip`'s behavior.
     pub fn parse_inner(
         content: &str,
         working_dir: &Path,
+        requirements_dir: &Path,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
@@ -336,7 +342,7 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let sub_file = working_dir.join(filename);
+                    let sub_file = requirements_dir.join(filename);
                     let sub_requirements = Self::parse(&sub_file, working_dir).map_err(|err| {
                         RequirementsTxtParserError::Subfile {
                             source: Box::new(err),
@@ -352,7 +358,7 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let sub_file = working_dir.join(filename);
+                    let sub_file = requirements_dir.join(filename);
                     let sub_constraints = Self::parse(&sub_file, working_dir).map_err(|err| {
                         RequirementsTxtParserError::Subfile {
                             source: Box::new(err),
@@ -980,6 +986,15 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
+        // Copy the existing files over to a temporary directory.
+        let temp_dir = tempdir().unwrap();
+        for entry in fs::read_dir(&working_dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            let dest = temp_dir.path().join(path.file_name().unwrap());
+            fs::copy(&path, &dest).unwrap();
+        }
+
         // Replace line endings with the other choice. This works even if you use git with LF
         // only on windows.
         let contents = fs::read_to_string(requirements_txt).unwrap();
@@ -988,9 +1003,6 @@ mod test {
         } else {
             contents.replace('\n', "\r\n")
         };
-
-        // Write to a new file.
-        let temp_dir = tempdir().unwrap();
         let requirements_txt = temp_dir.path().join(path);
         fs::write(&requirements_txt, contents).unwrap();
 
@@ -1177,6 +1189,58 @@ mod test {
         }, {
             insta::assert_display_snapshot!(errors, @"Requirement `file.txt` in `<REQUIREMENTS_TXT>` looks like a requirements file but was passed as a package name. Did you mean `-r file.txt`?");
         });
+
+        Ok(())
+    }
+
+    #[test]
+    fn relative_requirement() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+
+        // Create a requirements file with a relative entry, in a subdirectory.
+        let sub_dir = temp_dir.child("subdir");
+
+        let sibling_txt = sub_dir.child("sibling.txt");
+        sibling_txt.write_str(indoc! {"
+            flask
+        "})?;
+
+        let child_txt = sub_dir.child("child.txt");
+        child_txt.write_str(indoc! {"
+            -r sibling.txt
+        "})?;
+
+        // Create a requirements file that points at `requirements.txt`.
+        let parent_txt = temp_dir.child("parent.txt");
+        parent_txt.write_str(indoc! {"
+            -r subdir/child.txt
+        "})?;
+
+        let requirements = RequirementsTxt::parse(parent_txt.path(), temp_dir.path()).unwrap();
+        insta::assert_debug_snapshot!(requirements, @r###"
+        RequirementsTxt {
+            requirements: [
+                RequirementEntry {
+                    requirement: Requirement {
+                        name: PackageName(
+                            "flask",
+                        ),
+                        extras: [],
+                        version_or_url: None,
+                        marker: None,
+                    },
+                    hashes: [],
+                    editable: false,
+                },
+            ],
+            constraints: [],
+            editables: [],
+            index_url: None,
+            extra_index_urls: [],
+            find_links: [],
+            no_index: false,
+        }
+        "###);
 
         Ok(())
     }
