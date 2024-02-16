@@ -37,6 +37,18 @@ pub enum ResolveError {
     #[error("Attempted to wait on an unregistered task")]
     Unregistered,
 
+    #[error("Attempted to wait on an unregistered task 1 ")]
+    Unregistered1,
+
+    #[error("Attempted to wait on an unregistered task 2 ")]
+    Unregistered2,
+
+    #[error("Attempted to wait on an unregistered task 3 ")]
+    Unregistered3,
+
+    #[error("Attempted to wait on an unregistered task 4 ")]
+    Unregistered4,
+
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
     NameMismatch {
         given: PackageName,

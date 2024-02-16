@@ -65,10 +65,13 @@ impl ResolutionGraph {
             match package {
                 PubGrubPackage::Package(package_name, None, None) => {
                     // Create the distribution.
-                    let pinned_package = pins
-                        .get(package_name, version)
-                        .expect("Every package should be pinned")
-                        .clone();
+                    let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
+                        Dist::from_editable(package_name.clone(), editable.clone())?
+                    } else {
+                        pins.get(package_name, version)
+                            .expect("Every package should be pinned")
+                            .clone()
+                    };
 
                     // Add its hashes to the index.
                     if let Some(versions_response) = packages.get(package_name) {
@@ -87,9 +90,7 @@ impl ResolutionGraph {
                 }
                 PubGrubPackage::Package(package_name, None, Some(url)) => {
                     // Create the distribution.
-                    let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
-                        Dist::from_editable(package_name.clone(), editable.clone())?
-                    } else {
+                    let pinned_package = {
                         let url = redirects.get(url).map_or_else(
                             || url.clone(),
                             |url| VerbatimUrl::unknown(url.value().clone()),
@@ -115,20 +116,35 @@ impl ResolutionGraph {
                 PubGrubPackage::Package(package_name, Some(extra), None) => {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_registry(package_name, version);
-                    let metadata = distributions
-                        .get(&dist.package_id())
-                        .expect("Every package should have metadata");
 
-                    if !metadata.provides_extras.contains(extra) {
-                        let pinned_package = pins
-                            .get(package_name, version)
-                            .expect("Every package should be pinned")
-                            .clone();
+                    if let Some((_, metadata)) = editables.get(package_name) {
+                        if !metadata.provides_extras.contains(extra) {
+                            let pinned_package = pins
+                                .get(package_name, version)
+                                .expect("Every package should be pinned")
+                                .clone();
 
-                        diagnostics.push(Diagnostic::MissingExtra {
-                            dist: pinned_package,
-                            extra: extra.clone(),
-                        });
+                            diagnostics.push(Diagnostic::MissingExtra {
+                                dist: pinned_package,
+                                extra: extra.clone(),
+                            });
+                        }
+                    } else {
+                        let metadata = distributions
+                            .get(&dist.package_id())
+                            .expect("Every package should have metadata");
+
+                        if !metadata.provides_extras.contains(extra) {
+                            let pinned_package = pins
+                                .get(package_name, version)
+                                .expect("Every package should be pinned")
+                                .clone();
+
+                            diagnostics.push(Diagnostic::MissingExtra {
+                                dist: pinned_package,
+                                extra: extra.clone(),
+                            });
+                        }
                     }
                 }
                 PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {

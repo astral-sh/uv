@@ -160,16 +160,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         // Determine all the editable requirements.
         let mut editables = FxHashMap::default();
         for (editable_requirement, metadata) in &manifest.editables {
-            // Convert the editable requirement into a distribution.
-            let dist = Dist::from_editable(metadata.name.clone(), editable_requirement.clone())
-                .expect("This is a valid distribution");
-
-            // Mock editable responses.
-            let package_id = dist.package_id();
-            index.distributions.register(package_id.clone());
-            index.distributions.done(package_id, metadata.clone());
             editables.insert(
-                dist.name().clone(),
+                metadata.name.clone(),
                 (editable_requirement.clone(), metadata.clone()),
             );
         }
@@ -558,7 +550,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     /// partial solution.
     ///
     /// Returns [None] when there are no versions in the given range.
-    #[instrument(skip_all, fields(%package))]
+    #[instrument(skip_all, fields(% package))]
     async fn choose_version(
         &self,
         package: &PubGrubPackage,
@@ -622,7 +614,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         .distributions
                         .wait(&dist.package_id())
                         .await
-                        .ok_or(ResolveError::Unregistered)?;
+                        .ok_or(ResolveError::Unregistered4)?;
                     let version = &metadata.version;
                     if range.contains(version) {
                         Ok(Some(ResolverVersion::Available(version.clone())))
@@ -633,6 +625,16 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             }
 
             PubGrubPackage::Package(package_name, extra, None) => {
+                // If the dist is an editable, return the version from the editable metadata.
+                if let Some((_local, metadata)) = self.editables.get(package_name) {
+                    let version = metadata.version.clone();
+                    return if range.contains(&version) {
+                        Ok(Some(ResolverVersion::Available(version)))
+                    } else {
+                        Ok(None)
+                    };
+                }
+
                 // Wait for the metadata to be available.
                 let versions_response = self
                     .index
@@ -640,7 +642,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .wait(package_name)
                     .instrument(info_span!("package_wait", %package_name))
                     .await
-                    .ok_or(ResolveError::Unregistered)?;
+                    .ok_or(ResolveError::Unregistered3)?;
                 self.visited.insert(package_name.clone());
 
                 let version_map = match *versions_response {
@@ -759,7 +761,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     }
 
     /// Given a candidate package and version, return its dependencies.
-    #[instrument(skip_all, fields(%package, %version))]
+    #[instrument(skip_all, fields(% package, % version))]
     async fn get_dependencies(
         &self,
         package: &PubGrubPackage,
@@ -798,11 +800,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 // Add a dependency on each editable.
                 for (editable, metadata) in self.editables.values() {
                     constraints.insert(
-                        PubGrubPackage::Package(
-                            metadata.name.clone(),
-                            None,
-                            Some(editable.url().clone()),
-                        ),
+                        PubGrubPackage::Package(metadata.name.clone(), None, None),
                         Range::singleton(metadata.version.clone()),
                     );
                     for extra in &editable.extras {
@@ -810,7 +808,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             PubGrubPackage::Package(
                                 metadata.name.clone(),
                                 Some(extra.clone()),
-                                Some(editable.url().clone()),
+                                None,
                             ),
                             Range::singleton(metadata.version.clone()),
                         );
@@ -830,7 +828,37 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     return Ok(Dependencies::Available(DependencyConstraints::default()));
                 }
 
-                // Determine the distribution to lookup
+                // Determine if the distribution is editable.
+                if let Some((_local, metadata)) = self.editables.get(package_name) {
+                    let mut constraints = PubGrubDependencies::from_requirements(
+                        &metadata.requires_dist,
+                        &self.constraints,
+                        &self.overrides,
+                        Some(package_name),
+                        extra.as_ref(),
+                        self.markers,
+                    )?;
+
+                    for (package, version) in constraints.iter() {
+                        debug!("Adding transitive dependency: {package}{version}");
+
+                        // Emit a request to fetch the metadata for this package.
+                        self.visit_package(package, priorities, request_sink)
+                            .await?;
+                    }
+
+                    // If a package has an extra, insert a constraint on the base package.
+                    if extra.is_some() {
+                        constraints.insert(
+                            PubGrubPackage::Package(package_name.clone(), None, None),
+                            Range::singleton(version.clone()),
+                        );
+                    }
+
+                    return Ok(Dependencies::Available(constraints.into()));
+                }
+
+                // Determine the distribution to lookup.
                 let dist = match url {
                     Some(url) => PubGrubDistribution::from_url(package_name, url),
                     None => PubGrubDistribution::from_registry(package_name, version),
@@ -855,7 +883,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .wait(&package_id)
                     .instrument(info_span!("distributions_wait", %package_id))
                     .await
-                    .ok_or(ResolveError::Unregistered)?;
+                    .ok_or(ResolveError::Unregistered2)?;
 
                 let mut constraints = PubGrubDependencies::from_requirements(
                     &metadata.requires_dist,
@@ -941,7 +969,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         Ok::<(), ResolveError>(())
     }
 
-    #[instrument(skip_all, fields(%request))]
+    #[instrument(skip_all, fields(% request))]
     async fn process_request(&self, request: Request) -> Result<Option<Response>, ResolveError> {
         match request {
             // Fetch package metadata from the registry.
@@ -984,13 +1012,18 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
             // Pre-fetch the package and distribution metadata.
             Request::Prefetch(package_name, range) => {
+                // Ignore editables.
+                if self.editables.contains_key(&package_name) {
+                    return Ok(None);
+                }
+
                 // Wait for the package metadata to become available.
                 let versions_response = self
                     .index
                     .packages
                     .wait(&package_name)
                     .await
-                    .ok_or(ResolveError::Unregistered)?;
+                    .ok_or(ResolveError::Unregistered1)?;
 
                 let version_map = match *versions_response {
                     VersionsResponse::Found(ref version_map) => version_map,
