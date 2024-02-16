@@ -160,7 +160,7 @@ fn install_requirements_txt() -> Result<()> {
 
 /// Respect installed versions when resolving.
 #[test]
-fn respect_installed() -> Result<()> {
+fn respect_installed_and_reinstall() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Install Flask.
@@ -264,6 +264,29 @@ fn respect_installed() -> Result<()> {
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      - flask==2.3.3
+     + flask==3.0.0
+    "###
+    );
+
+    // Re-install Flask. We should install even though the version is current
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("Flask")?;
+
+    uv_snapshot!(filters, command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--reinstall-package")
+        .arg("Flask")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Installed 1 package in [TIME]
+     - flask==3.0.0
      + flask==3.0.0
     "###
     );
@@ -893,4 +916,99 @@ fn no_deps() {
     );
 
     context.assert_command("import flask").failure();
+}
+
+/// Upgrade a package.
+#[test]
+fn install_upgrade() {
+    let context = TestContext::new("3.12");
+
+    // Install an old version of anyio and httpcore.
+    uv_snapshot!(command(&context)
+        .arg("anyio==3.6.2")
+        .arg("httpcore==0.16.3")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Downloaded 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + anyio==3.6.2
+     + certifi==2023.11.17
+     + h11==0.14.0
+     + httpcore==0.16.3
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+
+    // Upgrade anyio.
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--upgrade-package")
+        .arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==3.6.2
+     + anyio==4.0.0
+    "###
+    );
+
+    // Upgrade anyio again, should not reinstall.
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--upgrade-package")
+        .arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
+    "###
+    );
+
+    // Install httpcore, request anyio upgrade should not reinstall
+    uv_snapshot!(command(&context)
+        .arg("httpcore")
+        .arg("--upgrade-package")
+        .arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 6 packages in [TIME]
+    "###
+    );
+
+    // Upgrade httpcore with global flag
+    uv_snapshot!(command(&context)
+        .arg("httpcore")
+        .arg("--upgrade"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - httpcore==0.16.3
+     + httpcore==1.0.2
+    "###
+    );
 }
