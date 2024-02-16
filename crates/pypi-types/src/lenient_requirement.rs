@@ -18,7 +18,7 @@ static INVALID_TRAILING_DOT_STAR: Lazy<Regex> =
 /// Ex) `!=3.0*`
 static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
 /// Ex) `>=3.6,`
-static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r",$").unwrap());
+static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r",\s*$").unwrap());
 /// Ex) `>= '2.7'`, `>=3.6'`
 static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]"#).unwrap());
 
@@ -233,6 +233,15 @@ mod tests {
     fn specifier_trailing_comma() {
         let actual: VersionSpecifiers =
             LenientVersionSpecifiers::from_str(">=3.6,").unwrap().into();
+        let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=3.6").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn specifier_trailing_comma_trailing_space() {
+        let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(">=3.6, ")
+            .unwrap()
+            .into();
         let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=3.6").unwrap();
         assert_eq!(actual, expected);
     }
