@@ -69,7 +69,7 @@ To install a package into the virtual environment:
 uv pip install flask                # Install Flask.
 uv pip install -r requirements.txt  # Install from a requirements.txt file.
 uv pip install -e .                 # Install the current project in editable mode.
-uv pip install package@file://.     # Install the current project from disk
+uv pip install package@.            # Install the current project from disk
 ```
 
 To generate a set of locked dependencies from an input file:
