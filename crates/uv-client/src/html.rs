@@ -18,7 +18,7 @@ pub(crate) struct SimpleHtml {
 
 impl SimpleHtml {
     /// Parse the list of [`File`]s from the simple HTML page returned by the given URL.
-    #[instrument(skip(text))]
+    #[instrument(skip_all, fields(url = % url))]
     pub(crate) fn parse(text: &str, url: &Url) -> Result<Self, Error> {
         let dom = tl::parse(text, tl::ParserOptions::default())?;
 
