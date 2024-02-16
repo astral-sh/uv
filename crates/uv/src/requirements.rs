@@ -80,6 +80,18 @@ impl RequirementsSource {
     }
 }
 
+impl std::fmt::Display for RequirementsSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Editable(path) => write!(f, "-e {path}"),
+            Self::RequirementsTxt(path) | Self::PyprojectToml(path) => {
+                write!(f, "{}", path.to_string_lossy())
+            }
+            Self::Package(package) => write!(f, "{package}"),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub(crate) enum ExtrasSpecification<'a> {
     #[default]
@@ -125,7 +137,7 @@ pub(crate) struct RequirementsSpecification {
 
 impl RequirementsSpecification {
     /// Read the requirements and constraints from a source.
-    #[instrument(level = Level::DEBUG)]
+    #[instrument(skip_all, level = Level::DEBUG, fields(source = % source))]
     pub(crate) fn from_source(
         source: &RequirementsSource,
         extras: &ExtrasSpecification,
