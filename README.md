@@ -53,6 +53,17 @@ To create a virtual environment:
 uv venv  # Create a virtual environment at .venv.
 ```
 
+To activate the virtual environment
+
+
+```shell
+# On macOS and Linux.
+source .venv/bin/activate
+
+# On Windows.
+.\.venv\Scripts\activate.ps1
+```
+
 To install a package into the virtual environment:
 
 ```shell
