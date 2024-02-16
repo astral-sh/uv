@@ -2075,7 +2075,7 @@ fn compile_editable() -> Result<()> {
     requirements_in.write_str(indoc! {r"
         -e ../../scripts/editable-installs/poetry_editable
         -e ${PROJECT_ROOT}/../../scripts/editable-installs/maturin_editable
-        -e file://../../scripts/editable-installs/black_editable[d]
+        -e file://../../scripts/editable-installs/black_editable[dev]
         boltons # normal dependency for comparison
         "
     })?;
@@ -2122,12 +2122,14 @@ fn compile_editable() -> Result<()> {
         #   yarl
     numpy==1.26.2
         # via poetry-editable
+    uvloop==0.19.0
+        # via black
     yarl==1.9.2
         # via aiohttp
 
     ----- stderr -----
     Built 3 editables in [TIME]
-    Resolved 12 packages in [TIME]
+    Resolved 13 packages in [TIME]
     "###);
 
     Ok(())

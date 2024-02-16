@@ -550,7 +550,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     /// partial solution.
     ///
     /// Returns [None] when there are no versions in the given range.
-    #[instrument(skip_all, fields(% package))]
+    #[instrument(skip_all, fields(%package))]
     async fn choose_version(
         &self,
         package: &PubGrubPackage,
@@ -614,7 +614,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         .distributions
                         .wait(&dist.package_id())
                         .await
-                        .ok_or(ResolveError::Unregistered4)?;
+                        .ok_or(ResolveError::Unregistered)?;
                     let version = &metadata.version;
                     if range.contains(version) {
                         Ok(Some(ResolverVersion::Available(version.clone())))
@@ -642,7 +642,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .wait(package_name)
                     .instrument(info_span!("package_wait", %package_name))
                     .await
-                    .ok_or(ResolveError::Unregistered3)?;
+                    .ok_or(ResolveError::Unregistered)?;
                 self.visited.insert(package_name.clone());
 
                 let version_map = match *versions_response {
@@ -761,7 +761,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
     }
 
     /// Given a candidate package and version, return its dependencies.
-    #[instrument(skip_all, fields(% package, % version))]
+    #[instrument(skip_all, fields(%package, %version))]
     async fn get_dependencies(
         &self,
         package: &PubGrubPackage,
@@ -883,7 +883,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .wait(&package_id)
                     .instrument(info_span!("distributions_wait", %package_id))
                     .await
-                    .ok_or(ResolveError::Unregistered2)?;
+                    .ok_or(ResolveError::Unregistered)?;
 
                 let mut constraints = PubGrubDependencies::from_requirements(
                     &metadata.requires_dist,
@@ -969,7 +969,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         Ok::<(), ResolveError>(())
     }
 
-    #[instrument(skip_all, fields(% request))]
+    #[instrument(skip_all, fields(%request))]
     async fn process_request(&self, request: Request) -> Result<Option<Response>, ResolveError> {
         match request {
             // Fetch package metadata from the registry.
@@ -1023,7 +1023,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .packages
                     .wait(&package_name)
                     .await
-                    .ok_or(ResolveError::Unregistered1)?;
+                    .ok_or(ResolveError::Unregistered)?;
 
                 let version_map = match *versions_response {
                     VersionsResponse::Found(ref version_map) => version_map,
