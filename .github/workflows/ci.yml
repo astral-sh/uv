@@ -86,9 +86,9 @@ jobs:
       - name: "Smoke test"
         if: ${{ matrix.os != 'windows' }}
         run: |
-          alias uv="./target/debug/uv"
-          uv venv
-          uv pip install ruff
+          uv="./target/debug/uv"
+          $uv venv
+          $uv pip install ruff
       - name: "Smoke test"
         if: ${{ matrix.os == 'windows' }}
         run: |
