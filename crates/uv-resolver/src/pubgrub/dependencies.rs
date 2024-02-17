@@ -121,6 +121,7 @@ impl PubGrubDependencies {
 
                     // Merge the package.
                     if let Some(package) = merge_package(entry.0, &package)? {
+                        dependencies.remove(&package);
                         dependencies.insert(package, version);
                     } else {
                         dependencies.insert(package, version);
