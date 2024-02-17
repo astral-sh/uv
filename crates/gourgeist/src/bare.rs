@@ -112,14 +112,12 @@ pub fn create_bare_venv(
     };
     let bin_dir = location.join(bin_name);
     let prompt: String = match prompt {
-        Some(".") => {
-            match env::current_dir() {
-                Ok(cwd) => match cwd.file_name() {
-                    Some(name) => name.to_string_lossy().to_string(),
-                    None => String::new(),
-                },
-                Err(err) => return Err(err),
-            }
+        Some(".") => match env::current_dir() {
+            Ok(cwd) => match cwd.file_name() {
+                Some(name) => name.to_string_lossy().to_string(),
+                None => String::new(),
+            },
+            Err(err) => return Err(err),
         },
         Some(p) => p.to_string(),
         None => String::new(),
