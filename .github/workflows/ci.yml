@@ -80,18 +80,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-
       - name: "Cargo test"
         run: |
-          cargo nextest run --workspace \
-            --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
-
+          cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
       - name: "Smoke test"
+        if: ${{ matrix.os != 'windows' }}
         run: |
-          uv=./target/debug/uv
-
-          $uv venv
-          $uv pip install ruff
+          alias uv="./target/debug/uv"
+          uv venv
+          uv pip install ruff
+      - name: "Smoke test"
+        if: ${{ matrix.os == 'windows' }}
+        run: |
+          Set-Alias -Name uv -Value ./target/debug/uv
+          uv venv
+          uv pip install ruff
 
   # Separate job for the nightly crate
   windows-trampoline:
