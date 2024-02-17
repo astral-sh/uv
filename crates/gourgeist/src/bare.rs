@@ -19,6 +19,8 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
     ("activate.nu", include_str!("activator/activate.nu")),
     ("activate.ps1", include_str!("activator/activate.ps1")),
     ("activate.bat", include_str!("activator/activate.bat")),
+    ("deactivate.bat", include_str!("activator/deactivate.bat")),
+    ("pydoc.bat", include_str!("activator/pydoc.bat")),
     (
         "activate_this.py",
         include_str!("activator/activate_this.py"),

@@ -1,10 +1,10 @@
+use alloc::{ffi::CString, vec, vec::Vec};
 use core::mem::MaybeUninit;
 use core::{
     ffi::CStr,
     ptr::{addr_of, addr_of_mut, null, null_mut},
 };
 
-use alloc::{ffi::CString, vec, vec::Vec};
 use windows_sys::Win32::{
     Foundation::*,
     System::{
@@ -38,7 +38,7 @@ fn getenv(name: &CStr) -> Option<CString> {
 }
 
 /// Transform `<command> <arguments>` to `python <command> <arguments>`.
-fn make_child_cmdline(is_gui: bool) -> Vec<u8> {
+fn make_child_cmdline(is_gui: bool) -> CString {
     let executable_name: CString = executable_filename();
     let python_exe = find_python_exe(is_gui, &executable_name);
     let mut child_cmdline = Vec::<u8>::new();
@@ -53,15 +53,18 @@ fn make_child_cmdline(is_gui: bool) -> Vec<u8> {
     push_quoted_path(&executable_name, &mut child_cmdline);
 
     push_arguments(&mut child_cmdline);
+
     child_cmdline.push(b'\0');
 
-    eprintln!(
-        "executable_name: '{}'\nnew_cmdline: {}",
-        unsafe { core::str::from_utf8_unchecked(executable_name.to_bytes()) },
-        unsafe { core::str::from_utf8_unchecked(child_cmdline.as_slice()) }
-    );
+    // Helpful when debugging trampline issues
+    // eprintln!(
+    //     "executable_name: '{}'\nnew_cmdline: {}",
+    //     core::str::from_utf8(executable_name.to_bytes(),
+    //     core::str::from_utf8(child_cmdline.as_slice())
+    // );
 
-    child_cmdline
+    // SAFETY: We push the null termination byte at the end.
+    unsafe { CString::from_vec_with_nul_unchecked(child_cmdline) }
 }
 
 fn push_quoted_path(path: &CStr, command: &mut Vec<u8>) {
@@ -81,17 +84,17 @@ fn push_quoted_path(path: &CStr, command: &mut Vec<u8>) {
 /// Returns the full path of the executable.
 /// See https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulefilenamea
 fn executable_filename() -> CString {
-    unsafe {
-        // MAX_PATH is a lie, Windows paths can be longer.
-        // https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#maximum-path-length-limitation
-        // But it's a good first guess, usually paths are short and we should only need a single attempt.
-        let mut buffer: Vec<u8> = vec![0; MAX_PATH as usize];
-        loop {
-            // Call the Windows API function to get the module file name
-            let len = GetModuleFileNameA(0, buffer.as_mut_ptr(), buffer.len() as u32);
+    // MAX_PATH is a lie, Windows paths can be longer.
+    // https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#maximum-path-length-limitation
+    // But it's a good first guess, usually paths are short and we should only need a single attempt.
+    let mut buffer: Vec<u8> = vec![0; MAX_PATH as usize];
+    loop {
+        // Call the Windows API function to get the module file name
+        let len = unsafe { GetModuleFileNameA(0, buffer.as_mut_ptr(), buffer.len() as u32) };
 
-            // That's the error condition because len doesn't include the trailing null byte
-            if len as usize == buffer.len() {
+        // That's the error condition because len doesn't include the trailing null byte
+        if len as usize == buffer.len() {
+            unsafe {
                 let last_error = GetLastError();
                 match last_error {
                     ERROR_INSUFFICIENT_BUFFER => {
@@ -104,13 +107,14 @@ fn executable_filename() -> CString {
                         ExitProcess(1);
                     }
                 }
-            } else {
-                buffer.truncate(len as usize + b"\0".len());
-                break;
             }
+        } else {
+            buffer.truncate(len as usize + b"\0".len());
+            break;
         }
-        CString::from_vec_with_nul_unchecked(buffer)
     }
+
+    unsafe { CString::from_vec_with_nul_unchecked(buffer) }
 }
 
 /// The scripts are in the same directory as the Python interpreter, so we can find Python by getting the locations of
@@ -141,7 +145,10 @@ fn find_python_exe(is_gui: bool, executable_name: &CStr) -> CString {
 }
 
 fn push_arguments(output: &mut Vec<u8>) {
-    let arguments_as_str = unsafe { CStr::from_ptr(GetCommandLineA() as _) };
+    let arguments_as_str = unsafe {
+        // SAFETY: We rely on `GetCommandLineA` to return a valid pointer to a null terminated string.
+        CStr::from_ptr(GetCommandLineA() as _)
+    };
 
     // Skip over the executable name and then push the rest of the arguments
     let after_executable = skip_one_argument(arguments_as_str.to_bytes());
@@ -149,7 +156,6 @@ fn push_arguments(output: &mut Vec<u8>) {
     output.extend_from_slice(after_executable)
 }
 
-// TODO copy tests from MSDN for parsing
 fn skip_one_argument(arguments: &[u8]) -> &[u8] {
     let mut quoted = false;
     let mut offset = 0;
@@ -159,15 +165,11 @@ fn skip_one_argument(arguments: &[u8]) -> &[u8] {
     while let Some(byte) = bytes_iter.next().copied() {
         match byte {
             b'"' => {
-                if quoted {
-                    offset += 1;
-                    break;
-                } else {
-                    quoted = true;
-                }
+                quoted = !quoted;
             }
             b'\\' => {
-                if bytes_iter.peek().copied() == Some(&b'\"') {
+                // Skip over escaped quotes or even number of backslashes.
+                if matches!(bytes_iter.peek().copied(), Some(&b'\"' | &b'\\')) {
                     offset += 1;
                     bytes_iter.next();
                 }
@@ -210,7 +212,7 @@ fn make_job_object() -> HANDLE {
     }
 }
 
-fn spawn_child(si: &STARTUPINFOA, child_cmdline: &mut [u8]) -> HANDLE {
+fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
     unsafe {
         if si.dwFlags & STARTF_USESTDHANDLES != 0 {
             // ignore errors from these -- if the handle's not inheritable/not valid, then nothing
@@ -224,7 +226,7 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: &mut [u8]) -> HANDLE {
             null(),
             // Why does this have to be mutable? Who knows. But it's not a mistake --
             // MS explicitly documents that this buffer might be mutated by CreateProcess.
-            child_cmdline.as_mut_ptr(),
+            child_cmdline.into_bytes_with_nul().as_mut_ptr(),
             null(),
             null(),
             1,
@@ -309,14 +311,14 @@ fn clear_app_starting_state(child_handle: HANDLE) {
 
 pub fn bounce(is_gui: bool) -> ! {
     unsafe {
-        let mut child_cmdline = make_child_cmdline(is_gui);
-        let job = make_job_object();
+        let child_cmdline = make_child_cmdline(is_gui);
 
         let mut si = MaybeUninit::<STARTUPINFOA>::uninit();
         GetStartupInfoA(si.as_mut_ptr());
         let si = si.assume_init();
 
-        let child_handle = spawn_child(&si, child_cmdline.as_mut_slice());
+        let child_handle = spawn_child(&si, child_cmdline);
+        let job = make_job_object();
         check!(AssignProcessToJobObject(job, child_handle));
 
         // (best effort) Close all the handles that we can
