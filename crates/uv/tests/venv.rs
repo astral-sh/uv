@@ -26,6 +26,10 @@ fn create_venv() -> Result<()> {
             "Using Python [VERSION] interpreter at [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
+        (
+            r".*?\\\.venv\\Scripts\\activate\.ps1", 
+            "Activate with source /home/ferris/project/.venv/bin/activate"
+        ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -58,6 +62,10 @@ fn create_venv() -> Result<()> {
             "Using Python [VERSION] interpreter at [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
+        (
+            r".*?\\\.venv\\Scripts\\activate\.ps1", 
+            "Activate with source /home/ferris/project/.venv/bin/activate"
+        ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -100,6 +108,10 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
             "Using Python [VERSION] interpreter at [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
+        (
+            r".*?\\\.venv\\Scripts\\activate\.ps1", 
+            "Activate with source .venv/bin/activate"
+        ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -141,6 +153,10 @@ fn seed() -> Result<()> {
             "Using Python [VERSION] interpreter at [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
+        (
+            r".*?\\\.venv\\Scripts\\activate\.ps1", 
+            "Activate with source /home/ferris/project/.venv/bin/activate"
+        ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -320,6 +336,10 @@ fn create_venv_python_patch() -> Result<()> {
     let filters = &[
         (r"interpreter at .+", "interpreter at [PATH]"),
         (&filter_venv, "/home/ferris/project/.venv"),
+        (
+            r".*?\\\.venv\\Scripts\\activate\.ps1", 
+            "Activate with source /home/ferris/project/.venv/bin/activate"
+        ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -412,6 +432,10 @@ fn empty_dir_exists() -> Result<()> {
             "Using Python [VERSION] interpreter at [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
+        (
+            r".*?\\\.venv\\Scripts\\activate\.ps1", 
+            "Activate with source /home/ferris/project/.venv/bin/activate"
+        ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -503,6 +527,10 @@ fn virtualenv_compatibility() -> Result<()> {
             "Using Python [VERSION] interpreter at [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
+        (
+            r".*?\\\.venv\\Scripts\\activate\.ps1", 
+            "Activate with source /home/ferris/project/.venv/bin/activate"
+        ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
