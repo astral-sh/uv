@@ -1017,11 +1017,20 @@ async fn run() -> Result<ExitStatus> {
                 args.no_index,
             );
 
+            // Since we use ".venv" as the default name, we use "." as the default prompt.
+            let prompt: Option<&str> = args.prompt.as_deref().or_else(|| {
+                if args.name == PathBuf::from(".venv") {
+                    Some(".")
+                } else {
+                    None
+                }
+            });
+
             commands::venv(
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
-                args.prompt.as_deref(),
+                prompt,
                 if args.offline {
                     Connectivity::Offline
                 } else {

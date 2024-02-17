@@ -1,5 +1,6 @@
 //! Create a bare virtualenv without any packages install
 
+use std::env;
 use std::env::consts::EXE_SUFFIX;
 use std::io;
 use std::io::{BufWriter, Write};
@@ -28,7 +29,9 @@ const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 /// Very basic `.cfg` file format writer.
 fn write_cfg(f: &mut impl Write, data: &[(&str, String); 9]) -> io::Result<()> {
     for (key, value) in data {
-        writeln!(f, "{key} = {value}")?;
+        if !value.is_empty() {
+            writeln!(f, "{key} = {value}")?;
+        }
     }
     Ok(())
 }
@@ -108,17 +111,18 @@ pub fn create_bare_venv(
         unimplemented!("Only Windows and Unix are supported")
     };
     let bin_dir = location.join(bin_name);
-    let prompt: String = if let Some(p) = prompt {
-        p.to_string()
-    } else {
-        let mut loc = location.clone();
-        if loc.ends_with(".venv") {
-            loc.pop();
-        }
-        match loc.file_name() {
-            Some(name) => name.to_string(),
-            None => "venv".to_string(),
-        }
+    let prompt: String = match prompt {
+        Some(".") => {
+            match env::current_dir() {
+                Ok(cwd) => match cwd.file_name() {
+                    Some(name) => name.to_string_lossy().to_string(),
+                    None => String::new(),
+                },
+                Err(err) => return Err(err),
+            }
+        },
+        Some(p) => p.to_string(),
+        None => String::new(),
     };
 
     fs::write(location.join(".gitignore"), "*")?;
@@ -173,7 +177,7 @@ pub fn create_bare_venv(
         let activator = template
             .replace("{{ VIRTUAL_ENV_DIR }}", location.as_str())
             .replace("{{ BIN_NAME }}", bin_name)
-            .replace("{{ VIRTUAL_PROMPT }}", &prompt)
+            .replace("{{ VIRTUAL_PROMPT }}", prompt.as_str())
             .replace(
                 "{{ RELATIVE_SITE_PACKAGES }}",
                 &format!(
