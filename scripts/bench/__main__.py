@@ -769,6 +769,172 @@ class Pdm(Suite):
         )
 
 
+class Pixi(Suite):
+    def __init__(self, path: str | None = None) -> None:
+        self.name = path or "pixi"
+        self.path = path or "pixi"
+
+    def setup(self, requirements_file: str, *, cwd: str) -> None:
+        """Initialize a Pixi project and install python in it."""
+        import json
+        from packaging.requirements import Requirement
+
+        # Parse all dependencies from the requirements file.
+        with open(requirements_file) as fp:
+            requirements = [
+                Requirement(line)
+                for line in fp
+                if not line.lstrip().startswith("#") and len(line.strip()) > 0
+            ]
+        self.pixi_requirements = [str(requirement) for requirement in requirements]
+
+        # Get pixi information.
+        info = subprocess.check_output([self.path, "info", "--json"], cwd=cwd)
+        self.pixi_info = json.loads(info)
+
+        # Store some paths.
+        self.lock_baseline = os.path.join(cwd, "baseline.lock")
+        self.env_baseline = os.path.join(cwd, "envbaseline")
+        self.pixi_lock = os.path.join(cwd, "pixi.lock")
+        self.pixi_toml = os.path.join(cwd, "pixi.toml")
+        self.pixi_env = os.path.join(cwd, ".pixi")
+        self.cache_dir = os.path.join(self.pixi_info["cache_dir"], "pypi")
+
+        # Create a Pixi project
+        subprocess.check_call(
+            [self.path, "init", "--platform", self.pixi_info["platform"]],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        # Install Python
+        subprocess.check_call(
+            [self.path, "add", "python==3.12"],
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        # Copy pixi.lock and .pixi/ for baselining.
+        shutil.copyfile(self.pixi_lock, self.lock_baseline)
+        shutil.copytree(self.pixi_env, self.env_baseline)
+
+    def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_COLD.value})",
+            prepare=(
+                f"rm -rf {self.pixi_lock} {self.cache_dir} && "
+                f"cp {self.lock_baseline} {self.pixi_lock}"
+            ),
+            command=[
+                self.path,
+                "add",
+                "--manifest-path",
+                self.pixi_toml,
+                "--no-install",
+                "--pypi",
+            ]
+            + self.pixi_requirements,
+        )
+
+    def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self.setup(requirements_file, cwd=cwd)
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_WARM.value})",
+            prepare=(
+                f"rm -rf {self.pixi_lock} && "
+                f"cp {self.lock_baseline} {self.pixi_lock}"
+            ),
+            command=[
+                self.path,
+                "add",
+                "--manifest-path",
+                self.pixi_toml,
+                "--no-install",
+                "--pypi",
+            ]
+            + self.pixi_requirements,
+        )
+
+    def _setup_baseline(self, requirements_file: str, *, cwd: str) -> None:
+        """Add requirements from requirements_file to the lockfile without installing them
+        and duplicate the lockfile as baseline.lock"""
+        self.setup(requirements_file, cwd=cwd)
+        subprocess.check_call(
+            [
+                self.path,
+                "add",
+                "--manifest-path",
+                self.pixi_toml,
+                "--no-install",
+                "--pypi",
+            ]
+            + self.pixi_requirements,
+            cwd=cwd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        # Update baseline lock file
+        shutil.copyfile(self.pixi_lock, self.lock_baseline)
+
+    def resolve_incremental(
+        self, requirements_file: str, *, cwd: str
+    ) -> Command | None:
+        self._setup_baseline(requirements_file, cwd=cwd)
+        return Command(
+            name=f"{self.name} ({Benchmark.RESOLVE_INCREMENTAL.value})",
+            prepare=f"rm -f {self.pixi_lock} && cp {self.lock_baseline} {self.pixi_lock}",
+            command=[
+                self.path,
+                "add",
+                "--manifest-path",
+                self.pixi_toml,
+                "--no-install",
+                "--pypi",
+                INCREMENTAL_REQUIREMENT,
+            ],
+        )
+
+    def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self._setup_baseline(requirements_file, cwd=cwd)
+        return Command(
+            name=f"{self.name} ({Benchmark.INSTALL_COLD.value})",
+            prepare=(
+                f"rm -rf {self.cache_dir} {self.pixi_env} && "
+                f"mkdir {self.pixi_env} && "
+                f"cp -a {self.env_baseline}/. {self.pixi_env}"
+            ),
+            command=[
+                self.path,
+                "install",
+                "--manifest-path",
+                self.pixi_toml,
+                "--frozen",
+            ],
+        )
+
+    def install_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
+        self._setup_baseline(requirements_file, cwd=cwd)
+        return Command(
+            name=f"{self.name} ({Benchmark.INSTALL_WARM.value})",
+            prepare=(
+                f"rm -rf {self.pixi_env} && "
+                f"mkdir {self.pixi_env} && "
+                f"cp -a {self.env_baseline}/. {self.pixi_env}"
+            ),
+            command=[
+                self.path,
+                "install",
+                "--manifest-path",
+                self.pixi_toml,
+                "--frozen",
+            ],
+        )
+
+
 class uv(Suite):
     def __init__(self, *, path: str | None = None) -> Command | None:
         """Initialize a uv benchmark."""
@@ -964,6 +1130,11 @@ def main():
         action="store_true",
     )
     parser.add_argument(
+        "--pixi",
+        help="Whether to benchmark Pixi (requires Pixi to be installed).",
+        action="store_true",
+    )
+    parser.add_argument(
         "--uv",
         help="Whether to benchmark uv (assumes a uv binary exists at `./target/release/uv`).",
         action="store_true",
@@ -990,6 +1161,12 @@ def main():
         "--pdm-path",
         type=str,
         help="Path(s) to the PDM binary to benchmark.",
+        action="append",
+    )
+    parser.add_argument(
+        "--pixi-path",
+        type=str,
+        help="Path(s) to the Pixi binary to benchmark.",
         action="append",
     )
     parser.add_argument(
@@ -1025,6 +1202,8 @@ def main():
         suites.append(Poetry())
     if args.pdm:
         suites.append(Pdm())
+    if args.pixi:
+        suites.append(Pixi())
     if args.uv:
         suites.append(uv())
     for path in args.pip_sync_path or []:
@@ -1035,6 +1214,8 @@ def main():
         suites.append(Poetry(path=path))
     for path in args.pdm_path or []:
         suites.append(Pdm(path=path))
+    for path in args.pixi_path or []:
+        suites.append(Pixi(path=path))
     for path in args.uv_path or []:
         suites.append(uv(path=path))
 
@@ -1045,6 +1226,7 @@ def main():
             PipCompile(),
             Poetry(),
             uv(),
+            Pixi(),
         ]
 
     # Determine the benchmarks to run, based on user input. If no benchmarks were
