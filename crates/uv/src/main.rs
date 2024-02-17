@@ -1016,8 +1016,9 @@ async fn run() -> Result<ExitStatus> {
                 Vec::new(),
                 args.no_index,
             );
-            let cwd = env::current_dir()?;
+            let cwd : PathBuf;
             let prompt = if args.prompt == "." {
+                cwd = env::current_dir()?;
                 cwd.file_name().map(|p| p.to_str().unwrap())
             } else {
                 Some(args.prompt.as_str())
