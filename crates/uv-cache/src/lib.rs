@@ -508,7 +508,7 @@ impl CacheBucket {
             CacheBucket::FlatIndex => "flat-index-v0",
             CacheBucket::Git => "git-v0",
             CacheBucket::Interpreter => "interpreter-v0",
-            CacheBucket::Simple => "simple-v0",
+            CacheBucket::Simple => "simple-v1",
             CacheBucket::Wheels => "wheels-v0",
             CacheBucket::Archive => "archive-v0",
         }
