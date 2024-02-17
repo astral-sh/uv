@@ -10,8 +10,8 @@ use pypi_types::{DistInfoMetadata, Hashes, Yanked};
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, Error)]
 pub enum FileConversionError {
-    #[error("Invalid 'requires-python' value")]
-    VersionSpecifiersParseError(#[from] VersionSpecifiersParseError),
+    #[error("Failed to parse 'requires-python': {0}")]
+    RequiresPython(String, #[source] VersionSpecifiersParseError),
     #[error("Failed to parse URL: {0}")]
     Url(String, #[source] url::ParseError),
 }
@@ -44,7 +44,10 @@ impl File {
             dist_info_metadata: file.dist_info_metadata,
             filename: file.filename,
             hashes: file.hashes,
-            requires_python: file.requires_python.transpose()?,
+            requires_python: file
+                .requires_python
+                .transpose()
+                .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(|dt| dt.timestamp_millis()),
             url: if file.url.contains("://") {
