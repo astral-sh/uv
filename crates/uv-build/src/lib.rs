@@ -339,20 +339,16 @@ impl SourceBuild {
             .await
             .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
 
-        // If we're using the default backend configuration, skip `get_requires_for_build_*`, since
-        // we already installed the requirements above.
         if let Some(pep517_backend) = &pep517_backend {
-            if pep517_backend != &default_backend {
-                create_pep517_build_environment(
-                    &source_tree,
-                    &venv,
-                    pep517_backend,
-                    build_context,
-                    &package_id,
-                    build_kind,
-                )
-                .await?;
-            }
+            create_pep517_build_environment(
+                &source_tree,
+                &venv,
+                pep517_backend,
+                build_context,
+                &package_id,
+                build_kind,
+            )
+            .await?;
         }
 
         Ok(Self {
