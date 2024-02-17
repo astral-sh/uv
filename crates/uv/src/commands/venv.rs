@@ -22,7 +22,6 @@ use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{InMemoryIndex, OptionsBuilder};
 use uv_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 
-
 use pep440_rs::VersionSpecifier;
 
 use crate::commands::ExitStatus;
