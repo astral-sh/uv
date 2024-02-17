@@ -210,13 +210,6 @@ pub(crate) async fn pip_compile(
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
-    let options = OptionsBuilder::new()
-        .resolution_mode(resolution_mode)
-        .prerelease_mode(prerelease_mode)
-        .dependency_mode(dependency_mode)
-        .exclude_newer(exclude_newer)
-        .build();
-
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -230,7 +223,7 @@ pub(crate) async fn pip_compile(
         no_build,
         &NoBinary::None,
     )
-    .with_options(options);
+    .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
     // Build the editables and add their requirements
     let editable_metadata = if editables.is_empty() {
@@ -285,6 +278,13 @@ pub(crate) async fn pip_compile(
         project,
         editable_metadata,
     );
+
+    let options = OptionsBuilder::new()
+        .resolution_mode(resolution_mode)
+        .prerelease_mode(prerelease_mode)
+        .dependency_mode(dependency_mode)
+        .exclude_newer(exclude_newer)
+        .build();
 
     // Resolve the dependencies.
     let resolver = Resolver::new(
