@@ -333,7 +333,7 @@ pub(crate) async fn pip_sync(
                     printer,
                     " {} {}{}",
                     "+".green(),
-                    event.dist.name().as_ref().white().bold(),
+                    event.dist.name().as_ref().bold(),
                     event.dist.installed_version().to_string().dimmed()
                 )?;
             }
@@ -342,7 +342,7 @@ pub(crate) async fn pip_sync(
                     printer,
                     " {} {}{}",
                     "-".red(),
-                    event.dist.name().as_ref().white().bold(),
+                    event.dist.name().as_ref().bold(),
                     event.dist.installed_version().to_string().dimmed()
                 )?;
             }
