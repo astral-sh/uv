@@ -52,7 +52,7 @@ fi
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"
-PATH="$VIRTUAL_ENV/bin:$PATH"
+PATH="$VIRTUAL_ENV/{{ BIN_NAME }}:$PATH"
 export PATH
 
 if [ "x" != x ] ; then

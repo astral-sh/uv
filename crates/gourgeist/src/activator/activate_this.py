@@ -18,7 +18,7 @@ except NameError as exc:
     raise AssertionError(msg) from exc
 
 bin_dir = os.path.dirname(abs_file)
-base = bin_dir[: -len("bin") - 1]  # strip away the bin part from the __file__, plus the path separator
+base = bin_dir[: -len("{{ BIN_NAME }}") - 1]  # strip away the bin part from the __file__, plus the path separator
 
 # prepend bin to PATH (this file is inside the bin directory)
 os.environ["PATH"] = os.pathsep.join([bin_dir, *os.environ.get("PATH", "").split(os.pathsep)])
