@@ -181,7 +181,7 @@ async fn venv_impl(
                 printer,
                 " {} {}{}",
                 "+".green(),
-                distribution.name().as_ref().white().bold(),
+                distribution.name().as_ref().bold(),
                 distribution.version_or_url().dimmed()
             )
             .into_diagnostic()?;

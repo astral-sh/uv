@@ -156,7 +156,7 @@ pub(crate) async fn pip_uninstall(
             printer,
             " {} {}{}",
             "-".red(),
-            distribution.name().as_ref().white().bold(),
+            distribution.name().as_ref().bold(),
             distribution.installed_version().to_string().dimmed()
         )?;
     }
