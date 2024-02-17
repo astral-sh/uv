@@ -30,6 +30,7 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    prompt: Option<&str>,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -40,6 +41,7 @@ pub(crate) async fn venv(
         path,
         python_request,
         index_locations,
+        prompt,
         connectivity,
         seed,
         exclude_newer,
@@ -81,6 +83,7 @@ async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    prompt: Option<&str>,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -114,7 +117,7 @@ async fn venv_impl(
     .into_diagnostic()?;
 
     // Create the virtual environment.
-    let venv = gourgeist::create_venv(path, interpreter).map_err(VenvError::Creation)?;
+    let venv = gourgeist::create_venv(path, interpreter, prompt).map_err(VenvError::Creation)?;
 
     // Install seed packages.
     if seed {

@@ -70,8 +70,8 @@ set -gx PATH "$VIRTUAL_ENV"'/bin' $PATH
 
 # Prompt override provided?
 # If not, just use the environment name.
-if test -n ''
-    set -gx VIRTUAL_ENV_PROMPT ''
+if test -n '{{ PROMPT }}'
+    set -gx VIRTUAL_ENV_PROMPT '{{ PROMPT }}'
 else
     set -gx VIRTUAL_ENV_PROMPT (basename "$VIRTUAL_ENV")
 end

@@ -24,11 +24,15 @@ pub enum Error {
 }
 
 /// Create a virtualenv.
-pub fn create_venv(location: &Path, interpreter: Interpreter) -> Result<Virtualenv, Error> {
+pub fn create_venv(
+    location: &Path,
+    interpreter: Interpreter,
+    prompt: Option<&str>,
+) -> Result<Virtualenv, Error> {
     let location: &Utf8Path = location
         .try_into()
         .map_err(|err: FromPathError| err.into_io_error())?;
-    let paths = create_bare_venv(location, &interpreter)?;
+    let paths = create_bare_venv(location, &interpreter, prompt)?;
     Ok(Virtualenv::from_interpreter(
         interpreter,
         paths.root.as_std_path(),

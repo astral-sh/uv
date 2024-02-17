@@ -55,8 +55,8 @@ _OLD_VIRTUAL_PATH="$PATH"
 PATH="$VIRTUAL_ENV/bin:$PATH"
 export PATH
 
-if [ "x" != x ] ; then
-    VIRTUAL_ENV_PROMPT=""
+if [ "x{{ PROMPT }}" != x ] ; then
+    VIRTUAL_ENV_PROMPT="{{ PROMPT }}"
 else
     VIRTUAL_ENV_PROMPT=$(basename "$VIRTUAL_ENV")
 fi

@@ -17,8 +17,8 @@ setenv PATH "$VIRTUAL_ENV:q/bin:$PATH:q"
 
 
 
-if ('' != "") then
-    setenv VIRTUAL_ENV_PROMPT ''
+if ('{{ PROMPT }}' != "") then
+    setenv VIRTUAL_ENV_PROMPT '{{ PROMPT }}'
 else
     setenv VIRTUAL_ENV_PROMPT "$VIRTUAL_ENV:t:q"
 endif

@@ -26,7 +26,7 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
 const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 
 /// Very basic `.cfg` file format writer.
-fn write_cfg(f: &mut impl Write, data: &[(&str, String); 8]) -> io::Result<()> {
+fn write_cfg(f: &mut impl Write, data: &[(&str, String); 9]) -> io::Result<()> {
     for (key, value) in data {
         writeln!(f, "{key} = {value}")?;
     }
@@ -55,7 +55,11 @@ pub struct VenvPaths {
 }
 
 /// Write all the files that belong to a venv without any packages installed.
-pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::Result<VenvPaths> {
+pub fn create_bare_venv(
+    location: &Utf8Path,
+    interpreter: &Interpreter,
+    prompt: Option<&str>,
+) -> io::Result<VenvPaths> {
     // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
     // This would make python-build-standalone fail with the encodings module not being found because its home is wrong.
     let base_python: Utf8PathBuf = fs_err::canonicalize(interpreter.sys_executable())?
@@ -104,6 +108,10 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
         unimplemented!("Only Windows and Unix are supported")
     };
     let bin_dir = location.join(bin_name);
+    let prompt = match prompt {
+        Some(p) => p,
+        None => "venv",
+    };
 
     fs::write(location.join(".gitignore"), "*")?;
 
@@ -157,6 +165,7 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
         let activator = template
             .replace("{{ VIRTUAL_ENV_DIR }}", location.as_str())
             .replace("{{ BIN_NAME }}", bin_name)
+            .replace("{{ PROMPT }}", prompt)
             .replace(
                 "{{ RELATIVE_SITE_PACKAGES }}",
                 &format!(
@@ -208,6 +217,7 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
             interpreter.base_exec_prefix().to_string_lossy().to_string(),
         ),
         ("base-executable", base_python.to_string()),
+        ("prompt", prompt.to_string()),
     ];
     let mut pyvenv_cfg = BufWriter::new(File::create(location.join("pyvenv.cfg"))?);
     write_cfg(&mut pyvenv_cfg, pyvenv_cfg_data)?;

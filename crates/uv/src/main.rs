@@ -651,6 +651,10 @@ struct VenvArgs {
     #[clap(default_value = ".venv")]
     name: PathBuf,
 
+    /// The prompt used in shells.
+    #[clap(long, default_value = ".")]
+    prompt: String,
+
     /// The URL of the Python Package Index.
     #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
     index_url: IndexUrl,
@@ -1012,10 +1016,17 @@ async fn run() -> Result<ExitStatus> {
                 Vec::new(),
                 args.no_index,
             );
+            let cwd = env::current_dir()?;
+            let prompt = if args.prompt == "." {
+                cwd.file_name().map(|p| p.to_str().unwrap())
+            } else {
+                Some(args.prompt.as_str())
+            };
             commands::venv(
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
+                prompt,
                 if args.offline {
                     Connectivity::Offline
                 } else {

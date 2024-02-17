@@ -37,8 +37,8 @@ deactivate -nondestructive
 $VIRTUAL_ENV = $BASE_DIR
 $env:VIRTUAL_ENV = $VIRTUAL_ENV
 
-if ("" -ne "") {
-    $env:VIRTUAL_ENV_PROMPT = ""
+if ("{{ PROMPT }}" -ne "") {
+    $env:VIRTUAL_ENV_PROMPT = "{{ PROMPT }}"
 }
 else {
     $env:VIRTUAL_ENV_PROMPT = $( Split-Path $env:VIRTUAL_ENV -Leaf )
