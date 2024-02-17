@@ -1016,10 +1016,18 @@ async fn run() -> Result<ExitStatus> {
                 Vec::new(),
                 args.no_index,
             );
-            let cwd : PathBuf;
+            let cwd_save: PathBuf;
             let prompt = if args.prompt == "." {
-                cwd = env::current_dir()?;
-                cwd.file_name().map(|p| p.to_str().unwrap())
+                match env::current_dir() {
+                    Ok(cwd) => {
+                        cwd_save = cwd.clone();
+                        match cwd_save.file_name() {
+                            Some(b) => b.to_str(),
+                            None => None,
+                        }
+                    }
+                    Err(_) => None,
+                }
             } else {
                 Some(args.prompt.as_str())
             };
