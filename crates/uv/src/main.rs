@@ -1016,35 +1016,12 @@ async fn run() -> Result<ExitStatus> {
                 Vec::new(),
                 args.no_index,
             );
-            let prompt_string: String;
-            let prompt = match args.prompt {
-                Some(p) if p != "." => {
-                    prompt_string = p.clone();
-                    Some(prompt_string.as_str())
-                },
-                _ => {
-                    if args.name == PathBuf::from(".venv") {
-                        match env::current_dir() {
-                            Ok(cwd) => match cwd.file_name() {
-                                Some(cwd) => {
-                                    prompt_string = cwd.to_string_lossy().to_string();
-                                    Some(prompt_string.as_str())
-                                }
-                                None => None,
-                            },
-                            Err(_) => None,
-                        }
-                    } else {
-                        prompt_string = args.name.to_string_lossy().to_string();
-                        Some(prompt_string.as_str())
-                    }
-                },
-            };
+
             commands::venv(
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
-                prompt,
+                args.prompt.as_deref(),
                 if args.offline {
                     Connectivity::Offline
                 } else {

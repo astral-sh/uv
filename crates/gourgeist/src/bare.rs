@@ -108,7 +108,18 @@ pub fn create_bare_venv(
         unimplemented!("Only Windows and Unix are supported")
     };
     let bin_dir = location.join(bin_name);
-    let prompt = prompt.unwrap_or("venv");
+    let prompt: String = if let Some(p) = prompt {
+        p.to_string()
+    } else {
+        let mut loc = location.clone();
+        if loc.ends_with(".venv") {
+            loc.pop();
+        }
+        match loc.file_name() {
+            Some(name) => name.to_string(),
+            None => "venv".to_string(),
+        }
+    };
 
     fs::write(location.join(".gitignore"), "*")?;
 
@@ -162,7 +173,7 @@ pub fn create_bare_venv(
         let activator = template
             .replace("{{ VIRTUAL_ENV_DIR }}", location.as_str())
             .replace("{{ BIN_NAME }}", bin_name)
-            .replace("{{ PROMPT }}", prompt)
+            .replace("{{ PROMPT }}", &prompt)
             .replace(
                 "{{ RELATIVE_SITE_PACKAGES }}",
                 &format!(
@@ -214,7 +225,7 @@ pub fn create_bare_venv(
             interpreter.base_exec_prefix().to_string_lossy().to_string(),
         ),
         ("base-executable", base_python.to_string()),
-        ("prompt", prompt.to_string()),
+        ("prompt", prompt),
     ];
     let mut pyvenv_cfg = BufWriter::new(File::create(location.join("pyvenv.cfg"))?);
     write_cfg(&mut pyvenv_cfg, pyvenv_cfg_data)?;
