@@ -96,7 +96,7 @@ impl std::fmt::Display for VersionOrUrl<'_> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstalledVersion<'a> {
     /// A PEP 440 version specifier, used to identify a distribution in a registry.
     Version(&'a Version),

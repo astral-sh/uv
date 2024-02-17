@@ -506,7 +506,7 @@ async fn install(
         reinstalls,
         extraneous: _,
     } = Planner::with_requirements(&requirements)
-        .with_editable_requirements(editables)
+        .with_editable_requirements(&editables)
         .build(
             site_packages,
             reinstall,

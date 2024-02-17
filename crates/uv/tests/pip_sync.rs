@@ -2247,7 +2247,7 @@ fn sync_editable() -> Result<()> {
         "../../scripts/editable-installs/maturin_editable/python/maturin_editable/__init__.py";
     let python_version_1 = indoc::indoc! {r"
         from .maturin_editable import *
-        
+
         version = 1
    "};
     fs_err::write(python_source_file, python_version_1)?;
@@ -2263,7 +2263,7 @@ fn sync_editable() -> Result<()> {
     // Edit the sources.
     let python_version_2 = indoc::indoc! {r"
         from .maturin_editable import *
-        
+
         version = 2
    "};
     fs_err::write(python_source_file, python_version_2)?;
@@ -2661,6 +2661,51 @@ fn offline() -> Result<()> {
      + black==23.10.1
     "###
     );
+
+    Ok(())
+}
+
+/// Sync with a repeated `anyio` requirement. The second requirement should be ignored.
+#[test]
+fn repeat_requirement() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio\nanyio")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.2.0
+    "###);
+
+    Ok(())
+}
+
+/// Sync with a repeated, but conflicting `anyio` requirement. The second requirement should cause
+/// an error.
+#[test]
+fn conflicting_requirement() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio\nanyio==4.0.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to determine installation plan
+      Caused by: Detected duplicate package in requirements: anyio
+    "###);
 
     Ok(())
 }

@@ -142,7 +142,7 @@ pub(crate) async fn pip_sync(
         reinstalls,
         extraneous,
     } = Planner::with_requirements(&requirements)
-        .with_editable_requirements(resolved_editables.editables)
+        .with_editable_requirements(&resolved_editables.editables)
         .build(
             site_packages,
             reinstall,
