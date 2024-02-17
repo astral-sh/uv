@@ -49,6 +49,7 @@ fn create_venv() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
+    Activate with source /home/ferris/project/.venv/bin/activate
     "###
     );
 
@@ -86,6 +87,7 @@ fn create_venv() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
+    Activate with source /home/ferris/project/.venv/bin/activate
     "###
     );
 
@@ -131,6 +133,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: .venv
+    Activate with source .venv/bin/activate
     "###
     );
 
@@ -225,6 +228,7 @@ fn seed_older_python_version() -> Result<()> {
      + setuptools==68.2.2
      + pip==23.3.1
      + wheel==0.41.3
+    Activate with source /home/ferris/project/.venv/bin/activate
     "###
     );
 
@@ -456,6 +460,7 @@ fn empty_dir_exists() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
+    Activate with source /home/ferris/project/.venv/bin/activate
     "###
     );
 
@@ -552,6 +557,7 @@ fn virtualenv_compatibility() -> Result<()> {
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
+    Activate with source /home/ferris/project/.venv/bin/activate
     "###
     );
 
