@@ -22,6 +22,7 @@ uv-warnings = { path = "../uv-warnings" }
 fs-err = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
+reqwest = { workspace = true, features = ["blocking"] }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

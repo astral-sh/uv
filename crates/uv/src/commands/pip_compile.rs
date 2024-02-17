@@ -119,7 +119,6 @@ pub(crate) async fn pip_compile(
         // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
         .filter(|_| !upgrade.is_all())
         .filter(|output_file| output_file.exists())
-        .map(Path::to_path_buf)
         .map(RequirementsSource::from_path)
         .as_ref()
         .map(|source| RequirementsSpecification::from_source(source, &extras))

@@ -2753,6 +2753,7 @@ dependencies = [
  "pep440_rs 0.4.0",
  "pep508_rs",
  "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",

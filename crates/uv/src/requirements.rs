@@ -1,6 +1,6 @@
 //! A standard interface for working with heterogeneous sources of requirements.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use console::Term;
@@ -22,18 +22,23 @@ pub(crate) enum RequirementsSource {
     /// An editable path was provided on the command line (e.g., `pip install -e ../flask`).
     Editable(String),
     /// Dependencies were provided via a `requirements.txt` file (e.g., `pip install -r requirements.txt`).
-    RequirementsTxt(PathBuf),
+    RequirementsTxt(String),
     /// Dependencies were provided via a `pyproject.toml` file (e.g., `pip-compile pyproject.toml`).
-    PyprojectToml(PathBuf),
+    PyprojectToml(String),
 }
 
 impl RequirementsSource {
     /// Parse a [`RequirementsSource`] from a [`PathBuf`].
-    pub(crate) fn from_path(path: PathBuf) -> Self {
-        if path.ends_with("pyproject.toml") {
-            Self::PyprojectToml(path)
+    pub(crate) fn from_path(path: &Path) -> Self {
+        return RequirementsSource::from_string(path.to_str().unwrap().to_string());
+    }
+
+    /// Parse a [`RequirementsSource`] from a user-provided string.
+    pub(crate) fn from_string(source: String) -> Self {
+        if source.ends_with("pyproject.toml") {
+            Self::PyprojectToml(source)
         } else {
-            Self::RequirementsTxt(path)
+            Self::RequirementsTxt(source)
         }
     }
 
@@ -54,8 +59,23 @@ impl RequirementsSource {
                     );
                     let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
                     if confirmation {
-                        return Self::RequirementsTxt(name.into());
+                        return Self::RequirementsTxt(name);
                     }
+                }
+            }
+        }
+
+        // If the user provided a URL without `-r` (as in
+        // `uv pip install https://example.com/requirements.txt`), prompt them to correct it.
+        if name.starts_with("http://") || name.starts_with("https://") {
+            let term = Term::stderr();
+            if term.is_term() {
+                let prompt = format!(
+                    "`{name}` looks like a URL but was passed as a package name. Did you mean `-r {name}`?"
+                );
+                let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
+                if confirmation {
+                    return Self::RequirementsTxt(name);
                 }
             }
         }
@@ -70,7 +90,7 @@ impl RequirementsSource {
                         format!("`{name}` looks like a local directory but was passed as a package name. Did you mean `-e {name}`?");
                     let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
                     if confirmation {
-                        return Self::RequirementsTxt(name.into());
+                        return Self::RequirementsTxt(name);
                     }
                 }
             }
@@ -84,8 +104,8 @@ impl std::fmt::Display for RequirementsSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Editable(path) => write!(f, "-e {path}"),
-            Self::RequirementsTxt(path) | Self::PyprojectToml(path) => {
-                write!(f, "{}", path.display())
+            Self::RequirementsTxt(source) | Self::PyprojectToml(source) => {
+                write!(f, "{source}")
             }
             Self::Package(package) => write!(f, "{package}"),
         }
@@ -175,8 +195,9 @@ impl RequirementsSpecification {
                     find_links: vec![],
                 }
             }
-            RequirementsSource::RequirementsTxt(path) => {
-                let requirements_txt = RequirementsTxt::parse(path, std::env::current_dir()?)?;
+            RequirementsSource::RequirementsTxt(requirements_txt_source) => {
+                let requirements_txt =
+                    RequirementsTxt::parse(requirements_txt_source, std::env::current_dir()?)?;
                 Self {
                     project: None,
                     requirements: requirements_txt
@@ -233,7 +254,6 @@ impl RequirementsSpecification {
                         format!("Invalid `project.name` in {}", path.normalized_display())
                     })?);
                 }
-
                 Self {
                     project: project_name,
                     requirements,

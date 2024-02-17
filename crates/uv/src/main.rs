@@ -434,7 +434,7 @@ struct PipInstallArgs {
 
     /// Install all packages listed in the given requirements files.
     #[clap(short, long, group = "sources")]
-    requirement: Vec<PathBuf>,
+    requirement: Vec<String>,
 
     /// Install the editable package based on the provided local file path.
     #[clap(short, long, group = "sources")]
@@ -794,18 +794,18 @@ async fn run() -> Result<ExitStatus> {
             let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
             let requirements = args
                 .src_file
-                .into_iter()
-                .map(RequirementsSource::from_path)
+                .iter()
+                .map(|path_buf| RequirementsSource::from_path(path_buf.as_path()))
                 .collect::<Vec<_>>();
             let constraints = args
                 .constraint
-                .into_iter()
-                .map(RequirementsSource::from_path)
+                .iter()
+                .map(|path_buf| RequirementsSource::from_path(path_buf.as_path()))
                 .collect::<Vec<_>>();
             let overrides = args
                 .r#override
-                .into_iter()
-                .map(RequirementsSource::from_path)
+                .iter()
+                .map(|path_buf| RequirementsSource::from_path(path_buf.as_path()))
                 .collect::<Vec<_>>();
             let index_urls = IndexLocations::from_args(
                 args.index_url,
@@ -875,8 +875,8 @@ async fn run() -> Result<ExitStatus> {
             );
             let sources = args
                 .src_file
-                .into_iter()
-                .map(RequirementsSource::from_path)
+                .iter()
+                .map(|path_buf| RequirementsSource::from_path(path_buf.as_path()))
                 .collect::<Vec<_>>();
             let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
             let no_binary = NoBinary::from_args(args.no_binary);
@@ -916,18 +916,18 @@ async fn run() -> Result<ExitStatus> {
                 .chain(
                     args.requirement
                         .into_iter()
-                        .map(RequirementsSource::from_path),
+                        .map(RequirementsSource::from_string),
                 )
                 .collect::<Vec<_>>();
             let constraints = args
                 .constraint
-                .into_iter()
-                .map(RequirementsSource::from_path)
+                .iter()
+                .map(|path_buf| RequirementsSource::from_path(path_buf.as_path()))
                 .collect::<Vec<_>>();
             let overrides = args
                 .r#override
-                .into_iter()
-                .map(RequirementsSource::from_path)
+                .iter()
+                .map(|path_buf| RequirementsSource::from_path(path_buf.as_path()))
                 .collect::<Vec<_>>();
             let index_urls = IndexLocations::from_args(
                 args.index_url,
@@ -992,8 +992,8 @@ async fn run() -> Result<ExitStatus> {
                 .chain(args.editable.into_iter().map(RequirementsSource::Editable))
                 .chain(
                     args.requirement
-                        .into_iter()
-                        .map(RequirementsSource::from_path),
+                        .iter()
+                        .map(|path_buf| RequirementsSource::from_path(path_buf.as_path())),
                 )
                 .collect::<Vec<_>>();
             commands::pip_uninstall(&sources, cache, printer).await
