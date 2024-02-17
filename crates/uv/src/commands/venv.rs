@@ -144,7 +144,6 @@ async fn venv_impl(
         let in_flight = InFlight::default();
 
         // Prep the build context.
-        let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
         let build_dispatch = BuildDispatch::new(
             &client,
             cache,
@@ -158,7 +157,7 @@ async fn venv_impl(
             &NoBuild::All,
             &NoBinary::None,
         )
-        .with_options(options);
+        .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
         // Resolve the seed packages.
         let resolution = build_dispatch
