@@ -652,8 +652,8 @@ struct VenvArgs {
     name: PathBuf,
 
     /// The prompt used in shells.
-    #[clap(long, default_value = ".")]
-    prompt: String,
+    #[clap(long)]
+    prompt: Option<String>,
 
     /// The URL of the Python Package Index.
     #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
@@ -1016,20 +1016,29 @@ async fn run() -> Result<ExitStatus> {
                 Vec::new(),
                 args.no_index,
             );
-            let cwd_save: PathBuf;
-            let prompt = if args.prompt == "." {
-                match env::current_dir() {
-                    Ok(cwd) => {
-                        cwd_save = cwd.clone();
-                        match cwd_save.file_name() {
-                            Some(b) => b.to_str(),
-                            None => None,
+            let prompt_string: String;
+            let prompt = match args.prompt {
+                Some(p) if p != "." => {
+                    prompt_string = p.clone();
+                    Some(prompt_string.as_str())
+                },
+                _ => {
+                    if args.name == PathBuf::from(".venv") {
+                        match env::current_dir() {
+                            Ok(cwd) => match cwd.file_name() {
+                                Some(cwd) => {
+                                    prompt_string = cwd.to_string_lossy().to_string();
+                                    Some(prompt_string.as_str())
+                                }
+                                None => None,
+                            },
+                            Err(_) => None,
                         }
+                    } else {
+                        prompt_string = args.name.to_string_lossy().to_string();
+                        Some(prompt_string.as_str())
                     }
-                    Err(_) => None,
-                }
-            } else {
-                Some(args.prompt.as_str())
+                },
             };
             commands::venv(
                 &args.name,
