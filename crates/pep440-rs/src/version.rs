@@ -349,7 +349,7 @@ impl Version {
         }
     }
 
-    /// Returns the pre-relase part of this version, if it exists.
+    /// Returns the pre-release part of this version, if it exists.
     #[inline]
     pub fn pre(&self) -> Option<PreRelease> {
         match *self.inner {
@@ -755,7 +755,7 @@ impl FromStr for Version {
 /// pre-release numeric value.
 /// * Byte 0 corresponds to the dev-release segment. If there is no dev-release
 /// segment, then byte 0 is set to 0xFF. This makes "no dev-release" sort after
-/// "has dev-release." The dev-release value (constrainted to be <u8::MAX) is
+/// "has dev-release." The dev-release value (constrained to be <u8::MAX) is
 /// stored in byte 0 as-is.
 ///
 /// The order of the encoding above is significant. For example, the

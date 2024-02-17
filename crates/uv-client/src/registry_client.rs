@@ -625,7 +625,7 @@ impl SimpleMetadata {
                 let file = match File::try_from(file, base) {
                     Ok(file) => file,
                     Err(err) => {
-                        // Ignore files with unparseable version specifiers.
+                        // Ignore files with unparsable version specifiers.
                         warn!("Skipping file for {package_name}: {err}");
                         continue;
                     }

@@ -685,7 +685,7 @@ mod tests {
                 <a href="https://storage.googleapis.com/jax-releases/cuda100/jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl">cuda100/jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl</a><br>
                 <a href="https://storage.googleapis.com/jax-releases/cuda100/jaxlib-0.1.52+cuda100-cp37-none-manylinux2010_x86_64.whl">cuda100/jaxlib-0.1.52+cuda100-cp37-none-manylinux2010_x86_64.whl</a><br>
             </body>
-            </hmtl>
+            </html>
         "#;
         let base = Url::parse("https://storage.googleapis.com/jax-releases/jax_cuda_releases.html")
             .unwrap();

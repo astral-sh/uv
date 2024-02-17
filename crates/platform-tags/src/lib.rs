@@ -194,7 +194,7 @@ impl Tags {
         false
     }
 
-    /// Returns the [`TagCompatiblity`] of the given tags.
+    /// Returns the [`TagCompatibility`] of the given tags.
     ///
     /// If compatible, includes the score of the most-compatible platform tag.
     /// If incompatible, includes the tag part which was a closest match.
