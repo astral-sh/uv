@@ -357,7 +357,7 @@ class Poetry(Suite):
                 "bench",
                 "--no-interaction",
                 "--python",
-                "3.12",
+                "3.12.1",
             ],
             cwd=cwd,
             stdout=subprocess.DEVNULL,
