@@ -228,7 +228,7 @@ impl<'a> FlatIndexClient<'a> {
             let file = File {
                 dist_info_metadata: None,
                 filename: filename.to_string(),
-                hashes: Hashes { sha256: None },
+                hashes: Hashes::default(),
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,

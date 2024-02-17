@@ -678,7 +678,7 @@ impl Identifier for Url {
 
 impl Identifier for File {
     fn distribution_id(&self) -> DistributionId {
-        if let Some(hash) = &self.hashes.sha256 {
+        if let Some(hash) = self.hashes.as_str() {
             DistributionId::new(hash)
         } else {
             self.url.distribution_id()
@@ -686,7 +686,7 @@ impl Identifier for File {
     }
 
     fn resource_id(&self) -> ResourceId {
-        if let Some(hash) = &self.hashes.sha256 {
+        if let Some(hash) = self.hashes.as_str() {
             ResourceId::new(hash)
         } else {
             self.url.resource_id()
