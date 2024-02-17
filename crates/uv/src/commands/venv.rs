@@ -166,7 +166,7 @@ async fn venv_impl(
         let version_specifier = VersionSpecifier::from_str("<3.12").unwrap();
         let mut requirements = vec![Requirement::from_str("pip").unwrap()];
 
-        if version_specifier.contains(&interpreter.python_version()) {
+        if version_specifier.contains(interpreter.python_version()) {
             requirements.push(Requirement::from_str("setuptools").unwrap());
             requirements.push(Requirement::from_str("wheel").unwrap());
         }
