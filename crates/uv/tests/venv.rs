@@ -162,9 +162,7 @@ fn seed() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
-     + setuptools==68.2.2
      + pip==23.3.1
-     + wheel==0.41.3
     "###
     );
 

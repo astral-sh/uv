@@ -162,9 +162,7 @@ async fn venv_impl(
         // Resolve the seed packages.
         let resolution = build_dispatch
             .resolve(&[
-                Requirement::from_str("wheel").unwrap(),
                 Requirement::from_str("pip").unwrap(),
-                Requirement::from_str("setuptools").unwrap(),
             ])
             .await
             .map_err(VenvError::Seed)?;
