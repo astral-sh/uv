@@ -121,10 +121,9 @@ impl ResolutionGraph {
                         if !metadata.provides_extras.contains(extra) {
                             let pinned_package = pins
                                 .get(package_name, version)
-                                .expect(&format!(
-                                    "Every package should be pinned: {:?}",
-                                    package_name
-                                ))
+                                .unwrap_or_else(|| {
+                                    panic!("Every package should be pinned: {package_name:?}")
+                                })
                                 .clone();
 
                             diagnostics.push(Diagnostic::MissingExtra {
@@ -133,18 +132,19 @@ impl ResolutionGraph {
                             });
                         }
                     } else {
-                        let metadata = distributions.get(&dist.package_id()).expect(&format!(
-                            "Every package should have metadata: {:?}",
-                            dist.package_id()
-                        ));
+                        let metadata = distributions.get(&dist.package_id()).unwrap_or_else(|| {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.package_id()
+                            )
+                        });
 
                         if !metadata.provides_extras.contains(extra) {
                             let pinned_package = pins
                                 .get(package_name, version)
-                                .expect(&format!(
-                                    "Every package should be pinned: {:?}",
-                                    package_name
-                                ))
+                                .unwrap_or_else(|| {
+                                    panic!("Every package should be pinned: {package_name:?}")
+                                })
                                 .clone();
 
                             diagnostics.push(Diagnostic::MissingExtra {
@@ -157,10 +157,12 @@ impl ResolutionGraph {
                 PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_url(package_name, url);
-                    let metadata = distributions.get(&dist.package_id()).expect(&format!(
-                        "Every package should have metadata: {:?}",
-                        dist.package_id()
-                    ));
+                    let metadata = distributions.get(&dist.package_id()).unwrap_or_else(|| {
+                        panic!(
+                            "Every package should have metadata: {:?}",
+                            dist.package_id()
+                        )
+                    });
 
                     if !metadata.provides_extras.contains(extra) {
                         let url = redirects.get(url).map_or_else(
