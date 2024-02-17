@@ -226,7 +226,7 @@ impl Pep517Backend {
             import sys
             sys.path = [{backend_path}] + sys.path
 
-            {import} 
+            {import}
         "#, backend_path = backend_path_encoded}
     }
 }
@@ -305,8 +305,11 @@ impl SourceBuild {
                 .map_err(|err| Error::Extraction(extracted.clone(), err))?;
 
             // Extract the top-level directory from the archive.
-            uv_extract::strip_component(&extracted)
-                .map_err(|err| Error::Extraction(extracted.clone(), err))?
+            match uv_extract::strip_component(&extracted) {
+                Ok(top_level) => top_level,
+                Err(uv_extract::Error::NonSingularArchive(_)) => extracted,
+                Err(err) => return Err(Error::Extraction(extracted.clone(), err)),
+            }
         };
         let source_tree = if let Some(subdir) = subdirectory {
             source_root.join(subdir)
@@ -614,7 +617,7 @@ impl SourceBuild {
         let script = formatdoc! {
             r#"{}
             print(backend.build_{}("{}", metadata_directory={}))
-            "#, pep517_backend.backend_import(), self.build_kind, escaped_wheel_dir, metadata_directory 
+            "#, pep517_backend.backend_import(), self.build_kind, escaped_wheel_dir, metadata_directory
         };
         let span = info_span!(
             "run_python_script",
