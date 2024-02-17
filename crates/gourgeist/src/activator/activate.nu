@@ -33,7 +33,7 @@ export-env {
     }
 
     let virtual_env = '{{ VIRTUAL_ENV_DIR }}'
-    let bin = 'bin'
+    let bin = '{{ BIN_NAME }}'
 
     let is_windows = ($nu.os-info.family) == 'windows'
     let path_name = (if (has-env 'Path') {

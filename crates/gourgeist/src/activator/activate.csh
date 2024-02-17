@@ -13,7 +13,7 @@ deactivate nondestructive
 setenv VIRTUAL_ENV '{{ VIRTUAL_ENV_DIR }}'
 
 set _OLD_VIRTUAL_PATH="$PATH:q"
-setenv PATH "$VIRTUAL_ENV:q/bin:$PATH:q"
+setenv PATH "$VIRTUAL_ENV:q/{{ BIN_NAME }}:$PATH:q"
 
 
 
