@@ -108,10 +108,7 @@ pub fn create_bare_venv(
         unimplemented!("Only Windows and Unix are supported")
     };
     let bin_dir = location.join(bin_name);
-    let prompt = match prompt {
-        Some(p) => p,
-        None => "venv",
-    };
+    let prompt = prompt.unwrap_or("venv");
 
     fs::write(location.join(".gitignore"), "*")?;
 
