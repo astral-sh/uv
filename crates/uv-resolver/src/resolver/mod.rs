@@ -180,12 +180,17 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     None
                 }
             })
-            .chain(
-                manifest
-                    .editables
-                    .iter()
-                    .map(|(editable, _)| editable.raw()),
-            )
+            .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
+                std::iter::once(editable.raw()).chain(metadata.requires_dist.iter().filter_map(
+                    |req| {
+                        if let Some(pep508_rs::VersionOrUrl::Url(url)) = &req.version_or_url {
+                            Some(url.raw())
+                        } else {
+                            None
+                        }
+                    },
+                ))
+            }))
             .collect();
 
         // Determine the allowed yanked package versions
