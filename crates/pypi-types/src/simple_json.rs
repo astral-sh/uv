@@ -136,16 +136,21 @@ impl Default for Yanked {
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 pub struct Hashes {
+    pub md5: Option<String>,
     pub sha256: Option<String>,
 }
 
 impl Hashes {
     /// Format as `<algorithm>:<hash>`.
-    ///
-    /// Currently limited to SHA256.
     pub fn to_string(&self) -> Option<String> {
         self.sha256
             .as_ref()
             .map(|sha256| format!("sha256:{sha256}"))
+            .or_else(|| self.md5.as_ref().map(|md5| format!("md5:{md5}")))
+    }
+
+    /// Return the hash digest.
+    pub fn as_str(&self) -> Option<&str> {
+        self.sha256.as_deref().or(self.md5.as_deref())
     }
 }
