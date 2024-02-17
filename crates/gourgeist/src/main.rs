@@ -21,6 +21,8 @@ struct Cli {
     path: Option<Utf8PathBuf>,
     #[clap(short, long)]
     python: Option<Utf8PathBuf>,
+    #[clap(long)]
+    prompt: Option<String>,
 }
 
 fn run() -> Result<(), gourgeist::Error> {
@@ -34,7 +36,7 @@ fn run() -> Result<(), gourgeist::Error> {
         Cache::from_path(".gourgeist_cache")?
     };
     let info = Interpreter::query(python.as_std_path(), &platform, &cache).unwrap();
-    create_bare_venv(&location, &info, None)?;
+    create_bare_venv(&location, &info, cli.prompt.as_deref())?;
     Ok(())
 }
 
