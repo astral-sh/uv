@@ -96,7 +96,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
                 self.url(
                     source_dist,
-                    filename,
+                    &filename,
                     &url,
                     &cache_shard,
                     subdirectory.as_deref(),
@@ -177,7 +177,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
                 self.url_metadata(
                     source_dist,
-                    filename,
+                    &filename,
                     &url,
                     &cache_shard,
                     subdirectory.as_deref(),
