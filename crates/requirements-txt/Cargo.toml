@@ -17,6 +17,7 @@ pep440_rs = { path = "../pep440-rs", features = ["rkyv", "serde"] }
 pep508_rs = { path = "../pep508-rs", features = ["rkyv", "serde"] }
 uv-fs = { path = "../uv-fs" }
 uv-normalize = { path = "../uv-normalize" }
+uv-warnings = { path = "../uv-warnings" }
 
 fs-err = { workspace = true }
 once_cell = { workspace = true }

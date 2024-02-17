@@ -52,6 +52,29 @@ fn missing_requirements_txt() {
 }
 
 #[test]
+fn empty_requirements_txt() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Requirements file requirements.txt does not contain any dependencies
+    Audited 0 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn no_solution() {
     let context = TestContext::new("3.12");
 
@@ -1011,4 +1034,98 @@ fn install_upgrade() {
      + httpcore==1.0.2
     "###
     );
+}
+
+/// Install a package from a `requirements.txt` file, with a `constraints.txt` file.
+#[test]
+fn install_constraints_txt() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirementstxt = context.temp_dir.child("requirements.txt");
+    requirementstxt.write_str("django==5.0b1")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("sqlparse<0.4.4")?;
+
+    uv_snapshot!(command(&context)
+            .arg("-r")
+            .arg("requirements.txt")
+            .arg("--constraint")
+            .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + asgiref==3.7.2
+     + django==5.0b1
+     + sqlparse==0.4.3
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install a package from a `requirements.txt` file, with an inline constraint.
+#[test]
+fn install_constraints_inline() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirementstxt = context.temp_dir.child("requirements.txt");
+    requirementstxt.write_str("django==5.0b1\n-c constraints.txt")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("sqlparse<0.4.4")?;
+
+    uv_snapshot!(command(&context)
+            .arg("-r")
+            .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + asgiref==3.7.2
+     + django==5.0b1
+     + sqlparse==0.4.3
+    "###
+    );
+
+    Ok(())
+}
+
+/// Tests that we can install `polars==0.14.0`, which has this odd dependency
+/// requirement in its wheel metadata: `pyarrow>=4.0.*; extra == 'pyarrow'`.
+///
+/// The `>=4.0.*` is invalid, but is something we "fix" because it is out
+/// of the control of the end user. However, our fix for this case ends up
+/// stripping the quotes around `pyarrow` and thus produces an irrevocably
+/// invalid dependency requirement.
+///
+/// See: <https://github.com/astral-sh/uv/issues/1477>
+#[test]
+fn install_pinned_polars_invalid_metadata() {
+    let context = TestContext::new("3.12");
+
+    // Install Flask.
+    uv_snapshot!(command(&context)
+        .arg("polars==0.14.0"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + polars==0.14.0
+    "###
+    );
+
+    context.assert_command("import polars").success();
 }

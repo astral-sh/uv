@@ -8,41 +8,85 @@ use fs_err as fs;
 use goblin::elf::Elf;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use tracing::trace;
 
 use crate::{Os, PlatformError};
 
+pub(crate) fn detect_linux_libc() -> Result<Os, PlatformError> {
+    let ld_path = find_ld_path()?;
+
+    tracing::trace!("trying to detect musl version by running `{ld_path:?}`");
+    match detect_musl_version(&ld_path) {
+        Ok(os) => return Ok(os),
+        Err(err) => tracing::trace!("tried to find musl version, but failed: {err}"),
+    }
+    tracing::trace!("trying to detect libc version from possible symlink at {ld_path:?}");
+    match detect_linux_libc_from_ld_symlink(&ld_path) {
+        Ok(os) => return Ok(os),
+        Err(err) => {
+            tracing::trace!("tried to find libc version from ld symlink, but failed: {err}");
+        }
+    }
+    tracing::trace!("trying to run `ldd --version` to detect glibc version");
+    match detect_glibc_version_from_ldd() {
+        Ok(os_version) => return Ok(os_version),
+        Err(err) => {
+            tracing::trace!("tried to find glibc version from `ldd --version`, but failed: {err}");
+        }
+    }
+    let msg = "\
+          could not detect either glibc version nor musl libc version, \
+          at least one of which is required\
+      ";
+    Err(PlatformError::OsVersionDetectionError(msg.to_string()))
+}
+
 // glibc version is taken from std/sys/unix/os.rs
-fn glibc_version_from_ldd() -> Result<Os, PlatformError> {
-    trace!("Falling back to `ldd --version` to detect OS libc version");
+fn detect_glibc_version_from_ldd() -> Result<Os, PlatformError> {
     let output = Command::new("ldd")
         .args(["--version"])
         .output()
         .map_err(|err| {
-            PlatformError::OsVersionDetectionError(format!("Failed to execute ldd: {err}"))
+            PlatformError::OsVersionDetectionError(format!(
+                "failed to execute `ldd --version` for glibc: {err}"
+            ))
         })?;
-    let output_str = std::str::from_utf8(&output.stdout).map_err(|err| {
-        PlatformError::OsVersionDetectionError(format!(
-            "Failed to parse ldd output as UTF-8: {err}"
-        ))
-    })?;
-    let version_str = ldd_output_to_version_str(output_str)?;
-
-    parse_glibc_version(version_str).ok_or_else(|| {
-        PlatformError::OsVersionDetectionError(format!(
-            "Invalid version string from ldd output: {version_str}"
-        ))
-    })
+    match glibc_ldd_output_to_version("stdout", &output.stdout) {
+        Ok(os) => return Ok(os),
+        Err(err) => {
+            tracing::trace!("failed to parse glibc version from stdout of `ldd --version`: {err}");
+        }
+    }
+    match glibc_ldd_output_to_version("stderr", &output.stderr) {
+        Ok(os) => return Ok(os),
+        Err(err) => {
+            tracing::trace!("failed to parse glibc version from stderr of `ldd --version`: {err}");
+        }
+    }
+    Err(PlatformError::OsVersionDetectionError(
+        "could not find glibc version from stdout or stderr of `ldd --version`".to_string(),
+    ))
 }
 
-fn ldd_output_to_version_str(output_str: &str) -> Result<&str, PlatformError> {
+fn glibc_ldd_output_to_version(kind: &str, output: &[u8]) -> Result<Os, PlatformError> {
     static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"ldd \(.+\) ([0-9]+\.[0-9]+)").unwrap());
-    let Some((_, [version])) = RE.captures(output_str).map(|c| c.extract()) else {
+
+    let output = std::str::from_utf8(output).map_err(|err| {
+        PlatformError::OsVersionDetectionError(format!(
+            "failed to parse `ldd --version` {kind} as UTF-8: {err}"
+        ))
+    })?;
+    tracing::trace!("{kind} output from `ldd --version`: {output:?}");
+    let Some((_, [version])) = RE.captures(output).map(|c| c.extract()) else {
+        return Err(PlatformError::OsVersionDetectionError(
+            "failed to detect glibc version on {kind}".to_string(),
+        ));
+    };
+    let Some(os) = parse_glibc_version(version) else {
         return Err(PlatformError::OsVersionDetectionError(format!(
-            "ERROR: failed to detect glibc version. ldd output: {output_str}",
+            "failed to parse glibc version on {kind} from: {version:?}",
         )));
     };
-    Ok(version)
+    Ok(os)
 }
 
 // Returns Some((major, minor)) if the string is a valid "x.y" version,
@@ -55,46 +99,33 @@ fn parse_glibc_version(version: &str) -> Option<Os> {
     }
 }
 
-pub(crate) fn detect_linux_libc() -> Result<Os, PlatformError> {
-    let libc = find_libc()?;
-    let linux = if let Ok(Some((major, minor))) = get_musl_version(&libc) {
-        Os::Musllinux { major, minor }
-    } else if let Some(os_version) = detect_linux_libc_from_ld_symlink(&libc) {
-        return Ok(os_version);
-    } else if let Ok(os_version) = glibc_version_from_ldd() {
-        return Ok(os_version);
-    } else {
-        let msg = "\
-            Couldn't detect either glibc version nor musl libc version, \
-            at least one of which is required\
-        ";
-        return Err(PlatformError::OsVersionDetectionError(msg.to_string()));
-    };
-    Ok(linux)
-}
-
-fn detect_linux_libc_from_ld_symlink(path: &Path) -> Option<Os> {
+fn detect_linux_libc_from_ld_symlink(path: &Path) -> Result<Os, PlatformError> {
     static RE: Lazy<Regex> =
         Lazy::new(|| Regex::new(r"^ld-([0-9]{1,3})\.([0-9]{1,3})\.so$").unwrap());
 
-    let target = fs::read_link(path).ok()?;
+    let target = fs::read_link(path).map_err(|err| {
+        PlatformError::OsVersionDetectionError(format!(
+            "failed to read {path:?} as a symbolic link: {err}",
+        ))
+    })?;
     let Some(filename) = target.file_name() else {
-        trace!("expected dynamic linker symlink {target:?} to have a filename");
-        return None;
+        return Err(PlatformError::OsVersionDetectionError(format!(
+            "failed to get base name of symbolic link path {target:?}",
+        )));
     };
     let filename = filename.to_string_lossy();
     let Some((_, [major, minor])) = RE.captures(&filename).map(|c| c.extract()) else {
-        trace!(
-            "couldn't find major/minor version in dynamic linker symlink \
-             filename {filename:?} from its path {target:?}"
-        );
-        return None;
+        return Err(PlatformError::OsVersionDetectionError(format!(
+            "failed to find major/minor version in dynamic linker symlink \
+             filename {filename:?} from its path {target:?} via regex {regex}",
+            regex = RE.as_str(),
+        )));
     };
     // OK since we are guaranteed to have between 1 and 3 ASCII digits and the
     // maximum possible value, 999, fits into a u16.
     let major = major.parse().expect("valid major version");
     let minor = minor.parse().expect("valid minor version");
-    Some(Os::Manylinux { major, minor })
+    Ok(Os::Manylinux { major, minor })
 }
 
 /// Read the musl version from libc library's output. Taken from maturin.
@@ -106,29 +137,59 @@ fn detect_linux_libc_from_ld_symlink(path: &Path) -> Option<Os> {
 /// Version 1.2.2
 /// Dynamic Program Loader
 /// ```
-fn get_musl_version(ld_path: impl AsRef<Path>) -> std::io::Result<Option<(u16, u16)>> {
-    static RE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"Version ([0-9]{2,4})\.([0-9]{2,4})").unwrap());
-
-    let output = Command::new(ld_path.as_ref())
+fn detect_musl_version(ld_path: impl AsRef<Path>) -> Result<Os, PlatformError> {
+    let ld_path = ld_path.as_ref();
+    let output = Command::new(ld_path)
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        .output()?;
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let Some((_, [major, minor])) = RE.captures(&stderr).map(|c| c.extract()) else {
-        return Ok(None);
+        .output()
+        .map_err(|err| {
+            PlatformError::OsVersionDetectionError(format!(
+                "failed to execute `{ld_path:?}` for musl: {err}"
+            ))
+        })?;
+    match musl_ld_output_to_version("stdout", &output.stdout) {
+        Ok(os) => return Ok(os),
+        Err(err) => {
+            tracing::trace!("failed to parse musl version from stdout of `{ld_path:?}`: {err}");
+        }
+    }
+    match musl_ld_output_to_version("stderr", &output.stderr) {
+        Ok(os) => return Ok(os),
+        Err(err) => {
+            tracing::trace!("failed to parse musl version from stderr of `{ld_path:?}`: {err}");
+        }
+    }
+    Err(PlatformError::OsVersionDetectionError(format!(
+        "could not find musl version from stdout or stderr of `{ld_path:?}`",
+    )))
+}
+
+fn musl_ld_output_to_version(kind: &str, output: &[u8]) -> Result<Os, PlatformError> {
+    static RE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"Version ([0-9]{1,4})\.([0-9]{1,4})").unwrap());
+
+    let output = std::str::from_utf8(output).map_err(|err| {
+        PlatformError::OsVersionDetectionError(format!("failed to parse {kind} as UTF-8: {err}"))
+    })?;
+    tracing::trace!("{kind} output from `ld`: {output:?}");
+    let Some((_, [major, minor])) = RE.captures(output).map(|c| c.extract()) else {
+        return Err(PlatformError::OsVersionDetectionError(format!(
+            "could not find musl version from on {kind} via regex: {}",
+            RE.as_str(),
+        )));
     };
-    // OK since we are guaranteed to have between 2 and 4 ASCII digits and the
+    // OK since we are guaranteed to have between 1 and 4 ASCII digits and the
     // maximum possible value, 9999, fits into a u16.
     let major = major.parse().expect("valid major version");
     let minor = minor.parse().expect("valid minor version");
-    Ok(Some((major, minor)))
+    Ok(Os::Musllinux { major, minor })
 }
 
 /// Find musl libc path from executable's ELF header.
-fn find_libc() -> Result<PathBuf, PlatformError> {
-    let buffer = fs::read("/bin/ls")?;
-    let error_str = "Couldn't parse /bin/ls for detecting the ld version";
+fn find_ld_path() -> Result<PathBuf, PlatformError> {
+    let buffer = fs::read("/bin/sh")?;
+    let error_str = "Couldn't parse /bin/sh for detecting the ld version";
     let elf = Elf::parse(&buffer)
         .map_err(|err| PlatformError::OsVersionDetectionError(format!("{error_str}: {err}")))?;
     if let Some(elf_interpreter) = elf.interpreter {
@@ -146,24 +207,55 @@ mod tests {
 
     #[test]
     fn parse_ldd_output() {
-        let ver_str = ldd_output_to_version_str(
-            r"ldd (GNU libc) 2.12
+        let ver_str = glibc_ldd_output_to_version(
+            "stdout",
+            br"ldd (GNU libc) 2.12
 Copyright (C) 2010 Free Software Foundation, Inc.
 This is free software; see the source for copying conditions.  There is NO
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 Written by Roland McGrath and Ulrich Drepper.",
         )
         .unwrap();
-        assert_eq!(ver_str, "2.12");
+        assert_eq!(
+            ver_str,
+            Os::Manylinux {
+                major: 2,
+                minor: 12
+            }
+        );
 
-        let ver_str = ldd_output_to_version_str(
-            r"ldd (Ubuntu GLIBC 2.31-0ubuntu9.2) 2.31
+        let ver_str = glibc_ldd_output_to_version(
+            "stderr",
+            br"ldd (Ubuntu GLIBC 2.31-0ubuntu9.2) 2.31
   Copyright (C) 2020 Free Software Foundation, Inc.
   This is free software; see the source for copying conditions.  There is NO
   warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
   Written by Roland McGrath and Ulrich Drepper.",
         )
         .unwrap();
-        assert_eq!(ver_str, "2.31");
+        assert_eq!(
+            ver_str,
+            Os::Manylinux {
+                major: 2,
+                minor: 31
+            }
+        );
+    }
+
+    #[test]
+    fn parse_musl_ld_output() {
+        // This output was generated by running `/lib/ld-musl-x86_64.so.1`
+        // in an Alpine Docker image. The Alpine version:
+        //
+        // # cat /etc/alpine-release
+        // 3.19.1
+        let output = b"\
+musl libc (x86_64)
+Version 1.2.4_git20230717
+Dynamic Program Loader
+Usage: /lib/ld-musl-x86_64.so.1 [options] [--] pathname [args]\
+        ";
+        let got = musl_ld_output_to_version("stderr", output).unwrap();
+        assert_eq!(got, Os::Musllinux { major: 1, minor: 2 });
     }
 }

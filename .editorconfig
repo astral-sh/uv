@@ -1,0 +1,20 @@
+# Check http://editorconfig.org for more information
+# This is the main config file for this project:
+root = true
+
+[*]
+charset = utf-8
+trim_trailing_whitespace = true
+end_of_line = lf
+indent_style = space
+insert_final_newline = true
+indent_size = 2
+
+[*.{rs,py,pyi}]
+indent_size = 4
+
+[*.snap]
+trim_trailing_whitespace = false
+
+[*.md]
+max_line_length = 100

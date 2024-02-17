@@ -246,7 +246,7 @@ impl Dist {
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
             {
                 Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
-                    filename: WheelFilename::from_str(url.filename()?)?,
+                    filename: WheelFilename::from_str(&url.filename()?)?,
                     url,
                     path,
                 })))
@@ -265,7 +265,7 @@ impl Dist {
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
         {
             Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
-                filename: WheelFilename::from_str(url.filename()?)?,
+                filename: WheelFilename::from_str(&url.filename()?)?,
                 url,
             })))
         } else {
@@ -498,8 +498,8 @@ impl DistributionMetadata for Dist {
 }
 
 impl RemoteSource for File {
-    fn filename(&self) -> Result<&str, Error> {
-        Ok(&self.filename)
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
+        Ok(Cow::Borrowed(&self.filename))
     }
 
     fn size(&self) -> Option<u64> {
@@ -508,10 +508,17 @@ impl RemoteSource for File {
 }
 
 impl RemoteSource for Url {
-    fn filename(&self) -> Result<&str, Error> {
-        self.path_segments()
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
+        // Identify the last segment of the URL as the filename.
+        let filename = self
+            .path_segments()
             .and_then(Iterator::last)
-            .ok_or_else(|| Error::UrlFilename(self.clone()))
+            .ok_or_else(|| Error::UrlFilename(self.clone()))?;
+
+        // Decode the filename, which may be percent-encoded.
+        let filename = urlencoding::decode(filename)?;
+
+        Ok(filename)
     }
 
     fn size(&self) -> Option<u64> {
@@ -520,7 +527,7 @@ impl RemoteSource for Url {
 }
 
 impl RemoteSource for RegistryBuiltDist {
-    fn filename(&self) -> Result<&str, Error> {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
         self.file.filename()
     }
 
@@ -530,7 +537,7 @@ impl RemoteSource for RegistryBuiltDist {
 }
 
 impl RemoteSource for RegistrySourceDist {
-    fn filename(&self) -> Result<&str, Error> {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
         self.file.filename()
     }
 
@@ -540,7 +547,7 @@ impl RemoteSource for RegistrySourceDist {
 }
 
 impl RemoteSource for DirectUrlBuiltDist {
-    fn filename(&self) -> Result<&str, Error> {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
         self.url.filename()
     }
 
@@ -550,7 +557,7 @@ impl RemoteSource for DirectUrlBuiltDist {
 }
 
 impl RemoteSource for DirectUrlSourceDist {
-    fn filename(&self) -> Result<&str, Error> {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
         self.url.filename()
     }
 
@@ -560,12 +567,24 @@ impl RemoteSource for DirectUrlSourceDist {
 }
 
 impl RemoteSource for GitSourceDist {
-    fn filename(&self) -> Result<&str, Error> {
-        self.url.filename().map(|filename| {
-            filename
-                .rsplit_once('@')
-                .map_or(filename, |(_, filename)| filename)
-        })
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
+        // The filename is the last segment of the URL, before any `@`.
+        match self.url.filename()? {
+            Cow::Borrowed(filename) => {
+                if let Some((_, filename)) = filename.rsplit_once('@') {
+                    Ok(Cow::Borrowed(filename))
+                } else {
+                    Ok(Cow::Borrowed(filename))
+                }
+            }
+            Cow::Owned(filename) => {
+                if let Some((_, filename)) = filename.rsplit_once('@') {
+                    Ok(Cow::Owned(filename.to_owned()))
+                } else {
+                    Ok(Cow::Owned(filename))
+                }
+            }
+        }
     }
 
     fn size(&self) -> Option<u64> {
@@ -574,7 +593,7 @@ impl RemoteSource for GitSourceDist {
 }
 
 impl RemoteSource for PathBuiltDist {
-    fn filename(&self) -> Result<&str, Error> {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
         self.url.filename()
     }
 
@@ -584,7 +603,7 @@ impl RemoteSource for PathBuiltDist {
 }
 
 impl RemoteSource for PathSourceDist {
-    fn filename(&self) -> Result<&str, Error> {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
         self.url.filename()
     }
 
@@ -594,7 +613,7 @@ impl RemoteSource for PathSourceDist {
 }
 
 impl RemoteSource for SourceDist {
-    fn filename(&self) -> Result<&str, Error> {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
         match self {
             Self::Registry(dist) => dist.filename(),
             Self::DirectUrl(dist) => dist.filename(),
@@ -614,7 +633,7 @@ impl RemoteSource for SourceDist {
 }
 
 impl RemoteSource for BuiltDist {
-    fn filename(&self) -> Result<&str, Error> {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
         match self {
             Self::Registry(dist) => dist.filename(),
             Self::DirectUrl(dist) => dist.filename(),
@@ -632,7 +651,7 @@ impl RemoteSource for BuiltDist {
 }
 
 impl RemoteSource for Dist {
-    fn filename(&self) -> Result<&str, Error> {
+    fn filename(&self) -> Result<Cow<'_, str>, Error> {
         match self {
             Self::Built(dist) => dist.filename(),
             Self::Source(dist) => dist.filename(),

@@ -41,6 +41,7 @@ tokio = { workspace = true, features = ["fs"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+urlencoding = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

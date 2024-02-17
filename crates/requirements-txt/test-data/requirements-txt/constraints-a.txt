@@ -1,2 +1,2 @@
--c constraints-b.txt # We can't actually semantically deal with those yet
+-c constraints-b.txt
 django-debug-toolbar<2.2

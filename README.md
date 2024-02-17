@@ -1,9 +1,9 @@
 # uv
 
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
-[![image](https://img.shields.io/pypi/v/uv/0.1.1.svg)](https://pypi.python.org/pypi/uv)
-[![image](https://img.shields.io/pypi/l/uv/0.1.1.svg)](https://pypi.python.org/pypi/uv)
-[![image](https://img.shields.io/pypi/pyversions/uv/0.1.1.svg)](https://pypi.python.org/pypi/uv)
+[![image](https://img.shields.io/pypi/v/uv/0.1.2.svg)](https://pypi.python.org/pypi/uv)
+[![image](https://img.shields.io/pypi/l/uv/0.1.2.svg)](https://pypi.python.org/pypi/uv)
+[![image](https://img.shields.io/pypi/pyversions/uv/0.1.2.svg)](https://pypi.python.org/pypi/uv)
 [![Actions status](https://github.com/astral-sh/uv/workflows/CI/badge.svg)](https://github.com/astral-sh/uv/actions)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
 
@@ -69,6 +69,7 @@ To install a package into the virtual environment:
 uv pip install flask                # Install Flask.
 uv pip install -r requirements.txt  # Install from a requirements.txt file.
 uv pip install -e .                 # Install the current project in editable mode.
+uv pip install "package @ ."        # Install the current project from disk
 ```
 
 To generate a set of locked dependencies from an input file:
@@ -170,7 +171,7 @@ its own. For example, setting `VIRTUAL_ENV=/path/to/venv` will cause uv to insta
 uv uses aggressive caching to avoid re-downloading (and re-building dependencies) that have
 already been accessed in prior runs.
 
-The specifics of uv's caching semantics vary based on the nature of the dependency: 
+The specifics of uv's caching semantics vary based on the nature of the dependency:
 
 - **For registry dependencies** (like those downloaded from PyPI), uv respects HTTP caching headers.
 - **For direct URL dependencies**, uv respects HTTP caching headers, and also caches based on
@@ -186,7 +187,7 @@ If you're running into caching issues, uv includes a few escape hatches:
 - To force uv to revalidate cached data for all dependencies, run `uv pip install --refresh ...`.
 - To force uv to revalidate cached data for a specific dependency, run, e.g., `uv pip install --refresh-package flask ...`.
 - To force uv to ignore existing installed versions, run `uv pip install --reinstall ...`.
-- To clear the global cache entirely, run `uv clean`. 
+- To clear the global cache entirely, run `uv clean`.
 
 ### Resolution strategy
 
@@ -256,7 +257,7 @@ By default, uv will accept pre-release versions during dependency resolution in 
 If dependency resolution fails due to a transitive pre-release, uv will prompt the user to
 re-run with `--prerelease=allow`, to allow pre-releases for all dependencies.
 
-Alternatively, you can add the transitive dependency to your `requirements.in` file with 
+Alternatively, you can add the transitive dependency to your `requirements.in` file with
 pre-release specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific
 dependency.
 
@@ -356,6 +357,6 @@ dually licensed as above, without any additional terms or conditions.
 
 <div align="center">
   <a target="_blank" href="https://astral.sh" style="background:none">
-    <img src="https://raw.githubusercontent.com/astral-sh/uv/main/assets/svg/Astral.svg" alt="Made by Astral Badge">
+    <img src="https://raw.githubusercontent.com/astral-sh/uv/main/assets/svg/Astral.svg" alt="Made by Astral">
   </a>
 </div>

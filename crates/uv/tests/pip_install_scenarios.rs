@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/de58b3e3f998486b6c0f3dd67b7341c880eb54b2/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/64b4451b832cece378f6e773d326ea09efe8903d/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -733,6 +733,76 @@ fn multiple_extras_required() {
     assert_installed(&context.venv, "a_502cbb59", "1.0.0", &context.temp_dir);
     assert_installed(&context.venv, "b_502cbb59", "1.0.0", &context.temp_dir);
     assert_installed(&context.venv, "c_502cbb59", "1.0.0", &context.temp_dir);
+}
+
+/// all-extras-required
+///
+/// Multiple optional dependencies are requested for the via an 'all' extra.
+///
+/// ```text
+/// 4cf56e90
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a[all]
+/// │       ├── satisfied by a-1.0.0
+/// │       ├── satisfied by a-1.0.0[all]
+/// │       ├── satisfied by a-1.0.0[extra_b]
+/// │       └── satisfied by a-1.0.0[extra_c]
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   ├── a-1.0.0[all]
+/// │   │   ├── requires a[extra_b]
+/// │   │   │   ├── satisfied by a-1.0.0
+/// │   │   │   ├── satisfied by a-1.0.0[all]
+/// │   │   │   ├── satisfied by a-1.0.0[extra_b]
+/// │   │   │   └── satisfied by a-1.0.0[extra_c]
+/// │   │   └── requires a[extra_c]
+/// │   │       ├── satisfied by a-1.0.0
+/// │   │       ├── satisfied by a-1.0.0[all]
+/// │   │       ├── satisfied by a-1.0.0[extra_b]
+/// │   │       └── satisfied by a-1.0.0[extra_c]
+/// │   ├── a-1.0.0[extra_b]
+/// │   │   └── requires b
+/// │   │       └── satisfied by b-1.0.0
+/// │   └── a-1.0.0[extra_c]
+/// │       └── requires c
+/// │           └── satisfied by c-1.0.0
+/// ├── b
+/// │   └── b-1.0.0
+/// └── c
+///     └── c-1.0.0
+/// ```
+#[test]
+fn all_extras_required() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-4cf56e90", "albatross"));
+    filters.push((r"b-4cf56e90", "bluebird"));
+    filters.push((r"c-4cf56e90", "crow"));
+    filters.push((r"-4cf56e90", ""));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("a-4cf56e90[all]")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + albatross==1.0.0
+     + bluebird==1.0.0
+     + crow==1.0.0
+    "###);
+
+    assert_installed(&context.venv, "a_4cf56e90", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "b_4cf56e90", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "c_4cf56e90", "1.0.0", &context.temp_dir);
 }
 
 /// extra-incompatible-with-extra

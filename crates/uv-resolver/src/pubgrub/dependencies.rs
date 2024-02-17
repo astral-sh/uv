@@ -21,22 +21,16 @@ impl PubGrubDependencies {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &Overrides,
-        extra: Option<&ExtraName>,
-        source: Option<&PackageName>,
+        source_name: Option<&PackageName>,
+        source_extra: Option<&ExtraName>,
         env: &MarkerEnvironment,
     ) -> Result<Self, ResolveError> {
         let mut dependencies = DependencyConstraints::<PubGrubPackage, Range<Version>>::default();
 
         // Iterate over all declared requirements.
         for requirement in overrides.apply(requirements) {
-            // Avoid self-dependencies.
-            if source.is_some_and(|source| source == &requirement.name) {
-                warn!("{} has a dependency on itself", requirement.name);
-                continue;
-            }
-
             // If the requirement isn't relevant for the current platform, skip it.
-            if let Some(extra) = extra {
+            if let Some(extra) = source_extra {
                 if !requirement.evaluate_markers(env, std::slice::from_ref(extra)) {
                     continue;
                 }
@@ -55,6 +49,16 @@ impl PubGrubDependencies {
                     .map(|extra| to_pubgrub(requirement, Some(extra))),
             ) {
                 let (package, version) = result?;
+
+                // Ignore self-dependencies.
+                if let PubGrubPackage::Package(name, extra, None) = &package {
+                    if source_name.is_some_and(|source_name| source_name == name)
+                        && source_extra == extra.as_ref()
+                    {
+                        warn!("{name} has a dependency on itself");
+                        continue;
+                    }
+                }
 
                 if let Some(entry) = dependencies.get_key_value(&package) {
                     // Merge the versions.
@@ -80,14 +84,8 @@ impl PubGrubDependencies {
                 continue;
             }
 
-            // Avoid self-dependencies.
-            if source.is_some_and(|source| source == &constraint.name) {
-                warn!("{} has a dependency on itself", constraint.name);
-                continue;
-            }
-
             // If the requirement isn't relevant for the current platform, skip it.
-            if let Some(extra) = extra {
+            if let Some(extra) = source_extra {
                 if !constraint.evaluate_markers(env, std::slice::from_ref(extra)) {
                     continue;
                 }
@@ -106,6 +104,16 @@ impl PubGrubDependencies {
                     .map(|extra| to_pubgrub(constraint, Some(extra))),
             ) {
                 let (package, version) = result?;
+
+                // Ignore self-dependencies.
+                if let PubGrubPackage::Package(name, extra, None) = &package {
+                    if source_name.is_some_and(|source_name| source_name == name)
+                        && source_extra == extra.as_ref()
+                    {
+                        warn!("{name} has a dependency on itself");
+                        continue;
+                    }
+                }
 
                 if let Some(entry) = dependencies.get_key_value(&package) {
                     // Merge the versions.

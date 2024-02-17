@@ -20,6 +20,10 @@ jupyter = [
   "ipython>=7.8.0",
   "tokenize-rt>=3.2.0",
 ]
+dev = [
+  "black[d]",
+  "black[uvloop]",
+]
 
 [build-system]
 requires = ["flit_core>=3.4,<4"]

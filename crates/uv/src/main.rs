@@ -238,7 +238,7 @@ struct PipCompileArgs {
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
-    #[clap(long)]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
@@ -362,7 +362,7 @@ struct PipSyncArgs {
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
-    #[clap(long)]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
@@ -527,7 +527,7 @@ struct PipInstallArgs {
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
-    #[clap(long)]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
@@ -632,15 +632,15 @@ struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     ///
     /// Supported formats:
-    /// * `-p 3.10` searches for an installed Python 3.10 (`py --list-paths` on Windows, `python3.10` on Linux/Mac).
+    /// - `3.10` searches for an installed Python 3.10 (`py --list-paths` on Windows, `python3.10` on Linux/Mac).
     ///   Specifying a patch version is not supported.
-    /// * `-p python3.10` or `-p python.exe` looks for a binary in `PATH`.
-    /// * `-p /home/ferris/.local/bin/python3.10` uses this exact Python.
+    /// - `python3.10` or `python.exe` looks for a binary in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses this exact Python.
     ///
     /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
     /// doesn't look for a Python interpreter on disk.
     // Short `-p` to match `virtualenv`
-    #[clap(short, long)]
+    #[clap(short, long, verbatim_doc_comment)]
     python: Option<String>,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
@@ -656,7 +656,7 @@ struct VenvArgs {
     index_url: IndexUrl,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
-    #[clap(long)]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those

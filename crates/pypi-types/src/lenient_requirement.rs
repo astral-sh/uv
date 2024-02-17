@@ -7,6 +7,7 @@ use tracing::warn;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Requirement};
+use uv_normalize::{ExtraName, InvalidNameError};
 
 /// Ex) `>=7.2.0<8.0.0`
 static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
@@ -14,13 +15,13 @@ static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").u
 static NOT_EQUAL_TILDE: Lazy<Regex> = Lazy::new(|| Regex::new(r"!=~((?:\d\.)*\d)").unwrap());
 /// Ex) `>=1.9.*`, `<3.4.*`
 static INVALID_TRAILING_DOT_STAR: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(<=|>=|<|>)(\d+(\.\d+)?)\.\*").unwrap());
+    Lazy::new(|| Regex::new(r"(<=|>=|<|>)(\d+(\.\d+)*)\.\*").unwrap());
 /// Ex) `!=3.0*`
 static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
 /// Ex) `>=3.6,`
 static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r",\s*$").unwrap());
 /// Ex) `>= '2.7'`, `>=3.6'`
-static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]"#).unwrap());
+static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]([*\d])|([*\d])['"]"#).unwrap());
 
 /// Regex to match the invalid specifier, replacement to fix it and message about was wrong and
 /// fixed
@@ -44,7 +45,7 @@ static FIXUPS: &[(&Lazy<Regex>, &str, &str)] = &[
     // Given `>=3.6,`, rewrite to `>=3.6`
     (&TRAILING_COMMA, r"${1}", "removing trailing comma"),
     // Given `>= '2.7'`, rewrite to `>= 2.7`
-    (&STRAY_QUOTES, r"", "removing stray quotes"),
+    (&STRAY_QUOTES, r"$1$2", "removing stray quotes"),
 ];
 
 fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -> Result<T, Err> {
@@ -119,6 +120,36 @@ impl<'de> Deserialize<'de> for LenientVersionSpecifiers {
     {
         let s = String::deserialize(deserializer)?;
         Self::from_str(&s).map_err(de::Error::custom)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LenientExtraName(ExtraName);
+
+impl LenientExtraName {
+    /// Parse an [`ExtraName`] from a string, but return `None` if the name is `.none`.
+    ///
+    /// Some versions of `flit` erroneously included `.none` as an extra name, which is not
+    /// allowed by PEP 508.
+    ///
+    /// See: <https://github.com/pypa/flit/issues/228/>
+    pub fn try_parse(name: String) -> Option<Result<Self, InvalidNameError>> {
+        match ExtraName::new(name) {
+            Ok(name) => Some(Ok(Self(name))),
+            Err(err) => {
+                if err.as_str() == ".none" {
+                    None
+                } else {
+                    Some(Err(err))
+                }
+            }
+        }
+    }
+}
+
+impl From<LenientExtraName> for ExtraName {
+    fn from(name: LenientExtraName) -> Self {
+        name.0
     }
 }
 
