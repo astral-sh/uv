@@ -1,0 +1,49 @@
+---
+source: crates/requirements-txt/src/lib.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [
+        RequirementEntry {
+            requirement: Requirement {
+                name: PackageName(
+                    "tomli",
+                ),
+                extras: [],
+                version_or_url: None,
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+        RequirementEntry {
+            requirement: Requirement {
+                name: PackageName(
+                    "numpy",
+                ),
+                extras: [],
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "1.24.2",
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+                marker: None,
+            },
+            hashes: [],
+            editable: false,
+        },
+    ],
+    constraints: [],
+    editables: [],
+    index_url: None,
+    extra_index_urls: [],
+    find_links: [],
+    no_index: false,
+}

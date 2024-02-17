@@ -35,10 +35,12 @@
 //! ```
 
 use std::borrow::Cow;
+use std::env;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tracing::{instrument, warn};
 use unscanny::{Pattern, Scanner};
@@ -274,6 +276,25 @@ impl Display for RequirementEntry {
     }
 }
 
+/// Expand environment variables that exist into their values accepting only the
+/// format ${VARIABLE_NAME_123} where the name must follow the POSIX standard of
+/// ASCII upper case letters, numbers and underscore.
+fn replace_env(text: &str) -> String {
+    let re = Regex::new(r"\$\{([A-Z0-9_]+)\}").unwrap();
+    return re.replace_all(text, |caps: &regex::Captures| {
+        if let Some(var_name) = caps.get(1) {
+            let name = var_name.as_str();
+            let env_data = env::var(name);
+            if let Ok(var_value) = env_data {
+                return var_value;
+            }
+            return caps[0].to_string();
+        }
+        // If the environment variable is not found, return the original placeholder
+        return caps[0].to_string();
+    }).into_owned()
+}
+
 /// Parsed and flattened requirements.txt with requirements and constraints
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct RequirementsTxt {
@@ -300,11 +321,12 @@ impl RequirementsTxt {
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtFileError> {
-        let content =
+        let mut content =
             uv_fs::read_to_string(&requirements_txt).map_err(|err| RequirementsTxtFileError {
                 file: requirements_txt.as_ref().to_path_buf(),
                 error: RequirementsTxtParserError::IO(err),
             })?;
+        content = replace_env(&content);
 
         let working_dir = working_dir.as_ref();
         let requirements_dir = requirements_txt.as_ref().parent().unwrap_or(working_dir);
@@ -937,6 +959,7 @@ impl From<io::Error> for RequirementsTxtParserError {
 
 #[cfg(test)]
 mod test {
+    use std::env;
     use std::path::{Path, PathBuf};
 
     use anyhow::Result;
@@ -968,6 +991,19 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
+        let actual = RequirementsTxt::parse(requirements_txt, &working_dir).unwrap();
+
+        let snapshot = format!("parse-{}", path.to_string_lossy());
+        insta::assert_debug_snapshot!(snapshot, actual);
+    }
+
+    #[test_case(Path::new("env-vars.txt"))]
+    fn parse_env_vars(path: &Path) {
+        let working_dir = workspace_test_data_dir().join("requirements-txt");
+        let requirements_txt = working_dir.join(path);
+
+        env::set_var("INCLUDE_NAME", "include-b");
+        env::set_var("NUMPY_VER", "1.24.2");
         let actual = RequirementsTxt::parse(requirements_txt, &working_dir).unwrap();
 
         let snapshot = format!("parse-{}", path.to_string_lossy());
