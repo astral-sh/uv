@@ -1,14 +1,15 @@
+use std::collections::hash_map::Entry;
 use std::hash::BuildHasherDefault;
 use std::io;
 use std::path::Path;
 
 use anyhow::{bail, Result};
-use rustc_hash::FxHashSet;
+use rustc_hash::FxHashMap;
 use tracing::{debug, warn};
 
 use distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations, InstalledDirectUrlDist,
-    InstalledDist, Name, SourceDist,
+    InstalledDist, InstalledMetadata, InstalledVersion, Name, SourceDist,
 };
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
@@ -25,7 +26,7 @@ use crate::{ResolvedEditable, SitePackages};
 #[derive(Debug)]
 pub struct Planner<'a> {
     requirements: &'a [Requirement],
-    editable_requirements: Vec<ResolvedEditable>,
+    editable_requirements: &'a [ResolvedEditable],
 }
 
 impl<'a> Planner<'a> {
@@ -34,13 +35,13 @@ impl<'a> Planner<'a> {
     pub fn with_requirements(requirements: &'a [Requirement]) -> Self {
         Self {
             requirements,
-            editable_requirements: Vec::new(),
+            editable_requirements: &[],
         }
     }
 
     /// Set the editable requirements use in the [`Plan`].
     #[must_use]
-    pub fn with_editable_requirements(self, editable_requirements: Vec<ResolvedEditable>) -> Self {
+    pub fn with_editable_requirements(self, editable_requirements: &'a [ResolvedEditable]) -> Self {
         Self {
             editable_requirements,
             ..self
@@ -72,7 +73,7 @@ impl<'a> Planner<'a> {
         let mut remote = vec![];
         let mut reinstalls = vec![];
         let mut extraneous = vec![];
-        let mut seen = FxHashSet::with_capacity_and_hasher(
+        let mut seen = FxHashMap::with_capacity_and_hasher(
             self.requirements.len(),
             BuildHasherDefault::default(),
         );
@@ -80,11 +81,20 @@ impl<'a> Planner<'a> {
         // Remove any editable requirements.
         for requirement in self.editable_requirements {
             // If we see the same requirement twice, then we have a conflict.
-            if !seen.insert(requirement.name().clone()) {
-                bail!(
-                    "Detected duplicate package in requirements: {}",
-                    requirement.name()
-                );
+            let specifier = Specifier::Editable(requirement.installed_version());
+            match seen.entry(requirement.name().clone()) {
+                Entry::Occupied(value) => {
+                    if value.get() == &specifier {
+                        continue;
+                    }
+                    bail!(
+                        "Detected duplicate package in requirements: {}",
+                        requirement.name()
+                    );
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(specifier);
+                }
             }
 
             match requirement {
@@ -111,7 +121,7 @@ impl<'a> Planner<'a> {
                         // Remove any non-editable installs of the same package.
                         reinstalls.push(dist);
                     }
-                    local.push(built.wheel);
+                    local.push(built.wheel.clone());
                 }
             }
         }
@@ -123,11 +133,20 @@ impl<'a> Planner<'a> {
             }
 
             // If we see the same requirement twice, then we have a conflict.
-            if !seen.insert(requirement.name.clone()) {
-                bail!(
-                    "Detected duplicate package in requirements: {}",
-                    requirement.name
-                );
+            let specifier = Specifier::NonEditable(requirement.version_or_url.as_ref());
+            match seen.entry(requirement.name.clone()) {
+                Entry::Occupied(value) => {
+                    if value.get() == &specifier {
+                        continue;
+                    }
+                    bail!(
+                        "Detected duplicate package in requirements: {}",
+                        requirement.name
+                    );
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(specifier);
+                }
             }
 
             // Check if the package should be reinstalled. A reinstall involves (1) purging any
@@ -380,6 +399,14 @@ impl<'a> Planner<'a> {
             extraneous,
         })
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Specifier<'a> {
+    /// An editable requirement, marked by the installed version of the package.
+    Editable(InstalledVersion<'a>),
+    /// A non-editable requirement, marked by the version or URL specifier.
+    NonEditable(Option<&'a VersionOrUrl>),
 }
 
 /// Returns `true` if the cache entry linked to the file at the given [`Path`] is not-modified.
