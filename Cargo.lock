@@ -864,6 +864,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "url",
+ "urlencoding",
  "uv-fs",
  "uv-git",
  "uv-normalize",

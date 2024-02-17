@@ -48,7 +48,7 @@ pub trait InstalledMetadata: Name {
 
 pub trait RemoteSource {
     /// Return an appropriate filename for the distribution.
-    fn filename(&self) -> Result<&str, Error>;
+    fn filename(&self) -> Result<Cow<'_, str>, Error>;
 
     /// Return the size of the distribution, if known.
     fn size(&self) -> Option<u64>;

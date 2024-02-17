@@ -6,6 +6,9 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
+    Utf8(#[from] std::string::FromUtf8Error),
+
+    #[error(transparent)]
     WheelFilename(#[from] distribution_filename::WheelFilenameError),
 
     #[error("Unable to extract filename from URL: {0}")]

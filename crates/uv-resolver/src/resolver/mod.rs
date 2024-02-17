@@ -1,5 +1,6 @@
 //! Given a set of requirements, find a set of compatible packages.
 
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -729,7 +730,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         dist.for_resolution()
                             .dist
                             .filename()
-                            .unwrap_or("unknown filename")
+                            .unwrap_or(Cow::Borrowed("unknown filename"))
                     );
                 } else {
                     debug!(
@@ -739,7 +740,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         dist.for_resolution()
                             .dist
                             .filename()
-                            .unwrap_or("unknown filename")
+                            .unwrap_or(Cow::Borrowed("unknown filename"))
                     );
                 }
 
