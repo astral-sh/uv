@@ -22,8 +22,6 @@ use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{InMemoryIndex, OptionsBuilder};
 use uv_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
 
-use pep440_rs::VersionSpecifier;
-
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
@@ -163,10 +161,10 @@ async fn venv_impl(
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
         // Resolve the seed packages.
-        let version_specifier = VersionSpecifier::from_str("<3.12").unwrap();
+        let version_specifier = (3, 12);
         let mut requirements = vec![Requirement::from_str("pip").unwrap()];
 
-        if version_specifier.contains(interpreter.python_version()) {
+        if version_specifier > interpreter.python_tuple() {
             requirements.push(Requirement::from_str("setuptools").unwrap());
             requirements.push(Requirement::from_str("wheel").unwrap());
         }
