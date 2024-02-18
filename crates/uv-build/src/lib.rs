@@ -19,7 +19,7 @@ use once_cell::sync::Lazy;
 use pyproject_toml::{BuildSystem, Project};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use tempfile::{tempdir, tempdir_in, TempDir};
+use tempfile::{tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::process::Command;
 use tokio::sync::Mutex;
@@ -283,7 +283,7 @@ impl SourceBuild {
         setup_py: SetupPyStrategy,
         build_kind: BuildKind,
     ) -> Result<SourceBuild, Error> {
-        let temp_dir = tempdir()?;
+        let temp_dir = tempdir_in(build_context.cache().root())?;
 
         let metadata = match fs::metadata(source) {
             Ok(metadata) => metadata,
