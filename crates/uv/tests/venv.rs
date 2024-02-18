@@ -20,6 +20,7 @@ fn create_venv() -> Result<()> {
 
     // Create a virtual environment at `.venv`.
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filter_prompt = r"(?s)Activate with:\n- Powershell: \.\\(\.\w+)\\Scripts\\activate\.ps1\n- CMD: \.\\(\.\w+)\\Scripts\\activate\.bat";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
@@ -27,8 +28,8 @@ fn create_venv() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            r".*?\\\.venv\\Scripts\\activate\.ps1", 
-            "Activate with source /home/ferris/project/.venv/bin/activate"
+            &filter_prompt, 
+            "Activate with: source /home/ferris/project/.venv/bin/activate"
         ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
@@ -49,7 +50,7 @@ fn create_venv() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
-    Activate with source /home/ferris/project/.venv/bin/activate
+    Activate with: source /home/ferris/project/.venv/bin/activate
     "###
     );
 
@@ -57,6 +58,7 @@ fn create_venv() -> Result<()> {
 
     // Create a virtual environment at the same location, which should replace it.
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filter_prompt = r"(?s)Activate with:\n- Powershell: \.\\(\.\w+)\\Scripts\\activate\.ps1\n- CMD: \.\\(\.\w+)\\Scripts\\activate\.bat";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
@@ -64,8 +66,8 @@ fn create_venv() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            r".*?\\\.venv\\Scripts\\activate\.ps1", 
-            "Activate with source /home/ferris/project/.venv/bin/activate"
+            &filter_prompt, 
+            "Activate with: source /home/ferris/project/.venv/bin/activate"
         ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
@@ -87,7 +89,7 @@ fn create_venv() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
-    Activate with source /home/ferris/project/.venv/bin/activate
+    Activate with: source /home/ferris/project/.venv/bin/activate
     "###
     );
 
@@ -104,6 +106,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filter_prompt = r"(?s)Activate with:\n- Powershell: \.\\(\.\w+)\\Scripts\\activate\.ps1\n- CMD: \.\\(\.\w+)\\Scripts\\activate\.bat";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
@@ -111,8 +114,8 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            r".*?\\\.venv\\Scripts\\activate\.ps1", 
-            "Activate with source .venv/bin/activate"
+            &filter_prompt,
+            "Activate with: source .venv/bin/activate"
         ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
@@ -133,7 +136,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: .venv
-    Activate with source .venv/bin/activate
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -150,6 +153,7 @@ fn seed() -> Result<()> {
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filter_prompt = r"(?s)Activate with:\n- Powershell: \.\\(\.\w+)\\Scripts\\activate\.ps1\n- CMD: \.\\(\.\w+)\\Scripts\\activate\.bat";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
@@ -157,8 +161,8 @@ fn seed() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            r".*?\\\.venv\\Scripts\\activate\.ps1", 
-            "Activate with source /home/ferris/project/.venv/bin/activate"
+            &filter_prompt, 
+            "Activate with: source /home/ferris/project/.venv/bin/activate"
         ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
@@ -228,7 +232,7 @@ fn seed_older_python_version() -> Result<()> {
      + setuptools==68.2.2
      + pip==23.3.1
      + wheel==0.41.3
-    Activate with source /home/ferris/project/.venv/bin/activate
+    Activate with: source /home/ferris/project/.venv/bin/activate
     "###
     );
 
@@ -337,12 +341,13 @@ fn create_venv_python_patch() -> Result<()> {
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filter_prompt = r"(?s)Activate with:\n- Powershell: \.\\(\.\w+)\\Scripts\\activate\.ps1\n- CMD: \.\\(\.\w+)\\Scripts\\activate\.bat";
     let filters = &[
         (r"interpreter at .+", "interpreter at [PATH]"),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            r".*?\\\.venv\\Scripts\\activate\.ps1", 
-            "Activate with source /home/ferris/project/.venv/bin/activate"
+            &filter_prompt, 
+            "Activate with: source /home/ferris/project/.venv/bin/activate"
         ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
@@ -430,6 +435,7 @@ fn empty_dir_exists() -> Result<()> {
     venv.create_dir_all()?;
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filter_prompt = r"(?s)Activate with:\n- Powershell: \.\\(\.\w+)\\Scripts\\activate\.ps1\n- CMD: \.\\(\.\w+)\\Scripts\\activate\.bat";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
@@ -437,8 +443,8 @@ fn empty_dir_exists() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            r".*?\\\.venv\\Scripts\\activate\.ps1", 
-            "Activate with source /home/ferris/project/.venv/bin/activate"
+            &filter_prompt, 
+            "Activate with: source /home/ferris/project/.venv/bin/activate"
         ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
@@ -460,7 +466,7 @@ fn empty_dir_exists() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
-    Activate with source /home/ferris/project/.venv/bin/activate
+    Activate with: source /home/ferris/project/.venv/bin/activate
     "###
     );
 
@@ -526,6 +532,7 @@ fn virtualenv_compatibility() -> Result<()> {
 
     // Create a virtual environment at `.venv`, passing the redundant `--clear` flag.
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filter_prompt = r"(?s)Activate with:\n- Powershell: \.\\(\.\w+)\\Scripts\\activate\.ps1\n- CMD: \.\\(\.\w+)\\Scripts\\activate\.bat";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
@@ -533,8 +540,8 @@ fn virtualenv_compatibility() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            r".*?\\\.venv\\Scripts\\activate\.ps1", 
-            "Activate with source /home/ferris/project/.venv/bin/activate"
+            &filter_prompt, 
+            "Activate with: source /home/ferris/project/.venv/bin/activate"
         ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
@@ -557,7 +564,7 @@ fn virtualenv_compatibility() -> Result<()> {
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
-    Activate with source /home/ferris/project/.venv/bin/activate
+    Activate with: source /home/ferris/project/.venv/bin/activate
     "###
     );
 
