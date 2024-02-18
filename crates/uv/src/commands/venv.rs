@@ -14,7 +14,6 @@ use distribution_types::{DistributionMetadata, IndexLocations, Name};
 use gourgeist::Prompt;
 use pep508_rs::Requirement;
 use platform_host::Platform;
-use platform_host::Os;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -196,22 +195,23 @@ async fn venv_impl(
         }
     }
 
-    match &platform.os() {
-        Os::Windows => {
-            writeln!(
-                printer,
-                "Activate with .\\{}\\Scripts\\activate.ps1",
-                path.normalized_display().cyan()
-            )
-        },
-        _ => {
-            writeln!(
-                printer,
-                "Activate with source {}/bin/activate",
-                path.normalized_display().cyan()
-            )
-        }
-    }.into_diagnostic()?;
+    if cfg!(windows) {
+        writeln!(
+            printer,
+            "Activate with:\n\
+            - Powershell: .\\{0}\\Scripts\\activate.ps1\n\
+            - CMD: .\\{0}\\Scripts\\activate.bat",
+            path.normalized_display().cyan()
+        )
+        .into_diagnostic()?;
+    } else {
+        writeln!(
+            printer,
+            "Activate with: source {0}/bin/activate",
+            path.normalized_display().cyan()
+        )
+        .into_diagnostic()?;
+    };
 
     Ok(ExitStatus::Success)
 }
