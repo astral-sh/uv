@@ -15,6 +15,8 @@ use uv_normalize::{ExtraName, PackageName};
 
 use crate::confirm;
 
+use uv_warnings::warn_user;
+
 #[derive(Debug)]
 pub(crate) enum RequirementsSource {
     /// A package was provided on the command line (e.g., `pip install flask`).
@@ -232,6 +234,10 @@ impl RequirementsSpecification {
                     project_name = Some(PackageName::new(project.name).with_context(|| {
                         format!("Invalid `project.name` in {}", path.normalized_display())
                     })?);
+                }
+
+                if requirements.is_empty() {
+                    warn_user!("PyProject file {} does not contain any dependencies (hint: Poetry's format is not supported for now)", contents);
                 }
 
                 Self {
