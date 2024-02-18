@@ -21,7 +21,7 @@
 
 @set "VIRTUAL_ENV={{ VIRTUAL_ENV_DIR }}"
 
-@set "VIRTUAL_ENV_PROMPT=venv"
+@set "VIRTUAL_ENV_PROMPT={{ VIRTUAL_PROMPT }}"
 @if NOT DEFINED VIRTUAL_ENV_PROMPT (
     @for %%d in ("%VIRTUAL_ENV%") do @set "VIRTUAL_ENV_PROMPT=%%~nxd"
 )
