@@ -1,9 +1,9 @@
 use itertools::Itertools;
-use pep440_rs::Version;
 use pubgrub::range::Range;
 use pubgrub::type_aliases::DependencyConstraints;
 use tracing::warn;
 
+use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use uv_normalize::{ExtraName, PackageName};
 
@@ -62,14 +62,24 @@ impl PubGrubDependencies {
 
                 if let Some(entry) = dependencies.get_key_value(&package) {
                     // Merge the versions.
-                    let version = merge_versions(&package, entry.1, &version)?;
+                    let intersection = entry.1.intersection(&version);
+                    if intersection.is_empty() {
+                        return Err(ResolveError::ConflictingVersions(
+                            package.to_string(),
+                            format!(
+                                "`{package}{left}` does not intersect with `{package}{right}`",
+                                left = entry.1,
+                                right = version
+                            ),
+                        ));
+                    }
 
                     // Merge the package.
                     if let Some(package) = merge_package(entry.0, &package)? {
                         dependencies.remove(&package);
-                        dependencies.insert(package, version);
+                        dependencies.insert(package, intersection);
                     } else {
-                        dependencies.insert(package, version);
+                        dependencies.insert(package, intersection);
                     }
                 } else {
                     dependencies.insert(package.clone(), version.clone());
@@ -117,14 +127,14 @@ impl PubGrubDependencies {
 
                 if let Some(entry) = dependencies.get_key_value(&package) {
                     // Merge the versions.
-                    let version = merge_versions(&package, entry.1, &version)?;
+                    let intersection = entry.1.intersection(&version);
 
                     // Merge the package.
                     if let Some(package) = merge_package(entry.0, &package)? {
                         dependencies.remove(&package);
-                        dependencies.insert(package, version);
+                        dependencies.insert(package, intersection);
                     } else {
-                        dependencies.insert(package, version);
+                        dependencies.insert(package, intersection);
                     }
                 }
             }
@@ -184,23 +194,6 @@ fn to_pubgrub(
                 version,
             ))
         }
-    }
-}
-
-/// Merge two [`Version`] ranges.
-fn merge_versions(
-    package: &PubGrubPackage,
-    left: &Range<Version>,
-    right: &Range<Version>,
-) -> Result<Range<Version>, ResolveError> {
-    let result = left.intersection(right);
-    if result.is_empty() {
-        Err(ResolveError::ConflictingVersions(
-            package.to_string(),
-            format!("`{package}{left}` does not intersect with `{package}{right}`"),
-        ))
-    } else {
-        Ok(result)
     }
 }
 

@@ -3540,3 +3540,60 @@ fn compile_constraints_incompatible_url() -> Result<()> {
 
     Ok(())
 }
+
+/// Resolve a package from a `requirements.in` file, with a `constraints.txt` file pinning one of
+/// its transitive dependencies to a specific version.
+#[test]
+fn compile_constraints_compatible_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("virtualenv")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("filelock==3.8.0")?;
+
+    uv_snapshot!(context.compile()
+            .arg("requirements.in")
+            .arg("--constraint")
+            .arg("constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only anyio>=4 is available and you require anyio<4, we can
+          conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Resolve a package from a `requirements.in` file, with a `constraints.txt` file pinning one of
+/// its direct dependencies to an incompatible version.
+#[test]
+fn compile_constraints_incompatible_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("filelock==1.0.0")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("filelock==3.8.0")?;
+
+    uv_snapshot!(context.compile()
+            .arg("requirements.in")
+            .arg("--constraint")
+            .arg("constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ you require ∅
+    "###
+    );
+
+    Ok(())
+}
