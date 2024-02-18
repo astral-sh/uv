@@ -115,10 +115,14 @@ pub fn strip_component(source: impl AsRef<Path>) -> Result<PathBuf, Error> {
     // TODO(konstin): Verify the name of the directory.
     let top_level =
         fs_err::read_dir(source.as_ref())?.collect::<std::io::Result<Vec<fs_err::DirEntry>>>()?;
-    let [root] = top_level.as_slice() else {
-        return Err(Error::InvalidArchive(
-            top_level.into_iter().map(|e| e.file_name()).collect(),
-        ));
-    };
-    Ok(root.path())
+    match top_level.as_slice() {
+        [root] => Ok(root.path()),
+        [] => Err(Error::EmptyArchive),
+        _ => Err(Error::NonSingularArchive(
+            top_level
+                .into_iter()
+                .map(|entry| entry.file_name())
+                .collect(),
+        )),
+    }
 }

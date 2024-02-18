@@ -1129,3 +1129,32 @@ fn install_pinned_polars_invalid_metadata() {
 
     context.assert_command("import polars").success();
 }
+
+/// Install a source distribution with `--resolution=lowest-direct`, to ensure that the build
+/// requirements aren't resolved at their lowest compatible version.
+#[test]
+fn install_sdist_resolution_lowest() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz")?;
+
+    uv_snapshot!(command(&context)
+            .arg("-r")
+            .arg("requirements.in")
+            .arg("--resolution=lowest-direct"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    Ok(())
+}

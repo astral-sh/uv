@@ -155,4 +155,35 @@ impl ErrorKind {
 
         ErrorKind::RequestMiddlewareError(err)
     }
+
+    /// Returns `true` if the error is due to the server not supporting HTTP range requests.
+    pub(crate) fn is_http_range_requests_unsupported(&self) -> bool {
+        match self {
+            // The server doesn't support range requests (as reported by the `HEAD` check).
+            ErrorKind::AsyncHttpRangeReader(
+                AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
+            ) => {
+                return true;
+            }
+
+            // The server doesn't support range requests, but we only discovered this while
+            // unzipping due to erroneous server behavior.
+            ErrorKind::Zip(_, ZipError::UpstreamReadError(err)) => {
+                if let Some(inner) = err.get_ref() {
+                    if let Some(inner) = inner.downcast_ref::<AsyncHttpRangeReaderError>() {
+                        if matches!(
+                            inner,
+                            AsyncHttpRangeReaderError::HttpRangeRequestUnsupported
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            _ => {}
+        }
+
+        false
+    }
 }

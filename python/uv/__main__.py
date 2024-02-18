@@ -50,10 +50,10 @@ def find_uv_bin() -> str:
 if __name__ == "__main__":
     uv = os.fsdecode(find_uv_bin())
 
-    env = {}
+    env = os.environ.copy()
     venv = detect_virtualenv()
     if venv:
-        env["VIRTUAL_ENV"] = venv
+        env.setdefault("VIRTUAL_ENV", venv)
 
     if sys.platform == "win32":
         import subprocess

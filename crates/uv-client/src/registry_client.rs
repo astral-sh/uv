@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::path::Path;
 use std::str::FromStr;
 
-use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
+use async_http_range_reader::AsyncHttpRangeReader;
 use async_zip::tokio::read::seek::ZipFileReader;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::tempfile_in;
 use tokio::io::BufWriter;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, instrument, trace, warn, Instrument};
+use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
@@ -454,19 +454,17 @@ impl RegistryClient {
 
         match result {
             Ok(metadata) => return Ok(metadata),
-            Err(err) => match err.into_kind() {
-                ErrorKind::AsyncHttpRangeReader(
-                    AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
-                ) => {}
-                kind => return Err(kind.into()),
-            },
+            Err(err) => {
+                if err.kind().is_http_range_requests_unsupported() {
+                    // The range request version failed. Fall back to downloading the entire file
+                    // and the reading the file from the zip the regular way.
+                    warn!("Range requests not supported for {filename}; downloading wheel");
+                } else {
+                    return Err(err);
+                }
+            }
         }
 
-        // The range request version failed (this is bad, the webserver should support this), fall
-        // back to downloading the entire file and the reading the file from the zip the regular
-        // way.
-
-        debug!("Range requests not supported for {filename}; downloading wheel");
         // TODO(konstin): Download the wheel into a cache shared with the installer instead
         // Note that this branch is only hit when you're not using and the server where
         // you host your wheels for some reasons doesn't support range requests
@@ -627,7 +625,7 @@ impl SimpleMetadata {
                 let file = match File::try_from(file, base) {
                     Ok(file) => file,
                     Err(err) => {
-                        // Ignore files with unparseable version specifiers.
+                        // Ignore files with unparsable version specifiers.
                         warn!("Skipping file for {package_name}: {err}");
                         continue;
                     }
@@ -708,8 +706,9 @@ pub enum Connectivity {
 mod tests {
     use std::str::FromStr;
 
-    use pypi_types::{JoinRelativeError, SimpleJson};
     use url::Url;
+
+    use pypi_types::{JoinRelativeError, SimpleJson};
     use uv_normalize::PackageName;
 
     use crate::{html::SimpleHtml, SimpleMetadata, SimpleMetadatum};

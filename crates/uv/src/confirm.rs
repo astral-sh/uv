@@ -22,7 +22,7 @@ pub(crate) fn confirm(message: &str, term: &Term, default: bool) -> Result<bool>
     let prompt = format!(
         "{} {} {} {} {}",
         style("?".to_string()).for_stderr().yellow(),
-        style(message).for_stderr().white().bold(),
+        style(message).for_stderr().bold(),
         style("[y/n]").for_stderr().black().bright(),
         style("›").for_stderr().black().bright(),
         style(if default { "yes" } else { "no" })
@@ -49,7 +49,7 @@ pub(crate) fn confirm(message: &str, term: &Term, default: bool) -> Result<bool>
     let report = format!(
         "{} {} {} {}",
         style("✔".to_string()).for_stderr().green(),
-        style(message).for_stderr().white().bold(),
+        style(message).for_stderr().bold(),
         style("·").for_stderr().black().bright(),
         style(if response { "yes" } else { "no" })
             .for_stderr()

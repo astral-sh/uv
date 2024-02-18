@@ -13,7 +13,9 @@ pub enum Error {
     #[error("Unsupported archive type: {0}")]
     UnsupportedArchive(PathBuf),
     #[error(
-        "The top level of the archive must only contain a list directory, but it contains: {0:?}"
+        "The top-level of the archive must only contain a list directory, but it contains: {0:?}"
     )]
-    InvalidArchive(Vec<OsString>),
+    NonSingularArchive(Vec<OsString>),
+    #[error("The top-level of the archive must only contain a list directory, but it's empty")]
+    EmptyArchive,
 }

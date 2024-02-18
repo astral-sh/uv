@@ -163,13 +163,6 @@ pub(crate) async fn pip_install(
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
-    let options = OptionsBuilder::new()
-        .resolution_mode(resolution_mode)
-        .prerelease_mode(prerelease_mode)
-        .dependency_mode(dependency_mode)
-        .exclude_newer(exclude_newer)
-        .build();
-
     let resolve_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -183,7 +176,7 @@ pub(crate) async fn pip_install(
         no_build,
         no_binary,
     )
-    .with_options(options);
+    .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command. If an editable is already
@@ -204,6 +197,13 @@ pub(crate) async fn pip_install(
         )
         .await?
     };
+
+    let options = OptionsBuilder::new()
+        .resolution_mode(resolution_mode)
+        .prerelease_mode(prerelease_mode)
+        .dependency_mode(dependency_mode)
+        .exclude_newer(exclude_newer)
+        .build();
 
     // Resolve the requirements.
     let resolution = match resolve(
@@ -258,6 +258,7 @@ pub(crate) async fn pip_install(
             no_build,
             no_binary,
         )
+        .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build())
     };
 
     // Sync the environment.
@@ -662,7 +663,7 @@ async fn install(
                     printer,
                     " {} {}{}",
                     "+".green(),
-                    event.dist.name().as_ref().white().bold(),
+                    event.dist.name().as_ref().bold(),
                     event.dist.installed_version().to_string().dimmed()
                 )?;
             }
@@ -671,7 +672,7 @@ async fn install(
                     printer,
                     " {} {}{}",
                     "-".red(),
-                    event.dist.name().as_ref().white().bold(),
+                    event.dist.name().as_ref().bold(),
                     event.dist.installed_version().to_string().dimmed()
                 )?;
             }

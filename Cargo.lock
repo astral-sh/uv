@@ -203,9 +203,9 @@ dependencies = [
 
 [[package]]
 name = "async_http_range_reader"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea8c52f8b749ec4e8665041001a31208afdae9ef88916d2edf1610deb8b3616e"
+checksum = "5143aaae4ec035a5d7cfda666eab896fe5428a2a8ab09ca651a2dce3a8f06912"
 dependencies = [
  "bisection",
  "futures",
@@ -213,6 +213,7 @@ dependencies = [
  "itertools 0.12.1",
  "memmap2 0.9.4",
  "reqwest",
+ "reqwest-middleware",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -1236,6 +1237,7 @@ name = "gourgeist"
 version = "0.0.4"
 dependencies = [
  "anstream",
+ "cachedir",
  "camino",
  "clap",
  "directories",
@@ -4114,7 +4116,7 @@ checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
 
 [[package]]
 name = "uv"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anstream",
  "anyhow",

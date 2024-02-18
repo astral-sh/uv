@@ -11,10 +11,10 @@ use tracing_tree::HierarchicalLayer;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Level {
-    /// Suppress all tracing output by default (overrideable by `RUST_LOG`).
+    /// Suppress all tracing output by default (overridable by `RUST_LOG`).
     #[default]
     Default,
-    /// Show debug messages by default (overrideable by `RUST_LOG`).
+    /// Show debug messages by default (overridable by `RUST_LOG`).
     Verbose,
 }
 
