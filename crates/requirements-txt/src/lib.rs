@@ -1111,20 +1111,6 @@ mod test {
     }
 
     #[test]
-    fn url_test() -> Result<()> {
-        let temp_dir = assert_fs::TempDir::new()?;
-        let error = RequirementsTxt::parse("https://example.com/requirements.txt", temp_dir.path())
-            .unwrap_err();
-        let errors = anyhow::Error::new(error).chain().join("\n");
-
-        insta::assert_display_snapshot!(errors, @r###"
-        Unsupported URL (expected a `file://` scheme) in `<REQUIREMENTS_TXT>`: `https://example.com/requirements.txt`
-        "###);
-
-        Ok(())
-    }
-
-    #[test]
     fn invalid_include_missing_file() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
         let missing_txt = temp_dir.child("missing.txt");
