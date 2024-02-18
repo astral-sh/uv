@@ -93,13 +93,38 @@ impl RequirementsTxtSource {
     /// - `file:../ferris/`
     /// - `../ferris/`
     /// - `https://download.pytorch.org/whl/torch_stable.html`
-    pub fn parse(given: &str, working_dir: &impl AsRef<Path>) -> Result<Self, url::ParseError> {
-        parse_helper(
-            given,
-            working_dir,
-            RequirementsTxtSource::Path,
-            RequirementsTxtSource::Url,
-        )
+    /// Parse a raw string for a `--find-links` entry, which could be a URL or a local path.
+    ///
+    /// For example:
+    /// - `file:///home/ferris/project/scripts/...`
+    /// - `file:../ferris/`
+    /// - `../ferris/`
+    /// - `https://download.pytorch.org/whl/torch_stable.html`
+    pub fn parse(given: &str, working_dir: impl AsRef<Path>) -> Result<Self, url::ParseError> {
+        if let Some((scheme, path)) = split_scheme(given) {
+            if scheme == "file" {
+                // Ex) `file:///home/ferris/project/scripts/...` or `file:../ferris/`
+                let path = path.strip_prefix("//").unwrap_or(path);
+
+                // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
+                let path = normalize_url_path(path);
+
+                let path = PathBuf::from(path.as_ref());
+                let path = if path.is_absolute() {
+                    path
+                } else {
+                    working_dir.as_ref().join(path)
+                };
+                Ok(Self::Path(path))
+            } else {
+                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
+                let url = Url::parse(given)?;
+                Ok(Self::Url(url))
+            }
+        } else {
+            let path = PathBuf::from(given);
+            Ok(Self::Path(path))
+        }
     }
 }
 
@@ -118,56 +143,36 @@ impl FindLink {
     /// - `../ferris/`
     /// - `https://download.pytorch.org/whl/torch_stable.html`
     pub fn parse(given: &str, working_dir: impl AsRef<Path>) -> Result<Self, url::ParseError> {
-        parse_helper(given, &working_dir, FindLink::Path, FindLink::Url)
-    }
-}
+        if let Some((scheme, path)) = split_scheme(given) {
+            if scheme == "file" {
+                // Ex) `file:///home/ferris/project/scripts/...` or `file:../ferris/`
+                let path = path.strip_prefix("//").unwrap_or(path);
 
-/// Parse a raw string for a `--find-links` entry, which could be a URL or a local path.
-///
-/// For example:
-/// - `file:///home/ferris/project/scripts/...`
-/// - `file:../ferris/`
-/// - `../ferris/`
-/// - `https://download.pytorch.org/whl/torch_stable.html`
-fn parse_helper<F, G, T>(
-    given: &str,
-    working_dir: &impl AsRef<Path>,
-    path_handler: F,
-    url_handler: G,
-) -> Result<T, url::ParseError>
-where
-    F: Fn(PathBuf) -> T,
-    G: Fn(Url) -> T,
-{
-    if let Some((scheme, path)) = split_scheme(given) {
-        if scheme == "file" {
-            // Ex) `file:///home/ferris/project/scripts/...` or `file:../ferris/`
-            let path = path.strip_prefix("//").unwrap_or(path);
+                // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
+                let path = normalize_url_path(path);
 
-            // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
-            let path = normalize_url_path(path);
-
-            let path = PathBuf::from(path.as_ref());
+                let path = PathBuf::from(path.as_ref());
+                let path = if path.is_absolute() {
+                    path
+                } else {
+                    working_dir.as_ref().join(path)
+                };
+                Ok(Self::Path(path))
+            } else {
+                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
+                let url = Url::parse(given)?;
+                Ok(Self::Url(url))
+            }
+        } else {
+            // Ex) `../ferris/`
+            let path = PathBuf::from(given);
             let path = if path.is_absolute() {
                 path
             } else {
                 working_dir.as_ref().join(path)
             };
-            Ok(path_handler(path))
-        } else {
-            // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-            let url = Url::parse(given)?;
-            Ok(url_handler(url))
+            Ok(Self::Path(path))
         }
-    } else {
-        // Ex) `../ferris/`
-        let path = PathBuf::from(given);
-        let path = if path.is_absolute() {
-            path
-        } else {
-            working_dir.as_ref().join(path)
-        };
-        Ok(path_handler(path))
     }
 }
 
