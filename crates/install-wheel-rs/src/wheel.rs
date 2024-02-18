@@ -383,7 +383,7 @@ pub(crate) fn write_script_entrypoints(
         let launcher_python_script = get_script_launcher(
             &entrypoint.module,
             &entrypoint.function,
-            &entrypoint.import_path,
+            &entrypoint.import_name,
             &get_shebang(location),
         );
 
@@ -1268,7 +1268,7 @@ mod test {
                 script_name: "launcher".to_string(),
                 module: "foo.bar".to_string(),
                 function: "main".to_string(),
-                import_path: "main".to_string(),
+                import_name: "main".to_string(),
             })
         );
         assert_eq!(
@@ -1282,7 +1282,7 @@ mod test {
                 script_name: "launcher".to_string(),
                 module: "foo.bar".to_string(),
                 function: "main".to_string(),
-                import_path: "main".to_string(),
+                import_name: "main".to_string(),
             })
         );
         assert_eq!(
@@ -1300,7 +1300,7 @@ mod test {
                 script_name: "launcher".to_string(),
                 module: "foomod".to_string(),
                 function: "main_bar".to_string(),
-                import_path: "main_bar".to_string(),
+                import_name: "main_bar".to_string(),
             })
         );
     }
