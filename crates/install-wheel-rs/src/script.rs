@@ -16,6 +16,8 @@ pub struct Script {
     pub module: String,
     #[pyo3(get)]
     pub function: String,
+    #[pyo3(get)]
+    pub import_name: String,
 }
 
 /// A script defining the name of the runnable entrypoint and the module and function that should be
