@@ -547,33 +547,6 @@ async fn install(
         })
         .collect::<Vec<_>>();
 
-    // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
-    // have been yanked, we currently don't show this message on the second run anymore
-    for dist in &remote {
-        let Some(file) = dist.file() else {
-            continue;
-        };
-        match &file.yanked {
-            None | Some(Yanked::Bool(false)) => {}
-            Some(Yanked::Bool(true)) => {
-                writeln!(
-                    printer,
-                    "{}{} {dist} is yanked.",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                )?;
-            }
-            Some(Yanked::Reason(reason)) => {
-                writeln!(
-                    printer,
-                    "{}{} {dist} is yanked (reason: \"{reason}\").",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                )?;
-            }
-        }
-    }
-
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
         vec![]
@@ -584,7 +557,7 @@ async fn install(
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader
-            .download(remote, in_flight)
+            .download(remote.clone(), in_flight)
             .await
             .context("Failed to download distributions")?;
 
@@ -674,6 +647,33 @@ async fn install(
                     "-".red(),
                     event.dist.name().as_ref().bold(),
                     event.dist.installed_version().to_string().dimmed()
+                )?;
+            }
+        }
+    }
+
+    // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
+    // have been yanked, we currently don't show this message on the second run anymore
+    for dist in &remote {
+        let Some(file) = dist.file() else {
+            continue;
+        };
+        match &file.yanked {
+            None | Some(Yanked::Bool(false)) => {}
+            Some(Yanked::Bool(true)) => {
+                writeln!(
+                    printer,
+                    "{}{} {dist} is yanked.",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                )?;
+            }
+            Some(Yanked::Reason(reason)) => {
+                writeln!(
+                    printer,
+                    "{}{} {dist} is yanked (reason: \"{reason}\").",
+                    "warning".yellow().bold(),
+                    ":".bold(),
                 )?;
             }
         }
