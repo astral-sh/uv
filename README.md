@@ -45,6 +45,9 @@ pip install uv
 
 # With pipx.
 pipx install uv
+
+# With Homebrew.
+brew install uv
 ```
 
 To create a virtual environment:
