@@ -207,7 +207,7 @@ async fn venv_impl(
     } else {
         writeln!(
             printer,
-            "Activate with: source {0}/bin/activate",
+            "Activate with: source {}/bin/activate",
             path.normalized_display().cyan()
         )
         .into_diagnostic()?;
