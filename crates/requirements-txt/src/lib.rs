@@ -994,19 +994,6 @@ mod test {
         insta::assert_debug_snapshot!(snapshot, actual);
     }
 
-    #[test_case(Path::new("env-vars.txt"))]
-    fn parse_env_vars(path: &Path) {
-        let working_dir = workspace_test_data_dir().join("requirements-txt");
-        let requirements_txt = working_dir.join(path);
-
-        env::set_var("INCLUDE_NAME", "include-b");
-        env::set_var("NUMPY_VER", "1.24.2");
-        let actual = RequirementsTxt::parse(requirements_txt, &working_dir).unwrap();
-
-        let snapshot = format!("parse-{}", path.to_string_lossy());
-        insta::assert_debug_snapshot!(snapshot, actual);
-    }
-
     #[test_case(Path::new("basic.txt"))]
     #[test_case(Path::new("constraints-a.txt"))]
     #[test_case(Path::new("constraints-b.txt"))]
@@ -1299,5 +1286,54 @@ mod test {
             EditableRequirement::split_extras("../editable[[dev]"),
             Some(("../editable[", "[dev]"))
         );
+    }
+
+    #[test]
+    fn parse_env_vars() -> Result<()> {
+        let path = Path::new("env-vars.txt");
+        let working_dir = workspace_test_data_dir().join("requirements-txt");
+        let requirements_txt = working_dir.join(path);
+
+        env::set_var("INCLUDE_NAME", "include-b");
+        env::set_var("NUMPY_VER", "1.24.2");
+        let actual = RequirementsTxt::parse(requirements_txt, &working_dir).unwrap();
+        env::remove_var("INCLUDE_NAME");
+        env::remove_var("NUMPY_VER");
+
+        let snapshot = format!("parse-{}", path.to_string_lossy());
+        insta::assert_debug_snapshot!(snapshot, actual);
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_missing_env_vars() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            numpy==${NUMPY_VERSION}
+        "})?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt =
+            regex::escape(&requirements_txt.path().normalized_display().to_string());
+        let filters = vec![
+            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
+            (r"\\", "/"),
+        ];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_display_snapshot!(errors, @r###"
+            Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
+            expected version to start with a number, but no leading ASCII digits were found
+            numpy==${NUMPY_VERSION}
+                 ^^^^^^^^^^^^^^^^^^
+            "###);
+        });
+
+        Ok(())
     }
 }
