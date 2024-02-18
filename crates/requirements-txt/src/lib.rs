@@ -283,12 +283,9 @@ fn replace_env(text: &str) -> String {
     let re = Regex::new(r"\$\{([A-Z0-9_]+)\}").unwrap();
     return re.replace_all(text, |caps: &regex::Captures| {
         if let Some(var_name) = caps.get(1) {
-            let name = var_name.as_str();
-            let env_data = env::var(name);
-            if let Ok(var_value) = env_data {
+            if let Ok(var_value) = env::var(var_name.as_str()) {
                 return var_value;
             }
-            return caps[0].to_string();
         }
         // If the environment variable is not found, return the original placeholder
         return caps[0].to_string();
