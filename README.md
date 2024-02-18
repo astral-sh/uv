@@ -275,7 +275,7 @@ Historically, `pip` has supported "constraints" (`-c constraints.txt`), which al
 narrow the set of acceptable versions for a given package.
 
 uv supports constraints, but also takes this concept further by allowing users to _override_ the
-acceptable versions of a package across the dependency tree via overrides (`-o overrides.txt`).
+acceptable versions of a package across the dependency tree via overrides (`--override overrides.txt`).
 
 In short, overrides allow the user to lie to the resolver by overriding the declared dependencies
 of a package. Overrides are a useful last resort for cases in which the user knows that a
