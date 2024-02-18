@@ -161,10 +161,10 @@ async fn venv_impl(
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
         // Resolve the seed packages.
-        let version_specifier = (3, 12);
         let mut requirements = vec![Requirement::from_str("pip").unwrap()];
 
-        if version_specifier > interpreter.python_tuple() {
+        // Only include `setuptools` and `wheel` on Python <3.12
+        if interpreter.python_tuple() < (3, 12) {
             requirements.push(Requirement::from_str("setuptools").unwrap());
             requirements.push(Requirement::from_str("wheel").unwrap());
         }
