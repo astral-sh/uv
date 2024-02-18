@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
+use std::vec;
 
 use anstream::eprint;
 use anyhow::Result;
@@ -160,12 +161,15 @@ async fn venv_impl(
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
         // Resolve the seed packages.
+        let mut requirements = vec![Requirement::from_str("pip").unwrap()];
+
+        // Only include `setuptools` and `wheel` on Python <3.12
+        if interpreter.python_tuple() < (3, 12) {
+            requirements.push(Requirement::from_str("setuptools").unwrap());
+            requirements.push(Requirement::from_str("wheel").unwrap());
+        }
         let resolution = build_dispatch
-            .resolve(&[
-                Requirement::from_str("wheel").unwrap(),
-                Requirement::from_str("pip").unwrap(),
-                Requirement::from_str("setuptools").unwrap(),
-            ])
+            .resolve(&requirements)
             .await
             .map_err(VenvError::Seed)?;
 
