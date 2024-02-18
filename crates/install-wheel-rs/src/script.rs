@@ -28,7 +28,7 @@ pub struct Script {
     pub script_name: String,
     pub module: String,
     pub function: String,
-    pub import_name: String
+    pub import_name: String,
 }
 
 impl Script {
@@ -64,8 +64,11 @@ impl Script {
             }
         }
 
-        let function =  captures.name("function").unwrap().as_str().to_string();
-        let import_name = function.split_once('.').map_or(function.as_str(), |(import_name, _)| import_name).to_string();
+        let function = captures.name("function").unwrap().as_str().to_string();
+        let import_name = function
+            .split_once('.')
+            .map_or(function.as_str(), |(import_name, _)| import_name)
+            .to_string();
         Ok(Some(Script {
             script_name: script_name.to_string(),
             module: captures.name("module").unwrap().as_str().to_string(),
@@ -107,11 +110,12 @@ mod test {
 
     #[test]
     fn test_split_of_import_name_from_function() {
-            let entrypoint = "foomod:mod_bar.sub_foo.func_baz";
+        let entrypoint = "foomod:mod_bar.sub_foo.func_baz";
 
-            let script = Script::from_value("script", entrypoint, None).unwrap().unwrap();
-            assert_eq!(script.function, "mod_bar.sub_foo.func_baz");
-            assert_eq!(script.import_name, "mod_bar");
+        let script = Script::from_value("script", entrypoint, None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(script.function, "mod_bar.sub_foo.func_baz");
+        assert_eq!(script.import_name, "mod_bar");
     }
-
 }

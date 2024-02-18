@@ -52,7 +52,12 @@ const LAUNCHER_AARCH64_CONSOLE: &[u8] =
 /// Wrapper script template function
 ///
 /// <https://github.com/pypa/pip/blob/7f8a6844037fb7255cfd0d34ff8e8cf44f2598d4/src/pip/_vendor/distlib/scripts.py#L41-L48>
-fn get_script_launcher(module: &str, function_path: &str, import_name: &str, shebang: &str) -> String {
+fn get_script_launcher(
+    module: &str,
+    function_path: &str,
+    import_name: &str,
+    shebang: &str,
+) -> String {
     format!(
         r##"{shebang}
 # -*- coding: utf-8 -*-
