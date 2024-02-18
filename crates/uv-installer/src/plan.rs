@@ -381,7 +381,10 @@ impl<'a> Planner<'a> {
             let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_gourgeist());
             for dist_info in site_packages {
                 if seed_packages
-                    && matches!(dist_info.name().as_ref(), "pip" | "setuptools" | "wheel")
+                    && matches!(
+                        dist_info.name().as_ref(),
+                        "pip" | "setuptools" | "wheel" | "uv"
+                    )
                 {
                     debug!("Preserving seed package: {dist_info}");
                     continue;
