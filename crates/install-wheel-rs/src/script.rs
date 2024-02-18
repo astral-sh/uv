@@ -63,7 +63,7 @@ impl Script {
         }
 
         let function =  captures.name("function").unwrap().as_str().to_string();
-        let import_path = function.split_once('.').map_or(function.clone(), |(import_path, _)| import_path.to_string());
+        let import_path = function.split_once('.').map_or(function.as_str(), |(import_path, _)| import_path).to_string();
         Ok(Some(Script {
             script_name: script_name.to_string(),
             module: captures.name("module").unwrap().as_str().to_string(),
