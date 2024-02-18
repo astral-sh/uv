@@ -108,6 +108,10 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
     };
     let bin_dir = location.join(bin_name);
 
+    // Add the CACHEDIR.TAG.
+    cachedir::ensure_tag(&location)?;
+
+    // Create a `.gitignore` file to ignore all files in the venv.
     fs::write(location.join(".gitignore"), "*")?;
 
     // Different names for the python interpreter

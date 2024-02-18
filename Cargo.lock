@@ -1237,6 +1237,7 @@ name = "gourgeist"
 version = "0.0.4"
 dependencies = [
  "anstream",
+ "cachedir",
  "camino",
  "clap",
  "directories",

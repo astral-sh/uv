@@ -26,6 +26,7 @@ uv-cache = { path = "../uv-cache" }
 uv-interpreter = { path = "../uv-interpreter" }
 
 anstream = { workspace = true }
+cachedir = { workspace = true }
 camino = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 directories = { workspace = true }
