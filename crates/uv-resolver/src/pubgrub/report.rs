@@ -744,27 +744,33 @@ struct CombineAnd<'a> {
 
 impl<'a> CombineAnd<'a> {
     fn from_string(left: &'a str, right: &'a str) -> Self {
-        CombineAnd {
-            left,
-            right,
-        }
+        CombineAnd { left, right }
     }
 }
-impl<'a> std::fmt::Display for CombineAnd<'_> {
+
+impl std::fmt::Display for CombineAnd<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let result = if self.left.starts_with("you require ") && self.right.starts_with("you require ") {
-            format!(
-                "{}and {}",
-                Padded::from_string("", &self.left.replace("you require ", "you require both ").to_string(), " "),
-                self.right.strip_prefix("you require ").unwrap()
-            )
-        } else {
-            format!(
-                "{}and {}",
-                Padded::from_string("", &self.left.to_string(), " "),
-                self.right
-            )
-        };
+        let result =
+            if self.left.starts_with("you require ") && self.right.starts_with("you require ") {
+                format!(
+                    "{}and {}",
+                    Padded::from_string(
+                        "",
+                        &self
+                            .left
+                            .replace("you require ", "you require both ")
+                            .to_string(),
+                        " "
+                    ),
+                    self.right.strip_prefix("you require ").unwrap()
+                )
+            } else {
+                format!(
+                    "{}and {}",
+                    Padded::from_string("", &self.left.to_string(), " "),
+                    self.right
+                )
+            };
 
         write!(f, "{result}")
     }
