@@ -708,6 +708,53 @@ fn install_no_index_version() {
     context.assert_command("import flask").failure();
 }
 
+/// Install a package from a public GitHub repository
+#[test]
+fn install_git_public_https() {
+    let context = TestContext::new("3.8");
+
+    uv_snapshot!(command(&context)
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@395ba191b190da0451c1e67a9b4a1cb5340398e5)
+    "###);
+
+    context.assert_installed("uv_public_pypackage", "0.1.0");
+}
+
+/// Install a package from a private GitHub repository using a PAT
+#[test]
+fn install_git_private_https_pat() {
+    let context = TestContext::new("3.8");
+
+    // This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
+    let token = "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";
+
+    uv_snapshot!(command(&context)
+        .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://github_pat_[SIZE]GIZA7Q0qxQCNd[SIZE]VVCf_8ZeenAddxUYnR82xy7geDJo5DsazrjdVjfh3TH[TIME]nE3IXVTWKSJ9DInbt@github.com/astral-test/uv-private-pypackage@c44e30b5d3e49dab7dbbe543a331fbf0e4dc3b37)
+    "###);
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
+}
+
 /// Install a package without using pre-built wheels.
 #[test]
 fn reinstall_no_binary() {
