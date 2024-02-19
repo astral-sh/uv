@@ -109,8 +109,8 @@ impl RepositoryUrl {
 
         // If a Git URL ends in a reference (like a branch, tag, or commit), remove it.
         if url.scheme().starts_with("git+") {
-            if let Some((prefix, _)) = url.as_str().rsplit_once('@') {
-                url = prefix.parse().unwrap();
+            if let Some((prefix, _)) = url.clone().path().rsplit_once('@') {
+                url.set_path(prefix);
             }
         }
 
