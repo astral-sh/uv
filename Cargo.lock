@@ -894,6 +894,7 @@ dependencies = [
  "data-encoding",
  "distribution-filename",
  "fs-err",
+ "itertools 0.12.1",
  "once_cell",
  "pep440_rs 0.4.0",
  "pep508_rs",

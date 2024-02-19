@@ -56,8 +56,12 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
 
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, &cache)?;
-    let index_locations =
-        IndexLocations::from_args(args.index_url, args.extra_index_url, args.find_links, false);
+    let index_locations = IndexLocations::new(
+        Some(args.index_url),
+        args.extra_index_url,
+        args.find_links,
+        false,
+    );
     let client = RegistryClientBuilder::new(cache.clone())
         .index_urls(index_locations.index_urls())
         .build();

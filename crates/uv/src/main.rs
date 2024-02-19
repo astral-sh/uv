@@ -239,9 +239,9 @@ struct PipCompileArgs {
     #[clap(long)]
     refresh_package: Vec<PackageName>,
 
-    /// The URL of the Python Package Index.
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
-    index_url: IndexUrl,
+    /// The URL of the Python package index (by default: https://pypi.org/simple).
+    #[clap(long, short, env = "UV_INDEX_URL")]
+    index_url: Option<IndexUrl>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     #[clap(long, env = "UV_EXTRA_INDEX_URL")]
@@ -363,9 +363,9 @@ struct PipSyncArgs {
     #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
     link_mode: install_wheel_rs::linker::LinkMode,
 
-    /// The URL of the Python Package Index.
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
-    index_url: IndexUrl,
+    /// The URL of the Python package index (by default: https://pypi.org/simple).
+    #[clap(long, short, env = "UV_INDEX_URL")]
+    index_url: Option<IndexUrl>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     #[clap(long, env = "UV_EXTRA_INDEX_URL")]
@@ -528,9 +528,9 @@ struct PipInstallArgs {
     #[clap(short, long)]
     output_file: Option<PathBuf>,
 
-    /// The URL of the Python Package Index.
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
-    index_url: IndexUrl,
+    /// The URL of the Python package index (by default: https://pypi.org/simple).
+    #[clap(long, short, env = "UV_INDEX_URL")]
+    index_url: Option<IndexUrl>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     #[clap(long, env = "UV_EXTRA_INDEX_URL")]
@@ -669,9 +669,9 @@ struct VenvArgs {
     #[clap(long, verbatim_doc_comment)]
     prompt: Option<String>,
 
-    /// The URL of the Python Package Index.
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
-    index_url: IndexUrl,
+    /// The URL of the Python package index (by default: https://pypi.org/simple).
+    #[clap(long, short, env = "UV_INDEX_URL")]
+    index_url: Option<IndexUrl>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     #[clap(long, env = "UV_EXTRA_INDEX_URL")]
@@ -825,7 +825,7 @@ async fn run() -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
-            let index_urls = IndexLocations::from_args(
+            let index_urls = IndexLocations::new(
                 args.index_url,
                 args.extra_index_url,
                 args.find_links,
@@ -885,7 +885,7 @@ async fn run() -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
-            let index_urls = IndexLocations::from_args(
+            let index_urls = IndexLocations::new(
                 args.index_url,
                 args.extra_index_url,
                 args.find_links,
@@ -947,7 +947,7 @@ async fn run() -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
-            let index_urls = IndexLocations::from_args(
+            let index_urls = IndexLocations::new(
                 args.index_url,
                 args.extra_index_url,
                 args.find_links,
@@ -1023,7 +1023,7 @@ async fn run() -> Result<ExitStatus> {
         Commands::Venv(args) => {
             args.compat_args.validate()?;
 
-            let index_locations = IndexLocations::from_args(
+            let index_locations = IndexLocations::new(
                 args.index_url,
                 args.extra_index_url,
                 // No find links for the venv subcommand, to keep things simple
