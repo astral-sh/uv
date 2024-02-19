@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::path::Path;
 use std::str::FromStr;
+use std::env;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use async_zip::tokio::read::seek::ZipFileReader;
@@ -78,11 +79,15 @@ impl RegistryClientBuilder {
 
     pub fn build(self) -> RegistryClient {
         let client_raw = {
+            let timeout: u64 = env::var("UV_REQUEST_TIMEOUT")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(300);
             // Disallow any connections.
             let client_core = ClientBuilder::new()
                 .user_agent("uv")
                 .pool_max_idle_per_host(20)
-                .timeout(std::time::Duration::from_secs(60 * 5));
+                .timeout(std::time::Duration::from_secs(timeout));
 
             client_core.build().expect("Failed to build HTTP client.")
         };
