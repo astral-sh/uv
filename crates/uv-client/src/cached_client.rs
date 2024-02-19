@@ -231,7 +231,11 @@ impl CachedClient {
             Some(cached) => self.send_cached(req, cache_control, cached).boxed().await?,
             None => {
                 debug!("No cache entry for: {}", req.url());
-                self.fresh_request(req).await?
+                let (response, cache_policy) = self.fresh_request(req).await?;
+                CachedResponse::ModifiedOrNew {
+                    response,
+                    cache_policy,
+                }
             }
         };
         match cached_response {
@@ -354,7 +358,11 @@ impl CachedClient {
                     "Cached request doesn't match current request for: {}",
                     req.url()
                 );
-                self.fresh_request(req).await?
+                let (response, cache_policy) = self.fresh_request(req).await?;
+                CachedResponse::ModifiedOrNew {
+                    response,
+                    cache_policy,
+                }
             }
         })
     }
@@ -400,7 +408,10 @@ impl CachedClient {
     }
 
     #[instrument(skip_all, fields(url = req.url().as_str()))]
-    async fn fresh_request(&self, req: Request) -> Result<CachedResponse, Error> {
+    async fn fresh_request(
+        &self,
+        req: Request,
+    ) -> Result<(Response, Option<Box<CachePolicy>>), Error> {
         trace!("Sending fresh {} request for {}", req.method(), req.url());
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let response = self
@@ -411,13 +422,12 @@ impl CachedClient {
             .error_for_status()
             .map_err(ErrorKind::RequestError)?;
         let cache_policy = cache_policy_builder.build(&response);
-        Ok(CachedResponse::ModifiedOrNew {
-            response,
-            cache_policy: cache_policy
-                .to_archived()
-                .is_storable()
-                .then(|| Box::new(cache_policy)),
-        })
+        let cache_policy = if cache_policy.to_archived().is_storable() {
+            Some(Box::new(cache_policy))
+        } else {
+            None
+        };
+        Ok((response, cache_policy))
     }
 }
 
