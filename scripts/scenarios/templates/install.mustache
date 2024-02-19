@@ -46,8 +46,10 @@ fn command(context: &TestContext) -> Command {
     command
         .arg("pip")
         .arg("install")
-        .arg("--extra-index-url")
+        .arg("--index-url")
         .arg("https://test.pypi.org/simple")
+        .arg("--find-links")
+        .arg("{{vendor_links}}")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())

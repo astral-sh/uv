@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/64b4451b832cece378f6e773d326ea09efe8903d/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/de0bab473eeaa4445db5a8febd732c655fad3d52/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -45,8 +45,10 @@ fn command(context: &TestContext) -> Command {
     command
         .arg("pip")
         .arg("install")
-        .arg("--extra-index-url")
+        .arg("--index-url")
         .arg("https://test.pypi.org/simple")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/de0bab473eeaa4445db5a8febd732c655fad3d52/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -477,7 +479,7 @@ fn dependency_excludes_range_of_compatible_versions() {
 /// There is a non-contiguous range of compatible versions for the requested package
 /// `a`, but another dependency `c` excludes the range. This is the same as
 /// `dependency-excludes-range-of-compatible-versions` but some of the versions of
-/// `a` are incompatible for another reason e.g. dependency on non-existent package
+/// `a` are incompatible for another reason e.g. dependency on non-existant package
 /// `d`.
 ///
 /// ```text
@@ -737,7 +739,7 @@ fn multiple_extras_required() {
 
 /// all-extras-required
 ///
-/// Multiple optional dependencies are requested for the via an 'all' extra.
+/// Multiple optional dependencies are requested for the package via an 'all' extra.
 ///
 /// ```text
 /// 4cf56e90
