@@ -386,7 +386,7 @@ pub(crate) fn write_script_entrypoints(
         };
 
         // Generate the launcher script.
-        let launcher_python_script = get_script_launcher(&entrypoint, &get_shebang(location));
+        let launcher_python_script = get_script_launcher(entrypoint, &get_shebang(location));
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
         if cfg!(windows) {
