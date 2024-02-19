@@ -62,13 +62,26 @@ impl TryFrom<Url> for GitUrl {
         url.set_fragment(None);
         url.set_query(None);
 
+        // Clone to avoid borrow checker issues
+        let immutable_url = url.clone();
+
         // If the URL ends with a reference, like `https://git.example.com/MyProject.git@v1.0`,
         // extract it.
         let mut reference = GitReference::DefaultBranch;
-        if let Some((prefix, rev)) = url.clone().path().rsplit_once('@') {
+        if let Some((prefix, rev)) = immutable_url.path().rsplit_once('@') {
             reference = GitReference::from_rev(rev);
             url.set_path(prefix);
         }
+
+        // If using HTTPS, treat a username as a PAT
+        if url.scheme().starts_with("https")
+            && immutable_url.password().is_none()
+            && !immutable_url.username().is_empty()
+        {
+            url.set_password(Some(immutable_url.username())).unwrap();
+            url.set_username("").unwrap();
+        }
+
         let precise = if let GitReference::FullCommit(rev) = &reference {
             Some(GitSha::from_str(rev)?)
         } else {

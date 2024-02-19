@@ -749,7 +749,7 @@ fn install_git_private_https_pat() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://github_pat_[SIZE]GIZA7Q0qxQCNd[SIZE]VVCf_8ZeenAddxUYnR82xy7geDJo5DsazrjdVjfh3TH[TIME]nE3IXVTWKSJ9DInbt@github.com/astral-test/uv-private-pypackage@c44e30b5d3e49dab7dbbe543a331fbf0e4dc3b37)
+     + uv-private-pypackage==0.1.0 (from git+https://:github_pat_[SIZE]GIZA7Q0qxQCNd[SIZE]VVCf_8ZeenAddxUYnR82xy7geDJo5DsazrjdVjfh3TH[TIME]nE3IXVTWKSJ9DInbt@github.com/astral-test/uv-private-pypackage@c44e30b5d3e49dab7dbbe543a331fbf0e4dc3b37)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
