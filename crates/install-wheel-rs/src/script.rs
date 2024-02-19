@@ -1,3 +1,4 @@
+use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_hash::FxHashSet;
 use serde::Serialize;
@@ -43,9 +44,11 @@ impl Script {
         //  between the object reference and the left square bracket, between the extra names and the square brackets and colons delimiting them,
         //  and after the right square bracket."
         // – https://packaging.python.org/en/latest/specifications/entry-points/#file-format
-        let script_regex = Regex::new(r"^(?P<module>[\w\d_\-.]+)\s*:\s*(?P<function>[\w\d_\-.]+)(?:\s*\[\s*(?P<extras>(?:[^,]+,?\s*)+)\])?\s*$").unwrap();
+        static SCRIPT_REGEX: Lazy<Regex> = Lazy::new(|| {
+            Regex::new(r"^(?P<module>[\w\d_\-.]+)\s*:\s*(?P<function>[\w\d_\-.]+)(?:\s*\[\s*(?P<extras>(?:[^,]+,?\s*)+)\])?\s*$").unwrap()
+        });
 
-        let captures = script_regex
+        let captures = SCRIPT_REGEX
             .captures(value)
             .ok_or_else(|| Error::InvalidWheel(format!("invalid console script: '{value}'")))?;
         if let Some(script_extras) = captures.name("extras") {
@@ -66,6 +69,12 @@ impl Script {
             module: captures.name("module").unwrap().as_str().to_string(),
             function: captures.name("function").unwrap().as_str().to_string(),
         }))
+    }
+
+    pub fn import_name(&self) -> &str {
+        self.function
+            .split_once('.')
+            .map_or(&self.function, |(import_name, _)| import_name)
     }
 }
 
@@ -97,5 +106,16 @@ mod test {
                 "case: {case}"
             );
         }
+    }
+
+    #[test]
+    fn test_split_of_import_name_from_function() {
+        let entrypoint = "foomod:mod_bar.sub_foo.func_baz";
+
+        let script = Script::from_value("script", entrypoint, None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(script.function, "mod_bar.sub_foo.func_baz");
+        assert_eq!(script.import_name(), "mod_bar");
     }
 }

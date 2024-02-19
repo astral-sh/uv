@@ -904,10 +904,10 @@ fn warn_on_yanked_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install"). Refresh your lockfile to pin an un-yanked version.
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + colorama==0.4.2
+    warning: colorama==0.4.2 is yanked (reason: "Bad build, missing files, will not install"). Refresh your lockfile to pin an un-yanked version.
     "###
     );
 
@@ -2682,7 +2682,7 @@ fn repeat_requirement() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.2.0
+     + anyio==4.3.0
     "###);
 
     Ok(())

@@ -6,7 +6,6 @@
 
 ### Linux
 
-
 On Ubuntu and other Debian-based distributions, you can install the C compiler and CMake with
 
 ```shell
@@ -17,13 +16,13 @@ sudo apt install build-essential cmake
 
 CMake may be installed with Homebrew:
 
-```
+```shell
 brew install cmake
 ```
 
 The Python bootstrapping script requires `coreutils` and `zstd`; we recommend installing them with Homebrew:
 
-```
+```shell
 brew install coreutils zstd
 ```
 
@@ -31,7 +30,7 @@ See the [Python](#python) section for instructions on installing the Python vers
 
 ### Windows
 
-You can install CMake from the [installers](https://cmake.org/download/) or with `pipx install cmake` 
+You can install CMake from the [installers](https://cmake.org/download/) or with `pipx install cmake`
 (make sure that the pipx install path is in `PATH`, pipx complains if it isn't).
 
 ## Testing
@@ -39,6 +38,7 @@ You can install CMake from the [installers](https://cmake.org/download/) or with
 For running tests, we recommend [nextest](https://nexte.st/).
 
 ### Python
+
 Testing uv requires multiple specific Python versions. You can install them into
 `<project root>/bin` via our bootstrapping script:
 
@@ -48,13 +48,22 @@ pipx run scripts/bootstrap/install.py
 
 Alternatively, you can install `zstandard` from PyPI, then run:
 
-```
+```shell
 python3.12 scripts/bootstrap/install.py
+```
+
+### Local testing
+
+You can invoke your development version of uv with `cargo run -- <args>`. For example:
+
+```shell
+cargo run -- venv
+cargo run -- pip install requests
 ```
 
 ## Running inside a docker container
 
-Source distributions can run arbitrary code on build and can make unwanted modifications to your system (https://moyix.blogspot.com/2022/09/someones-been-messing-with-my-subnormals.html, https://pypi.org/project/nvidia-pyindex/), which can even occur when just resolving requirements. To prevent this, there's a Docker container you can run commands in:
+Source distributions can run arbitrary code on build and can make unwanted modifications to your system (["Someone's Been Messing With My Subnormals!" on Blogspot](https://moyix.blogspot.com/2022/09/someones-been-messing-with-my-subnormals.html), ["nvidia-pyindex" on PyPI](https://pypi.org/project/nvidia-pyindex/)), which can even occur when just resolving requirements. To prevent this, there's a Docker container you can run commands in:
 
 ```bash
 docker buildx build -t uv-builder -f builder.dockerfile --load .
@@ -73,10 +82,18 @@ Please refer to Ruff's [Profiling Guide](https://github.com/astral-sh/ruff/blob/
 
 You can use [tracing-durations-export](https://github.com/konstin/tracing-durations-export) to visualize parallel requests and find any spots where uv is CPU-bound. Example usage, with `uv` and `uv-dev` respectively:
 
-```bash
+```shell
 RUST_LOG=uv=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --profile profiling -- pip compile scripts/requirements/jupyter.in
 ```
 
-```bash
+```shell
 RUST_LOG=uv=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --bin uv-dev --profile profiling -- resolve jupyter
+```
+
+### Trace-level logging
+
+You can enable `trace` level logging using the `RUST_LOG` environment variable, i.e.
+
+```shell
+RUST_LOG=trace uv …
 ```

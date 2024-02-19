@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.1.4"
+version = "0.1.5"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -41,6 +41,7 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+clap_complete_command = { workspace = true }
 console = { workspace = true }
 ctrlc = { workspace = true  }
 dunce = { workspace = true }

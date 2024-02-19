@@ -166,6 +166,16 @@ impl ErrorKind {
                 return true;
             }
 
+            // The server returned a "Method Not Allowed" error, indicating it doesn't support
+            // HEAD requests, so we can't check for range requests.
+            ErrorKind::RequestError(err) => {
+                if let Some(status) = err.status() {
+                    if status == reqwest::StatusCode::METHOD_NOT_ALLOWED {
+                        return true;
+                    }
+                }
+            }
+
             // The server doesn't support range requests, but we only discovered this while
             // unzipping due to erroneous server behavior.
             ErrorKind::Zip(_, ZipError::UpstreamReadError(err)) => {

@@ -1,4 +1,5 @@
 use std::env;
+use std::io::stdout;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
@@ -7,7 +8,7 @@ use anstream::eprintln;
 use anyhow::Result;
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 use clap::error::{ContextKind, ContextValue};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use owo_colors::OwoColorize;
 use tracing::instrument;
 
@@ -47,6 +48,8 @@ mod confirm;
 mod logging;
 mod printer;
 mod requirements;
+
+const DEFAULT_VENV_NAME: &str = ".venv";
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -114,6 +117,9 @@ enum Commands {
     Venv(VenvArgs),
     /// Clear the cache.
     Clean(CleanArgs),
+    /// Generate shell completion
+    #[clap(alias = "--generate-shell-completion", hide = true)]
+    GenerateShellCompletion { shell: clap_complete_command::Shell },
 }
 
 #[derive(Args)]
@@ -648,8 +654,20 @@ struct VenvArgs {
     seed: bool,
 
     /// The path to the virtual environment to create.
-    #[clap(default_value = ".venv")]
+    #[clap(default_value = DEFAULT_VENV_NAME)]
     name: PathBuf,
+
+    /// Provide an alternative prompt prefix for the virtual environment.
+    ///
+    /// The default behavior depends on whether the virtual environment path is provided:
+    /// - If provided (`uv venv project`), the prompt is set to the virtual environment's directory name.
+    /// - If not provided (`uv venv`), the prompt is set to the current directory's name.
+    ///
+    /// Possible values:
+    /// - `.`: Use the current directory name.
+    /// - Any string: Use the given string.
+    #[clap(long, verbatim_doc_comment)]
+    prompt: Option<String>,
 
     /// The URL of the Python Package Index.
     #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
@@ -1012,10 +1030,21 @@ async fn run() -> Result<ExitStatus> {
                 Vec::new(),
                 args.no_index,
             );
+
+            // Since we use ".venv" as the default name, we use "." as the default prompt.
+            let prompt = args.prompt.or_else(|| {
+                if args.name == PathBuf::from(DEFAULT_VENV_NAME) {
+                    Some(".".to_string())
+                } else {
+                    None
+                }
+            });
+
             commands::venv(
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
+                gourgeist::Prompt::from_args(prompt),
                 if args.offline {
                     Connectivity::Offline
                 } else {
@@ -1027,6 +1056,10 @@ async fn run() -> Result<ExitStatus> {
                 printer,
             )
             .await
+        }
+        Commands::GenerateShellCompletion { shell } => {
+            shell.generate(&mut Cli::command(), &mut stdout());
+            Ok(ExitStatus::Success)
         }
     }
 }

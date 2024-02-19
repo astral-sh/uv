@@ -45,7 +45,7 @@ import textwrap
 from pathlib import Path
 
 
-PACKSE_COMMIT = "64b4451b832cece378f6e773d326ea09efe8903d"
+PACKSE_COMMIT = "de0bab473eeaa4445db5a8febd732c655fad3d52"
 TOOL_ROOT = Path(__file__).parent
 TEMPLATES = TOOL_ROOT / "templates"
 INSTALL_TEMPLATE = TEMPLATES / "install.mustache"
@@ -205,6 +205,9 @@ for template, tests, scenarios in [
     # Add generated metadata
     data["generated_from"] = f"https://github.com/zanieb/packse/tree/{commit}/scenarios"
     data["generated_with"] = " ".join(sys.argv)
+    data[
+        "vendor_links"
+    ] = f"https://raw.githubusercontent.com/zanieb/packse/{commit}/vendor/links.html"
 
     # Render the template
     print(f"Rendering template {template.name}", file=sys.stderr)
