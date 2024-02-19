@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::tempfile_in;
 use tokio::io::BufWriter;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{info_span, instrument, trace, warn, Instrument};
+use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
@@ -79,10 +79,21 @@ impl RegistryClientBuilder {
 
     pub fn build(self) -> RegistryClient {
         let client_raw = {
-            let timeout: u64 = env::var("UV_REQUEST_TIMEOUT")
-                .ok()
-                .and_then(|v| v.parse::<u64>().ok())
-                .unwrap_or(300);
+            // Get pip timeout from env var
+            let default_timeout = 5 * 60;
+            let timeout: u64 = match env::var("UV_REQUEST_TIMEOUT") {
+                Ok(value) => {
+                    match value.parse::<u64>() {
+                        Ok(parsed) => parsed,
+                        Err(_) => {
+                            eprintln!("Warning: UV_REQUEST_TIMEOUT is an invalid value. Using default value.");
+                            default_timeout
+                        }
+                    }
+                }
+                Err(_) => default_timeout,
+            };
+            debug!("Pip request timeout is {}.", timeout);
             // Disallow any connections.
             let client_core = ClientBuilder::new()
                 .user_agent("uv")
