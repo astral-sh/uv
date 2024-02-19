@@ -48,6 +48,8 @@ mod logging;
 mod printer;
 mod requirements;
 
+const DEFAULT_VENV_NAME: &str = ".venv";
+
 #[derive(Parser)]
 #[command(author, version, about)]
 #[command(propagate_version = true)]
@@ -648,7 +650,7 @@ struct VenvArgs {
     seed: bool,
 
     /// The path to the virtual environment to create.
-    #[clap(default_value = ".venv")]
+    #[clap(default_value = DEFAULT_VENV_NAME)]
     name: PathBuf,
 
     /// Provide an alternative prompt prefix for the virtual environment.
@@ -1027,7 +1029,7 @@ async fn run() -> Result<ExitStatus> {
 
             // Since we use ".venv" as the default name, we use "." as the default prompt.
             let prompt = args.prompt.or_else(|| {
-                if args.name == PathBuf::from(".venv") {
+                if args.name == PathBuf::from(DEFAULT_VENV_NAME) {
                     Some(".".to_string())
                 } else {
                     None
