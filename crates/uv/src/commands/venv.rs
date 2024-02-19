@@ -11,6 +11,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name};
+use gourgeist::Prompt;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -31,6 +32,7 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    prompt: Prompt,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -41,6 +43,7 @@ pub(crate) async fn venv(
         path,
         python_request,
         index_locations,
+        prompt,
         connectivity,
         seed,
         exclude_newer,
@@ -82,6 +85,7 @@ async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    prompt: Prompt,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -115,7 +119,7 @@ async fn venv_impl(
     .into_diagnostic()?;
 
     // Create the virtual environment.
-    let venv = gourgeist::create_venv(path, interpreter).map_err(VenvError::Creation)?;
+    let venv = gourgeist::create_venv(path, interpreter, prompt).map_err(VenvError::Creation)?;
 
     // Install seed packages.
     if seed {
