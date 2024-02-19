@@ -227,6 +227,7 @@ impl CachedClient {
         Callback: FnOnce(Response) -> CallbackReturn,
         CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
     {
+        let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
         let cached_response = match Self::read_cache(cache_entry).await {
             Some(cached) => self.send_cached(req, cache_control, cached).boxed().await?,
             None => {
@@ -239,7 +240,17 @@ impl CachedClient {
             }
         };
         match cached_response {
-            CachedResponse::FreshCache(cached) => Ok(Payload::from_aligned_bytes(cached.data)?),
+            CachedResponse::FreshCache(cached) => match Payload::from_aligned_bytes(cached.data) {
+                Ok(payload) => Ok(payload),
+                Err(err) => {
+                    warn!(
+                        "Broken fresh cache entry (for payload) at {}, removing: {err}",
+                        cache_entry.path().display()
+                    );
+                    self.resend_and_heal_cache(fresh_req, cache_entry, response_callback)
+                        .await
+                }
+            },
             CachedResponse::NotModified { cached, new_policy } => {
                 let refresh_cache =
                     info_span!("refresh_cache", file = %cache_entry.path().display());
@@ -249,7 +260,18 @@ impl CachedClient {
                     write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
                         .await
                         .map_err(ErrorKind::CacheWrite)?;
-                    Ok(Payload::from_aligned_bytes(cached.data)?)
+                    match Payload::from_aligned_bytes(cached.data) {
+                        Ok(payload) => Ok(payload),
+                        Err(err) => {
+                            warn!(
+                                "Broken fresh cache entry after revalidation \
+                                 (for payload) at {}, removing: {err}",
+                                cache_entry.path().display()
+                            );
+                            self.resend_and_heal_cache(fresh_req, cache_entry, response_callback)
+                                .await
+                        }
+                    }
                 }
                 .instrument(refresh_cache)
                 .await
@@ -262,6 +284,22 @@ impl CachedClient {
                     .await
             }
         }
+    }
+
+    async fn resend_and_heal_cache<Payload: Cacheable, CallBackError, Callback, CallbackReturn>(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+        response_callback: Callback,
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>>
+    where
+        Callback: FnOnce(Response) -> CallbackReturn,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
+    {
+        let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
+        let (response, cache_policy) = self.fresh_request(req).await?;
+        self.run_response_callback(cache_entry, cache_policy, response, response_callback)
+            .await
     }
 
     async fn run_response_callback<Payload: Cacheable, CallBackError, Callback, CallbackReturn>(
