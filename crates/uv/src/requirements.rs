@@ -237,7 +237,14 @@ impl RequirementsSpecification {
                 }
 
                 if requirements.is_empty() {
-                    warn_user!("PyProject file {} does not contain any dependencies (hint: Poetry's format is not supported for now)", contents);
+                    if pyproject_toml.build_system.is_some_and(|build_system| {
+                        build_system
+                            .requires
+                            .iter()
+                            .any(|v| v.name.as_dist_info_name().starts_with("poetry"))
+                    }) {
+                        warn_user!("`{}` does not contain any dependencies (hint: Poetry's format is not supported for now)", path.normalized_display());
+                    }
                 }
 
                 Self {
