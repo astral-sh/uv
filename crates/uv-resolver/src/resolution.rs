@@ -26,6 +26,14 @@ use crate::resolver::VersionsResponse;
 
 use crate::ResolveError;
 
+/// Indicate the style of annotation comments
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+pub enum AnnotationStyle {
+    Line,
+    Split,
+}
+
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
 #[derive(Debug)]
@@ -256,11 +264,13 @@ pub struct DisplayResolutionGraph<'a> {
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
     /// requested each package.
     include_annotations: bool,
+    /// Format of annotation comments
+    annotation_style: AnnotationStyle,
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
     fn from(resolution: &'a ResolutionGraph) -> Self {
-        Self::new(resolution, false, true)
+        Self::new(resolution, false, true, AnnotationStyle::Split)
     }
 }
 
@@ -270,12 +280,42 @@ impl<'a> DisplayResolutionGraph<'a> {
         underlying: &'a ResolutionGraph,
         show_hashes: bool,
         include_annotations: bool,
+        annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
         Self {
             resolution: underlying,
             show_hashes,
             include_annotations,
+            annotation_style,
         }
+    }
+
+    fn annotation_line(edges: Vec<&Dist>) -> String {
+        let deps = edges
+            .into_iter()
+            .map(|dependency| format!("{}", dependency.name()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("{}", format!("# via {deps}").green())
+    }
+
+    fn annotation_split(edges: Vec<&Dist>) -> String {
+        let mut result: String = String::new();
+        match edges.len() {
+            0 => {}
+            1 => {
+                result = format!("{}", format!("    # via {}", edges[0].name()).green());
+            }
+            _ => {
+                let deps = edges
+                    .into_iter()
+                    .map(|dependency| format!("    #   {}", dependency.name()))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                result = format!("{}", format!("    # via\n{deps}").green());
+            }
+        }
+        result
     }
 }
 
@@ -339,12 +379,13 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // Print out the dependency graph.
         for (index, node) in nodes {
             // Display the node itself.
+            let mut line: String;
             match node {
                 Node::Distribution(_, dist) => {
-                    write!(f, "{}", dist.verbatim())?;
+                    line = format!("{}", dist.verbatim());
                 }
                 Node::Editable(_, editable) => {
-                    write!(f, "-e {}", editable.verbatim())?;
+                    line = format!("-e {}", editable.verbatim());
                 }
             }
 
@@ -358,14 +399,15 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 {
                     for hash in hashes {
                         if let Some(hash) = hash.to_string() {
-                            writeln!(f, " \\")?;
-                            write!(f, "    --hash={hash}")?;
+                            line.push_str(" \\\n");
+                            line.push_str(&format!("    --hash={hash}"));
                         }
                     }
                 }
             }
-            writeln!(f)?;
 
+            let mut sep = "";
+            let mut annotation = String::new();
             if self.include_annotations {
                 // Display all dependencies.
                 let mut edges = self
@@ -376,21 +418,30 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .collect::<Vec<_>>();
                 edges.sort_unstable_by_key(|package| package.name());
 
-                match edges.len() {
-                    0 => {}
-                    1 => {
-                        for dependency in edges {
-                            writeln!(f, "{}", format!("    # via {}", dependency.name()).green())?;
+                match self.annotation_style {
+                    AnnotationStyle::Line => {
+                        if !edges.is_empty() {
+                            sep = if self.show_hashes { "\n    " } else { "  " };
+                            annotation = DisplayResolutionGraph::annotation_line(edges);
                         }
                     }
-                    _ => {
-                        writeln!(f, "{}", "    # via".green())?;
-                        for dependency in edges {
-                            writeln!(f, "{}", format!("    #   {}", dependency.name()).green())?;
+                    AnnotationStyle::Split => {
+                        if !edges.is_empty() {
+                            sep = "\n";
                         }
+                        annotation = DisplayResolutionGraph::annotation_split(edges);
                     }
                 }
             }
+            // Assemble the line with the annotations and remove trailing whitespaces.
+            line = format!("{line:24}{sep}{annotation}")
+                .split('\n')
+                .map(str::trim_end)
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            // Write requirement line to the formatter.
+            writeln!(f, "{line}")?;
         }
 
         Ok(())

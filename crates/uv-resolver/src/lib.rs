@@ -4,7 +4,7 @@ pub use finder::{DistFinder, Reporter as FinderReporter};
 pub use manifest::Manifest;
 pub use options::{Options, OptionsBuilder};
 pub use prerelease_mode::PreReleaseMode;
-pub use resolution::{Diagnostic, DisplayResolutionGraph, ResolutionGraph};
+pub use resolution::{AnnotationStyle, Diagnostic, DisplayResolutionGraph, ResolutionGraph};
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
     BuildId, DefaultResolverProvider, InMemoryIndex, Reporter as ResolverReporter, Resolver,

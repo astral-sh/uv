@@ -19,7 +19,7 @@ use uv_client::Connectivity;
 use uv_installer::{NoBinary, Reinstall};
 use uv_interpreter::PythonVersion;
 use uv_normalize::{ExtraName, PackageName};
-use uv_resolver::{DependencyMode, PreReleaseMode, ResolutionMode};
+use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
 use uv_traits::{NoBuild, PackageNameSpecifier, SetupPyStrategy};
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, Upgrade};
@@ -353,6 +353,10 @@ struct PipCompileArgs {
     /// Include `--find-links` entries in the generated output file.
     #[clap(long, hide = true)]
     emit_find_links: bool,
+
+    /// Choose the format of annotation comments
+    #[clap(long, default_value_t=AnnotationStyle::Split, value_enum)]
+    annotation_style: AnnotationStyle,
 
     #[command(flatten)]
     compat_args: compat::PipCompileCompatArgs,
@@ -898,6 +902,7 @@ async fn run() -> Result<ExitStatus> {
                 &no_build,
                 args.python_version,
                 args.exclude_newer,
+                args.annotation_style,
                 cache,
                 printer,
             )

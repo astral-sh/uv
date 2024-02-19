@@ -28,8 +28,8 @@ use uv_installer::{Downloader, NoBinary};
 use uv_interpreter::{Interpreter, PythonVersion};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{
-    DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest, OptionsBuilder,
-    PreReleaseMode, ResolutionMode, Resolver,
+    AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
+    OptionsBuilder, PreReleaseMode, ResolutionMode, Resolver,
 };
 use uv_traits::{InFlight, NoBuild, SetupPyStrategy};
 use uv_warnings::warn_user;
@@ -62,6 +62,7 @@ pub(crate) async fn pip_compile(
     no_build: &NoBuild,
     python_version: Option<PythonVersion>,
     exclude_newer: Option<DateTime<Utc>>,
+    annotation_style: AnnotationStyle,
     cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -391,7 +392,12 @@ pub(crate) async fn pip_compile(
     write!(
         writer,
         "{}",
-        DisplayResolutionGraph::new(&resolution, generate_hashes, include_annotations)
+        DisplayResolutionGraph::new(
+            &resolution,
+            generate_hashes,
+            include_annotations,
+            annotation_style
+        )
     )?;
 
     Ok(ExitStatus::Success)
