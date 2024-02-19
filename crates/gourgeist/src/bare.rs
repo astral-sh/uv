@@ -30,7 +30,11 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
 const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 
 /// Very basic `.cfg` file format writer.
-fn write_cfg(f: &mut impl Write, data: &[(&str, String); 8], prompt: Option<String>) -> io::Result<()> {
+fn write_cfg(
+    f: &mut impl Write,
+    data: &[(&str, String); 8],
+    prompt: Option<String>,
+) -> io::Result<()> {
     for (key, value) in data {
         if !value.is_empty() {
             writeln!(f, "{key} = {value}")?;
