@@ -1,6 +1,33 @@
 import os
 import sys
 import sysconfig
+from pathlib import Path
+
+
+def find_uv_bin() -> str:
+    """Return the uv binary path."""
+
+    uv_exe = "uv" + sysconfig.get_config_var("EXE")
+
+    path = Path(sysconfig.get_path("scripts")) / uv_exe
+    if path.is_file():
+        return str(path)
+
+    if sys.version_info >= (3, 10):
+        user_scheme = sysconfig.get_preferred_scheme("user")
+    elif os.name == "nt":
+        user_scheme = "nt_user"
+    elif sys.platform == "darwin" and sys._framework:
+        user_scheme = "osx_framework_user"
+    else:
+        user_scheme = "posix_user"
+
+    path = Path(sysconfig.get_path("scripts", scheme=user_scheme)) / uv_exe
+    if path.is_file():
+        return str(path)
+
+    msg = str(path)
+    raise FileNotFoundError(msg)
 
 
 def detect_virtualenv() -> str:
@@ -14,37 +41,12 @@ def detect_virtualenv() -> str:
         return value
 
     # Otherwise, check if we're in a venv
-    venv_marker = os.path.join(sys.prefix, "pyvenv.cfg")
+    venv_marker = Path(sys.prefix) / "pyvenv.cfg"
 
-    if os.path.exists(venv_marker):
+    if venv_marker.exists():
         return sys.prefix
 
     return ""
-
-
-def find_uv_bin() -> str:
-    """Return the uv binary path."""
-
-    uv_exe = "uv" + sysconfig.get_config_var("EXE")
-
-    path = os.path.join(sysconfig.get_path("scripts"), uv_exe)
-    if os.path.isfile(path):
-        return path
-
-    if sys.version_info >= (3, 10):
-        user_scheme = sysconfig.get_preferred_scheme("user")
-    elif os.name == "nt":
-        user_scheme = "nt_user"
-    elif sys.platform == "darwin" and sys._framework:
-        user_scheme = "osx_framework_user"
-    else:
-        user_scheme = "posix_user"
-
-    path = os.path.join(sysconfig.get_path("scripts", scheme=user_scheme), uv_exe)
-    if os.path.isfile(path):
-        return path
-
-    raise FileNotFoundError(path)
 
 
 if __name__ == "__main__":
@@ -58,7 +60,7 @@ if __name__ == "__main__":
     if sys.platform == "win32":
         import subprocess
 
-        completed_process = subprocess.run([uv, *sys.argv[1:]], env=env)
+        completed_process = subprocess.run([uv, *sys.argv[1:]], env=env, check=False)
         sys.exit(completed_process.returncode)
     else:
         os.execvpe(uv, [uv, *sys.argv[1:]], env=env)
