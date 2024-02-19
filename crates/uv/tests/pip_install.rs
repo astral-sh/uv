@@ -91,8 +91,8 @@ fn no_solution() {
       ╰─▶ Because only flask<=3.0.0 is available and flask==3.0.0 depends
           on werkzeug>=3.0.0, we can conclude that flask>=3.0.0 depends on
           werkzeug>=3.0.0.
-          And because you require flask>=3.0.0 and you require werkzeug<1.0.0, we
-          can conclude that the requirements are unsatisfiable.
+          And because you require both flask>=3.0.0 and werkzeug<1.0.0, we can
+          conclude that the requirements are unsatisfiable.
     "###);
 }
 

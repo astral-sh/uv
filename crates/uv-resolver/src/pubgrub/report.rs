@@ -207,10 +207,11 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
         let external2 = self.format_external(external2);
         let terms = self.format_terms(current_terms);
 
+        let combined = CombineAnd::from_string(&external1, &external2);
+
         format!(
-            "Because {}and {}we can conclude that {}",
-            Padded::from_string("", &external1, " "),
-            Padded::from_string("", &external2, ", "),
+            "Because {}we can conclude that {}",
+            Padded::from_string("", &combined.to_string(), ", "),
             Padded::from_string("", &terms, ".")
         )
     }
@@ -310,10 +311,11 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
         let external = self.format_external(external);
         let terms = self.format_terms(current_terms);
 
+        let combined = CombineAnd::from_string(&prior_external, &external);
+
         format!(
-            "And because {}and {}we can conclude that {}",
-            Padded::from_string("", &prior_external, " "),
-            Padded::from_string("", &external, ", "),
+            "And because {}we can conclude that {}",
+            Padded::from_string("", &combined.to_string(), ", "),
             Padded::from_string("", &terms, "."),
         )
     }
@@ -728,6 +730,41 @@ impl<T: std::fmt::Display> std::fmt::Display for Padded<'_, T> {
                 result.push_str(self.right);
             }
         }
+
+        write!(f, "{result}")
+    }
+}
+
+/// Combines two clauses, and reduces dependency clauses that share the same root.
+#[derive(Debug)]
+struct CombineAnd<'a> {
+    left: &'a str,
+    right: &'a str,
+}
+
+impl<'a> CombineAnd<'a> {
+    fn from_string(left: &'a str, right: &'a str) -> Self {
+        CombineAnd {
+            left,
+            right,
+        }
+    }
+}
+impl<'a> std::fmt::Display for CombineAnd<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let result = if self.left.starts_with("you require ") && self.right.starts_with("you require ") {
+            format!(
+                "{}and {}",
+                Padded::from_string("", &self.left.replace("you require ", "you require both ").to_string(), " "),
+                self.right.strip_prefix("you require ").unwrap()
+            )
+        } else {
+            format!(
+                "{}and {}",
+                Padded::from_string("", &self.left.to_string(), " "),
+                self.right
+            )
+        };
 
         write!(f, "{result}")
     }
