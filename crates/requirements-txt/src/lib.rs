@@ -277,19 +277,21 @@ impl Display for RequirementEntry {
 }
 
 /// Expand environment variables that exist into their values accepting only the
-/// format ${VARIABLE_NAME_123} where the name must follow the POSIX standard of
+/// format `${VARIABLE_NAME_123}` where the name must follow the POSIX standard of
 /// ASCII upper case letters, numbers and underscore.
 fn replace_env(text: &str) -> String {
     let re = Regex::new(r"\$\{([A-Z0-9_]+)\}").unwrap();
-    return re.replace_all(text, |caps: &regex::Captures| {
-        if let Some(var_name) = caps.get(1) {
-            if let Ok(var_value) = env::var(var_name.as_str()) {
-                return var_value;
+    return re
+        .replace_all(text, |caps: &regex::Captures| {
+            if let Some(var_name) = caps.get(1) {
+                if let Ok(var_value) = env::var(var_name.as_str()) {
+                    return var_value;
+                }
             }
-        }
-        // If the environment variable is not found, return the original placeholder
-        return caps[0].to_string();
-    }).into_owned()
+            // If the environment variable is not found, return the original placeholder
+            caps[0].to_string()
+        })
+        .into_owned();
 }
 
 /// Parsed and flattened requirements.txt with requirements and constraints
@@ -1289,7 +1291,7 @@ mod test {
     }
 
     #[test]
-    fn parse_env_vars() -> Result<()> {
+    fn parse_env_vars() {
         let path = Path::new("env-vars.txt");
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
@@ -1302,8 +1304,6 @@ mod test {
 
         let snapshot = format!("parse-{}", path.to_string_lossy());
         insta::assert_debug_snapshot!(snapshot, actual);
-
-        Ok(())
     }
 
     #[test]
