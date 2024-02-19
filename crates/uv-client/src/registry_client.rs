@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
+use std::env;
 use std::fmt::Debug;
 use std::path::Path;
 use std::str::FromStr;
-use std::env;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use async_zip::tokio::read::seek::ZipFileReader;
