@@ -370,6 +370,16 @@ optional-dependencies.foo = [
     ----- stdout -----
 
     ----- stderr -----
+    warning: PyProject file [build-system]
+    requires = ["setuptools", "wheel"]
+
+    [project]
+    name = "project"
+    dependencies = []
+    optional-dependencies.foo = [
+        "django==5.0b1",
+    ]
+     does not contain any dependencies (hint: Poetry's format is not supported for now)
     error: Requested extra not found: bar
     "###
     );
