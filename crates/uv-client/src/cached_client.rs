@@ -254,29 +254,44 @@ impl CachedClient {
                 response,
                 cache_policy,
             } => {
-                let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
-                let data = response_callback(response)
-                    .boxed()
+                self.run_response_callback(cache_entry, cache_policy, response, response_callback)
                     .await
-                    .map_err(|err| CachedClientError::Callback(err))?;
-                let Some(cache_policy) = cache_policy else {
-                    return Ok(data.into_target());
-                };
-                async {
-                    fs_err::tokio::create_dir_all(cache_entry.dir())
-                        .await
-                        .map_err(ErrorKind::CacheWrite)?;
-                    let data_with_cache_policy_bytes =
-                        DataWithCachePolicy::serialize(&cache_policy, &data.to_bytes()?)?;
-                    write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
-                        .await
-                        .map_err(ErrorKind::CacheWrite)?;
-                    Ok(data.into_target())
-                }
-                .instrument(new_cache)
-                .await
             }
         }
+    }
+
+    async fn run_response_callback<Payload: Cacheable, CallBackError, Callback, CallbackReturn>(
+        &self,
+        cache_entry: &CacheEntry,
+        cache_policy: Option<Box<CachePolicy>>,
+        response: Response,
+        response_callback: Callback,
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>>
+    where
+        Callback: FnOnce(Response) -> CallbackReturn,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
+    {
+        let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
+        let data = response_callback(response)
+            .boxed()
+            .await
+            .map_err(|err| CachedClientError::Callback(err))?;
+        let Some(cache_policy) = cache_policy else {
+            return Ok(data.into_target());
+        };
+        async {
+            fs_err::tokio::create_dir_all(cache_entry.dir())
+                .await
+                .map_err(ErrorKind::CacheWrite)?;
+            let data_with_cache_policy_bytes =
+                DataWithCachePolicy::serialize(&cache_policy, &data.to_bytes()?)?;
+            write_atomic(cache_entry.path(), data_with_cache_policy_bytes)
+                .await
+                .map_err(ErrorKind::CacheWrite)?;
+            Ok(data.into_target())
+        }
+        .instrument(new_cache)
+        .await
     }
 
     async fn read_cache(cache_entry: &CacheEntry) -> Option<DataWithCachePolicy> {
@@ -288,7 +303,7 @@ impl CachedClient {
             Ok(data) => Some(data),
             Err(err) => {
                 warn!(
-                    "Broken cache entry at {}, removing: {err}",
+                    "Broken cache policy entry at {}, removing: {err}",
                     cache_entry.path().display()
                 );
                 let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
