@@ -30,7 +30,7 @@ See the [Python](#python) section for instructions on installing the Python vers
 
 ### Windows
 
-You can install CMake from the [installers](https://cmake.org/download/) or with `pipx install cmake` 
+You can install CMake from the [installers](https://cmake.org/download/) or with `pipx install cmake`
 (make sure that the pipx install path is in `PATH`, pipx complains if it isn't).
 
 ## Testing
@@ -50,6 +50,15 @@ Alternatively, you can install `zstandard` from PyPI, then run:
 
 ```shell
 python3.12 scripts/bootstrap/install.py
+```
+
+### Local testing
+
+You can invoke your development version of uv with `cargo run -- <args>`. For example:
+
+```shell
+cargo run -- venv
+cargo run -- pip install requests
 ```
 
 ## Running inside a docker container
