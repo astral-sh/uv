@@ -1,4 +1,5 @@
 use std::env;
+use std::io::stdout;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
@@ -7,7 +8,7 @@ use anstream::eprintln;
 use anyhow::Result;
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 use clap::error::{ContextKind, ContextValue};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use owo_colors::OwoColorize;
 use tracing::instrument;
 
@@ -114,6 +115,9 @@ enum Commands {
     Venv(VenvArgs),
     /// Clear the cache.
     Clean(CleanArgs),
+    /// Generate shell completion
+    #[clap(alias = "--generate-shell-completion", hide = true)]
+    GenerateShellCompletion { shell: clap_complete_command::Shell },
 }
 
 #[derive(Args)]
@@ -1027,6 +1031,10 @@ async fn run() -> Result<ExitStatus> {
                 printer,
             )
             .await
+        }
+        Commands::GenerateShellCompletion { shell } => {
+            shell.generate(&mut Cli::command(), &mut stdout());
+            Ok(ExitStatus::Success)
         }
     }
 }
