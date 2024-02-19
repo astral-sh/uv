@@ -651,7 +651,7 @@ struct VenvArgs {
     #[clap(default_value = ".venv")]
     name: PathBuf,
 
-    /// The prompt used in shells.
+    /// Provide an alternative prompt prefix for this environment
     #[clap(long)]
     prompt: Option<String>,
 
