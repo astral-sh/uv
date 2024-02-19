@@ -80,3 +80,11 @@ RUST_LOG=uv=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run -
 ```shell
 RUST_LOG=uv=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --bin uv-dev --profile profiling -- resolve jupyter
 ```
+
+### Trace-level logging
+
+You can enable `trace` level logging using the `RUST_LOG` environment variable, i.e.
+
+```shell
+RUST_LOG=trace uv …
+```
