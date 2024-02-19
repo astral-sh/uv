@@ -178,7 +178,7 @@ pub fn create_bare_venv(
         let activator = template
             .replace("{{ VIRTUAL_ENV_DIR }}", location.as_str())
             .replace("{{ BIN_NAME }}", bin_name)
-            .replace("{{ VIRTUAL_PROMPT }}", prompt.as_str())
+            .replace("{{ VIRTUAL_PROMPT }}", prompt.as_deref().unwrap_or(""))
             .replace(
                 "{{ RELATIVE_SITE_PACKAGES }}",
                 &format!(
