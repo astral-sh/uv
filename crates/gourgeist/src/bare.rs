@@ -30,11 +30,14 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
 const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 
 /// Very basic `.cfg` file format writer.
-fn write_cfg(f: &mut impl Write, data: &[(&str, String); 9]) -> io::Result<()> {
+fn write_cfg(f: &mut impl Write, data: &[(&str, String); 8], prompt: Option<String>) -> io::Result<()> {
     for (key, value) in data {
         if !value.is_empty() {
             writeln!(f, "{key} = {value}")?;
         }
+    }
+    if let Some(prompt) = prompt {
+        writeln!(f, "prompt = {prompt}")?;
     }
     Ok(())
 }
@@ -230,10 +233,9 @@ pub fn create_bare_venv(
             interpreter.base_exec_prefix().to_string_lossy().to_string(),
         ),
         ("base-executable", base_python.to_string()),
-        ("prompt", prompt),
     ];
     let mut pyvenv_cfg = BufWriter::new(File::create(location.join("pyvenv.cfg"))?);
-    write_cfg(&mut pyvenv_cfg, pyvenv_cfg_data)?;
+    write_cfg(&mut pyvenv_cfg, pyvenv_cfg_data, prompt)?;
     drop(pyvenv_cfg);
 
     let site_packages = if cfg!(unix) {
