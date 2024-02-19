@@ -11,7 +11,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
 
-use gourgeist::{create_bare_venv, parse_python_cli};
+use gourgeist::{create_bare_venv, parse_python_cli, Prompt};
 use platform_host::Platform;
 use uv_cache::Cache;
 use uv_interpreter::Interpreter;
@@ -36,7 +36,7 @@ fn run() -> Result<(), gourgeist::Error> {
         Cache::from_path(".gourgeist_cache")?
     };
     let info = Interpreter::query(python.as_std_path(), &platform, &cache).unwrap();
-    create_bare_venv(&location, &info, cli.prompt.as_deref())?;
+    create_bare_venv(&location, &info, Prompt::from_args(cli.prompt))?;
     Ok(())
 }
 

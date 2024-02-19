@@ -323,8 +323,11 @@ impl SourceBuild {
         let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)
             .map_err(|err| *err)?;
 
-        let venv =
-            gourgeist::create_venv(&temp_dir.path().join(".venv"), interpreter.clone(), None)?;
+        let venv = gourgeist::create_venv(
+            &temp_dir.path().join(".venv"),
+            interpreter.clone(),
+            gourgeist::Prompt::None,
+        )?;
 
         // Setup the build environment.
         let resolved_requirements = Self::get_resolved_requirements(

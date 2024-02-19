@@ -12,6 +12,8 @@ use tracing::info;
 
 use uv_interpreter::Interpreter;
 
+use crate::Prompt;
+
 /// The bash activate scripts with the venv dependent paths patches out
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
     ("activate", include_str!("activator/activate")),
@@ -69,7 +71,7 @@ pub struct VenvPaths {
 pub fn create_bare_venv(
     location: &Utf8Path,
     interpreter: &Interpreter,
-    prompt: Option<&str>,
+    prompt: Prompt,
 ) -> io::Result<VenvPaths> {
     // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
     // This would make python-build-standalone fail with the encodings module not being found because its home is wrong.
@@ -120,11 +122,11 @@ pub fn create_bare_venv(
     };
     let bin_dir = location.join(bin_name);
     let prompt = match prompt {
-        Some(".") => env::current_dir()?
+        Prompt::CurrentDirectoryName => env::current_dir()?
             .file_name()
             .map(|name| name.to_string_lossy().to_string()),
-        Some(p) => Some(p.to_string()),
-        None => None,
+        Prompt::Static(value) => Some(value),
+        Prompt::None => None,
     };
 
     // Add the CACHEDIR.TAG.

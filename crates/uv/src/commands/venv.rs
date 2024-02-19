@@ -11,6 +11,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name};
+use gourgeist::Prompt;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -31,7 +32,7 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
-    prompt: Option<&str>,
+    prompt: Prompt,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -84,7 +85,7 @@ async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
-    prompt: Option<&str>,
+    prompt: Prompt,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,

@@ -23,11 +23,34 @@ pub enum Error {
     Platform(#[from] PlatformError),
 }
 
+/// The value to use for the shell prompt when inside a virtual environment.
+#[derive(Debug)]
+pub enum Prompt {
+    /// Use the current directory name as the prompt.
+    CurrentDirectoryName,
+    /// Use the fixed string as the prompt.
+    Static(String),
+    /// Default to no prompt. The prompt is then set by the activator script
+    /// to the virtual environment's directory name.
+    None,
+}
+
+impl Prompt {
+    /// Determine the prompt value to be used from the command line arguments.
+    pub fn from_args(prompt: Option<String>) -> Self {
+        match prompt {
+            Some(prompt) if prompt == "." => Prompt::CurrentDirectoryName,
+            Some(prompt) => Prompt::Static(prompt),
+            None => Prompt::None,
+        }
+    }
+}
+
 /// Create a virtualenv.
 pub fn create_venv(
     location: &Path,
     interpreter: Interpreter,
-    prompt: Option<&str>,
+    prompt: Prompt,
 ) -> Result<Virtualenv, Error> {
     let location: &Utf8Path = location
         .try_into()

@@ -651,8 +651,16 @@ struct VenvArgs {
     #[clap(default_value = ".venv")]
     name: PathBuf,
 
-    /// Provide an alternative prompt prefix for this environment
-    #[clap(long)]
+    /// Provide an alternative prompt prefix for the virtual environment.
+    ///
+    /// The default behavior depends on whether the virtual environment path is provided:
+    /// - If provided (`uv venv project`), the prompt is set to the virtual environment's directory name.
+    /// - If not provided (`uv venv`), the prompt is set to the current directory's name.
+    ///
+    /// Possible values:
+    /// - `.`: Use the current directory name.
+    /// - Any string: Use the given string.
+    #[clap(long, verbatim_doc_comment)]
     prompt: Option<String>,
 
     /// The URL of the Python Package Index.
@@ -1018,9 +1026,9 @@ async fn run() -> Result<ExitStatus> {
             );
 
             // Since we use ".venv" as the default name, we use "." as the default prompt.
-            let prompt: Option<&str> = args.prompt.as_deref().or_else(|| {
+            let prompt = args.prompt.or_else(|| {
                 if args.name == PathBuf::from(".venv") {
-                    Some(".")
+                    Some(".".to_string())
                 } else {
                     None
                 }
@@ -1030,7 +1038,7 @@ async fn run() -> Result<ExitStatus> {
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
-                prompt,
+                gourgeist::Prompt::from_args(prompt),
                 if args.offline {
                     Connectivity::Offline
                 } else {
