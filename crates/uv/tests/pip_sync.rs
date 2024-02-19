@@ -2682,7 +2682,7 @@ fn repeat_requirement() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.2.0
+     + anyio==4.3.0
     "###);
 
     Ok(())

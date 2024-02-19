@@ -52,7 +52,13 @@ const LAUNCHER_AARCH64_CONSOLE: &[u8] =
 /// Wrapper script template function
 ///
 /// <https://github.com/pypa/pip/blob/7f8a6844037fb7255cfd0d34ff8e8cf44f2598d4/src/pip/_vendor/distlib/scripts.py#L41-L48>
-fn get_script_launcher(module: &str, import_name: &str, shebang: &str) -> String {
+fn get_script_launcher(entry_point: &Script, shebang: &str) -> String {
+    let Script {
+        module, function, ..
+    } = entry_point;
+
+    let import_name = entry_point.import_name();
+
     format!(
         r##"{shebang}
 # -*- coding: utf-8 -*-
@@ -61,7 +67,7 @@ import sys
 from {module} import {import_name}
 if __name__ == "__main__":
     sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
-    sys.exit({import_name}())
+    sys.exit({function}())
 "##
     )
 }
@@ -380,11 +386,7 @@ pub(crate) fn write_script_entrypoints(
         };
 
         // Generate the launcher script.
-        let launcher_python_script = get_script_launcher(
-            &entrypoint.module,
-            &entrypoint.function,
-            &get_shebang(location),
-        );
+        let launcher_python_script = get_script_launcher(entrypoint, &get_shebang(location));
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
         if cfg!(windows) {
