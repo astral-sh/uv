@@ -3132,11 +3132,11 @@ fn transitive_package_only_yanked_in_range_opt_in() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: bluebird==1.0.0 is yanked.
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0
      + bluebird==1.0.0
+    warning: bluebird==1.0.0 is yanked.
     "###);
 
     // Since the user included a dependency on `b` with an exact specifier, the yanked
@@ -3252,12 +3252,12 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    warning: crow==2.0.0 is yanked.
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + albatross==1.0.0
      + bluebird==1.0.0
      + crow==2.0.0
+    warning: crow==2.0.0 is yanked.
     "###);
 
     // Since the user explicitly selected the yanked version of `c`, it can be
