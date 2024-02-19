@@ -417,7 +417,6 @@ build-backend = "poetry.core.masonry.api"
     Ok(())
 }
 
-
 /// Request multiple extras that do not exist as a dependency group in a `pyproject.toml` file.
 #[test]
 fn compile_pyproject_toml_extras_missing() -> Result<()> {
