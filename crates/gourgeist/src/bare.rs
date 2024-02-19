@@ -36,9 +36,7 @@ fn write_cfg(
     prompt: Option<String>,
 ) -> io::Result<()> {
     for (key, value) in data {
-        if !value.is_empty() {
-            writeln!(f, "{key} = {value}")?;
-        }
+        writeln!(f, "{key} = {value}")?;
     }
     if let Some(prompt) = prompt {
         writeln!(f, "prompt = {prompt}")?;
