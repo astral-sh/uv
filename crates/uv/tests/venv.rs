@@ -271,7 +271,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-          × No Python 3.15 found through `py --list-paths`. Is Python 3.15 installed?
+          × No Python 3.15 In `PATH`. Is Python 3.15 installed?
         "###
         );
     } else {

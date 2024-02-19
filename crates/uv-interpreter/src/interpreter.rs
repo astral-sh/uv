@@ -1,4 +1,5 @@
 use std::ffi::{OsStr, OsString};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -17,7 +18,7 @@ use uv_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;
 use crate::virtual_env::detect_virtual_env;
-use crate::{find_requested_python, Error, PythonVersion};
+use crate::{find_default_python, find_requested_python, Error, PythonVersion};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -170,38 +171,22 @@ impl Interpreter {
 
         // Look for the requested version with by search for `python{major}.{minor}` in `PATH` on
         // Unix and `py --list-paths` on Windows.
-        if let Some(python_version) = python_version {
-            if let Some(interpreter) =
-                find_requested_python(&python_version.string, platform, cache)?
-            {
-                if version_matches(&interpreter) {
-                    return Ok(Some(interpreter));
-                }
-            }
-        }
-
-        // Python discovery failed to find the requested version, maybe the default Python in PATH
-        // matches?
-        if cfg!(unix) {
-            if let Some(executable) = Interpreter::find_executable("python3")? {
-                debug!("Resolved python3 to {}", executable.display());
-                let interpreter = Interpreter::query(&executable, &python_platform.0, cache)?;
-                if version_matches(&interpreter) {
-                    return Ok(Some(interpreter));
-                }
-            }
-        } else if cfg!(windows) {
-            if let Some(executable) = Interpreter::find_executable("python.exe")? {
-                let interpreter = Interpreter::query(&executable, &python_platform.0, cache)?;
-                if version_matches(&interpreter) {
-                    return Ok(Some(interpreter));
-                }
-            }
+        let interpreter = if let Some(python_version) = python_version {
+            find_requested_python(&python_version.string, platform, cache)?
         } else {
-            unimplemented!("Only Windows and Unix are supported");
-        }
+            match find_default_python(platform, cache) {
+                Ok(interpreter) => Some(interpreter),
+                Err(Error::NoPythonInstalled) => None,
+                Err(err) => return Err(err),
+            }
+        };
 
-        Ok(None)
+        if let Some(interpreter) = interpreter {
+            debug_assert!(version_matches(&interpreter));
+            Ok(Some(interpreter))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Find the Python interpreter in `PATH`, respecting `UV_PYTHON_PATH`.
@@ -324,13 +309,48 @@ pub(crate) struct InterpreterQueryResult {
 impl InterpreterQueryResult {
     /// Return the resolved [`InterpreterQueryResult`] for the given Python executable.
     pub(crate) fn query(interpreter: &Path) -> Result<Self, Error> {
-        let output = Command::new(interpreter)
-            .args(["-c", include_str!("get_interpreter_info.py")])
-            .output()
-            .map_err(|err| Error::PythonSubcommandLaunch {
-                interpreter: interpreter.to_path_buf(),
-                err,
-            })?;
+        let script = include_str!("get_interpreter_info.py");
+        let output = if cfg!(windows)
+            && interpreter
+                .extension()
+                .is_some_and(|extension| extension == "bat")
+        {
+            // pyenv-win shims fail with a syntax error when using `-c`.
+            // I haven't been able to figure out the reason why.
+            // So we use `-` to read from stdin. That's more expensive
+            // so avoid doing it for regular exe files.
+            let mut child = Command::new(interpreter)
+                .arg("-")
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|err| Error::PythonSubcommandLaunch {
+                    interpreter: interpreter.to_path_buf(),
+                    err,
+                })?;
+
+            let mut stdin = child.stdin.take().unwrap();
+
+            // From the Rust documentation:
+            // If the child process fills its stdout buffer, it may end up
+            // waiting until the parent reads the stdout, and not be able to
+            // read stdin in the meantime, causing a deadlock.
+            // Writing from another thread ensures that stdout is being read
+            // at the same time, avoiding the problem.
+            std::thread::spawn(move || {
+                stdin
+                    .write_all(script.as_bytes())
+                    .expect("failed to write to stdin");
+            });
+
+            child.wait_with_output()
+        } else {
+            Command::new(interpreter).arg("-c").arg(script).output()
+        }
+        .map_err(|err| Error::PythonSubcommandLaunch {
+            interpreter: interpreter.to_path_buf(),
+            err,
+        })?;
 
         // stderr isn't technically a criterion for success, but i don't know of any cases where there
         // should be stderr output and if there is, we want to know
