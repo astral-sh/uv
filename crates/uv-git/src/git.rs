@@ -152,14 +152,15 @@ impl GitRemote {
         db: Option<GitDatabase>,
         reference: &GitReference,
         locked_rev: Option<git2::Oid>,
-        strategy: Option<FetchStrategy>,
+        mut strategy: Option<FetchStrategy>,
         client: &Client,
     ) -> Result<(GitDatabase, git2::Oid)> {
         let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
         if let Some(mut db) = db {
             fetch(&mut db.repo, self.url.as_str(), reference, strategy, client)
-                .with_context(|| format!("failed to fetch into: {}", into.normalized_display()))?;
+                .with_context(|| format!("failed to fetch into: {}", into.normalized_display()))?
+                .map(|s| strategy.get_or_insert(s));
 
             let resolved_commit_hash = match locked_rev {
                 Some(rev) => db.contains(rev).then_some(rev),
@@ -179,7 +180,9 @@ impl GitRemote {
         paths::create_dir_all(into)?;
         let mut repo = init(into, true)?;
         fetch(&mut repo, self.url.as_str(), reference, strategy, client)
-            .with_context(|| format!("failed to clone into: {}", into.normalized_display()))?;
+            .with_context(|| format!("failed to clone into: {}", into.normalized_display()))?
+            .map(|s| strategy.get_or_insert(s));
+
         let rev = match locked_rev {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
