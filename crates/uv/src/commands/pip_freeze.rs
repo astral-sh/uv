@@ -17,7 +17,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
-pub(crate) fn freeze(cache: &Cache, strict: bool, mut printer: Printer) -> Result<ExitStatus> {
+pub(crate) fn pip_freeze(cache: &Cache, strict: bool, mut printer: Printer) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let venv = Virtualenv::from_env(platform, cache)?;
