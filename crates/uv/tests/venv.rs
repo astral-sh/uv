@@ -20,7 +20,7 @@ fn create_venv() -> Result<()> {
 
     // Create a virtual environment at `.venv`.
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
-    let filter_prompt = r"(?s)Activate with:\n- Powershell: .*\n- CMD: .*";
+    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
@@ -58,7 +58,7 @@ fn create_venv() -> Result<()> {
 
     // Create a virtual environment at the same location, which should replace it.
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
-    let filter_prompt = r"(?s)Activate with:\n- Powershell: .*\n- CMD: .*";
+    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
@@ -106,7 +106,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
-    let filter_prompt = r"(?s)Activate with:\n- Powershell: .*\n- CMD: .*";
+    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
@@ -150,7 +150,7 @@ fn seed() -> Result<()> {
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
-    let filter_prompt = r"(?s)Activate with:\n- Powershell: .*\n- CMD: .*";
+    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
@@ -338,7 +338,7 @@ fn create_venv_python_patch() -> Result<()> {
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
-    let filter_prompt = r"(?s)Activate with:\n- Powershell: .*\n- CMD: .*";
+    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (r"interpreter at .+", "interpreter at [PATH]"),
         (&filter_venv, "/home/ferris/project/.venv"),
@@ -432,7 +432,7 @@ fn empty_dir_exists() -> Result<()> {
     venv.create_dir_all()?;
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
-    let filter_prompt = r"(?s)Activate with:\n- Powershell: .*\n- CMD: .*";
+    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
@@ -529,7 +529,7 @@ fn virtualenv_compatibility() -> Result<()> {
 
     // Create a virtual environment at `.venv`, passing the redundant `--clear` flag.
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
-    let filter_prompt = r"(?s)Activate with:\n- Powershell: .*\n- CMD: .*";
+    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
