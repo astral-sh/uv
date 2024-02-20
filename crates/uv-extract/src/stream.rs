@@ -14,6 +14,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
+    let target = target.as_ref();
     let mut reader = reader.compat();
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(&mut reader);
 
@@ -22,7 +23,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     while let Some(mut entry) = zip.next_with_entry().await? {
         // Construct the (expected) path to the file on-disk.
         let path = entry.reader().entry().filename().as_str()?;
-        let path = target.as_ref().join(path);
+        let path = target.join(path);
         let is_dir = entry.reader().entry().dir()?;
 
         // Either create the directory or write the file to disk.
@@ -81,7 +82,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             if has_any_executable_bit != 0 {
                 // Construct the (expected) path to the file on-disk.
                 let path = entry.filename().as_str()?;
-                let path = target.as_ref().join(path);
+                let path = target.join(path);
 
                 let permissions = fs_err::tokio::metadata(&path).await?.permissions();
                 fs_err::tokio::set_permissions(
