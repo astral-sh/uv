@@ -23,7 +23,8 @@ const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
     "NVZMaExzZmtFMHZ1ZEVNd0pPZXZkV040WUdTcmk2WXREeFB4TFlybGlwRTZONEpHV01FMnFZQWJVUm4=",
 ];
 
-/// Decode a
+/// Decode a split, base64 encoded authentication token.
+/// We split and encode the token to bypass revoke by GitHub's secret scanning
 fn decode_token(content: &[&str]) -> String {
     let token = content
         .iter()
