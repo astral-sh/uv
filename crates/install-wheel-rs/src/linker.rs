@@ -306,9 +306,10 @@ fn clone_recursive(site_packages: &Path, wheel: &Path, entry: &DirEntry) -> Resu
 
     let entry_file_type = entry.file_type()?;
 
-    // `reflink_or_copy` returns `InvalidInput` on macOS when reflinking a directory that already exists
-    // at the source destination. We need to properly fallback in this case as well, so we re-run `reflink`
-    // and check if that gives us an `AlreadyExists` error.
+    // `reflink_or_copy` returns `InvalidInput` on macOS when reflinking a directory/symlink that already exists
+    // at the destination - macOS has the capability to reflink those, but `reflink_or_copy` doesn't make an exception
+    // and obscures the underlying `AlreadyExists` error. We need to properly fallback in this case,
+    // so we run `reflink` and check if that gives us an `AlreadyExists` error.
     if reflink
         .as_ref()
         .is_err_and(|err| err.kind() == std::io::ErrorKind::InvalidInput)
