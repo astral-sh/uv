@@ -697,19 +697,8 @@ impl From<ParseErrorKind> for VersionSpecifierParseError {
     }
 }
 
-/// Parses a list of specifiers such as `>= 1.0, != 1.3.*, < 2.0`.
-///
-/// I recommend using [`VersionSpecifiers::from_str`] instead.
-///
-/// ```rust
-/// use std::str::FromStr;
-/// use pep440_rs::{parse_version_specifiers, Version};
-///
-/// let version = Version::from_str("1.19").unwrap();
-/// let version_specifiers = parse_version_specifiers(">=1.16, <2.0").unwrap();
-/// assert!(version_specifiers.iter().all(|specifier| specifier.contains(&version)));
-/// ```
-pub fn parse_version_specifiers(
+/// Parse a list of specifiers such as `>= 1.0, != 1.3.*, < 2.0`.
+pub(crate) fn parse_version_specifiers(
     spec: &str,
 ) -> Result<Vec<VersionSpecifier>, VersionSpecifiersParseError> {
     let mut version_ranges = Vec::new();

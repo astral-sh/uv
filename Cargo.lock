@@ -876,7 +876,7 @@ name = "distribution-filename"
 version = "0.0.1"
 dependencies = [
  "insta",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "platform-tags",
  "rkyv",
  "serde",
@@ -896,7 +896,7 @@ dependencies = [
  "fs-err",
  "itertools 0.12.1",
  "once_cell",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "pypi-types",
@@ -1588,7 +1588,7 @@ dependencies = [
  "indoc",
  "mailparse",
  "once_cell",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "platform-host",
  "platform-info",
  "plist",
@@ -2157,16 +2157,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "parking_lot"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3742b2c103b9f06bc9fff0a37ff4912935851bee6d36f3c02bcc755bcfec228f"
-dependencies = [
- "lock_api",
- "parking_lot_core 0.9.9",
-]
-
-[[package]]
 name = "parking_lot_core"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2201,19 +2191,7 @@ checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
 
 [[package]]
 name = "pep440_rs"
-version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "887f66cc62717ea72caac4f1eb4e6f392224da3ffff3f40ec13ab427802746d6"
-dependencies = [
- "lazy_static",
- "regex",
- "serde",
- "unicode-width",
-]
-
-[[package]]
-name = "pep440_rs"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "indoc",
  "once_cell",
@@ -2228,13 +2206,13 @@ dependencies = [
 
 [[package]]
 name = "pep508_rs"
-version = "0.2.3"
+version = "0.4.2"
 dependencies = [
  "derivative",
  "indoc",
  "log",
  "once_cell",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "pyo3",
  "pyo3-log",
  "regex",
@@ -2496,7 +2474,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset",
- "parking_lot 0.12.1",
+ "parking_lot",
  "pyo3-build-config",
  "pyo3-ffi",
  "pyo3-macros",
@@ -2567,7 +2545,7 @@ dependencies = [
  "insta",
  "mailparse",
  "once_cell",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "pep508_rs",
  "regex",
  "rkyv",
@@ -2583,12 +2561,12 @@ dependencies = [
 
 [[package]]
 name = "pyproject-toml"
-version = "0.8.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46d4a5e69187f23a29f8aa0ea57491d104ba541bc55f76552c2a74962aa20e04"
+checksum = "3b80f889b6d413c3f8963a2c7db03f95dd6e1d85e1074137cb2013ea2faa8898"
 dependencies = [
  "indexmap 2.2.3",
- "pep440_rs 0.3.12",
+ "pep440_rs",
  "pep508_rs",
  "serde",
  "toml",
@@ -2793,7 +2771,7 @@ dependencies = [
  "insta",
  "itertools 0.10.5",
  "once_cell",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "pep508_rs",
  "regex",
  "serde",
@@ -2882,7 +2860,7 @@ dependencies = [
  "getrandom",
  "http",
  "hyper",
- "parking_lot 0.11.2",
+ "parking_lot",
  "reqwest",
  "reqwest-middleware",
  "retry-policies",
@@ -4185,7 +4163,7 @@ dependencies = [
  "miette",
  "mimalloc",
  "owo-colors 4.0.0",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "pep508_rs",
  "platform-host",
  "platform-tags",
@@ -4292,7 +4270,7 @@ dependencies = [
  "http",
  "insta",
  "install-wheel-rs",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "pypi-types",
@@ -4338,7 +4316,7 @@ dependencies = [
  "itertools 0.12.1",
  "mimalloc",
  "owo-colors 4.0.0",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "pep508_rs",
  "petgraph",
  "platform-host",
@@ -4410,7 +4388,7 @@ dependencies = [
  "futures",
  "install-wheel-rs",
  "nanoid",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "pypi-types",
@@ -4502,7 +4480,7 @@ dependencies = [
  "futures",
  "install-wheel-rs",
  "once-map",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "pypi-types",
@@ -4536,7 +4514,7 @@ dependencies = [
  "insta",
  "itertools 0.12.1",
  "once_cell",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "pep508_rs",
  "platform-host",
  "platform-tags",
@@ -4586,7 +4564,7 @@ dependencies = [
  "once-map",
  "once_cell",
  "owo-colors 4.0.0",
- "pep440_rs 0.4.0",
+ "pep440_rs",
  "pep508_rs",
  "petgraph",
  "platform-host",
@@ -4812,7 +4790,7 @@ checksum = "be0ecb0db480561e9a7642b5d3e4187c128914e58aa84330b9493e3eb68c5e7f"
 dependencies = [
  "futures",
  "js-sys",
- "parking_lot 0.11.2",
+ "parking_lot",
  "pin-utils",
  "wasm-bindgen",
  "wasm-bindgen-futures",

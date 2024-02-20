@@ -9,7 +9,7 @@
 //! let version_specifier = VersionSpecifier::from_str("== 1.*").unwrap();
 //! assert!(version_specifier.contains(&version));
 //! let version_specifiers = VersionSpecifiers::from_str(">=1.16, <2.0").unwrap();
-//! assert!(version_specifiers.iter().all(|specifier| specifier.contains(&version)));
+//! assert!(version_specifiers.contains(&version));
 //! ```
 //!
 //! PEP 440 has a lot of unintuitive features, including:
@@ -41,9 +41,7 @@ pub use {
         LocalSegment, Operator, OperatorParseError, PreRelease, PreReleaseKind, Version,
         VersionParseError, VersionPattern, VersionPatternParseError, MIN_VERSION,
     },
-    version_specifier::{
-        parse_version_specifiers, VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError,
-    },
+    version_specifier::{VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError},
 };
 
 mod version;
