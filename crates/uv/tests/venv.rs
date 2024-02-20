@@ -183,6 +183,7 @@ fn seed() -> Result<()> {
     Using Python [VERSION] interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
      + pip==23.3.1
+    Activate with: source /home/ferris/project/.venv/bin/activate
     "###
     );
 
