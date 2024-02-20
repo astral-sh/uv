@@ -14,10 +14,10 @@ use assert_fs::fixture::PathChild;
 use fs_err::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
 use fs_err::os::windows::fs::symlink_file;
-use platform_host::Platform;
 use regex::Regex;
-use uv_cache::Cache;
 
+use platform_host::Platform;
+use uv_cache::Cache;
 use uv_interpreter::find_requested_python;
 
 // Exclude any packages uploaded after this date.
@@ -108,14 +108,26 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
 /// Python versions are sorted from newest to oldest.
 pub fn bootstrapped_pythons() -> Option<Vec<PathBuf>> {
     // Current dir is `<project root>/crates/uv`.
-    let bootstrapped_pythons = std::env::current_dir()
+    let project_root = std::env::current_dir()
         .unwrap()
         .parent()
         .unwrap()
         .parent()
         .unwrap()
-        .join("bin")
-        .join("versions");
+        .to_path_buf();
+    let boostrap_dir = if let Some(boostrap_dir) = env::var_os("PUFFIN_BOOTSTRAP_DIR") {
+        let boostrap_dir = PathBuf::from(boostrap_dir);
+        if boostrap_dir.is_absolute() {
+            boostrap_dir
+        } else {
+            // cargo test changes directory to the test crate, but doesn't tell us from where the user is running the
+            // tests. We'll assume that it's the project root.
+            project_root.join(boostrap_dir)
+        }
+    } else {
+        project_root.join("bin")
+    };
+    let bootstrapped_pythons = boostrap_dir.join("versions");
     let Ok(bootstrapped_pythons) = fs_err::read_dir(bootstrapped_pythons) else {
         return None;
     };

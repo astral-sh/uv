@@ -52,6 +52,8 @@ Alternatively, you can install `zstandard` from PyPI, then run:
 python3.12 scripts/bootstrap/install.py
 ```
 
+You can configure the bootstrapping directory with `PUFFIN_BOOTSTRAP_DIR`.
+
 ### Local testing
 
 You can invoke your development version of uv with `cargo run -- <args>`. For example:

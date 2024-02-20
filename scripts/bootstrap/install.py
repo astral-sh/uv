@@ -30,6 +30,7 @@
 
 import hashlib
 import json
+import os
 import platform
 import shutil
 import sys
@@ -48,7 +49,10 @@ except ImportError:
 # Setup some file paths
 THIS_DIR = Path(__file__).parent
 ROOT_DIR = THIS_DIR.parent.parent
-BIN_DIR = ROOT_DIR / "bin"
+if bin_dir := os.environ.get("PUFFIN_BOOTSTRAP_DIR"):
+    BIN_DIR = Path(bin_dir)
+else:
+    BIN_DIR = ROOT_DIR / "bin"
 INSTALL_DIR = BIN_DIR / "versions"
 VERSIONS_FILE = ROOT_DIR / ".python-versions"
 VERSIONS_METADATA_FILE = THIS_DIR / "versions.json"
