@@ -289,34 +289,6 @@ impl<'a> DisplayResolutionGraph<'a> {
             annotation_style,
         }
     }
-
-    fn annotation_line(edges: Vec<&Dist>) -> String {
-        let deps = edges
-            .into_iter()
-            .map(|dependency| format!("{}", dependency.name()))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("{}", format!("# via {deps}").green())
-    }
-
-    fn annotation_split(edges: Vec<&Dist>) -> String {
-        let mut result: String = String::new();
-        match edges.len() {
-            0 => {}
-            1 => {
-                result = format!("{}", format!("    # via {}", edges[0].name()).green());
-            }
-            _ => {
-                let deps = edges
-                    .into_iter()
-                    .map(|dependency| format!("    #   {}", dependency.name()))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                result = format!("{}", format!("    # via\n{deps}").green());
-            }
-        }
-        result
-    }
 }
 
 /// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
@@ -422,14 +394,33 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     AnnotationStyle::Line => {
                         if !edges.is_empty() {
                             sep = if self.show_hashes { "\n    " } else { "  " };
-                            annotation = DisplayResolutionGraph::annotation_line(edges);
+                            let deps = edges
+                                .into_iter()
+                                .map(|dependency| format!("{}", dependency.name()))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            annotation = format!("{}", format!("# via {deps}").green());
                         }
                     }
                     AnnotationStyle::Split => {
                         if !edges.is_empty() {
                             sep = "\n";
                         }
-                        annotation = DisplayResolutionGraph::annotation_split(edges);
+                        match edges.len() {
+                            0 => {}
+                            1 => {
+                                annotation =
+                                    format!("{}", format!("    # via {}", edges[0].name()).green());
+                            }
+                            _ => {
+                                let deps = edges
+                                    .into_iter()
+                                    .map(|dependency| format!("    #   {}", dependency.name()))
+                                    .collect::<Vec<_>>()
+                                    .join("\n");
+                                annotation = format!("{}", format!("    # via\n{deps}").green());
+                            }
+                        }
                     }
                 }
             }
