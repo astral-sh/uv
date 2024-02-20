@@ -4163,6 +4163,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "assert_fs",
+ "base64 0.21.7",
  "chrono",
  "clap",
  "clap_complete_command",

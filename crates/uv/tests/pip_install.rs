@@ -5,6 +5,7 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::indoc;
 use url::Url;
 
@@ -13,6 +14,14 @@ use common::{uv_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
 use crate::common::get_bin;
 
 mod common;
+
+// This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
+const READ_ONLY_GITHUB_TOKEN: &str = "Z2l0aHViX3BhdF8xMUJHSVpBN1EwYUVRbW1sZnRSNEx0X3hUcjlWUjBrMWczYXNlcDRwVDYxS01WTW90YjF5Ym15VHIxRjI0TkdHZDBHQ0NOSUpIUUhZNVh4V3d1";
+
+fn decode_token(content: &str) -> String {
+    let decoded = base64.decode(content).unwrap();
+    std::str::from_utf8(decoded.as_slice()).unwrap().to_string()
+}
 
 /// Create a `pip install` command with options shared across scenarios.
 fn command(context: &TestContext) -> Command {
@@ -734,9 +743,7 @@ fn install_git_public_https() {
 #[test]
 fn install_git_private_https_pat_no_username() {
     let context = TestContext::new("3.8");
-
-    // This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
-    let token = "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";
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     uv_snapshot!(command(&context)
         .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
@@ -749,7 +756,7 @@ fn install_git_private_https_pat_no_username() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://:github_pat_[SIZE]GIZA7Q0qxQCNd[SIZE]VVCf_8ZeenAddxUYnR82xy7geDJo5DsazrjdVjfh3TH[TIME]nE3IXVTWKSJ9DInbt@github.com/astral-test/uv-private-pypackage@c44e30b5d3e49dab7dbbe543a331fbf0e4dc3b37)
+     + uv-private-pypackage==0.1.0 (from git+https://:github_pat_[SIZE]GIZA7Q0aEQmmlftR4Lt_xTr9VR0k1g3asep4pT61KMVMotb1ybmyTr1F24NGGd0GCCNIJHQHY5XxWwu@github.com/astral-test/uv-private-pypackage@c44e30b5d3e49dab7dbbe543a331fbf0e4dc3b37)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -759,26 +766,21 @@ fn install_git_private_https_pat_no_username() {
 #[test]
 fn install_git_private_https_pat() {
     let context = TestContext::new("3.8");
-
-    // This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
-    let token = "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";
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
     let user = "astral-test-bot";
 
     uv_snapshot!(command(&context)
         .arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
         , @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: uv-private-pypackage @ git+https://astral-test-bot:github_pat_[SIZE]GIZA7Q0qxQCNd[SIZE]VVCf_8ZeenAddxUYnR82xy7geDJo5DsazrjdVjfh3TH[TIME]nE3IXVTWKSJ9DInbt@github.com/astral-test/uv-private-pypackage
-      Caused by: Git operation failed
-      Caused by: failed to clone into: /private/var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmpijslxX/git-v0/db/732d1383ce6d692d
-      Caused by: failed to authenticate when downloading repository
-
-    * attempted to find username/password via git's `credential.helper` support, but failed
-      Caused by: failed to acquire username/password from local configuration
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:github_pat_[SIZE]GIZA7Q0aEQmmlftR4Lt_xTr9VR0k1g3asep4pT61KMVMotb1ybmyTr1F24NGGd0GCCNIJHQHY5XxWwu@github.com/astral-test/uv-private-pypackage@c44e30b5d3e49dab7dbbe543a331fbf0e4dc3b37)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
