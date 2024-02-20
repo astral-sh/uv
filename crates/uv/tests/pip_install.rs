@@ -317,6 +317,65 @@ fn respect_installed_and_reinstall() -> Result<()> {
     Ok(())
 }
 
+/// Respect installed versions when resolving.
+#[test]
+#[cfg(not(windows))]
+fn reinstall_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install anyio.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio")?;
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+
+    // Re-install anyio, with an extra.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("anyio[trio]")?;
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + attrs==23.1.0
+     + outcome==1.3.0.post0
+     + sortedcontainers==2.4.0
+     + trio==0.23.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+
+    Ok(())
+}
+
 /// Like `pip`, we (unfortunately) allow incompatible environments.
 #[test]
 fn allow_incompatibilities() -> Result<()> {
