@@ -302,14 +302,28 @@ fn clone_recursive(site_packages: &Path, wheel: &Path, entry: &DirEntry) -> Resu
     debug!("Cloning {} to {}", from.display(), to.display());
 
     // Attempt to copy the file or directory
-    let reflink = reflink_copy::reflink_or_copy(&from, &to);
+    let mut reflink = reflink_copy::reflink_or_copy(&from, &to);
+
+    let entry_file_type = entry.file_type()?;
+
+    // `reflink_or_copy` returns `InvalidInput` on macOS when reflinking a directory that already exists
+    // at the source destination. We need to properly fallback in this case as well, so we re-run `reflink`
+    // and check if that gives us an `AlreadyExists` error.
+    if reflink
+        .as_ref()
+        .is_err_and(|err| err.kind() == std::io::ErrorKind::InvalidInput)
+        && cfg!(target_os = "macos")
+        && !entry_file_type.is_file()
+    {
+        reflink = reflink_copy::reflink(&from, &to).map(|()| None);
+    }
 
     if reflink
         .as_ref()
-        .is_err_and(|err| matches!(err.kind(), std::io::ErrorKind::AlreadyExists))
+        .is_err_and(|err| err.kind() == std::io::ErrorKind::AlreadyExists)
     {
         // If copying fails and the directory exists already, it must be merged recursively.
-        if entry.file_type()?.is_dir() {
+        if entry_file_type.is_dir() {
             for entry in fs::read_dir(from)? {
                 clone_recursive(site_packages, wheel, &entry?)?;
             }
