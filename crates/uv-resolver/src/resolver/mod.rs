@@ -46,7 +46,7 @@ use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
 use crate::resolver::allowed_urls::AllowedUrls;
 pub use crate::resolver::index::InMemoryIndex;
-use crate::resolver::provider::DefaultResolverProvider;
+pub use crate::resolver::provider::DefaultResolverProvider;
 pub use crate::resolver::provider::ResolverProvider;
 pub(crate) use crate::resolver::provider::VersionsResponse;
 use crate::resolver::reporter::Facade;

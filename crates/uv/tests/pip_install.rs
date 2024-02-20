@@ -1219,3 +1219,39 @@ fn install_sdist_resolution_lowest() -> Result<()> {
 
     Ok(())
 }
+
+/// Tests that we can install a package from a zip file that has bunk
+/// permissions.
+///
+/// See: <https://github.com/astral-sh/uv/issues/1453>
+#[test]
+fn direct_url_zip_file_bunk_permissions() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "opensafely-pipeline @ https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip",
+    )?;
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Downloaded 5 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + distro==1.8.0
+     + opensafely-pipeline==2023.11.6.145820 (from https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip)
+     + pydantic==1.10.13
+     + ruyaml==0.91.0
+     + setuptools==68.2.2
+     + typing-extensions==4.8.0
+    "###
+    );
+
+    Ok(())
+}
