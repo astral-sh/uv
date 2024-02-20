@@ -1,12 +1,17 @@
 [files]
 extend-exclude = [
-    "**/resources/**/*",
-    "**/snapshots/**/*",
+    "**/snapshots/",
     "scripts/**/*.in",
 ]
+ignore-hidden = false
 
-[default.extend-words]
-BA = "BA" # acronym for "Bad Allowed", used in testing.
-Nd = "Nd" # secret codeword used by friendly bards
-borken = "borken" # the word is borken :(
+[default]
+extend-ignore-re = [
+    "FRiENDlY-\\.\\.\\.-_-BARd",
+    "FrIeNdLy-\\._\\.-bArD",
+    "I borken you cache",
+    "eb1ba5f5",
+]
+
+[default.extend-identifiers]
 seeked = "seeked" # special term used for streams
