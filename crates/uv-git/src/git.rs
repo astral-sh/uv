@@ -1002,6 +1002,7 @@ pub(crate) fn fetch(
             tags,
         )
         .or_else(|_| {
+            debug!("fetching with libgit2 failed, trying the git command");
             fetch_with_strategy(
                 repo,
                 remote_url,
