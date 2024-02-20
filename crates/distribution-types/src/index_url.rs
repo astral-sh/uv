@@ -8,7 +8,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use pep508_rs::split_scheme;
+use pep508_rs::{split_scheme, Scheme};
 use uv_fs::normalize_url_path;
 
 static PYPI_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://pypi.org/simple").unwrap());
@@ -88,9 +88,9 @@ impl FromStr for FlatIndexLocation {
     /// - `https://download.pytorch.org/whl/torch_stable.html`
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some((scheme, path)) = split_scheme(s) {
-            match scheme {
+            match Scheme::parse(scheme) {
                 // Ex) `file:///home/ferris/project/scripts/...` or `file:../ferris/`
-                "file" => {
+                Some(Scheme::File) => {
                     let path = path.strip_prefix("//").unwrap_or(path);
 
                     // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
@@ -101,16 +101,13 @@ impl FromStr for FlatIndexLocation {
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                "git+git" | "git+http" | "git+file" | "git+ssh" | "git+https" | "bzr+http"
-                | "bzr+https" | "bzr+ssh" | "bzr+sftp" | "bzr+ftp" | "bzr+lp" | "bzr+file"
-                | "hg+file" | "hg+http" | "hg+https" | "hg+ssh" | "hg+static-http" | "svn+ssh"
-                | "svn+http" | "svn+https" | "svn+svn" | "svn+file" | "http" | "https" => {
+                Some(_) => {
                     let url = Url::parse(s)?;
                     Ok(Self::Url(url))
                 }
 
                 // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
-                _ => {
+                None => {
                     let path = PathBuf::from(s);
                     Ok(Self::Path(path))
                 }

@@ -17,6 +17,6 @@ pub enum Error {
     #[error("Distribution not found at: {0}")]
     NotFound(Url),
 
-    #[error("Unsupported scheme `{0}` on URL: {1}")]
-    UnsupportedScheme(String, String),
+    #[error("Unsupported scheme `{0}` on URL: {1} ({2})")]
+    UnsupportedScheme(String, String, String),
 }

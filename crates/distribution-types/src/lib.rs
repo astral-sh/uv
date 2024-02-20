@@ -41,7 +41,7 @@ use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use pep440_rs::Version;
-use pep508_rs::VerbatimUrl;
+use pep508_rs::{Scheme, VerbatimUrl};
 use uv_normalize::PackageName;
 
 pub use crate::any::*;
@@ -223,49 +223,8 @@ impl Dist {
 
     /// Create a [`Dist`] for a URL-based distribution.
     pub fn from_url(name: PackageName, url: VerbatimUrl) -> Result<Self, Error> {
-        match url.scheme() {
-            "git+git" | "git+http" => {
-                // Unsupported, insecure.
-                return Err(Error::UnsupportedScheme(
-                    url.scheme().to_owned(),
-                    "insecure Git protocol".to_string(),
-                ));
-            }
-            "git+file" => {
-                // Unsupported, local.
-                return Err(Error::UnsupportedScheme(
-                    url.scheme().to_owned(),
-                    "local Git protocol".to_string(),
-                ));
-            }
-            "git+ssh" | "git+https" => {
-                // Supported.
-                Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })))
-            }
-            "bzr+http" | "bzr+https" | "bzr+ssh" | "bzr+sftp" | "bzr+ftp" | "bzr+lp"
-            | "bzr+file" => {
-                // Unsupported.
-                return Err(Error::UnsupportedScheme(
-                    url.scheme().to_owned(),
-                    "Bazaar is not supported".to_string(),
-                ));
-            }
-            "hg+file" | "hg+http" | "hg+https" | "hg+ssh" | "hg+static-http" => {
-                // Unsupported.
-                return Err(Error::UnsupportedScheme(
-                    url.scheme().to_owned(),
-                    "Mercurial is not supported".to_string(),
-                ));
-            }
-            "svn+ssh" | "svn+http" | "svn+https" | "svn+svn" | "svn+file" => {
-                // Unsupported.
-                return Err(Error::UnsupportedScheme(
-                    url.scheme().to_owned(),
-                    "Subversion is not supported".to_string(),
-                ));
-            }
-            "http" | "https" => {
-                // Supported.
+        match Scheme::parse(url.scheme()) {
+            Some(Scheme::Http | Scheme::Https) => {
                 if Path::new(url.path())
                     .extension()
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
@@ -281,7 +240,7 @@ impl Dist {
                     })))
                 }
             }
-            "file" => {
+            Some(Scheme::File) => {
                 // Store the canonicalized path, which also serves to validate that it exists.
                 let path = match url
                     .to_file_path()
@@ -313,12 +272,59 @@ impl Dist {
                     })))
                 }
             }
-            _ => {
-                return Err(Error::UnsupportedScheme(
-                    url.scheme().to_owned(),
-                    format!("{} not a known scheme", url.scheme()),
-                ));
+            Some(Scheme::GitSsh | Scheme::GitHttps) => {
+                Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })))
             }
+            Some(Scheme::GitGit | Scheme::GitHttp) => Err(Error::UnsupportedScheme(
+                url.scheme().to_owned(),
+                url.verbatim().to_string(),
+                "insecure Git protocol".to_string(),
+            )),
+            Some(Scheme::GitFile) => Err(Error::UnsupportedScheme(
+                url.scheme().to_owned(),
+                url.verbatim().to_string(),
+                "local Git protocol".to_string(),
+            )),
+            Some(
+                Scheme::BzrHttp
+                | Scheme::BzrHttps
+                | Scheme::BzrSsh
+                | Scheme::BzrSftp
+                | Scheme::BzrFtp
+                | Scheme::BzrLp
+                | Scheme::BzrFile,
+            ) => Err(Error::UnsupportedScheme(
+                url.scheme().to_owned(),
+                url.verbatim().to_string(),
+                "Bazaar is not supported".to_string(),
+            )),
+            Some(
+                Scheme::HgFile
+                | Scheme::HgHttp
+                | Scheme::HgHttps
+                | Scheme::HgSsh
+                | Scheme::HgStaticHttp,
+            ) => Err(Error::UnsupportedScheme(
+                url.scheme().to_owned(),
+                url.verbatim().to_string(),
+                "Mercurial is not supported".to_string(),
+            )),
+            Some(
+                Scheme::SvnSsh
+                | Scheme::SvnHttp
+                | Scheme::SvnHttps
+                | Scheme::SvnSvn
+                | Scheme::SvnFile,
+            ) => Err(Error::UnsupportedScheme(
+                url.scheme().to_owned(),
+                url.verbatim().to_string(),
+                "Subversion is not supported".to_string(),
+            )),
+            None => Err(Error::UnsupportedScheme(
+                url.scheme().to_owned(),
+                url.verbatim().to_string(),
+                "unknown scheme".to_string(),
+            )),
         }
     }
 

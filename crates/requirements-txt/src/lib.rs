@@ -45,7 +45,9 @@ use unscanny::{Pattern, Scanner};
 use url::Url;
 use uv_warnings::warn_user;
 
-use pep508_rs::{split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, VerbatimUrl};
+use pep508_rs::{
+    split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, Scheme, VerbatimUrl,
+};
 use uv_fs::{normalize_url_path, Normalized};
 use uv_normalize::ExtraName;
 
@@ -93,9 +95,9 @@ impl FindLink {
     /// - `https://download.pytorch.org/whl/torch_stable.html`
     pub fn parse(given: &str, working_dir: impl AsRef<Path>) -> Result<Self, url::ParseError> {
         if let Some((scheme, path)) = split_scheme(given) {
-            match scheme {
+            match Scheme::parse(scheme) {
                 // Ex) `file:///home/ferris/project/scripts/...` or `file:../ferris/`
-                "file" => {
+                Some(Scheme::File) => {
                     let path = path.strip_prefix("//").unwrap_or(path);
 
                     // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
@@ -111,10 +113,7 @@ impl FindLink {
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                "git+git" | "git+http" | "git+file" | "git+ssh" | "git+https" | "bzr+http"
-                | "bzr+https" | "bzr+ssh" | "bzr+sftp" | "bzr+ftp" | "bzr+lp" | "bzr+file"
-                | "hg+file" | "hg+http" | "hg+https" | "hg+ssh" | "hg+static-http" | "svn+ssh"
-                | "svn+http" | "svn+https" | "svn+svn" | "svn+file" | "http" | "https" => {
+                Some(_) => {
                     let url = Url::parse(given)?;
                     Ok(Self::Url(url))
                 }
@@ -208,9 +207,9 @@ impl EditableRequirement {
 
         // Create a `VerbatimUrl` to represent the editable requirement.
         let url = if let Some((scheme, path)) = split_scheme(requirement) {
-            match scheme {
+            match Scheme::parse(scheme) {
                 // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`
-                "file" => {
+                Some(Scheme::File) => {
                     let path = path.strip_prefix("//").unwrap_or(path);
 
                     // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
@@ -220,10 +219,7 @@ impl EditableRequirement {
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                "git+git" | "git+http" | "git+file" | "git+ssh" | "git+https" | "bzr+http"
-                | "bzr+https" | "bzr+ssh" | "bzr+sftp" | "bzr+ftp" | "bzr+lp" | "bzr+file"
-                | "hg+file" | "hg+http" | "hg+https" | "hg+ssh" | "hg+static-http" | "svn+ssh"
-                | "svn+http" | "svn+https" | "svn+svn" | "svn+file" | "http" | "https" => {
+                Some(_) => {
                     return Err(RequirementsTxtParserError::UnsupportedUrl(
                         requirement.to_string(),
                     ));

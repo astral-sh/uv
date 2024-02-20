@@ -46,7 +46,7 @@ use uv_fs::normalize_url_path;
 #[cfg(feature = "pyo3")]
 use uv_normalize::InvalidNameError;
 use uv_normalize::{ExtraName, PackageName};
-pub use verbatim_url::{split_scheme, VerbatimUrl};
+pub use verbatim_url::{split_scheme, Scheme, VerbatimUrl};
 
 mod marker;
 mod verbatim_url;
@@ -744,9 +744,9 @@ fn preprocess_url(
     len: usize,
 ) -> Result<VerbatimUrl, Pep508Error> {
     let url = if let Some((scheme, path)) = split_scheme(url) {
-        match scheme {
+        match Scheme::parse(scheme) {
             // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`.
-            "file" => {
+            Some(Scheme::File) => {
                 let path = path.strip_prefix("//").unwrap_or(path);
 
                 // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
@@ -767,10 +767,7 @@ fn preprocess_url(
             }
 
             // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-            "git+git" | "git+http" | "git+file" | "git+ssh" | "git+https" | "bzr+http"
-            | "bzr+https" | "bzr+ssh" | "bzr+sftp" | "bzr+ftp" | "bzr+lp" | "bzr+file"
-            | "hg+file" | "hg+http" | "hg+https" | "hg+ssh" | "hg+static-http" | "svn+ssh"
-            | "svn+http" | "svn+https" | "svn+svn" | "svn+file" | "http" | "https" => {
+            Some(_) => {
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
                 VerbatimUrl::from_str(url).map_err(|err| Pep508Error {
                     message: Pep508ErrorSource::UrlError(err),
