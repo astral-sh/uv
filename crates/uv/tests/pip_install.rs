@@ -721,6 +721,7 @@ fn install_no_index_version() {
 
 /// Install a package from a public GitHub repository
 #[test]
+#[cfg(feature = "git")]
 fn install_git_public_https() {
     let context = TestContext::new("3.8");
 
@@ -743,6 +744,7 @@ fn install_git_public_https() {
 
 /// Install a package from a private GitHub repository using a PAT
 #[test]
+#[cfg(feature = "git")]
 fn install_git_private_https_pat() {
     let context = TestContext::new("3.8");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -769,6 +771,7 @@ fn install_git_private_https_pat() {
 
 /// Install a package from a private GitHub repository using a PAT
 #[test]
+#[cfg(feature = "git")]
 fn install_git_private_https_pat_and_username() {
     let context = TestContext::new("3.8");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
