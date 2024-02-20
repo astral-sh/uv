@@ -207,7 +207,7 @@ struct PipCompileArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[clap(short, long)]
+    #[clap(long, short)]
     constraint: Vec<PathBuf>,
 
     /// Override versions using the given requirements files.
@@ -242,7 +242,7 @@ struct PipCompileArgs {
     prerelease: PreReleaseMode,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
-    #[clap(short, long)]
+    #[clap(long, short)]
     output_file: Option<PathBuf>,
 
     /// Exclude comment annotations indicating the source of each package.
@@ -289,7 +289,7 @@ struct PipCompileArgs {
     /// source distributions (`.tar.gz` or `.zip`) at the top level.
     ///
     /// If a URL, the page must contain a flat list of links to package files.
-    #[clap(long)]
+    #[clap(long, short)]
     find_links: Vec<FlatIndexLocation>,
 
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
@@ -408,7 +408,7 @@ struct PipSyncArgs {
     /// source distributions (`.tar.gz` or `.zip`) at the top level.
     ///
     /// If a URL, the page must contain a flat list of links to package files.
-    #[clap(long)]
+    #[clap(long, short)]
     find_links: Vec<FlatIndexLocation>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
@@ -470,11 +470,11 @@ struct PipInstallArgs {
     package: Vec<String>,
 
     /// Install all packages listed in the given requirements files.
-    #[clap(short, long, group = "sources")]
+    #[clap(long, short, group = "sources")]
     requirement: Vec<PathBuf>,
 
     /// Install the editable package based on the provided local file path.
-    #[clap(short, long, group = "sources")]
+    #[clap(long, short, group = "sources")]
     editable: Vec<String>,
 
     /// Constrain versions using the given requirements files.
@@ -484,7 +484,7 @@ struct PipInstallArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[clap(short, long)]
+    #[clap(long, short)]
     constraint: Vec<PathBuf>,
 
     /// Override versions using the given requirements files.
@@ -556,7 +556,7 @@ struct PipInstallArgs {
     prerelease: PreReleaseMode,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
-    #[clap(short, long)]
+    #[clap(long, short)]
     output_file: Option<PathBuf>,
 
     /// The URL of the Python package index (by default: https://pypi.org/simple).
@@ -573,7 +573,7 @@ struct PipInstallArgs {
     /// source distributions (`.tar.gz` or `.zip`) at the top level.
     ///
     /// If a URL, the page must contain a flat list of links to package files.
-    #[clap(long)]
+    #[clap(long, short)]
     find_links: Vec<FlatIndexLocation>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
@@ -639,11 +639,11 @@ struct PipUninstallArgs {
     package: Vec<String>,
 
     /// Uninstall all packages listed in the given requirements files.
-    #[clap(short, long, group = "sources")]
+    #[clap(long, short, group = "sources")]
     requirement: Vec<PathBuf>,
 
     /// Uninstall the editable package based on the provided local file path.
-    #[clap(short, long, group = "sources")]
+    #[clap(long, short, group = "sources")]
     editable: Vec<String>,
 }
 
@@ -670,7 +670,7 @@ struct VenvArgs {
     /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
     /// doesn't look for a Python interpreter on disk.
     // Short `-p` to match `virtualenv`
-    #[clap(short, long, verbatim_doc_comment)]
+    #[clap(long, short, verbatim_doc_comment)]
     python: Option<String>,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
