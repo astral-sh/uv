@@ -6,13 +6,14 @@ use std::str::FromStr;
 use mailparse::{MailHeaderMap, MailParseError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::warn;
 
 use pep440_rs::{Version, VersionParseError, VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Requirement};
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 
 use crate::lenient_requirement::LenientRequirement;
-use crate::{LenientExtraName, LenientVersionSpecifiers};
+use crate::LenientVersionSpecifiers;
 
 /// Python Package Metadata 2.1 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.
@@ -119,12 +120,14 @@ impl Metadata21 {
             })
             .transpose()?;
         let provides_extras = get_all_values("Provides-Extra")
-            .filter_map(LenientExtraName::try_parse)
-            .map(|result| match result {
-                Ok(extra_name) => Ok(ExtraName::from(extra_name)),
-                Err(err) => Err(err),
+            .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
+                Ok(extra_name) => Some(extra_name),
+                Err(err) => {
+                    warn!("Ignoring invalid extra: {err}");
+                    None
+                }
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Vec<_>>();
 
         Ok(Metadata21 {
             metadata_version,
