@@ -198,9 +198,7 @@ async fn venv_impl(
     if cfg!(windows) {
         writeln!(
             printer,
-            "Activate with:\n\
-            - Powershell: .\\{0}\\Scripts\\activate.ps1\n\
-            - CMD: {0}\\Scripts\\activate.bat",
+            "Activate with: {}\\Scripts\\activate",
             path.normalized_display().cyan()
         )
         .into_diagnostic()?;
