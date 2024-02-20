@@ -21,6 +21,8 @@ static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap
 static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r",\s*$").unwrap());
 /// Ex) `>= '2.7'`, `>=3.6'`
 static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]([*\d])|([*\d])['"]"#).unwrap());
+/// Ex) `>dev`
+static GREATER_THAN_DEV: Lazy<Regex> = Lazy::new(|| Regex::new(r">dev").unwrap());
 
 /// Regex to match the invalid specifier, replacement to fix it and message about was wrong and
 /// fixed
@@ -45,6 +47,8 @@ static FIXUPS: &[(&Lazy<Regex>, &str, &str)] = &[
     (&TRAILING_COMMA, r"${1}", "removing trailing comma"),
     // Given `>= '2.7'`, rewrite to `>= 2.7`
     (&STRAY_QUOTES, r"$1$2", "removing stray quotes"),
+    // Given `>dev`, rewrite to `>0.0.0dev`
+    (&GREATER_THAN_DEV, r">0.0.0dev", "assuming 0.0.0dev"),
 ];
 
 fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -> Result<T, Err> {
@@ -320,6 +324,14 @@ mod tests {
             .unwrap()
             .into();
         let expected: Requirement = Requirement::from_str("botocore>=1.3.0,<1.4.0").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    /// <https://github.com/celery/celery/blob/6215f34d2675441ef2177bd850bf5f4b442e944c/requirements/default.txt#L1>
+    #[test]
+    fn greater_than_dev() {
+        let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(">dev").unwrap().into();
+        let expected: VersionSpecifiers = VersionSpecifiers::from_str(">0.0.0dev").unwrap();
         assert_eq!(actual, expected);
     }
 }
