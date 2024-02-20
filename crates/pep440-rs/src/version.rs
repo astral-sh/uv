@@ -2291,7 +2291,7 @@ fn parse_u64(bytes: &[u8]) -> Result<u64, VersionParseError> {
     Ok(n)
 }
 
-/// The minimum version that can be represented by a [`Version`].
+/// The minimum version that can be represented by a [`Version`]: `0a0.dev0`.
 pub static MIN_VERSION: once_cell::sync::Lazy<Version> =
     once_cell::sync::Lazy::new(|| Version::from_str("0a0.dev0").unwrap());
 

@@ -69,7 +69,7 @@ plist = { version = "1.6.0" }
 pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "9b6d89cb8a0c7902815c8b2ae99106ba322ffb14" }
 pyo3 = { version = "0.20.2" }
 pyo3-log = { version = "0.9.0"}
-pyproject-toml = { version = "0.8.1" }
+pyproject-toml = { version = "0.10.0" }
 rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.14" }

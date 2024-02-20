@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::str::FromStr;
 
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNameError};
@@ -11,21 +12,14 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 /// down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.
 ///
 /// See: <https://packaging.python.org/en/latest/specifications/name-normalization/>
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    Serialize,
-    rkyv::Archive,
-    rkyv::Deserialize,
-    rkyv::Serialize,
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize),
+    archive(check_bytes),
+    archive_attr(derive(Debug))
 )]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PackageName(String);
 
 impl PackageName {
@@ -75,6 +69,7 @@ impl FromStr for PackageName {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for PackageName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

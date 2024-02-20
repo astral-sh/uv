@@ -14,7 +14,7 @@
 //! assert_eq!(dependency_specification.extras, vec![ExtraName::from_str("security").unwrap(), ExtraName::from_str("tests").unwrap()]);
 //! ```
 
-#![deny(missing_docs)]
+#![warn(missing_docs)]
 
 #[cfg(feature = "pyo3")]
 use std::collections::hash_map::DefaultHasher;
@@ -738,7 +738,7 @@ fn parse_url(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<Verbatim
 /// Create a `VerbatimUrl` to represent the requirement.
 fn preprocess_url(
     url: &str,
-    working_dir: Option<&Path>,
+    #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused))] working_dir: Option<&Path>,
     cursor: &Cursor,
     start: usize,
     len: usize,
@@ -752,20 +752,22 @@ fn preprocess_url(
                 // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
                 let path = normalize_url_path(path);
 
+                #[cfg(feature = "non-pep508-extensions")]
                 if let Some(working_dir) = working_dir {
-                    VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
-                } else {
-                    VerbatimUrl::from_absolute_path(path)
-                        .map_err(|err| Pep508Error {
-                            message: Pep508ErrorSource::UrlError(err),
-                            start,
-                            len,
-                            input: cursor.to_string(),
-                        })?
-                        .with_given(url.to_string())
+                    return Ok(
+                        VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
+                    );
                 }
-            }
 
+                VerbatimUrl::from_absolute_path(path)
+                    .map_err(|err| Pep508Error {
+                        message: Pep508ErrorSource::UrlError(err),
+                        start,
+                        len,
+                        input: cursor.to_string(),
+                    })?
+                    .with_given(url.to_string())
+            }
             // Ex) `https://download.pytorch.org/whl/torch_stable.html`
             Some(_) => {
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
@@ -795,18 +797,19 @@ fn preprocess_url(
         }
     } else {
         // Ex) `../editable/`
+        #[cfg(feature = "non-pep508-extensions")]
         if let Some(working_dir) = working_dir {
-            VerbatimUrl::from_path(url, working_dir).with_given(url.to_string())
-        } else {
-            VerbatimUrl::from_absolute_path(url)
-                .map_err(|err| Pep508Error {
-                    message: Pep508ErrorSource::UrlError(err),
-                    start,
-                    len,
-                    input: cursor.to_string(),
-                })?
-                .with_given(url.to_string())
+            return Ok(VerbatimUrl::from_path(url, working_dir).with_given(url.to_string()));
         }
+
+        VerbatimUrl::from_absolute_path(url)
+            .map_err(|err| Pep508Error {
+                message: Pep508ErrorSource::UrlError(err),
+                start,
+                len,
+                input: cursor.to_string(),
+            })?
+            .with_given(url.to_string())
     };
     Ok(url)
 }
@@ -1045,6 +1048,7 @@ pub fn python_module(py: Python<'_>, m: &PyModule) -> PyResult<()> {
 /// Half of these tests are copied from <https://github.com/pypa/packaging/pull/624>
 #[cfg(test)]
 mod tests {
+    use std::env;
     use std::str::FromStr;
 
     use indoc::indoc;
@@ -1628,5 +1632,27 @@ mod tests {
                      ^^^^^^^^"
             },
         );
+    }
+
+    /// Check that the relative path support feature toggle works.
+    #[test]
+    fn non_pep508_paths() {
+        let requirements = &[
+            "foo @ file://./foo",
+            "foo @ file://foo-3.0.0-py3-none-any.whl",
+            "foo @ file:foo-3.0.0-py3-none-any.whl",
+            "foo @ ./foo-3.0.0-py3-none-any.whl",
+        ];
+        let cwd = env::current_dir().unwrap();
+
+        for requirement in requirements {
+            assert_eq!(
+                Requirement::parse(requirement, &cwd).is_ok(),
+                cfg!(feature = "non-pep508-extensions"),
+                "{}: {:?}",
+                requirement,
+                Requirement::parse(requirement, &cwd)
+            );
+        }
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "pep440_rs"
-version = "0.4.0"
+version = "0.5.0"
 description = "A library for python version numbers and specifiers, implementing PEP 440"
 license = "Apache-2.0 OR BSD-2-Clause"
 include = ["/src", "Changelog.md", "License-Apache", "License-BSD", "Readme.md", "pyproject.toml"]

@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 pep440_rs = { path = "../pep440-rs", features = ["rkyv", "serde"] }
-pep508_rs = { path = "../pep508-rs", features = ["rkyv", "serde"] }
+pep508_rs = { path = "../pep508-rs", features = ["rkyv", "serde", "non-pep508-extensions"] }
 uv-fs = { path = "../uv-fs" }
 uv-normalize = { path = "../uv-normalize" }
 uv-warnings = { path = "../uv-warnings" }

@@ -35,7 +35,8 @@ impl VerbatimUrl {
         Ok(Self { url, given: None })
     }
 
-    /// Parse a URL from am absolute or relative path.
+    /// Parse a URL from an absolute or relative path.
+    #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
     pub fn from_path(path: impl AsRef<str>, working_dir: impl AsRef<Path>) -> Self {
         // Expand any environment variables.
         let path = PathBuf::from(expand_env_vars(path.as_ref(), false).as_ref());
