@@ -142,6 +142,15 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
+    /// Returns true if this error kind corresponds to an I/O "not found"
+    /// error.
+    pub(crate) fn is_file_not_exists(&self) -> bool {
+        let ErrorKind::Io(ref err) = *self else {
+            return false;
+        };
+        matches!(err.kind(), std::io::ErrorKind::NotFound)
+    }
+
     pub(crate) fn from_middleware(err: reqwest_middleware::Error) -> Self {
         if let reqwest_middleware::Error::Middleware(ref underlying) = err {
             if let Some(err) = underlying.downcast_ref::<OfflineError>() {

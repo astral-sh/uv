@@ -344,11 +344,17 @@ impl CachedClient {
         {
             Ok(data) => Some(data),
             Err(err) => {
-                warn!(
-                    "Broken cache policy entry at {}, removing: {err}",
-                    cache_entry.path().display()
-                );
-                let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
+                // When we know the cache entry doesn't exist, then things are
+                // normal and we shouldn't emit a WARN.
+                if err.kind().is_file_not_exists() {
+                    trace!("No cache entry exists for {}", cache_entry.path().display());
+                } else {
+                    warn!(
+                        "Broken cache policy entry at {}, removing: {err}",
+                        cache_entry.path().display()
+                    );
+                    let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
+                }
                 None
             }
         }
