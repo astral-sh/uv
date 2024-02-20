@@ -4316,6 +4316,7 @@ dependencies = [
  "uv-cache",
  "uv-fs",
  "uv-normalize",
+ "uv-warnings",
 ]
 
 [[package]]
