@@ -30,6 +30,13 @@ impl Virtualenv {
         let executable = platform.venv_python(&venv);
         let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
 
+        debug_assert!(
+            interpreter.base_prefix == interpreter.base_exec_prefix,
+            "Not a virtualenv (Python: {}, prefix: {})",
+            executable.display(),
+            interpreter.base_prefix.display()
+        );
+
         Ok(Self {
             root: venv,
             interpreter,

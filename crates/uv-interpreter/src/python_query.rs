@@ -59,11 +59,11 @@ pub fn find_requested_python(
         let Some(executable) = Interpreter::find_executable(request)? else {
             return Ok(None);
         };
-        Ok(Some(Interpreter::query(&executable, platform, cache)?))
+        Interpreter::query(&executable, platform, cache).map(Some)
     } else {
         // `-p /home/ferris/.local/bin/python3.10`
         let executable = fs_err::canonicalize(request)?;
-        Ok(Some(Interpreter::query(&executable, platform, cache)?))
+        Interpreter::query(&executable, platform, cache).map(Some)
     }
 }
 
@@ -76,6 +76,18 @@ pub fn find_default_python(platform: &Platform, cache: &Cache) -> Result<Interpr
     find_python(PythonVersionSelector::Default, platform, cache)?.ok_or(Error::NoPythonInstalled)
 }
 
+/// Finds a python version matching `selector`.
+/// It searches for an existing installation in the following order:
+/// * (windows): Discover installations using `py --list-paths` (PEP514). Continue if `py` is not installed.
+/// * Search for the python binary in `PATH` (or `UV_TEST_PYTHON_PATH` if set). Visits each path and for each path resolves the
+///   files in the following order:
+///   * Major.Minor.Patch: `pythonx.y.z`, `pythonx.y`, `python.x`, `python`
+///   * Major.Minor: `pythonx.y`, `pythonx`, `python`
+///   * Major: `pythonx`, `python`
+///   * Default: `python3`, `python`
+///   * (windows): For each of the above, test for the existence of `python.bat` shim (pyenv-windows) last.
+///
+/// (Windows): Filter out the windows store shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).
 fn find_python(
     selector: PythonVersionSelector,
     platform: &Platform,
@@ -194,7 +206,6 @@ impl PythonInstallation {
     }
 
     /// Selects the interpreter if it matches the selector (version specification).
-    ///
     fn select(
         self,
         selector: PythonVersionSelector,
@@ -320,7 +331,7 @@ mod windows {
     /// ```
     static PY_LIST_PATHS: Lazy<Regex> = Lazy::new(|| {
         // Without the `R` flag, paths have trailing \r
-        Regex::new(r"(?mR)^ -(?:V:)?(\d).(\d+)-?(?:arm)?(?:\d*)\s*\*?\s*(.*)$").unwrap()
+        Regex::new(r"(?mR)^ -(?:V:)?(\d).(\d+)-?(?:arm)?\d*\s*\*?\s*(.*)$").unwrap()
     });
 
     /// Run `py --list-paths` to find the installed pythons.
@@ -385,6 +396,12 @@ mod windows {
     /// pointing to a valid Python.
     #[allow(unsafe_code)]
     pub(super) fn is_windows_store_shim(path: &std::path::Path) -> bool {
+        // Rye uses a more sophisticated test to identify the windows store shim.
+        // Unfortunately, it only works with the `python.exe` shim but not `python3.exe`.
+        // What we do here is a very naive implementation but probably sufficient for all we need.
+        // There's the risk of false positives but I consider it rare, considering how specific
+        // the path is.
+        // Rye Shim detection: https://github.com/mitsuhiko/rye/blob/78bf4d010d5e2e88ebce1ba636c7acec97fd454d/rye/src/cli/shim.rs#L100-L172
         path.to_str().map_or(false, |path| {
             path.ends_with("Local\\Microsoft\\WindowsApps\\python.exe")
                 || path.ends_with("Local\\Microsoft\\WindowsApps\\python3.exe")

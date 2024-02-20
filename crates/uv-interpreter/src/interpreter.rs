@@ -36,12 +36,7 @@ impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
     pub fn query(executable: &Path, platform: &Platform, cache: &Cache) -> Result<Self, Error> {
         let info = InterpreterQueryResult::query_cached(executable, cache)?;
-        // debug_assert!(
-        //     info.base_prefix == info.base_exec_prefix,
-        //     "Not a virtualenv (Python: {}, prefix: {})",
-        //     executable.display(),
-        //     info.base_prefix.display()
-        // );
+
         debug_assert!(
             info.sys_executable.is_absolute(),
             "`sys.executable` is not an absolute Python; Python installation is broken: {}",

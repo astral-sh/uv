@@ -2,10 +2,7 @@ use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
 
-use pep440_rs::Version;
 use thiserror::Error;
-
-use uv_fs::Normalized;
 
 pub use crate::cfg::Configuration;
 pub use crate::interpreter::Interpreter;
