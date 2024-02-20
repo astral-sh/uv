@@ -743,7 +743,7 @@ fn preprocess_url(
     start: usize,
     len: usize,
 ) -> Result<VerbatimUrl, Pep508Error> {
-    let url = if let Some((scheme, path)) = split_scheme(url) {
+    if let Some((scheme, path)) = split_scheme(url) {
         match Scheme::parse(scheme) {
             // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`.
             Some(Scheme::File) => {
@@ -759,40 +759,41 @@ fn preprocess_url(
                     );
                 }
 
-                VerbatimUrl::from_absolute_path(path)
+                Ok(VerbatimUrl::from_absolute_path(path)
                     .map_err(|err| Pep508Error {
                         message: Pep508ErrorSource::UrlError(err),
                         start,
                         len,
                         input: cursor.to_string(),
                     })?
-                    .with_given(url.to_string())
+                    .with_given(url.to_string()))
             }
             // Ex) `https://download.pytorch.org/whl/torch_stable.html`
             Some(_) => {
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                VerbatimUrl::from_str(url).map_err(|err| Pep508Error {
+                Ok(VerbatimUrl::from_str(url).map_err(|err| Pep508Error {
                     message: Pep508ErrorSource::UrlError(err),
                     start,
                     len,
                     input: cursor.to_string(),
-                })?
+                })?)
             }
 
             // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
             _ => {
+                #[cfg(feature = "non-pep508-extensions")]
                 if let Some(working_dir) = working_dir {
-                    VerbatimUrl::from_path(url, working_dir).with_given(url.to_string())
-                } else {
-                    VerbatimUrl::from_absolute_path(url)
-                        .map_err(|err| Pep508Error {
-                            message: Pep508ErrorSource::UrlError(err),
-                            start,
-                            len,
-                            input: cursor.to_string(),
-                        })?
-                        .with_given(url.to_string())
+                    return Ok(VerbatimUrl::from_path(url, working_dir).with_given(url.to_string()));
                 }
+
+                Ok(VerbatimUrl::from_absolute_path(url)
+                    .map_err(|err| Pep508Error {
+                        message: Pep508ErrorSource::UrlError(err),
+                        start,
+                        len,
+                        input: cursor.to_string(),
+                    })?
+                    .with_given(url.to_string()))
             }
         }
     } else {
@@ -802,16 +803,15 @@ fn preprocess_url(
             return Ok(VerbatimUrl::from_path(url, working_dir).with_given(url.to_string()));
         }
 
-        VerbatimUrl::from_absolute_path(url)
+        Ok(VerbatimUrl::from_absolute_path(url)
             .map_err(|err| Pep508Error {
                 message: Pep508ErrorSource::UrlError(err),
                 start,
                 len,
                 input: cursor.to_string(),
             })?
-            .with_given(url.to_string())
-    };
-    Ok(url)
+            .with_given(url.to_string()))
+    }
 }
 
 /// PEP 440 wrapper
