@@ -778,7 +778,35 @@ fn install_git_private_https_pat() {
     context.assert_installed("uv_private_pypackage", "0.1.0");
 }
 
-/// Install a package from a private GitHub repository using a PAT
+/// Install a package from a private GitHub repository at a specific commit using a PAT
+#[test]
+#[cfg(feature = "git")]
+fn install_git_private_https_pat_at_ref() {
+    let context = TestContext::new("3.8");
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.insert(0, (&token, "***"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"))
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+    "###);
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
+}
+
+/// Install a package from a private GitHub repository using a PAT and username
+/// An arbitrary username is supported when using a PAT.
 #[test]
 #[cfg(feature = "git")]
 fn install_git_private_https_pat_and_username() {
