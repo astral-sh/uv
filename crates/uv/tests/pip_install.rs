@@ -928,6 +928,41 @@ fn install_git_private_https_pat_and_username() {
     context.assert_installed("uv_private_pypackage", "0.1.0");
 }
 
+/// Install a package from a private GitHub repository using a PAT
+#[test]
+#[cfg(all(not(windows), feature = "git"))]
+fn install_git_private_https_pat_not_authorizd() {
+    let context = TestContext::new("3.8");
+
+    // A revoked token
+    let token = "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";
+
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.insert(0, (&token, "***"));
+
+    // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
+    // and hang the test
+    uv_snapshot!(filters, command(&context)
+        .arg(format!("uv-private-pypackage @ git+https://git:{token}@github.com/astral-test/uv-private-pypackage"))
+        , @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: uv-private-pypackage @ git+https://git:***@github.com/astral-test/uv-private-pypackage
+      Caused by: Git operation failed
+      Caused by: failed to clone into: /private/var/folders/bc/qlsk3t6x7c9fhhbvvcg68k9c0000gp/T/.tmp9ciF4C/git-v0/db/2496970ed6fdf08f
+      Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+    --- stderr
+    remote: Support for password authentication was removed on August 13, 2021.
+    remote: Please see https://docs.github.com/en/get-started/getting-started-with-git/about-remote-repositories#cloning-with-https-urls for information on currently recommended modes of authentication.
+    fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
+
+      Caused by: failed to fetch all refspecs
+    "###);
+}
+
 /// Install a package without using pre-built wheels.
 #[test]
 fn reinstall_no_binary() {
