@@ -128,6 +128,7 @@ async fn venv_impl(
 
         // Instantiate a client.
         let client = RegistryClientBuilder::new(cache.clone())
+            .index_urls(index_locations.index_urls())
             .connectivity(connectivity)
             .build();
 
