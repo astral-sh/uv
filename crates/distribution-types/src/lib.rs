@@ -41,7 +41,7 @@ use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use pep440_rs::Version;
-use pep508_rs::VerbatimUrl;
+use pep508_rs::{Scheme, VerbatimUrl};
 use uv_normalize::PackageName;
 
 pub use crate::any::*;
@@ -223,56 +223,108 @@ impl Dist {
 
     /// Create a [`Dist`] for a URL-based distribution.
     pub fn from_url(name: PackageName, url: VerbatimUrl) -> Result<Self, Error> {
-        if url.scheme().starts_with("git+") {
-            return Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })));
-        }
-
-        if url.scheme().eq_ignore_ascii_case("file") {
-            // Store the canonicalized path, which also serves to validate that it exists.
-            let path = match url
-                .to_file_path()
-                .map_err(|()| Error::UrlFilename(url.to_url()))?
-                .canonicalize()
-            {
-                Ok(path) => path,
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    return Err(Error::NotFound(url.to_url()));
+        match Scheme::parse(url.scheme()) {
+            Some(Scheme::Http | Scheme::Https) => {
+                if Path::new(url.path())
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+                {
+                    Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
+                        filename: WheelFilename::from_str(&url.filename()?)?,
+                        url,
+                    })))
+                } else {
+                    Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
+                        name,
+                        url,
+                    })))
                 }
-                Err(err) => return Err(err.into()),
-            };
+            }
+            Some(Scheme::File) => {
+                // Store the canonicalized path, which also serves to validate that it exists.
+                let path = match url
+                    .to_file_path()
+                    .map_err(|()| Error::UrlFilename(url.to_url()))?
+                    .canonicalize()
+                {
+                    Ok(path) => path,
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        return Err(Error::NotFound(url.to_url()));
+                    }
+                    Err(err) => return Err(err.into()),
+                };
 
-            return if path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-            {
-                Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
-                    filename: WheelFilename::from_str(&url.filename()?)?,
-                    url,
-                    path,
-                })))
-            } else {
-                Ok(Self::Source(SourceDist::Path(PathSourceDist {
-                    name,
-                    url,
-                    path,
-                    editable: false,
-                })))
-            };
-        }
-
-        if Path::new(url.path())
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-        {
-            Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
-                filename: WheelFilename::from_str(&url.filename()?)?,
-                url,
-            })))
-        } else {
-            Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
-                name,
-                url,
-            })))
+                if path
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+                {
+                    Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
+                        filename: WheelFilename::from_str(&url.filename()?)?,
+                        url,
+                        path,
+                    })))
+                } else {
+                    Ok(Self::Source(SourceDist::Path(PathSourceDist {
+                        name,
+                        url,
+                        path,
+                        editable: false,
+                    })))
+                }
+            }
+            Some(Scheme::GitSsh | Scheme::GitHttps) => {
+                Ok(Self::Source(SourceDist::Git(GitSourceDist { name, url })))
+            }
+            Some(Scheme::GitGit | Scheme::GitHttp) => Err(Error::UnsupportedScheme(
+                url.scheme().to_owned(),
+                url.verbatim().to_string(),
+                "insecure Git protocol".to_string(),
+            )),
+            Some(Scheme::GitFile) => Err(Error::UnsupportedScheme(
+                url.scheme().to_owned(),
+                url.verbatim().to_string(),
+                "local Git protocol".to_string(),
+            )),
+            Some(
+                Scheme::BzrHttp
+                | Scheme::BzrHttps
+                | Scheme::BzrSsh
+                | Scheme::BzrSftp
+                | Scheme::BzrFtp
+                | Scheme::BzrLp
+                | Scheme::BzrFile,
+            ) => Err(Error::UnsupportedScheme(
+                url.scheme().to_owned(),
+                url.verbatim().to_string(),
+                "Bazaar is not supported".to_string(),
+            )),
+            Some(
+                Scheme::HgFile
+                | Scheme::HgHttp
+                | Scheme::HgHttps
+                | Scheme::HgSsh
+                | Scheme::HgStaticHttp,
+            ) => Err(Error::UnsupportedScheme(
+                url.scheme().to_owned(),
+                url.verbatim().to_string(),
+                "Mercurial is not supported".to_string(),
+            )),
+            Some(
+                Scheme::SvnSsh
+                | Scheme::SvnHttp
+                | Scheme::SvnHttps
+                | Scheme::SvnSvn
+                | Scheme::SvnFile,
+            ) => Err(Error::UnsupportedScheme(
+                url.scheme().to_owned(),
+                url.verbatim().to_string(),
+                "Subversion is not supported".to_string(),
+            )),
+            None => Err(Error::UnsupportedScheme(
+                url.scheme().to_owned(),
+                url.verbatim().to_string(),
+                "unknown scheme".to_string(),
+            )),
         }
     }
 

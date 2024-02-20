@@ -251,6 +251,127 @@ pub fn split_scheme(s: &str) -> Option<(&str, &str)> {
     Some((scheme, rest))
 }
 
+/// A supported URL scheme for PEP 508 direct-URL requirements.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scheme {
+    /// `file://...`
+    File,
+    /// `git+git://...`
+    GitGit,
+    /// `git+http://...`
+    GitHttp,
+    /// `git+file://...`
+    GitFile,
+    /// `git+ssh://...`
+    GitSsh,
+    /// `git+https://...`
+    GitHttps,
+    /// `bzr+http://...`
+    BzrHttp,
+    /// `bzr+https://...`
+    BzrHttps,
+    /// `bzr+ssh://...`
+    BzrSsh,
+    /// `bzr+sftp://...`
+    BzrSftp,
+    /// `bzr+ftp://...`
+    BzrFtp,
+    /// `bzr+lp://...`
+    BzrLp,
+    /// `bzr+file://...`
+    BzrFile,
+    /// `hg+file://...`
+    HgFile,
+    /// `hg+http://...`
+    HgHttp,
+    /// `hg+https://...`
+    HgHttps,
+    /// `hg+ssh://...`
+    HgSsh,
+    /// `hg+static-http://...`
+    HgStaticHttp,
+    /// `svn+ssh://...`
+    SvnSsh,
+    /// `svn+http://...`
+    SvnHttp,
+    /// `svn+https://...`
+    SvnHttps,
+    /// `svn+svn://...`
+    SvnSvn,
+    /// `svn+file://...`
+    SvnFile,
+    /// `http://...`
+    Http,
+    /// `https://...`
+    Https,
+}
+
+impl Scheme {
+    /// Determine the [`Scheme`] from the given string, if possible.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "file" => Some(Self::File),
+            "git+git" => Some(Self::GitGit),
+            "git+http" => Some(Self::GitHttp),
+            "git+file" => Some(Self::GitFile),
+            "git+ssh" => Some(Self::GitSsh),
+            "git+https" => Some(Self::GitHttps),
+            "bzr+http" => Some(Self::BzrHttp),
+            "bzr+https" => Some(Self::BzrHttps),
+            "bzr+ssh" => Some(Self::BzrSsh),
+            "bzr+sftp" => Some(Self::BzrSftp),
+            "bzr+ftp" => Some(Self::BzrFtp),
+            "bzr+lp" => Some(Self::BzrLp),
+            "bzr+file" => Some(Self::BzrFile),
+            "hg+file" => Some(Self::HgFile),
+            "hg+http" => Some(Self::HgHttp),
+            "hg+https" => Some(Self::HgHttps),
+            "hg+ssh" => Some(Self::HgSsh),
+            "hg+static-http" => Some(Self::HgStaticHttp),
+            "svn+ssh" => Some(Self::SvnSsh),
+            "svn+http" => Some(Self::SvnHttp),
+            "svn+https" => Some(Self::SvnHttps),
+            "svn+svn" => Some(Self::SvnSvn),
+            "svn+file" => Some(Self::SvnFile),
+            "http" => Some(Self::Http),
+            "https" => Some(Self::Https),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for Scheme {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::File => write!(f, "file"),
+            Self::GitGit => write!(f, "git+git"),
+            Self::GitHttp => write!(f, "git+http"),
+            Self::GitFile => write!(f, "git+file"),
+            Self::GitSsh => write!(f, "git+ssh"),
+            Self::GitHttps => write!(f, "git+https"),
+            Self::BzrHttp => write!(f, "bzr+http"),
+            Self::BzrHttps => write!(f, "bzr+https"),
+            Self::BzrSsh => write!(f, "bzr+ssh"),
+            Self::BzrSftp => write!(f, "bzr+sftp"),
+            Self::BzrFtp => write!(f, "bzr+ftp"),
+            Self::BzrLp => write!(f, "bzr+lp"),
+            Self::BzrFile => write!(f, "bzr+file"),
+            Self::HgFile => write!(f, "hg+file"),
+            Self::HgHttp => write!(f, "hg+http"),
+            Self::HgHttps => write!(f, "hg+https"),
+            Self::HgSsh => write!(f, "hg+ssh"),
+            Self::HgStaticHttp => write!(f, "hg+static-http"),
+            Self::SvnSsh => write!(f, "svn+ssh"),
+            Self::SvnHttp => write!(f, "svn+http"),
+            Self::SvnHttps => write!(f, "svn+https"),
+            Self::SvnSvn => write!(f, "svn+svn"),
+            Self::SvnFile => write!(f, "svn+file"),
+            Self::Http => write!(f, "http"),
+            Self::Https => write!(f, "https"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

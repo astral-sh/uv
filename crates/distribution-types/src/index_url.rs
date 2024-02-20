@@ -8,7 +8,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use pep508_rs::split_scheme;
+use pep508_rs::{split_scheme, Scheme};
 use uv_fs::normalize_url_path;
 
 static PYPI_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://pypi.org/simple").unwrap());
@@ -88,19 +88,29 @@ impl FromStr for FlatIndexLocation {
     /// - `https://download.pytorch.org/whl/torch_stable.html`
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some((scheme, path)) = split_scheme(s) {
-            if scheme == "file" {
+            match Scheme::parse(scheme) {
                 // Ex) `file:///home/ferris/project/scripts/...` or `file:../ferris/`
-                let path = path.strip_prefix("//").unwrap_or(path);
+                Some(Scheme::File) => {
+                    let path = path.strip_prefix("//").unwrap_or(path);
 
-                // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
-                let path = normalize_url_path(path);
+                    // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
+                    let path = normalize_url_path(path);
 
-                let path = PathBuf::from(path.as_ref());
-                Ok(Self::Path(path))
-            } else {
+                    let path = PathBuf::from(path.as_ref());
+                    Ok(Self::Path(path))
+                }
+
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                let url = Url::parse(s)?;
-                Ok(Self::Url(url))
+                Some(_) => {
+                    let url = Url::parse(s)?;
+                    Ok(Self::Url(url))
+                }
+
+                // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
+                None => {
+                    let path = PathBuf::from(s);
+                    Ok(Self::Path(path))
+                }
             }
         } else {
             // Ex) `../ferris/`
