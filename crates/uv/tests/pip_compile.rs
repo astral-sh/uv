@@ -409,7 +409,7 @@ build-backend = "poetry.core.masonry.api"
     #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z pyproject.toml
 
     ----- stderr -----
-    warning: `pyproject.toml` does not contain any dependencies (hint: Poetry's format is not supported for now)
+    warning: `pyproject.toml` does not contain any dependencies (hint: specify dependencies in the `project.dependencies` section; `tool.poetry.dependencies` is not currently supported)
     Resolved 0 packages in [TIME]
     "###
     );

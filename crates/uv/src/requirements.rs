@@ -243,7 +243,7 @@ impl RequirementsSpecification {
                             .iter()
                             .any(|v| v.name.as_dist_info_name().starts_with("poetry"))
                     }) {
-                        warn_user!("`{}` does not contain any dependencies (hint: Poetry's format is not supported for now)", path.normalized_display());
+                        warn_user!("`{}` does not contain any dependencies (hint: specify dependencies in the `project.dependencies` section; `tool.poetry.dependencies` is not currently supported)", path.normalized_display());
                     }
                 }
 
