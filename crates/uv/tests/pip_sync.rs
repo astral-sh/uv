@@ -2734,3 +2734,26 @@ fn tar_dont_preserve_mtime() -> Result<()> {
 
     Ok(())
 }
+
+/// Avoid creating a file with 000 permissions
+#[test]
+fn set_read_permissions() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("databricks==0.2")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + databricks==0.2
+    "###);
+
+    Ok(())
+}
