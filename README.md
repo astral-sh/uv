@@ -37,7 +37,7 @@ Install uv with our standalone installers, or from [PyPI](https://pypi.org/proje
 # On macOS and Linux.
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# On Windows (with Powershell).
+# On Windows (with PowerShell).
 irm https://astral.sh/uv/install.ps1 | iex
 
 # With pip.
