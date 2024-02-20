@@ -3,6 +3,7 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use itertools::Either;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -120,6 +121,8 @@ impl Display for FlatIndexLocation {
 
 /// The index locations to use for fetching packages.
 ///
+/// By default, uses the PyPI index.
+///
 /// "pip treats all package sources equally" (<https://github.com/pypa/pip/issues/8606#issuecomment-788754817>),
 /// and so do we, i.e., you can't rely that on any particular order of querying indices.
 ///
@@ -132,6 +135,7 @@ pub struct IndexLocations {
     index: Option<IndexUrl>,
     extra_index: Vec<IndexUrl>,
     flat_index: Vec<FlatIndexLocation>,
+    no_index: bool,
 }
 
 impl Default for IndexLocations {
@@ -141,30 +145,24 @@ impl Default for IndexLocations {
             index: Some(IndexUrl::Pypi),
             extra_index: Vec::new(),
             flat_index: Vec::new(),
+            no_index: false,
         }
     }
 }
 
 impl IndexLocations {
     /// Determine the index URLs to use for fetching packages.
-    pub fn from_args(
-        index: IndexUrl,
+    pub fn new(
+        index: Option<IndexUrl>,
         extra_index: Vec<IndexUrl>,
         flat_index: Vec<FlatIndexLocation>,
         no_index: bool,
     ) -> Self {
-        if no_index {
-            Self {
-                index: None,
-                extra_index: Vec::new(),
-                flat_index,
-            }
-        } else {
-            Self {
-                index: Some(index),
-                extra_index,
-                flat_index,
-            }
+        Self {
+            index,
+            extra_index,
+            flat_index,
+            no_index,
         }
     }
 
@@ -182,36 +180,44 @@ impl IndexLocations {
         flat_index: Vec<FlatIndexLocation>,
         no_index: bool,
     ) -> Self {
-        if no_index {
-            Self {
-                index: None,
-                extra_index: Vec::new(),
-                flat_index,
-            }
-        } else {
-            Self {
-                index: self.index.or(index),
-                extra_index: self.extra_index.into_iter().chain(extra_index).collect(),
-                flat_index: self.flat_index.into_iter().chain(flat_index).collect(),
-            }
+        Self {
+            index: self.index.or(index),
+            extra_index: self.extra_index.into_iter().chain(extra_index).collect(),
+            flat_index: self.flat_index.into_iter().chain(flat_index).collect(),
+            no_index: self.no_index || no_index,
         }
     }
 }
 
 impl<'a> IndexLocations {
-    /// Return an iterator over all [`IndexUrl`] entries.
-    pub fn indexes(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
-        self.index.iter().chain(self.extra_index.iter())
-    }
-
     /// Return the primary [`IndexUrl`] entry.
+    ///
+    /// If `--no-index` is set, return `None`.
+    ///
+    /// If no index is provided, use the `PyPI` index.
     pub fn index(&'a self) -> Option<&'a IndexUrl> {
-        self.index.as_ref()
+        if self.no_index {
+            None
+        } else {
+            match self.index.as_ref() {
+                Some(index) => Some(index),
+                None => Some(&IndexUrl::Pypi),
+            }
+        }
     }
 
     /// Return an iterator over the extra [`IndexUrl`] entries.
     pub fn extra_index(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
-        self.extra_index.iter()
+        if self.no_index {
+            Either::Left(std::iter::empty())
+        } else {
+            Either::Right(self.extra_index.iter())
+        }
+    }
+
+    /// Return an iterator over all [`IndexUrl`] entries.
+    pub fn indexes(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
+        self.index().into_iter().chain(self.extra_index())
     }
 
     /// Return an iterator over the [`FlatIndexLocation`] entries.
@@ -224,6 +230,7 @@ impl<'a> IndexLocations {
         IndexUrls {
             index: self.index.clone(),
             extra_index: self.extra_index.clone(),
+            no_index: self.no_index,
         }
     }
 }
@@ -235,6 +242,7 @@ impl<'a> IndexLocations {
 pub struct IndexUrls {
     index: Option<IndexUrl>,
     extra_index: Vec<IndexUrl>,
+    no_index: bool,
 }
 
 impl Default for IndexUrls {
@@ -243,19 +251,45 @@ impl Default for IndexUrls {
         Self {
             index: Some(IndexUrl::Pypi),
             extra_index: Vec::new(),
+            no_index: false,
         }
     }
 }
 
 impl<'a> IndexUrls {
-    /// Return an iterator over the [`IndexUrl`] entries.
+    /// Return the primary [`IndexUrl`] entry.
+    ///
+    /// If `--no-index` is set, return `None`.
+    ///
+    /// If no index is provided, use the `PyPI` index.
+    pub fn index(&'a self) -> Option<&'a IndexUrl> {
+        if self.no_index {
+            None
+        } else {
+            match self.index.as_ref() {
+                Some(index) => Some(index),
+                None => Some(&IndexUrl::Pypi),
+            }
+        }
+    }
+
+    /// Return an iterator over the extra [`IndexUrl`] entries.
+    pub fn extra_index(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
+        if self.no_index {
+            Either::Left(std::iter::empty())
+        } else {
+            Either::Right(self.extra_index.iter())
+        }
+    }
+
+    /// Return an iterator over all [`IndexUrl`] entries.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
-        self.index.iter().chain(self.extra_index.iter())
+        self.index().into_iter().chain(self.extra_index())
     }
 
     /// Return `true` if no index is configured.
     pub fn no_index(&self) -> bool {
-        self.index.is_none() && self.extra_index.is_empty()
+        self.no_index
     }
 }
 
@@ -264,6 +298,7 @@ impl From<IndexLocations> for IndexUrls {
         Self {
             index: locations.index,
             extra_index: locations.extra_index,
+            no_index: locations.no_index,
         }
     }
 }

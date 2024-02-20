@@ -160,7 +160,9 @@ impl RegistryClient {
                 Err(CachedClientError::Client(err)) => match err.into_kind() {
                     ErrorKind::Offline(_) => continue,
                     ErrorKind::RequestError(err) => {
-                        if err.status() == Some(StatusCode::NOT_FOUND) {
+                        if err.status() == Some(StatusCode::NOT_FOUND)
+                            || err.status() == Some(StatusCode::FORBIDDEN)
+                        {
                             continue;
                         }
                         Err(ErrorKind::RequestError(err).into())

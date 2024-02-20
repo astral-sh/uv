@@ -26,6 +26,7 @@ pypi-types = { path = "../pypi-types" }
 anyhow = { workspace = true }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
+itertools = { workspace = true }
 once_cell = { workspace = true }
 rkyv = { workspace = true, features = ["strict", "validation"] }
 rustc-hash = { workspace = true }
