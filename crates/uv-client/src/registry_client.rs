@@ -82,18 +82,15 @@ impl RegistryClientBuilder {
         let client_raw = {
             // Get pip timeout from env var
             let default_timeout = 5 * 60;
-            let timeout: u64 = match env::var("UV_REQUEST_TIMEOUT") {
-                Ok(value) => {
-                    match value.parse::<u64>() {
-                        Ok(parsed) => parsed,
-                        Err(_) => {
-                            eprintln!("Warning: UV_REQUEST_TIMEOUT is an invalid value. Using default value.");
-                            default_timeout
-                        }
-                    }
-                }
-                Err(_) => default_timeout,
-            };
+            let timeout = env::var("UV_REQUEST_TIMEOUT")
+            .map_err(|_| default_timeout)
+            .and_then(|value| {
+                value.parse::<u64>()
+                    .map_err(|_| {
+                        warn_user_once!("Ignoring invalid value for UV_REQUEST_TIMEOUT. Expected integer number of seconds, got {value}.");
+                        default_timeout
+                    })
+            }).unwrap_or(default_timeout);
             debug!("Using registry request timeout of {}s", timeout);
             // Disallow any connections.
             let client_core = ClientBuilder::new()
