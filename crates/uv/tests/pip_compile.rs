@@ -2434,6 +2434,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
 
 /// Resolve a distribution from an HTML-only registry.
 #[test]
+#[cfg(not(target_env = "musl"))] // No musllinux wheels in the torch index
 fn compile_html() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
