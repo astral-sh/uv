@@ -7,6 +7,7 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::indoc;
+use itertools::Itertools;
 use url::Url;
 
 use common::{uv_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
@@ -16,12 +17,19 @@ use crate::common::get_bin;
 mod common;
 
 // This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
-const READ_ONLY_GITHUB_TOKEN: &str = "MTFCR0laQTdRMEg1MnNYbEJ1Mlg5TF90VU1keWNCYzFvb2psRm9UbEVVYTJEbW54VkhPUXJqaGhRT1UwQVdZV2p0T0wyWlBJM0UzdlFvUmE3eA==";
+const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
+    "Z2l0aHViX3BhdA==",
+    "MTFCR0laQTdRMGdXeGsweHV6ekR2Mg==",
+    "NVZMaExzZmtFMHZ1ZEVNd0pPZXZkV040WUdTcmk2WXREeFB4TFlybGlwRTZONEpHV01FMnFZQWJVUm4=",
+];
 
-fn decode_token(content: &str) -> String {
-    let decoded = base64.decode(content).unwrap();
-    let mut token = std::str::from_utf8(decoded.as_slice()).unwrap().to_string();
-    token.insert_str(0, "gitub_pat_");
+/// Decode a
+fn decode_token(content: &[&str]) -> String {
+    let token = content
+        .iter()
+        .map(|part| base64.decode(part).unwrap())
+        .map(|decoded| std::str::from_utf8(decoded.as_slice()).unwrap().to_string())
+        .join("_");
     token
 }
 
@@ -763,7 +771,7 @@ fn install_git_private_https_pat() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://:***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+     + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -784,18 +792,15 @@ fn install_git_private_https_pat_and_username() {
     uv_snapshot!(filters, command(&context)
         .arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
         , @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: uv-private-pypackage @ git+https://astral-test-bot:***@github.com/astral-test/uv-private-pypackage
-      Caused by: Git operation failed
-      Caused by: failed to clone into: [PATH]
-      Caused by: failed to authenticate when downloading repository
-
-    * attempted to find username/password via `credential.helper`, but maybe the found credentials were incorrect
-      Caused by: no authentication methods succeeded
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");

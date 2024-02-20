@@ -73,15 +73,6 @@ impl TryFrom<Url> for GitUrl {
             url.set_path(prefix);
         }
 
-        // If using HTTPS, treat a username as a PAT
-        if url.scheme().starts_with("https")
-            && immutable_url.password().is_none()
-            && !immutable_url.username().is_empty()
-        {
-            url.set_password(Some(immutable_url.username())).unwrap();
-            url.set_username("").unwrap();
-        }
-
         let precise = if let GitReference::FullCommit(rev) = &reference {
             Some(GitSha::from_str(rev)?)
         } else {

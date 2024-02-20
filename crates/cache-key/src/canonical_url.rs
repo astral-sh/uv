@@ -117,15 +117,6 @@ impl RepositoryUrl {
             }
         }
 
-        // If using HTTPS, treat a username as a PAT
-        if url.scheme().starts_with("https")
-            && immutable_url.password().is_none()
-            && !immutable_url.username().is_empty()
-        {
-            url.set_password(Some(immutable_url.username())).unwrap();
-            url.set_username("").unwrap();
-        }
-
         // Drop any fragments and query parameters.
         url.set_fragment(None);
         url.set_query(None);
