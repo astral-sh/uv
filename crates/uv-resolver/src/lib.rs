@@ -7,7 +7,8 @@ pub use prerelease_mode::PreReleaseMode;
 pub use resolution::{Diagnostic, DisplayResolutionGraph, ResolutionGraph};
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
-    BuildId, InMemoryIndex, Reporter as ResolverReporter, Resolver, ResolverProvider,
+    BuildId, DefaultResolverProvider, InMemoryIndex, Reporter as ResolverReporter, Resolver,
+    ResolverProvider,
 };
 
 mod candidate_selector;
