@@ -931,12 +931,16 @@ fn parse(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<Requirement,
 
     // ( url_req | name_req )?
     let requirement_kind = match cursor.peek_char() {
+        // url_req
         Some('@') => {
             cursor.next();
             Some(VersionOrUrl::Url(parse_url(cursor, working_dir)?))
         }
+        // name_req
         Some('(') => parse_version_specifier_parentheses(cursor)?,
+        // name_req
         Some('<' | '=' | '>' | '~' | '!') => parse_version_specifier(cursor)?,
+        // No requirements / any version
         Some(';') | None => None,
         Some(other) => {
             // Rewind to the start of the version specifier, to see if the user added a URL without
@@ -963,6 +967,8 @@ fn parse(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<Requirement,
         }
     };
 
+    let requirement_end = cursor.pos;
+
     // wsp*
     cursor.eat_whitespace();
     // quoted_marker?
@@ -976,12 +982,24 @@ fn parse(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<Requirement,
     // wsp*
     cursor.eat_whitespace();
     if let Some((pos, char)) = cursor.next() {
+        if let Some(VersionOrUrl::Url(url)) = requirement_kind {
+            // Unwrap safety: The `VerbatimUrl` we just parsed has a string source.
+            if url.given().unwrap().ends_with(';') && marker.is_none() {
+                return Err(Pep508Error {
+                    message: Pep508ErrorSource::String("Missing space before ';'".to_string()),
+                    start: requirement_end - ';'.len_utf8(),
+                    len: ';'.len_utf8(),
+                    input: cursor.to_string(),
+                });
+            }
+        }
+        let message = if marker.is_none() {
+            format!(r#"Expected end of input or ';', found '{char}'"#)
+        } else {
+            format!(r#"Expected end of input, found '{char}'"#)
+        };
         return Err(Pep508Error {
-            message: Pep508ErrorSource::String(if marker.is_none() {
-                format!(r#"Expected end of input or ';', found '{char}'"#)
-            } else {
-                format!(r#"Expected end of input, found '{char}'"#)
-            }),
+            message: Pep508ErrorSource::String(message),
             start: pos,
             len: char.len_utf8(),
             input: cursor.to_string(),
@@ -1470,9 +1488,9 @@ mod tests {
         assert_err(
             r#"name @ https://example.com/; extra == 'example'"#,
             indoc! {"
-                Expected end of input or ';', found 'e'
+                Missing space before ';'
                 name @ https://example.com/; extra == 'example'
-                                             ^"
+                                           ^"
             },
         );
     }
