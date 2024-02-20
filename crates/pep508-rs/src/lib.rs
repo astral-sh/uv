@@ -983,16 +983,17 @@ fn parse(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<Requirement,
     cursor.eat_whitespace();
     if let Some((pos, char)) = cursor.next() {
         if let Some(VersionOrUrl::Url(url)) = requirement_kind {
-            // Unwrap safety: The `VerbatimUrl` we just parsed has a string source.
-            if url.given().unwrap().ends_with(';') && marker.is_none() {
-                return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(
-                        "Missing space before ';', the end of the URL is ambiguous".to_string(),
-                    ),
-                    start: requirement_end - ';'.len_utf8(),
-                    len: ';'.len_utf8(),
-                    input: cursor.to_string(),
-                });
+            if let Some(given) = url.given() {
+                if given.ends_with(';') && marker.is_none() {
+                    return Err(Pep508Error {
+                        message: Pep508ErrorSource::String(
+                            "Missing space before ';', the end of the URL is ambiguous".to_string(),
+                        ),
+                        start: requirement_end - ';'.len_utf8(),
+                        len: ';'.len_utf8(),
+                        input: cursor.to_string(),
+                    });
+                }
             }
         }
         let message = if marker.is_none() {
