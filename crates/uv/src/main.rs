@@ -111,11 +111,14 @@ impl From<ColorChoice> for anstream::ColorChoice {
 #[allow(clippy::large_enum_variant)]
 enum Commands {
     /// Resolve and install Python packages.
-    Pip(PipArgs),
+    Pip(PipNamespace),
     /// Create a virtual environment.
     #[clap(alias = "virtualenv", alias = "v")]
     Venv(VenvArgs),
+    /// Manage the cache.
+    Cache(CacheNamespace),
     /// Clear the cache.
+    #[clap(hide = true)]
     Clean(CleanArgs),
     /// Generate shell completion
     #[clap(alias = "--generate-shell-completion", hide = true)]
@@ -123,7 +126,19 @@ enum Commands {
 }
 
 #[derive(Args)]
-struct PipArgs {
+struct CacheNamespace {
+    #[clap(subcommand)]
+    command: CacheCommand,
+}
+
+#[derive(Subcommand)]
+enum CacheCommand {
+    /// Clear the cache.
+    Clean(CleanArgs),
+}
+
+#[derive(Args)]
+struct PipNamespace {
     #[clap(subcommand)]
     command: PipCommand,
 }
@@ -804,7 +819,7 @@ async fn run() -> Result<ExitStatus> {
     let cache = Cache::try_from(cli.cache_args)?;
 
     match cli.command {
-        Commands::Pip(PipArgs {
+        Commands::Pip(PipNamespace {
             command: PipCommand::Compile(args),
         }) => {
             args.compat_args.validate()?;
@@ -879,7 +894,7 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Pip(PipArgs {
+        Commands::Pip(PipNamespace {
             command: PipCommand::Sync(args),
         }) => {
             args.compat_args.validate()?;
@@ -922,7 +937,7 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Pip(PipArgs {
+        Commands::Pip(PipNamespace {
             command: PipCommand::Install(args),
         }) => {
             let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
@@ -1000,7 +1015,7 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Pip(PipArgs {
+        Commands::Pip(PipNamespace {
             command: PipCommand::Uninstall(args),
         }) => {
             let sources = args
@@ -1016,10 +1031,13 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
             commands::pip_uninstall(&sources, cache, printer).await
         }
-        Commands::Pip(PipArgs {
+        Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),
         }) => commands::freeze(&cache, args.strict, printer),
-        Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
+        Commands::Cache(CacheNamespace {
+            command: CacheCommand::Clean(args),
+        })
+        | Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
         Commands::Venv(args) => {
             args.compat_args.validate()?;
 
