@@ -49,7 +49,7 @@ except ImportError:
 # Setup some file paths
 THIS_DIR = Path(__file__).parent
 ROOT_DIR = THIS_DIR.parent.parent
-if bin_dir := os.environ.get("PUFFIN_BOOTSTRAP_DIR"):
+if bin_dir := os.environ.get("UV_BOOTSTRAP_DIR"):
     BIN_DIR = Path(bin_dir)
 else:
     BIN_DIR = ROOT_DIR / "bin"

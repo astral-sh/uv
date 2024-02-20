@@ -115,7 +115,7 @@ pub fn bootstrapped_pythons() -> Option<Vec<PathBuf>> {
         .parent()
         .unwrap()
         .to_path_buf();
-    let boostrap_dir = if let Some(boostrap_dir) = env::var_os("PUFFIN_BOOTSTRAP_DIR") {
+    let boostrap_dir = if let Some(boostrap_dir) = env::var_os("UV_BOOTSTRAP_DIR") {
         let boostrap_dir = PathBuf::from(boostrap_dir);
         if boostrap_dir.is_absolute() {
             boostrap_dir
