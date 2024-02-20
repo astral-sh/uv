@@ -292,7 +292,6 @@ fn create_venv_unknown_python_minor() -> Result<()> {
 }
 
 #[test]
-#[cfg(unix)] // TODO(konstin): Support patch versions on Windows
 fn create_venv_unknown_python_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -334,8 +333,6 @@ fn create_venv_unknown_python_patch() -> Result<()> {
 }
 
 #[test]
-#[ignore] // TODO(konstin): Switch patch version strategy
-#[cfg(unix)] // TODO(konstin): Support patch versions on Windows
 fn create_venv_python_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
@@ -372,6 +369,7 @@ fn create_venv_python_patch() -> Result<()> {
     ----- stderr -----
     Using Python 3.12.1 interpreter at [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
+    Activate with: source /home/ferris/project/.venv/bin/activate
     "###
     );
 
@@ -522,6 +520,73 @@ fn non_empty_dir_exists() -> Result<()> {
       ╰─▶ The directory `/home/ferris/project/.venv` exists, but it's not a virtualenv
     "###
     );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(windows)]
+fn windows_shims() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let bin =
+        create_bin_with_executables(&temp_dir, &["3.8", "3.9"]).expect("Failed to create bin dir");
+    let venv = temp_dir.child(".venv");
+    let shim_path = temp_dir.child("shim");
+
+    let py38 = std::env::split_paths(&bin)
+        .last()
+        .expect("create_bin_with_executables to set up the python versions");
+    // We want 3.8 and the first version should be 3.9.
+    // Picking the last is necessary to prove that shims work because the python version selects
+    // the python version from the first path segment by default, so we take the last to prove it's not
+    // returning that version.
+    assert!(py38.to_str().unwrap().contains("3.8"));
+
+    // Write the shim script that forwards the arguments to the python3.8 installation.
+    std::fs::create_dir(&shim_path)?;
+    std::fs::write(
+        shim_path.child("python.bat"),
+        format!("@echo off\r\n{}/python.exe %*", py38.display()),
+    )?;
+
+    // Create a virtual environment at `.venv`, passing the redundant `--clear` flag.
+    let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
+    let filters = &[
+        (
+            r"Using Python 3\.8.\d+ interpreter at .+",
+            "Using Python 3.8.x interpreter at [PATH]",
+        ),
+        (&filter_venv, "/home/ferris/project/.venv"),
+        (
+            &filter_prompt,
+            "Activate with: source /home/ferris/project/.venv/bin/activate",
+        ),
+    ];
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--clear")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("UV_TEST_PYTHON_PATH", format!("{};{}", shim_path.display(), bin.normalized_display()))
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
+    Using Python 3.8.x interpreter at [PATH]
+    Creating virtualenv at: /home/ferris/project/.venv
+    Activate with: source /home/ferris/project/.venv/bin/activate
+    "###
+    );
+
+    venv.assert(predicates::path::is_dir());
 
     Ok(())
 }
