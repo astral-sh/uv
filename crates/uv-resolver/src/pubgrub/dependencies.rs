@@ -1,10 +1,10 @@
 use itertools::Itertools;
-use pep440_rs::Version;
 use pubgrub::range::Range;
 use pubgrub::type_aliases::DependencyConstraints;
 use tracing::warn;
 
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use pep440_rs::Version;
+use pep508_rs::{MarkerEnvironment, Requirement, VerbatimUrl, VersionOrUrl};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::overrides::Overrides;
@@ -22,6 +22,7 @@ impl PubGrubDependencies {
         constraints: &[Requirement],
         overrides: &Overrides,
         source_name: Option<&PackageName>,
+        source_url: Option<&VerbatimUrl>,
         source_extra: Option<&ExtraName>,
         env: &MarkerEnvironment,
     ) -> Result<Self, ResolveError> {
@@ -48,15 +49,20 @@ impl PubGrubDependencies {
                     .into_iter()
                     .map(|extra| to_pubgrub(requirement, Some(extra))),
             ) {
-                let (package, version) = result?;
+                let (mut package, version) = result?;
 
-                // Ignore self-dependencies.
-                if let PubGrubPackage::Package(name, extra, None) = &package {
-                    if source_name.is_some_and(|source_name| source_name == name)
-                        && source_extra == extra.as_ref()
-                    {
-                        warn!("{name} has a dependency on itself");
-                        continue;
+                // Detect self-dependencies.
+                if let PubGrubPackage::Package(name, extra, url) = &mut package {
+                    if source_name.is_some_and(|source_name| source_name == name) {
+                        // Allow, e.g., `black` to depend on `black[colorama]`.
+                        if source_extra == extra.as_ref() {
+                            warn!("{name} has a dependency on itself");
+                            continue;
+                        }
+                        // Propagate the source URL.
+                        if source_url.is_some() {
+                            *url = source_url.cloned();
+                        }
                     }
                 }
 
@@ -103,15 +109,20 @@ impl PubGrubDependencies {
                     .into_iter()
                     .map(|extra| to_pubgrub(constraint, Some(extra))),
             ) {
-                let (package, version) = result?;
+                let (mut package, version) = result?;
 
-                // Ignore self-dependencies.
-                if let PubGrubPackage::Package(name, extra, None) = &package {
-                    if source_name.is_some_and(|source_name| source_name == name)
-                        && source_extra == extra.as_ref()
-                    {
-                        warn!("{name} has a dependency on itself");
-                        continue;
+                // Detect self-dependencies.
+                if let PubGrubPackage::Package(name, extra, url) = &mut package {
+                    if source_name.is_some_and(|source_name| source_name == name) {
+                        // Allow, e.g., `black` to depend on `black[colorama]`.
+                        if source_extra == extra.as_ref() {
+                            warn!("{name} has a dependency on itself");
+                            continue;
+                        }
+                        // Propagate the source URL.
+                        if source_url.is_some() {
+                            *url = source_url.cloned();
+                        }
                     }
                 }
 
