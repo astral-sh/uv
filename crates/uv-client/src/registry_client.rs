@@ -24,6 +24,7 @@ use pep440_rs::Version;
 use pypi_types::{Metadata21, SimpleJson};
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
+use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
@@ -93,7 +94,7 @@ impl RegistryClientBuilder {
                 }
                 Err(_) => default_timeout,
             };
-            debug!("Pip request timeout is {}.", timeout);
+            debug!("Using registry request timeout of {}s", timeout);
             // Disallow any connections.
             let client_core = ClientBuilder::new()
                 .user_agent("uv")
