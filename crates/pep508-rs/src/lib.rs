@@ -744,33 +744,57 @@ fn preprocess_url(
     len: usize,
 ) -> Result<VerbatimUrl, Pep508Error> {
     let url = if let Some((scheme, path)) = split_scheme(url) {
-        if scheme == "file" {
+        match scheme {
             // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`.
-            let path = path.strip_prefix("//").unwrap_or(path);
+            "file" => {
+                let path = path.strip_prefix("//").unwrap_or(path);
 
-            // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
-            let path = normalize_url_path(path);
+                // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
+                let path = normalize_url_path(path);
 
-            if let Some(working_dir) = working_dir {
-                VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
-            } else {
-                VerbatimUrl::from_absolute_path(path)
-                    .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::UrlError(err),
-                        start,
-                        len,
-                        input: cursor.to_string(),
-                    })?
-                    .with_given(url.to_string())
+                if let Some(working_dir) = working_dir {
+                    VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
+                } else {
+                    VerbatimUrl::from_absolute_path(path)
+                        .map_err(|err| Pep508Error {
+                            message: Pep508ErrorSource::UrlError(err),
+                            start,
+                            len,
+                            input: cursor.to_string(),
+                        })?
+                        .with_given(url.to_string())
+                }
             }
-        } else {
+
             // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-            VerbatimUrl::from_str(url).map_err(|err| Pep508Error {
-                message: Pep508ErrorSource::UrlError(err),
-                start,
-                len,
-                input: cursor.to_string(),
-            })?
+            "git+git" | "git+http" | "git+file" | "git+ssh" | "git+https" | "bzr+http"
+            | "bzr+https" | "bzr+ssh" | "bzr+sftp" | "bzr+ftp" | "bzr+lp" | "bzr+file"
+            | "hg+file" | "hg+http" | "hg+https" | "hg+ssh" | "hg+static-http" | "svn+ssh"
+            | "svn+http" | "svn+https" | "svn+svn" | "svn+file" | "http" | "https" => {
+                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
+                VerbatimUrl::from_str(url).map_err(|err| Pep508Error {
+                    message: Pep508ErrorSource::UrlError(err),
+                    start,
+                    len,
+                    input: cursor.to_string(),
+                })?
+            }
+
+            // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
+            _ => {
+                if let Some(working_dir) = working_dir {
+                    VerbatimUrl::from_path(url, working_dir).with_given(url.to_string())
+                } else {
+                    VerbatimUrl::from_absolute_path(url)
+                        .map_err(|err| Pep508Error {
+                            message: Pep508ErrorSource::UrlError(err),
+                            start,
+                            len,
+                            input: cursor.to_string(),
+                        })?
+                        .with_given(url.to_string())
+                }
+            }
         }
     } else {
         // Ex) `../editable/`

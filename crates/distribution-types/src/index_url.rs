@@ -88,19 +88,32 @@ impl FromStr for FlatIndexLocation {
     /// - `https://download.pytorch.org/whl/torch_stable.html`
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some((scheme, path)) = split_scheme(s) {
-            if scheme == "file" {
+            match scheme {
                 // Ex) `file:///home/ferris/project/scripts/...` or `file:../ferris/`
-                let path = path.strip_prefix("//").unwrap_or(path);
+                "file" => {
+                    let path = path.strip_prefix("//").unwrap_or(path);
 
-                // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
-                let path = normalize_url_path(path);
+                    // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
+                    let path = normalize_url_path(path);
 
-                let path = PathBuf::from(path.as_ref());
-                Ok(Self::Path(path))
-            } else {
+                    let path = PathBuf::from(path.as_ref());
+                    Ok(Self::Path(path))
+                }
+
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                let url = Url::parse(s)?;
-                Ok(Self::Url(url))
+                "git+git" | "git+http" | "git+file" | "git+ssh" | "git+https" | "bzr+http"
+                | "bzr+https" | "bzr+ssh" | "bzr+sftp" | "bzr+ftp" | "bzr+lp" | "bzr+file"
+                | "hg+file" | "hg+http" | "hg+https" | "hg+ssh" | "hg+static-http" | "svn+ssh"
+                | "svn+http" | "svn+https" | "svn+svn" | "svn+file" | "http" | "https" => {
+                    let url = Url::parse(s)?;
+                    Ok(Self::Url(url))
+                }
+
+                // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
+                _ => {
+                    let path = PathBuf::from(s);
+                    Ok(Self::Path(path))
+                }
             }
         } else {
             // Ex) `../ferris/`
