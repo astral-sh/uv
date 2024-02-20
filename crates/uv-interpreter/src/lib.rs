@@ -58,6 +58,4 @@ pub enum Error {
     Cfg(#[from] cfg::Error),
     #[error("Error finding `{}` in PATH", _0.to_string_lossy())]
     WhichError(OsString, #[source] which::Error),
-    #[error("Interpreter at `{}` has the wrong patch version. Expected: {}, actual: {}", _0.normalized_display(), _1, _2)]
-    PatchVersionMismatch(PathBuf, String, Version),
 }
