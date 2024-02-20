@@ -190,7 +190,7 @@ If you're running into caching issues, uv includes a few escape hatches:
 - To force uv to revalidate cached data for all dependencies, run `uv pip install --refresh ...`.
 - To force uv to revalidate cached data for a specific dependency, run, e.g., `uv pip install --refresh-package flask ...`.
 - To force uv to ignore existing installed versions, run `uv pip install --reinstall ...`.
-- To clear the global cache entirely, run `uv clean`.
+- To clear the global cache entirely, run `uv cache clean`.
 
 ### Resolution strategy
 
