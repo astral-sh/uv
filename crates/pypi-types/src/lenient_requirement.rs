@@ -7,7 +7,6 @@ use tracing::warn;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Requirement};
-use uv_normalize::{ExtraName, InvalidNameError};
 
 /// Ex) `>=7.2.0<8.0.0`
 static MISSING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)([<>=~^!])").unwrap());
@@ -120,36 +119,6 @@ impl<'de> Deserialize<'de> for LenientVersionSpecifiers {
     {
         let s = String::deserialize(deserializer)?;
         Self::from_str(&s).map_err(de::Error::custom)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct LenientExtraName(ExtraName);
-
-impl LenientExtraName {
-    /// Parse an [`ExtraName`] from a string, but return `None` if the name is `.none`.
-    ///
-    /// Some versions of `flit` erroneously included `.none` as an extra name, which is not
-    /// allowed by PEP 508.
-    ///
-    /// See: <https://github.com/pypa/flit/issues/228/>
-    pub fn try_parse(name: String) -> Option<Result<Self, InvalidNameError>> {
-        match ExtraName::new(name) {
-            Ok(name) => Some(Ok(Self(name))),
-            Err(err) => {
-                if err.as_str() == ".none" {
-                    None
-                } else {
-                    Some(Err(err))
-                }
-            }
-        }
-    }
-}
-
-impl From<LenientExtraName> for ExtraName {
-    fn from(name: LenientExtraName) -> Self {
-        name.0
     }
 }
 
