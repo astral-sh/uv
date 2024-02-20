@@ -1,5 +1,6 @@
 //! Create a bare virtualenv without any packages install
 
+use std::env;
 use std::env::consts::EXE_SUFFIX;
 use std::io;
 use std::io::{BufWriter, Write};
@@ -11,6 +12,8 @@ use tracing::info;
 
 use uv_interpreter::Interpreter;
 
+use crate::Prompt;
+
 /// The bash activate scripts with the venv dependent paths patches out
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
     ("activate", include_str!("activator/activate")),
@@ -18,6 +21,9 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
     ("activate.fish", include_str!("activator/activate.fish")),
     ("activate.nu", include_str!("activator/activate.nu")),
     ("activate.ps1", include_str!("activator/activate.ps1")),
+    ("activate.bat", include_str!("activator/activate.bat")),
+    ("deactivate.bat", include_str!("activator/deactivate.bat")),
+    ("pydoc.bat", include_str!("activator/pydoc.bat")),
     (
         "activate_this.py",
         include_str!("activator/activate_this.py"),
@@ -26,9 +32,16 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
 const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 
 /// Very basic `.cfg` file format writer.
-fn write_cfg(f: &mut impl Write, data: &[(&str, String); 8]) -> io::Result<()> {
+fn write_cfg(
+    f: &mut impl Write,
+    data: &[(&str, String); 8],
+    prompt: Option<String>,
+) -> io::Result<()> {
     for (key, value) in data {
         writeln!(f, "{key} = {value}")?;
+    }
+    if let Some(prompt) = prompt {
+        writeln!(f, "prompt = {prompt}")?;
     }
     Ok(())
 }
@@ -55,7 +68,11 @@ pub struct VenvPaths {
 }
 
 /// Write all the files that belong to a venv without any packages installed.
-pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::Result<VenvPaths> {
+pub fn create_bare_venv(
+    location: &Utf8Path,
+    interpreter: &Interpreter,
+    prompt: Prompt,
+) -> io::Result<VenvPaths> {
     // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
     // This would make python-build-standalone fail with the encodings module not being found because its home is wrong.
     let base_python: Utf8PathBuf = fs_err::canonicalize(interpreter.sys_executable())?
@@ -104,7 +121,18 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
         unimplemented!("Only Windows and Unix are supported")
     };
     let bin_dir = location.join(bin_name);
+    let prompt = match prompt {
+        Prompt::CurrentDirectoryName => env::current_dir()?
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string()),
+        Prompt::Static(value) => Some(value),
+        Prompt::None => None,
+    };
 
+    // Add the CACHEDIR.TAG.
+    cachedir::ensure_tag(&location)?;
+
+    // Create a `.gitignore` file to ignore all files in the venv.
     fs::write(location.join(".gitignore"), "*")?;
 
     // Different names for the python interpreter
@@ -157,6 +185,7 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
         let activator = template
             .replace("{{ VIRTUAL_ENV_DIR }}", location.as_str())
             .replace("{{ BIN_NAME }}", bin_name)
+            .replace("{{ VIRTUAL_PROMPT }}", prompt.as_deref().unwrap_or(""))
             .replace(
                 "{{ RELATIVE_SITE_PACKAGES }}",
                 &format!(
@@ -210,7 +239,7 @@ pub fn create_bare_venv(location: &Utf8Path, interpreter: &Interpreter) -> io::R
         ("base-executable", base_python.to_string()),
     ];
     let mut pyvenv_cfg = BufWriter::new(File::create(location.join("pyvenv.cfg"))?);
-    write_cfg(&mut pyvenv_cfg, pyvenv_cfg_data)?;
+    write_cfg(&mut pyvenv_cfg, pyvenv_cfg_data, prompt)?;
     drop(pyvenv_cfg);
 
     let site_packages = if cfg!(unix) {

@@ -19,7 +19,7 @@ use once_cell::sync::Lazy;
 use pyproject_toml::{BuildSystem, Project};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use tempfile::{tempdir, tempdir_in, TempDir};
+use tempfile::{tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::process::Command;
 use tokio::sync::Mutex;
@@ -283,7 +283,7 @@ impl SourceBuild {
         setup_py: SetupPyStrategy,
         build_kind: BuildKind,
     ) -> Result<SourceBuild, Error> {
-        let temp_dir = tempdir()?;
+        let temp_dir = tempdir_in(build_context.cache().root())?;
 
         let metadata = match fs::metadata(source) {
             Ok(metadata) => metadata,
@@ -323,7 +323,11 @@ impl SourceBuild {
         let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)
             .map_err(|err| *err)?;
 
-        let venv = gourgeist::create_venv(&temp_dir.path().join(".venv"), interpreter.clone())?;
+        let venv = gourgeist::create_venv(
+            &temp_dir.path().join(".venv"),
+            interpreter.clone(),
+            gourgeist::Prompt::None,
+        )?;
 
         // Setup the build environment.
         let resolved_requirements = Self::get_resolved_requirements(

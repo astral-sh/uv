@@ -2,7 +2,7 @@
 name = "poetry-editable"
 version = "0.1.0"
 description = ""
-authors = ["konstin <konstin@mailbox.org>"]
+authors = ["Astral Software Inc. <hey@astral.sh>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"

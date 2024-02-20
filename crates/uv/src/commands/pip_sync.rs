@@ -197,33 +197,6 @@ pub(crate) async fn pip_sync(
         resolution.into_distributions().collect::<Vec<_>>()
     };
 
-    // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
-    // have been yanked, we currently don't show this message on the second run anymore
-    for dist in &remote {
-        let Some(file) = dist.file() else {
-            continue;
-        };
-        match &file.yanked {
-            None | Some(Yanked::Bool(false)) => {}
-            Some(Yanked::Bool(true)) => {
-                writeln!(
-                    printer,
-                    "{}{} {dist} is yanked. Refresh your lockfile to pin an un-yanked version.",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                )?;
-            }
-            Some(Yanked::Reason(reason)) => {
-                writeln!(
-                    printer,
-                    "{}{} {dist} is yanked (reason: \"{reason}\"). Refresh your lockfile to pin an un-yanked version.",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                )?;
-            }
-        }
-    }
-
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
         Vec::new()
@@ -234,7 +207,7 @@ pub(crate) async fn pip_sync(
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader
-            .download(remote, &in_flight)
+            .download(remote.clone(), &in_flight)
             .await
             .context("Failed to download distributions")?;
 
@@ -360,6 +333,33 @@ pub(crate) async fn pip_sync(
                 ":".bold(),
                 diagnostic.message().bold()
             )?;
+        }
+    }
+
+    // TODO(konstin): Also check the cache whether any cached or installed dist is already known to
+    // have been yanked, we currently don't show this message on the second run anymore
+    for dist in &remote {
+        let Some(file) = dist.file() else {
+            continue;
+        };
+        match &file.yanked {
+            None | Some(Yanked::Bool(false)) => {}
+            Some(Yanked::Bool(true)) => {
+                writeln!(
+                    printer,
+                    "{}{} {dist} is yanked. Refresh your lockfile to pin an un-yanked version.",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                )?;
+            }
+            Some(Yanked::Reason(reason)) => {
+                writeln!(
+                    printer,
+                    "{}{} {dist} is yanked (reason: \"{reason}\"). Refresh your lockfile to pin an un-yanked version.",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                )?;
+            }
         }
     }
 

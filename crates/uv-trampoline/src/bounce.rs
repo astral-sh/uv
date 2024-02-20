@@ -37,43 +37,64 @@ fn getenv(name: &CStr) -> Option<CString> {
     }
 }
 
-fn make_child_cmdline(is_gui: bool) -> Vec<u8> {
-    unsafe {
-        let python_exe = find_python_exe(is_gui);
+/// Transform `<command> <arguments>` to `python <command> <arguments>`.
+fn make_child_cmdline(is_gui: bool) -> CString {
+    let executable_name: CString = executable_filename();
+    let python_exe = find_python_exe(is_gui, &executable_name);
+    let mut child_cmdline = Vec::<u8>::new();
 
-        let my_cmdline = CStr::from_ptr(GetCommandLineA() as _);
-        let mut child_cmdline = Vec::<u8>::new();
-        child_cmdline.push(b'"');
-        for byte in python_exe.as_bytes() {
-            if *byte == b'"' {
-                // 3 double quotes: one to end the quoted span, one to become a literal double-quote,
-                // and one to start a new quoted span.
-                child_cmdline.extend(br#"""""#);
-            } else {
-                child_cmdline.push(*byte);
-            }
-        }
-        child_cmdline.extend(br#"" "#);
-        child_cmdline.extend(my_cmdline.to_bytes_with_nul());
-        //eprintln!("new_cmdline: {}", core::str::from_utf8_unchecked(new_cmdline.as_slice()));
-        child_cmdline
-    }
+    push_quoted_path(&python_exe, &mut child_cmdline);
+    child_cmdline.push(b' ');
+
+    // Use the full executable name because CMD only passes the name of the executable (but not the path)
+    // when e.g. invoking `black` instead of `<PATH_TO_VENV>/Scripts/black` and Python then fails
+    // to find the file. Unfortunately, this complicates things because we now need to split the executable
+    // from the arguments string...
+    push_quoted_path(&executable_name, &mut child_cmdline);
+
+    push_arguments(&mut child_cmdline);
+
+    child_cmdline.push(b'\0');
+
+    // Helpful when debugging trampline issues
+    // eprintln!(
+    //     "executable_name: '{}'\nnew_cmdline: {}",
+    //     core::str::from_utf8(executable_name.to_bytes(),
+    //     core::str::from_utf8(child_cmdline.as_slice())
+    // );
+
+    // SAFETY: We push the null termination byte at the end.
+    unsafe { CString::from_vec_with_nul_unchecked(child_cmdline) }
 }
 
-/// The scripts are in the same directory as the Python interpreter, so we can find Python by getting the locations of
-/// the current .exe and replacing the filename with `python[w].exe`.
-fn find_python_exe(is_gui: bool) -> CString {
-    unsafe {
-        // MAX_PATH is a lie, Windows paths can be longer.
-        // https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#maximum-path-length-limitation
-        // But it's a good first guess, usually paths are short and we should only need a single attempt.
-        let mut buffer: Vec<u8> = vec![0; MAX_PATH as usize];
-        loop {
-            // Call the Windows API function to get the module file name
-            let len = GetModuleFileNameA(0, buffer.as_mut_ptr(), buffer.len() as u32);
+fn push_quoted_path(path: &CStr, command: &mut Vec<u8>) {
+    command.push(b'"');
+    for byte in path.to_bytes() {
+        if *byte == b'"' {
+            // 3 double quotes: one to end the quoted span, one to become a literal double-quote,
+            // and one to start a new quoted span.
+            command.extend(br#"""""#);
+        } else {
+            command.push(*byte);
+        }
+    }
+    command.extend(br#"""#);
+}
 
-            // That's the error condition because len doesn't include the trailing null byte
-            if len as usize == buffer.len() {
+/// Returns the full path of the executable.
+/// See https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulefilenamea
+fn executable_filename() -> CString {
+    // MAX_PATH is a lie, Windows paths can be longer.
+    // https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#maximum-path-length-limitation
+    // But it's a good first guess, usually paths are short and we should only need a single attempt.
+    let mut buffer: Vec<u8> = vec![0; MAX_PATH as usize];
+    loop {
+        // Call the Windows API function to get the module file name
+        let len = unsafe { GetModuleFileNameA(0, buffer.as_mut_ptr(), buffer.len() as u32) };
+
+        // That's the error condition because len doesn't include the trailing null byte
+        if len as usize == buffer.len() {
+            unsafe {
                 let last_error = GetLastError();
                 match last_error {
                     ERROR_INSUFFICIENT_BUFFER => {
@@ -86,30 +107,84 @@ fn find_python_exe(is_gui: bool) -> CString {
                         ExitProcess(1);
                     }
                 }
-            } else {
-                buffer.truncate(len as usize + b"\0".len());
-                break;
+            }
+        } else {
+            buffer.truncate(len as usize + b"\0".len());
+            break;
+        }
+    }
+
+    unsafe { CString::from_vec_with_nul_unchecked(buffer) }
+}
+
+/// The scripts are in the same directory as the Python interpreter, so we can find Python by getting the locations of
+/// the current .exe and replacing the filename with `python[w].exe`.
+fn find_python_exe(is_gui: bool, executable_name: &CStr) -> CString {
+    // Replace the filename (the last segment of the path) with "python.exe"
+    // Assumption: We are not in an encoding where a backslash byte can be part of a larger character.
+    let bytes = executable_name.to_bytes();
+    let Some(last_backslash) = bytes.iter().rposition(|byte| *byte == b'\\') else {
+        eprintln!(
+            "Invalid current exe path (missing backslash): `{}`",
+            &*executable_name.to_string_lossy()
+        );
+        unsafe {
+            ExitProcess(1);
+        }
+    };
+
+    let mut buffer = bytes[..last_backslash + 1].to_vec();
+    buffer.extend_from_slice(if is_gui {
+        b"pythonw.exe"
+    } else {
+        b"python.exe"
+    });
+    buffer.push(b'\0');
+
+    unsafe { CString::from_vec_with_nul_unchecked(buffer) }
+}
+
+fn push_arguments(output: &mut Vec<u8>) {
+    let arguments_as_str = unsafe {
+        // SAFETY: We rely on `GetCommandLineA` to return a valid pointer to a null terminated string.
+        CStr::from_ptr(GetCommandLineA() as _)
+    };
+
+    // Skip over the executable name and then push the rest of the arguments
+    let after_executable = skip_one_argument(arguments_as_str.to_bytes());
+
+    output.extend_from_slice(after_executable)
+}
+
+fn skip_one_argument(arguments: &[u8]) -> &[u8] {
+    let mut quoted = false;
+    let mut offset = 0;
+    let mut bytes_iter = arguments.iter().peekable();
+
+    // Implements https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments?view=msvc-170
+    while let Some(byte) = bytes_iter.next().copied() {
+        match byte {
+            b'"' => {
+                quoted = !quoted;
+            }
+            b'\\' => {
+                // Skip over escaped quotes or even number of backslashes.
+                if matches!(bytes_iter.peek().copied(), Some(&b'\"' | &b'\\')) {
+                    offset += 1;
+                    bytes_iter.next();
+                }
+            }
+            byte => {
+                if byte.is_ascii_whitespace() && !quoted {
+                    break;
+                }
             }
         }
-        // Replace the filename (the last segment of the path) with "python.exe"
-        // Assumption: We are not in an encoding where a backslash byte can be part of a larger character.
-        let Some(last_backslash) = buffer.iter().rposition(|byte| *byte == b'\\') else {
-            eprintln!(
-                "Invalid current exe path (missing backslash): `{}`",
-                CString::from_vec_with_nul_unchecked(buffer)
-                    .to_string_lossy()
-                    .as_ref()
-            );
-            ExitProcess(1);
-        };
-        buffer.truncate(last_backslash + 1);
-        buffer.extend_from_slice(if is_gui {
-            b"pythonw.exe\0"
-        } else {
-            b"python.exe\0"
-        });
-        CString::from_vec_with_nul_unchecked(buffer)
+
+        offset += 1;
     }
+
+    &arguments[offset..]
 }
 
 fn make_job_object() -> HANDLE {
@@ -137,7 +212,7 @@ fn make_job_object() -> HANDLE {
     }
 }
 
-fn spawn_child(si: &STARTUPINFOA, child_cmdline: &mut [u8]) -> HANDLE {
+fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
     unsafe {
         if si.dwFlags & STARTF_USESTDHANDLES != 0 {
             // ignore errors from these -- if the handle's not inheritable/not valid, then nothing
@@ -151,7 +226,7 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: &mut [u8]) -> HANDLE {
             null(),
             // Why does this have to be mutable? Who knows. But it's not a mistake --
             // MS explicitly documents that this buffer might be mutated by CreateProcess.
-            child_cmdline.as_mut_ptr(),
+            child_cmdline.into_bytes_with_nul().as_mut_ptr(),
             null(),
             null(),
             1,
@@ -236,14 +311,14 @@ fn clear_app_starting_state(child_handle: HANDLE) {
 
 pub fn bounce(is_gui: bool) -> ! {
     unsafe {
-        let mut child_cmdline = make_child_cmdline(is_gui);
-        let job = make_job_object();
+        let child_cmdline = make_child_cmdline(is_gui);
 
         let mut si = MaybeUninit::<STARTUPINFOA>::uninit();
         GetStartupInfoA(si.as_mut_ptr());
         let si = si.assume_init();
 
-        let child_handle = spawn_child(&si, child_cmdline.as_mut_slice());
+        let child_handle = spawn_child(&si, child_cmdline);
+        let job = make_job_object();
         check!(AssignProcessToJobObject(job, child_handle));
 
         // (best effort) Close all the handles that we can

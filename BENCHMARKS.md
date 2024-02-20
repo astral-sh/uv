@@ -105,7 +105,6 @@ You need to install the [Roboto Font](https://fonts.google.com/specimen/Roboto) 
 The inclusion of this `BENCHMARKS.md` file was inspired by the excellent benchmarking documentation
 in [Orogene](https://github.com/orogene/orogene/blob/472e481b4fc6e97c2b57e69240bf8fe995dfab83/BENCHMARKS.md).
 
-
 ## Troubleshooting
 
 ### Flaky benchmarks

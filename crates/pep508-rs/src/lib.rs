@@ -46,7 +46,7 @@ use uv_fs::normalize_url_path;
 #[cfg(feature = "pyo3")]
 use uv_normalize::InvalidNameError;
 use uv_normalize::{ExtraName, PackageName};
-pub use verbatim_url::{split_scheme, VerbatimUrl};
+pub use verbatim_url::{split_scheme, Scheme, VerbatimUrl};
 
 mod marker;
 mod verbatim_url;
@@ -744,33 +744,54 @@ fn preprocess_url(
     len: usize,
 ) -> Result<VerbatimUrl, Pep508Error> {
     let url = if let Some((scheme, path)) = split_scheme(url) {
-        if scheme == "file" {
+        match Scheme::parse(scheme) {
             // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`.
-            let path = path.strip_prefix("//").unwrap_or(path);
+            Some(Scheme::File) => {
+                let path = path.strip_prefix("//").unwrap_or(path);
 
-            // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
-            let path = normalize_url_path(path);
+                // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
+                let path = normalize_url_path(path);
 
-            if let Some(working_dir) = working_dir {
-                VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
-            } else {
-                VerbatimUrl::from_absolute_path(path)
-                    .map_err(|err| Pep508Error {
-                        message: Pep508ErrorSource::UrlError(err),
-                        start,
-                        len,
-                        input: cursor.to_string(),
-                    })?
-                    .with_given(url.to_string())
+                if let Some(working_dir) = working_dir {
+                    VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
+                } else {
+                    VerbatimUrl::from_absolute_path(path)
+                        .map_err(|err| Pep508Error {
+                            message: Pep508ErrorSource::UrlError(err),
+                            start,
+                            len,
+                            input: cursor.to_string(),
+                        })?
+                        .with_given(url.to_string())
+                }
             }
-        } else {
+
             // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-            VerbatimUrl::from_str(url).map_err(|err| Pep508Error {
-                message: Pep508ErrorSource::UrlError(err),
-                start,
-                len,
-                input: cursor.to_string(),
-            })?
+            Some(_) => {
+                // Ex) `https://download.pytorch.org/whl/torch_stable.html`
+                VerbatimUrl::from_str(url).map_err(|err| Pep508Error {
+                    message: Pep508ErrorSource::UrlError(err),
+                    start,
+                    len,
+                    input: cursor.to_string(),
+                })?
+            }
+
+            // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
+            _ => {
+                if let Some(working_dir) = working_dir {
+                    VerbatimUrl::from_path(url, working_dir).with_given(url.to_string())
+                } else {
+                    VerbatimUrl::from_absolute_path(url)
+                        .map_err(|err| Pep508Error {
+                            message: Pep508ErrorSource::UrlError(err),
+                            start,
+                            len,
+                            input: cursor.to_string(),
+                        })?
+                        .with_given(url.to_string())
+                }
+            }
         }
     } else {
         // Ex) `../editable/`

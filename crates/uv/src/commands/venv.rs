@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
+use std::vec;
 
 use anstream::eprint;
 use anyhow::Result;
@@ -10,6 +11,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name};
+use gourgeist::Prompt;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -30,6 +32,7 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    prompt: Prompt,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -40,6 +43,7 @@ pub(crate) async fn venv(
         path,
         python_request,
         index_locations,
+        prompt,
         connectivity,
         seed,
         exclude_newer,
@@ -81,6 +85,7 @@ async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    prompt: Prompt,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -114,7 +119,7 @@ async fn venv_impl(
     .into_diagnostic()?;
 
     // Create the virtual environment.
-    let venv = gourgeist::create_venv(path, interpreter).map_err(VenvError::Creation)?;
+    let venv = gourgeist::create_venv(path, interpreter, prompt).map_err(VenvError::Creation)?;
 
     // Install seed packages.
     if seed {
@@ -160,12 +165,15 @@ async fn venv_impl(
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
         // Resolve the seed packages.
+        let mut requirements = vec![Requirement::from_str("pip").unwrap()];
+
+        // Only include `setuptools` and `wheel` on Python <3.12
+        if interpreter.python_tuple() < (3, 12) {
+            requirements.push(Requirement::from_str("setuptools").unwrap());
+            requirements.push(Requirement::from_str("wheel").unwrap());
+        }
         let resolution = build_dispatch
-            .resolve(&[
-                Requirement::from_str("wheel").unwrap(),
-                Requirement::from_str("pip").unwrap(),
-                Requirement::from_str("setuptools").unwrap(),
-            ])
+            .resolve(&requirements)
             .await
             .map_err(VenvError::Seed)?;
 

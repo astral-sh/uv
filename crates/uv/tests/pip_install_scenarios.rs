@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/64b4451b832cece378f6e773d326ea09efe8903d/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/de0bab473eeaa4445db5a8febd732c655fad3d52/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -45,13 +45,22 @@ fn command(context: &TestContext) -> Command {
     command
         .arg("pip")
         .arg("install")
-        .arg("--extra-index-url")
+        .arg("--index-url")
         .arg("https://test.pypi.org/simple")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/de0bab473eeaa4445db5a8febd732c655fad3d52/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
+    }
+
     command
 }
 
@@ -477,7 +486,7 @@ fn dependency_excludes_range_of_compatible_versions() {
 /// There is a non-contiguous range of compatible versions for the requested package
 /// `a`, but another dependency `c` excludes the range. This is the same as
 /// `dependency-excludes-range-of-compatible-versions` but some of the versions of
-/// `a` are incompatible for another reason e.g. dependency on non-existent package
+/// `a` are incompatible for another reason e.g. dependency on non-existant package
 /// `d`.
 ///
 /// ```text
@@ -737,7 +746,7 @@ fn multiple_extras_required() {
 
 /// all-extras-required
 ///
-/// Multiple optional dependencies are requested for the via an 'all' extra.
+/// Multiple optional dependencies are requested for the package via an 'all' extra.
 ///
 /// ```text
 /// 4cf56e90
@@ -3132,11 +3141,11 @@ fn transitive_package_only_yanked_in_range_opt_in() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: bluebird==1.0.0 is yanked.
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0
      + bluebird==1.0.0
+    warning: bluebird==1.0.0 is yanked.
     "###);
 
     // Since the user included a dependency on `b` with an exact specifier, the yanked
@@ -3252,12 +3261,12 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    warning: crow==2.0.0 is yanked.
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + albatross==1.0.0
      + bluebird==1.0.0
      + crow==2.0.0
+    warning: crow==2.0.0 is yanked.
     "###);
 
     // Since the user explicitly selected the yanked version of `c`, it can be
