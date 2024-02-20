@@ -198,6 +198,7 @@ async fn venv_impl(
     if cfg!(windows) {
         writeln!(
             printer,
+            // This should work whether the user is on CMD or PowerShell:
             "Activate with: {}\\Scripts\\activate",
             path.normalized_display().cyan()
         )
