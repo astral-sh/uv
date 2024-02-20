@@ -986,7 +986,9 @@ fn parse(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<Requirement,
             // Unwrap safety: The `VerbatimUrl` we just parsed has a string source.
             if url.given().unwrap().ends_with(';') && marker.is_none() {
                 return Err(Pep508Error {
-                    message: Pep508ErrorSource::String("Missing space before ';'".to_string()),
+                    message: Pep508ErrorSource::String(
+                        "Missing space before ';', the end of the URL is ambiguous".to_string(),
+                    ),
                     start: requirement_end - ';'.len_utf8(),
                     len: ';'.len_utf8(),
                     input: cursor.to_string(),
@@ -1488,7 +1490,7 @@ mod tests {
         assert_err(
             r#"name @ https://example.com/; extra == 'example'"#,
             indoc! {"
-                Missing space before ';'
+                Missing space before ';', the end of the URL is ambiguous
                 name @ https://example.com/; extra == 'example'
                                            ^"
             },
