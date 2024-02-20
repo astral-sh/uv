@@ -1086,7 +1086,7 @@ fn fetch_with_strategy(
                     debug!("initiating fetch of {refspecs:?} from {remote_url}");
                     let res =
                         repo.remote_anonymous(remote_url)?
-                            .fetch(&refspecs, Some(&mut opts), None);
+                            .fetch(refspecs, Some(&mut opts), None);
                     let err = match res {
                         Ok(()) => break,
                         Err(e) => e,
