@@ -238,35 +238,6 @@ pub(crate) async fn pip_install(
         Err(err) => return Err(err.into()),
     };
 
-    if dry_run {
-        writeln!(
-            printer,
-            "{}",
-            format!(
-                "Would install {}",
-                format!("{} packages", resolution.len()).bold(),
-            )
-            .dimmed()
-        )?;
-
-        for package_name in resolution.packages() {
-            if let Some(dist) = resolution.get(package_name) {
-                let version = dist
-                    .version()
-                    .map_or_else(String::new, |version| format!("=={version}"));
-
-                writeln!(
-                    printer,
-                    " {} {}{}",
-                    "~".blue(),
-                    package_name.as_ref().white().bold(),
-                    version.dimmed()
-                )?;
-            }
-        }
-        return Ok(ExitStatus::Success);
-    }
-
     // Re-initialize the in-flight map.
     let in_flight = InFlight::default();
 
@@ -306,6 +277,7 @@ pub(crate) async fn pip_install(
         &cache,
         &venv,
         printer,
+        dry_run,
     )
     .await?;
 
@@ -519,6 +491,7 @@ async fn install(
     cache: &Cache,
     venv: &Virtualenv,
     mut printer: Printer,
+    dry_run: bool,
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
 
@@ -547,6 +520,72 @@ async fn install(
             tags,
         )
         .context("Failed to determine installation plan")?;
+
+    if dry_run {
+        if !remote.is_empty() {
+            writeln!(
+                printer,
+                "{} The following packages would be downloaded:",
+                "DRY RUN".white().bold()
+            )?;
+            for dist in &remote {
+                let version = resolution
+                    .get(&dist.name)
+                    .map(|r| r.version().map_or(String::new(), |v| format!("=={v}")))
+                    .unwrap_or_default();
+                writeln!(
+                    printer,
+                    " {} {}{}",
+                    "~".blue(),
+                    dist.name.as_ref().white().bold(),
+                    version.dimmed()
+                )?;
+            }
+        }
+
+        if !reinstalls.is_empty() {
+            writeln!(
+                printer,
+                "{} The following packages would be reinstalled:",
+                "DRY RUN".white().bold()
+            )?;
+            for dist_info in &reinstalls {
+                let version = resolution
+                    .get(dist_info.name())
+                    .map(|r| r.version().map_or(String::new(), |v| format!("=={v}")))
+                    .unwrap_or_default();
+                writeln!(
+                    printer,
+                    " {} {}{}",
+                    "~".blue(),
+                    dist_info.name().white().bold(),
+                    version.dimmed()
+                )?;
+            }
+        }
+
+        if !local.is_empty() {
+            writeln!(
+                printer,
+                "{} The following packages would be installed from local cache:",
+                "DRY RUN".white().bold()
+            )?;
+            for local_dist in &local {
+                let version = resolution
+                    .get(local_dist.name())
+                    .map(|r| r.version().map_or(String::new(), |v| format!("=={v}")))
+                    .unwrap_or_default();
+                writeln!(
+                    printer,
+                    " {} {}{}",
+                    "~".blue(),
+                    local_dist.name().white().bold(),
+                    version.dimmed()
+                )?;
+            }
+        }
+        return Ok(());
+    }
 
     // Nothing to do.
     if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
