@@ -8,7 +8,7 @@ import sysconfig
 def find_uv_bin() -> str:
     """Return the uv binary path."""
 
-    uv_exe = "uv" + sysconfig.get_config_var("EXE")
+    uv_exe = f"uv{sysconfig.get_config_var('EXE')}"
 
     path = os.path.join(sysconfig.get_path("scripts"), uv_exe)
     if os.path.isfile(path):
