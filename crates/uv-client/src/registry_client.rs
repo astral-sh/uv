@@ -40,6 +40,7 @@ pub struct RegistryClientBuilder {
     retries: u32,
     connectivity: Connectivity,
     cache: Cache,
+    client: Option<Client>,
 }
 
 impl RegistryClientBuilder {
@@ -49,6 +50,7 @@ impl RegistryClientBuilder {
             cache,
             connectivity: Connectivity::Online,
             retries: 3,
+            client: None,
         }
     }
 }
@@ -78,19 +80,25 @@ impl RegistryClientBuilder {
         self
     }
 
+    #[must_use]
+    pub fn client(mut self, client: Client) -> Self {
+        self.client = Some(client);
+        self
+    }
+
     pub fn build(self) -> RegistryClient {
-        let client_raw = {
+        let client_raw = self.client.unwrap_or_else(|| {
             // Get pip timeout from env var
             let default_timeout = 5 * 60;
             let timeout = env::var("UV_REQUEST_TIMEOUT")
-            .map_err(|_| default_timeout)
-            .and_then(|value| {
-                value.parse::<u64>()
-                    .map_err(|_| {
-                        warn_user_once!("Ignoring invalid value for UV_REQUEST_TIMEOUT. Expected integer number of seconds, got {value}.");
-                        default_timeout
-                    })
-            }).unwrap_or(default_timeout);
+                .map_err(|_| default_timeout)
+                .and_then(|value| {
+                    value.parse::<u64>()
+                        .map_err(|_| {
+                            warn_user_once!("Ignoring invalid value for UV_REQUEST_TIMEOUT. Expected integer number of seconds, got {value}.");
+                            default_timeout
+                        })
+                }).unwrap_or(default_timeout);
             debug!("Using registry request timeout of {}s", timeout);
             // Disallow any connections.
             let client_core = ClientBuilder::new()
@@ -99,7 +107,7 @@ impl RegistryClientBuilder {
                 .timeout(std::time::Duration::from_secs(timeout));
 
             client_core.build().expect("Failed to build HTTP client.")
-        };
+        });
 
         let uncached_client = match self.connectivity {
             Connectivity::Online => {
