@@ -114,7 +114,7 @@ impl InstalledDist {
     /// Return the `INSTALLER` of the distribution.
     pub fn installer(&self) -> Option<String> {
         let path = self.path().join("INSTALLER");
-        let Ok(installer) = fs_err::read_to_string(&path) else {
+        let Ok(installer) = fs_err::read_to_string(path) else {
             return None;
         };
         Some(installer)
