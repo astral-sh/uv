@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::env;
 use std::fmt::Debug;
 use std::path::Path;
 use std::str::FromStr;
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::tempfile_in;
 use tokio::io::BufWriter;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{info_span, instrument, trace, warn, Instrument};
+use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
@@ -23,6 +24,7 @@ use pep440_rs::Version;
 use pypi_types::{Metadata21, SimpleJson};
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
+use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
@@ -78,11 +80,23 @@ impl RegistryClientBuilder {
 
     pub fn build(self) -> RegistryClient {
         let client_raw = {
+            // Get pip timeout from env var
+            let default_timeout = 5 * 60;
+            let timeout = env::var("UV_REQUEST_TIMEOUT")
+            .map_err(|_| default_timeout)
+            .and_then(|value| {
+                value.parse::<u64>()
+                    .map_err(|_| {
+                        warn_user_once!("Ignoring invalid value for UV_REQUEST_TIMEOUT. Expected integer number of seconds, got {value}.");
+                        default_timeout
+                    })
+            }).unwrap_or(default_timeout);
+            debug!("Using registry request timeout of {}s", timeout);
             // Disallow any connections.
             let client_core = ClientBuilder::new()
                 .user_agent("uv")
                 .pool_max_idle_per_host(20)
-                .timeout(std::time::Duration::from_secs(60 * 5));
+                .timeout(std::time::Duration::from_secs(timeout));
 
             client_core.build().expect("Failed to build HTTP client.")
         };
