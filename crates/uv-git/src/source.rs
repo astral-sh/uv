@@ -19,8 +19,6 @@ pub struct GitSource {
     git: GitUrl,
     /// The HTTP client to use for fetching.
     client: Client,
-    /// The fetch strategy to use when cloning.
-    strategy: FetchStrategy,
     /// The path to the Git source database.
     cache: PathBuf,
     /// The reporter to use for this source.
@@ -33,7 +31,6 @@ impl GitSource {
         Self {
             git,
             client: Client::new(),
-            strategy: FetchStrategy::Cli,
             cache: cache.into(),
             reporter: None,
         }
@@ -49,7 +46,25 @@ impl GitSource {
     }
 
     /// Fetch the underlying Git repository at the given revision.
+    ///
+    /// Uses the Libgit2 backend first, then falls back to the CLI which supports
+    /// more authentication schemes.
     pub fn fetch(self) -> Result<Fetch> {
+        self.fetch_with_strategy(FetchStrategy::Libgit2)
+            .or_else(|_| {
+                debug!("fetch with libgit2 failed, trying git cli");
+                self.fetch_with_strategy(FetchStrategy::Cli)
+            })
+            .map(|(actual_rev, checkout_path)| Fetch {
+                git: self.git.with_precise(actual_rev),
+                path: checkout_path,
+            })
+    }
+
+    /// Fetch the underlying Git repository at the given revision.
+    ///
+    /// Callers **should** update `self.git.with_precise` with the given SHA.
+    fn fetch_with_strategy(&self, strategy: FetchStrategy) -> Result<(GitSha, PathBuf)> {
         // The path to the repo, within the Git database.
         let ident = digest(&RepositoryUrl::new(&self.git.repository));
         let db_path = self.cache.join("db").join(&ident);
@@ -77,7 +92,7 @@ impl GitSource {
                     db,
                     &self.git.reference,
                     locked_rev.map(git2::Oid::from),
-                    self.strategy,
+                    strategy,
                     &self.client,
                 )?;
 
@@ -97,12 +112,7 @@ impl GitSource {
             .join("checkouts")
             .join(&ident)
             .join(short_id.as_str());
-        db.copy_to(
-            actual_rev.into(),
-            &checkout_path,
-            self.strategy,
-            &self.client,
-        )?;
+        db.copy_to(actual_rev.into(), &checkout_path, strategy, &self.client)?;
 
         // Report the checkout operation to the reporter.
         if let Some(task) = task {
@@ -111,10 +121,7 @@ impl GitSource {
             }
         }
 
-        Ok(Fetch {
-            git: self.git.with_precise(actual_rev),
-            path: checkout_path,
-        })
+        Ok((actual_rev, checkout_path))
     }
 }
 
