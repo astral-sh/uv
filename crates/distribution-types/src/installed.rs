@@ -112,12 +112,13 @@ impl InstalledDist {
     }
 
     /// Return the `INSTALLER` of the distribution.
-    pub fn installer(&self) -> Option<String> {
+    pub fn installer(&self) -> Result<Option<String>> {
         let path = self.path().join("INSTALLER");
-        let Ok(installer) = fs::read_to_string(path) else {
-            return None;
-        };
-        Some(installer)
+        match fs::read_to_string(path) {
+            Ok(installer) => Ok(Some(installer)),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err.into())
+        }
     }
 
     /// Return the [`Url`] of the distribution, if it is editable.
