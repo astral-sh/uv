@@ -117,7 +117,7 @@ impl InstalledDist {
         match fs::read_to_string(path) {
             Ok(installer) => Ok(Some(installer)),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(err.into())
+            Err(err) => Err(err.into()),
         }
     }
 
