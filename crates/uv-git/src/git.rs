@@ -1057,7 +1057,11 @@ fn fetch_with_cli(
         .env_remove("GIT_OBJECT_DIRECTORY")
         .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
         .cwd(repo.path());
-    cmd.exec()?;
+
+    // We capture the output to avoid streaming it to the user's console during clones.
+    // The required `on...line` callbacks currently do nothing.
+    // The output appears to be included in error messages by default.
+    cmd.exec_with_streaming(&mut |_| Ok(()), &mut |_| Ok(()), true)?;
     Ok(())
 }
 
