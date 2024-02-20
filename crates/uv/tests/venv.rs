@@ -200,12 +200,17 @@ fn seed_older_python_version() -> Result<()> {
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
+    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
             "Using Python [VERSION] interpreter at [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
+        (
+            &filter_prompt,
+            "Activate with: source /home/ferris/project/.venv/bin/activate",
+        ),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
