@@ -11,7 +11,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Clear the cache.
-pub(crate) fn clean(
+pub(crate) fn cache_clean(
     cache: &Cache,
     packages: &[PackageName],
     mut printer: Printer,

@@ -117,7 +117,7 @@ enum Commands {
     Venv(VenvArgs),
     /// Manage the cache.
     Cache(CacheNamespace),
-    /// Clear the cache.
+    /// Remove all items from the cache.
     #[clap(hide = true)]
     Clean(CleanArgs),
     /// Generate shell completion
@@ -133,8 +133,24 @@ struct CacheNamespace {
 
 #[derive(Subcommand)]
 enum CacheCommand {
-    /// Clear the cache.
+    /// Remove all items from the cache.
     Clean(CleanArgs),
+    /// Show the cache directory.
+    Dir,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+struct CleanArgs {
+    /// The packages to remove from the cache.
+    package: Vec<PackageName>,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+struct DirArgs {
+    /// The packages to remove from the cache.
+    package: Vec<PackageName>,
 }
 
 #[derive(Args)]
@@ -642,13 +658,6 @@ struct PipFreezeArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
-struct CleanArgs {
-    /// The packages to remove from the cache.
-    package: Vec<PackageName>,
-}
-
-#[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     ///
@@ -1033,11 +1042,17 @@ async fn run() -> Result<ExitStatus> {
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),
-        }) => commands::freeze(&cache, args.strict, printer),
+        }) => commands::pip_freeze(&cache, args.strict, printer),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })
-        | Commands::Clean(args) => commands::clean(&cache, &args.package, printer),
+        | Commands::Clean(args) => commands::cache_clean(&cache, &args.package, printer),
+        Commands::Cache(CacheNamespace {
+            command: CacheCommand::Dir,
+        }) => {
+            commands::cache_dir(&cache);
+            Ok(ExitStatus::Success)
+        }
         Commands::Venv(args) => {
             args.compat_args.validate()?;
 
