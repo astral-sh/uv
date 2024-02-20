@@ -190,24 +190,24 @@ impl<'a> SitePackages<'a> {
             }
 
             // Verify that the dependencies are installed.
-            for requirement in &metadata.requires_dist {
-                if !requirement.evaluate_markers(self.venv.interpreter().markers(), &[]) {
+            for dependency in &metadata.requires_dist {
+                if !dependency.evaluate_markers(self.venv.interpreter().markers(), &[]) {
                     continue;
                 }
 
                 let Some(installed) = self
                     .by_name
-                    .get(&requirement.name)
+                    .get(&dependency.name)
                     .map(|idx| &self.distributions[*idx])
                 else {
                     diagnostics.push(Diagnostic::MissingDependency {
                         package: package.clone(),
-                        requirement: requirement.clone(),
+                        requirement: dependency.clone(),
                     });
                     continue;
                 };
 
-                match &requirement.version_or_url {
+                match &dependency.version_or_url {
                     None | Some(pep508_rs::VersionOrUrl::Url(_)) => {
                         // Nothing to do (accept any installed version).
                     }
@@ -216,7 +216,7 @@ impl<'a> SitePackages<'a> {
                             diagnostics.push(Diagnostic::IncompatibleDependency {
                                 package: package.clone(),
                                 version: installed.version().clone(),
-                                requirement: requirement.clone(),
+                                requirement: dependency.clone(),
                             });
                         }
                     }
@@ -234,9 +234,18 @@ impl<'a> SitePackages<'a> {
         editables: &[EditableRequirement],
         constraints: &[Requirement],
     ) -> Result<bool> {
-        let mut requirements = requirements.to_vec();
+        let mut stack = Vec::<Requirement>::with_capacity(requirements.len());
         let mut seen =
             FxHashSet::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
+
+        // Add the direct requirements to the queue.
+        for dependency in requirements {
+            if dependency.evaluate_markers(self.venv.interpreter().markers(), &[]) {
+                if seen.insert(dependency.clone()) {
+                    stack.push(dependency.clone());
+                }
+            }
+        }
 
         // Verify that all editable requirements are met.
         for requirement in editables {
@@ -253,15 +262,21 @@ impl<'a> SitePackages<'a> {
             let metadata = distribution
                 .metadata()
                 .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
-            requirements.extend(metadata.requires_dist);
+
+            // Add the dependencies to the queue.
+            for dependency in metadata.requires_dist {
+                if dependency
+                    .evaluate_markers(self.venv.interpreter().markers(), &requirement.extras)
+                {
+                    if seen.insert(dependency.clone()) {
+                        stack.push(dependency);
+                    }
+                }
+            }
         }
 
         // Verify that all non-editable requirements are met.
-        while let Some(requirement) = requirements.pop() {
-            if !requirement.evaluate_markers(self.venv.interpreter().markers(), &[]) {
-                continue;
-            }
-
+        while let Some(requirement) = stack.pop() {
             let Some(distribution) = self
                 .by_name
                 .get(&requirement.name)
@@ -300,11 +315,19 @@ impl<'a> SitePackages<'a> {
             }
 
             // Recurse into the dependencies.
-            if seen.insert(requirement) {
-                let metadata = distribution
-                    .metadata()
-                    .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
-                requirements.extend(metadata.requires_dist);
+            let metadata = distribution
+                .metadata()
+                .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
+
+            // Add the dependencies to the queue.
+            for dependency in metadata.requires_dist {
+                if dependency
+                    .evaluate_markers(self.venv.interpreter().markers(), &requirement.extras)
+                {
+                    if seen.insert(dependency.clone()) {
+                        stack.push(dependency);
+                    }
+                }
             }
         }
 
