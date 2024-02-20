@@ -59,10 +59,10 @@ HIDDEN_FLAVORS = [
 ]
 SPECIAL_TRIPLES = {
     "macos": "x86_64-apple-darwin",
-    "linux64": "x86_64-unknown-linux",
+    "linux64": "x86_64-unknown-linux-gnu",
     "windows-amd64": "x86_64-pc-windows",
     "windows-x86": "i686-pc-windows",
-    "linux64-musl": "x86_64-unknown-linux",
+    "linux64-musl": "x86_64-unknown-linux-musl",
 }
 
 _filename_re = re.compile(
@@ -107,7 +107,7 @@ def parse_filename(filename):
 
 
 def normalize_triple(triple):
-    if "-musl" in triple or "-static" in triple:
+    if "-static" in triple:
         logging.debug("Skipping %r: unknown triple", triple)
         return
     triple = SPECIAL_TRIPLES.get(triple, triple)
@@ -117,10 +117,15 @@ def normalize_triple(triple):
         # Normalize
         arch = ARCH_MAP.get(arch, arch)
         platform = pieces[2]
+        if pieces[2] == "linux":
+            # On linux, the triple has four segments, the last one is the libc
+            libc = pieces[3]
+        else:
+            libc = "none"
     except IndexError:
         logging.debug("Skipping %r: unknown triple", triple)
         return
-    return "%s-%s" % (arch, platform)
+    return "%s-%s-%s" % (arch, platform, libc)
 
 
 def read_sha256(session, url):
@@ -217,8 +222,8 @@ def find(args):
         key=lambda x: x[:2],
         reverse=True,
     ):
-        for (arch, platform), url in sorted(choices.items()):
-            key = "%s-%s.%s.%s-%s-%s" % (interpreter, *py_ver, platform, arch)
+        for (arch, platform, libc), url in sorted(choices.items()):
+            key = "%s-%s.%s.%s-%s-%s-%s" % (interpreter, *py_ver, platform, arch, libc)
             logging.info("Found %s", key)
             sha256 = read_sha256(session, url)
 
@@ -226,6 +231,7 @@ def find(args):
                 "name": interpreter,
                 "arch": arch,
                 "os": platform,
+                "libc": libc,
                 "major": py_ver[0],
                 "minor": py_ver[1],
                 "patch": py_ver[2],

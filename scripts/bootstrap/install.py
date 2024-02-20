@@ -33,6 +33,7 @@ import json
 import platform
 import shutil
 import sys
+import sysconfig
 import tarfile
 import tempfile
 import urllib.parse
@@ -98,7 +99,11 @@ if INSTALL_DIR.exists():
 
 # Install each version
 for version in versions:
-    key = f"{INTERPRETER}-{version}-{PLATFORM_MAP.get(PLATFORM, PLATFORM)}-{ARCH_MAP.get(ARCH, ARCH)}"
+    if platform.system() == "Linux":
+        libc = sysconfig.get_config_var("SOABI").split("-")[-1]
+    else:
+        libc = "none"
+    key = f"{INTERPRETER}-{version}-{PLATFORM_MAP.get(PLATFORM, PLATFORM)}-{ARCH_MAP.get(ARCH, ARCH)}-{libc}"
     install_dir = INSTALL_DIR / f"{INTERPRETER}@{version}"
     print(f"Installing {key}")
 
