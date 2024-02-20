@@ -111,6 +111,15 @@ impl InstalledDist {
         })
     }
 
+    /// Return the `INSTALLER` of the distribution.
+    pub fn installer(&self) -> Option<String> {
+        let path = self.path().join("INSTALLER");
+        let Ok(installer) = fs_err::read_to_string(&path) else {
+            return None;
+        };
+        Some(installer)
+    }
+
     /// Return the [`Url`] of the distribution, if it is editable.
     pub fn as_editable(&self) -> Option<&Url> {
         match self {
