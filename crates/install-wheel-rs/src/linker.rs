@@ -302,7 +302,7 @@ fn clone_recursive(site_packages: &Path, wheel: &Path, entry: &DirEntry) -> Resu
     debug!("Cloning {} to {}", from.display(), to.display());
 
     // Attempt to copy the file or directory
-    let reflink = reflink_copy::reflink(&from, &to);
+    let reflink = reflink_copy::reflink_or_copy(&from, &to);
 
     if reflink
         .as_ref()
@@ -317,7 +317,7 @@ fn clone_recursive(site_packages: &Path, wheel: &Path, entry: &DirEntry) -> Resu
             // If file already exists, overwrite it.
             let tempdir = tempdir_in(site_packages)?;
             let tempfile = tempdir.path().join(from.file_name().unwrap());
-            reflink_copy::reflink(from, &tempfile)?;
+            reflink_copy::reflink_or_copy(from, &tempfile)?;
             fs::rename(&tempfile, to)?;
         }
     } else {
