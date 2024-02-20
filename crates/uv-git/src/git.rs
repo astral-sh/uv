@@ -907,6 +907,10 @@ pub(crate) fn fetch(
     // Translate the reference desired here into an actual list of refspecs
     // which need to get fetched. Additionally record if we're fetching tags.
     let mut refspecs = Vec::new();
+    // Track a secondary refspec list to include if the first fetch fails,
+    // this is important when using [`FetchStrategy::Cli`] as it will not
+    // succeed if _any_ given refspec cannot be found.
+    let mut secondary_refspecs = Vec::new();
     let mut tags = false;
     // The `+` symbol on the refspec means to allow a forced (fast-forward)
     // update which is needed if there is ever a force push that requires a
@@ -926,7 +930,7 @@ pub(crate) fn fetch(
             refspecs.push(format!(
                 "+refs/heads/{branch_or_tag}:refs/remotes/origin/{branch_or_tag}"
             ));
-            refspecs.push(format!(
+            secondary_refspecs.push(format!(
                 "+refs/tags/{branch_or_tag}:refs/remotes/origin/tags/{branch_or_tag}"
             ));
         }
@@ -969,13 +973,28 @@ pub(crate) fn fetch(
 
     debug!("Performing a Git fetch for: {remote_url}");
     match strategy {
-        FetchStrategy::Cli => fetch_with_cli(repo, remote_url, &refspecs, tags),
+        FetchStrategy::Cli => {
+            fetch_with_cli(repo, remote_url, &refspecs, tags).or_else(|err| {
+                // If secondary refspecs are populated i.e. from [`GitReference::BranchOrTag`],
+                // then ignore the first error and try again; ideally we'd only retry if the
+                // error was due to a missing ref but this is already not the fast path
+                if secondary_refspecs.is_empty() {
+                    Err(err)
+                } else {
+                    fetch_with_cli(repo, remote_url, &secondary_refspecs, tags)
+                }
+            })
+        }
         FetchStrategy::Libgit2 => {
             let git_config = git2::Config::open_default()?;
             with_fetch_options(&git_config, remote_url, &mut |mut opts| {
                 if tags {
                     opts.download_tags(git2::AutotagOption::All);
                 }
+
+                // When using libgit2, missing refspecs are okay
+                refspecs.append(&mut secondary_refspecs);
+
                 // The `fetch` operation here may fail spuriously due to a corrupt
                 // repository. It could also fail, however, for a whole slew of other
                 // reasons (aka network related reasons). We want Cargo to automatically
