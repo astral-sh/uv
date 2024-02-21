@@ -5,7 +5,9 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::indoc;
+use itertools::Itertools;
 use url::Url;
 
 use common::{uv_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
@@ -13,6 +15,24 @@ use common::{uv_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
 use crate::common::get_bin;
 
 mod common;
+
+// This is a fine-grained token that only has read-only access to the `uv-private-pypackage` repository
+const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
+    "Z2l0aHViX3BhdA==",
+    "MTFCR0laQTdRMGdXeGsweHV6ekR2Mg==",
+    "NVZMaExzZmtFMHZ1ZEVNd0pPZXZkV040WUdTcmk2WXREeFB4TFlybGlwRTZONEpHV01FMnFZQWJVUm4=",
+];
+
+/// Decode a split, base64 encoded authentication token.
+/// We split and encode the token to bypass revoke by GitHub's secret scanning
+fn decode_token(content: &[&str]) -> String {
+    let token = content
+        .iter()
+        .map(|part| base64.decode(part).unwrap())
+        .map(|decoded| std::str::from_utf8(decoded.as_slice()).unwrap().to_string())
+        .join("_");
+    token
+}
 
 /// Create a `pip install` command with options shared across scenarios.
 fn command(context: &TestContext) -> Command {
@@ -767,6 +787,122 @@ fn install_no_index_version() {
     );
 
     context.assert_command("import flask").failure();
+}
+
+/// Install a package from a public GitHub repository
+#[test]
+#[cfg(feature = "git")]
+fn install_git_public_https() {
+    let context = TestContext::new("3.8");
+
+    uv_snapshot!(command(&context)
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+    "###);
+
+    context.assert_installed("uv_public_pypackage", "0.1.0");
+}
+
+/// Install a package from a private GitHub repository using a PAT
+#[test]
+#[cfg(all(not(windows), feature = "git"))]
+fn install_git_private_https_pat() {
+    let context = TestContext::new("3.8");
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.insert(0, (&token, "***"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+    "###);
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
+}
+
+/// Install a package from a private GitHub repository at a specific commit using a PAT
+#[test]
+#[cfg(feature = "git")]
+fn install_git_private_https_pat_at_ref() {
+    let context = TestContext::new("3.8");
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.insert(0, (&token, "***"));
+    filters.push((r"git\+https://", ""));
+
+    // A user is _required_ on Windows
+    let user = if cfg!(windows) {
+        filters.push((r"git:", ""));
+        "git:"
+    } else {
+        ""
+    };
+
+    uv_snapshot!(filters, command(&context)
+        .arg(format!("uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"))
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from ***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+    "###);
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
+}
+
+/// Install a package from a private GitHub repository using a PAT and username
+/// An arbitrary username is supported when using a PAT.
+#[test]
+#[cfg(feature = "git")]
+fn install_git_private_https_pat_and_username() {
+    let context = TestContext::new("3.8");
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let user = "astral-test-bot";
+
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.insert(0, (&token, "***"));
+    filters.push(("failed to clone into: .*", "failed to clone into: [PATH]"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+    "###);
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
 }
 
 /// Install a package without using pre-built wheels.

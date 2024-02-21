@@ -65,10 +65,15 @@ impl TryFrom<Url> for GitUrl {
         // If the URL ends with a reference, like `https://git.example.com/MyProject.git@v1.0`,
         // extract it.
         let mut reference = GitReference::DefaultBranch;
-        if let Some((prefix, rev)) = url.as_str().rsplit_once('@') {
-            reference = GitReference::from_rev(rev);
-            url = Url::parse(prefix)?;
+        if let Some((prefix, suffix)) = url
+            .path()
+            .rsplit_once('@')
+            .map(|(prefix, suffix)| (prefix.to_string(), suffix.to_string()))
+        {
+            reference = GitReference::from_rev(&suffix);
+            url.set_path(&prefix);
         }
+
         let precise = if let GitReference::FullCommit(rev) = &reference {
             Some(GitSha::from_str(rev)?)
         } else {
