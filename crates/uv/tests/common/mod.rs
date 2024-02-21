@@ -123,7 +123,7 @@ impl TestContext {
     fn path_patterns(path: impl AsRef<Path>) -> Vec<String> {
         vec![
             format!(
-                // Remove the trailing `\` or `/` from directories for cross-platform filters
+                // Trim the trailing separator for cross-platform directories filters
                 r"{}\\?/?",
                 regex::escape(
                     &path
@@ -135,11 +135,15 @@ impl TestContext {
                         .display()
                         .to_string(),
                 )
+                // Make seprators platform agnostic because on Windows we will display
+                // paths with Unix-style separators sometimes
+                .replace(r"\\", r"(\\|\/)")
             ),
             // Include a non-canonicalized version
             format!(
                 r"{}\\?/?",
                 regex::escape(&path.as_ref().normalized().display().to_string())
+                    .replace(r"\\", r"(\\|\/)")
             ),
         ]
     }
