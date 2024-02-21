@@ -1,6 +1,7 @@
 # Windows trampolines
 
-This is a fork of [posy trampolines](https://github.com/njsmith/posy/tree/dda22e6f90f5fefa339b869dd2bbe107f5b48448/src/trampolines/windows-trampolines/posy-trampoline).
+This is a fork
+of [posy trampolines](https://github.com/njsmith/posy/tree/dda22e6f90f5fefa339b869dd2bbe107f5b48448/src/trampolines/windows-trampolines/posy-trampoline).
 
 # What is this?
 
@@ -13,26 +14,25 @@ That's what this does: it's a generic "trampoline" that lets us generate custom
 `.exe`s for arbitrary Python scripts, and when invoked it bounces to invoking
 `python <the script>` instead.
 
-
 # How do you use it?
 
 Basically, this looks up `python.exe` (for console programs) or
 `pythonw.exe` (for GUI programs) in the adjacent directory, and invokes
 `python[w].exe path\to\the\<the .exe>`.
 
-The intended use is: take your Python script, name it `__main__.py`, and pack it
-into a `.zip` file. Then concatenate that `.zip` file onto the end of one of our
-prebuilt `.exe`s.
+The intended use is:
+
+* take your Python script, name it `__main__.py`, and pack it
+  into a `.zip` file. Then concatenate that `.zip` file onto the end of one of our
+  prebuilt `.exe`s.
+* After the zip file content, write the path to the Python executable that the script uses to run
+  the Python script as UTF-8 encoded string, followed by the path's length as a 32-bit little-endian
+  integer.
+* At the very end, write the magic number `UVUV` in bytes.
 
 Then when you run `python` on the `.exe`, it will see the `.zip` trailer at the
 end of the `.exe`, and automagically look inside to find and execute
 `__main__.py`. Easy-peasy.
-
-(TODO: we should probably make the Python-finding logic slightly more flexible
-at some point -- in particular to support more conventional venv-style
-installation where you find `python` by looking in the directory next to the
-trampoline `.exe` -- but this is good enough to get started.)
-
 
 # Why does this exist?
 
@@ -46,7 +46,6 @@ Python-finding logic we want. But mostly it was just an interesting challenge.
 
 This does owe a *lot* to the `distlib` implementation though. The overall logic
 is copied more-or-less directly.
-
 
 # Anything I should know for hacking on this?
 
@@ -64,7 +63,7 @@ this:
   Though uh, this does mean that literally all of our code is `unsafe`. Sorry!
 
 - `runtime.rs` has the core glue to get panicking, heap allocation, and linking
-  working. 
+  working.
 
 - `diagnostics.rs` uses `ufmt` and some cute Windows tricks to get a convenient
   version of `eprintln!` that works without `std`, and automatically prints to
@@ -84,7 +83,6 @@ Miscellaneous tips:
   invoke `core::fmt`, even if the unwrap will actually never fail.
   `.unwrap_unchecked()` avoids this. Similar for `slice[idx]` vs
   `slice.get_unchecked(idx)`.
-
 
 # How do you build this stupid thing?
 
@@ -107,7 +105,6 @@ Two approaches that are reasonably likely to work:
 - Leave `compiler-builtins` commented-out, and build like: `cargo build
   --release -Z build-std=core,panic_abort,alloc -Z
   build-std-features=compiler-builtins-mem --target x86_64-pc-windows-msvc`
- 
 
 Hopefully in the future as `#![no_std]` develops, this will get smoother.
 
