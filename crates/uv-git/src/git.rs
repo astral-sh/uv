@@ -44,6 +44,7 @@ pub(crate) enum GitReference {
 }
 
 /// Strategy when fetching refspecs for a [`GitReference`]
+#[derive(Debug, Clone, Copy)]
 enum RefspecStrategy {
     // All refspecs should be fetched, if any fail then the fetch will fail
     All,
@@ -151,7 +152,7 @@ impl GitRemote {
         db: Option<GitDatabase>,
         reference: &GitReference,
         locked_rev: Option<git2::Oid>,
-        strategy: FetchStrategy,
+        strategy: Option<FetchStrategy>,
         client: &Client,
     ) -> Result<(GitDatabase, git2::Oid)> {
         let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
@@ -211,7 +212,7 @@ impl GitDatabase {
         &self,
         rev: git2::Oid,
         destination: &Path,
-        strategy: FetchStrategy,
+        strategy: Option<FetchStrategy>,
         client: &Client,
     ) -> Result<GitCheckout<'_>> {
         // If the existing checkout exists, and it is fresh, use it.
@@ -437,7 +438,7 @@ impl<'a> GitCheckout<'a> {
     /// Submodules set to `none` won't be fetched.
     ///
     /// [^1]: <https://git-scm.com/docs/git-submodule#Documentation/git-submodule.txt-none>
-    fn update_submodules(&self, strategy: FetchStrategy, client: &Client) -> Result<()> {
+    fn update_submodules(&self, strategy: Option<FetchStrategy>, client: &Client) -> Result<()> {
         /// Like `Cow`, but without a requirement on `Clone`.
         enum Repo<'a> {
             Borrowed(&'a git2::Repository),
@@ -891,15 +892,17 @@ pub(crate) fn with_fetch_options(
 /// * Dispatches `git fetch` using libgit2 or git CLI.
 ///
 /// The `remote_url` argument is the git remote URL where we want to fetch from.
+///
+/// Returns the successful fetch strategy used, if any.
 pub(crate) fn fetch(
     repo: &mut git2::Repository,
     remote_url: &str,
     reference: &GitReference,
-    strategy: FetchStrategy,
+    strategy: Option<FetchStrategy>,
     client: &Client,
-) -> Result<()> {
+) -> Result<Option<FetchStrategy>> {
     let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client) {
-        Ok(FastPathRev::UpToDate) => return Ok(()),
+        Ok(FastPathRev::UpToDate) => return Ok(None),
         Ok(FastPathRev::NeedsFetch(rev)) => Some(rev),
         Ok(FastPathRev::Indeterminate) => None,
         Err(e) => {
@@ -977,11 +980,53 @@ pub(crate) fn fetch(
         }
     }
 
+    if let Some(strategy) = strategy {
+        fetch_with_strategy(
+            repo,
+            remote_url,
+            strategy,
+            refspecs.as_slice(),
+            refspec_strategy,
+            tags,
+        )
+    } else {
+        fetch_with_strategy(
+            repo,
+            remote_url,
+            FetchStrategy::Libgit2,
+            refspecs.as_slice(),
+            refspec_strategy,
+            tags,
+        )
+        .or_else(|_| {
+            fetch_with_strategy(
+                repo,
+                remote_url,
+                FetchStrategy::Cli,
+                refspecs.as_slice(),
+                refspec_strategy,
+                tags,
+            )
+        })
+    }
+}
+
+fn fetch_with_strategy(
+    repo: &mut git2::Repository,
+    remote_url: &str,
+    strategy: FetchStrategy,
+    refspecs: &[String],
+    refspec_strategy: RefspecStrategy,
+    tags: bool,
+) -> Result<Option<FetchStrategy>> {
     debug!("Performing a Git fetch for: {remote_url}");
     match strategy {
         FetchStrategy::Cli => {
             match refspec_strategy {
-                RefspecStrategy::All => fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags),
+                RefspecStrategy::All => {
+                    fetch_with_cli(repo, remote_url, refspecs, tags)?;
+                    Ok(Some(strategy))
+                }
                 RefspecStrategy::First => {
                     let num_refspecs = refspecs.len();
 
@@ -991,7 +1036,7 @@ pub(crate) fn fetch(
                         .map(|refspec| {
                             (
                                 refspec.clone(),
-                                fetch_with_cli(repo, remote_url, &[refspec], tags),
+                                fetch_with_cli(repo, remote_url, &[refspec.clone()], tags),
                             )
                         })
                         // Stop after the first success
@@ -1007,7 +1052,7 @@ pub(crate) fn fetch(
                         }
                         Err(anyhow!("failed to fetch all refspecs"))
                     } else {
-                        Ok(())
+                        Ok(Some(strategy))
                     }
                 }
             }
@@ -1060,7 +1105,8 @@ pub(crate) fn fetch(
                     return Err(err.into());
                 }
                 Ok(())
-            })
+            })?;
+            Ok(Some(strategy))
         }
     }
 }
