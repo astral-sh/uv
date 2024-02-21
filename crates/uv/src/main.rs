@@ -20,7 +20,9 @@ use uv_installer::{NoBinary, Reinstall};
 use uv_interpreter::PythonVersion;
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
-use uv_traits::{NoBuild, PackageNameSpecifier, SetupPyStrategy};
+use uv_traits::{
+    ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, SetupPyStrategy,
+};
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, Upgrade};
 use crate::compat::CompatArgs;
@@ -331,6 +333,10 @@ struct PipCompileArgs {
     #[clap(long, conflicts_with = "no_build")]
     only_binary: Vec<PackageNameSpecifier>,
 
+    /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
+    #[clap(long, short = 'C', alias = "config-settings")]
+    config_setting: Vec<ConfigSettingEntry>,
+
     /// The minimum Python version that should be supported by the compiled requirements (e.g.,
     /// `3.7` or `3.7.9`).
     ///
@@ -455,6 +461,10 @@ struct PipSyncArgs {
     /// Clear previously specified packages with `:none:`.
     #[clap(long, conflicts_with = "no_build")]
     only_binary: Vec<PackageNameSpecifier>,
+
+    /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
+    #[clap(long, short = 'C', alias = "config-settings")]
+    config_setting: Vec<ConfigSettingEntry>,
 
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
@@ -620,6 +630,10 @@ struct PipInstallArgs {
     /// Clear previously specified packages with `:none:`.
     #[clap(long, conflicts_with = "no_build")]
     only_binary: Vec<PackageNameSpecifier>,
+
+    /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
+    #[clap(long, short = 'C', alias = "config-settings")]
+    config_setting: Vec<ConfigSettingEntry>,
 
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
@@ -873,6 +887,12 @@ async fn run() -> Result<ExitStatus> {
             } else {
                 DependencyMode::Transitive
             };
+            let setup_py = if args.legacy_setup_py {
+                SetupPyStrategy::Setuptools
+            } else {
+                SetupPyStrategy::Pep517
+            };
+            let config_settings = args.config_setting.into_iter().collect::<ConfigSettings>();
             commands::pip_compile(
                 &requirements,
                 &constraints,
@@ -889,11 +909,8 @@ async fn run() -> Result<ExitStatus> {
                 args.emit_index_url,
                 args.emit_find_links,
                 index_urls,
-                if args.legacy_setup_py {
-                    SetupPyStrategy::Setuptools
-                } else {
-                    SetupPyStrategy::Pep517
-                },
+                setup_py,
+                config_settings,
                 if args.offline {
                     Connectivity::Offline
                 } else {
@@ -928,21 +945,25 @@ async fn run() -> Result<ExitStatus> {
             let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
             let no_binary = NoBinary::from_args(args.no_binary);
             let no_build = NoBuild::from_args(args.only_binary, args.no_build);
+            let setup_py = if args.legacy_setup_py {
+                SetupPyStrategy::Setuptools
+            } else {
+                SetupPyStrategy::Pep517
+            };
+            let config_settings = args.config_setting.into_iter().collect::<ConfigSettings>();
+
             commands::pip_sync(
                 &sources,
                 &reinstall,
                 args.link_mode,
                 index_urls,
-                if args.legacy_setup_py {
-                    SetupPyStrategy::Setuptools
-                } else {
-                    SetupPyStrategy::Pep517
-                },
+                setup_py,
                 if args.offline {
                     Connectivity::Offline
                 } else {
                     Connectivity::Online
                 },
+                &config_settings,
                 &no_build,
                 &no_binary,
                 args.strict,
@@ -998,6 +1019,13 @@ async fn run() -> Result<ExitStatus> {
             } else {
                 DependencyMode::Transitive
             };
+            let setup_py = if args.legacy_setup_py {
+                SetupPyStrategy::Setuptools
+            } else {
+                SetupPyStrategy::Pep517
+            };
+            let config_settings = args.config_setting.into_iter().collect::<ConfigSettings>();
+
             commands::pip_install(
                 &requirements,
                 &constraints,
@@ -1010,16 +1038,13 @@ async fn run() -> Result<ExitStatus> {
                 index_urls,
                 &reinstall,
                 args.link_mode,
-                if args.legacy_setup_py {
-                    SetupPyStrategy::Setuptools
-                } else {
-                    SetupPyStrategy::Pep517
-                },
+                setup_py,
                 if args.offline {
                     Connectivity::Offline
                 } else {
                     Connectivity::Online
                 },
+                &config_settings,
                 &no_build,
                 &no_binary,
                 args.strict,

@@ -20,7 +20,7 @@ use uv_installer::{
 };
 use uv_interpreter::Virtualenv;
 use uv_resolver::InMemoryIndex;
-use uv_traits::{InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -36,6 +36,7 @@ pub(crate) async fn pip_sync(
     index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
+    config_settings: &ConfigSettings,
     no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
@@ -112,6 +113,7 @@ pub(crate) async fn pip_sync(
         &in_flight,
         venv.python_executable(),
         setup_py,
+        config_settings,
         no_build,
         no_binary,
     );

@@ -21,7 +21,7 @@ use uv_installer::NoBinary;
 use uv_interpreter::Virtualenv;
 use uv_normalize::PackageName;
 use uv_resolver::InMemoryIndex;
-use uv_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildContext, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct ResolveManyArgs {
@@ -96,6 +96,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                 let index_locations = IndexLocations::default();
                 let setup_py = SetupPyStrategy::default();
                 let flat_index = FlatIndex::default();
+                let config_settings = ConfigSettings::default();
 
                 // Create a `BuildDispatch` for each requirement.
                 let build_dispatch = BuildDispatch::new(
@@ -108,6 +109,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                     &in_flight,
                     venv.python_executable(),
                     setup_py,
+                    &config_settings,
                     &no_build,
                     &NoBinary::None,
                 );

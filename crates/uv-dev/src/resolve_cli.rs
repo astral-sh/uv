@@ -18,7 +18,7 @@ use uv_dispatch::BuildDispatch;
 use uv_installer::NoBinary;
 use uv_interpreter::Virtualenv;
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use uv_traits::{InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {
@@ -72,12 +72,12 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     };
     let index = InMemoryIndex::default();
     let in_flight = InFlight::default();
-
     let no_build = if args.no_build {
         NoBuild::All
     } else {
         NoBuild::None
     };
+    let config_settings = ConfigSettings::default();
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -89,6 +89,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         &in_flight,
         venv.python_executable(),
         SetupPyStrategy::default(),
+        &config_settings,
         &no_build,
         &NoBinary::None,
     );
