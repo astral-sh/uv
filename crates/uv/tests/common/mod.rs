@@ -44,17 +44,36 @@ pub struct TestContext {
     pub temp_dir: assert_fs::TempDir,
     pub cache_dir: assert_fs::TempDir,
     pub venv: PathBuf,
+
+    // Canonical paths, we store these for creating filters
+    temp_dir_path: PathBuf,
+    cache_dir_path: PathBuf,
+    venv_path: PathBuf,
 }
 
 impl TestContext {
     pub fn new(python_version: &str) -> Self {
         let temp_dir = assert_fs::TempDir::new().expect("Failed to create temp dir");
-        let cache_dir = assert_fs::TempDir::new().expect("Failed to create temp dir");
+        let cache_dir = assert_fs::TempDir::new().expect("Failed to create cache dir");
         let venv = create_venv(&temp_dir, &cache_dir, python_version);
+
+        let cache_dir_path = cache_dir
+            .canonicalize()
+            .expect("Failed to create canonical path");
+        let venv_path = venv
+            .canonicalize()
+            .expect("Failed to create canonical path");
+        let temp_dir_path = temp_dir
+            .canonicalize()
+            .expect("Failed to create canonical path");
+
         Self {
             temp_dir,
             cache_dir,
             venv,
+            temp_dir_path,
+            cache_dir_path,
+            venv_path,
         }
     }
 
@@ -97,29 +116,16 @@ impl TestContext {
         .stdout(version);
     }
 
-    pub fn filters(&self) -> std::io::Result<Vec<(String, String)>> {
-        let cache_dir = self.cache_dir.canonicalize()?;
-        let venv_dir = self.venv.canonicalize()?;
-        let temp_dir = self.temp_dir.canonicalize()?;
+    /// Canonical snapshot filters for this test context.
+    pub fn filters<'a>(&'a self) -> Vec<(&'a str, &'a str)> {
+        let mut filters = INSTA_FILTERS.to_vec();
 
-        let mut filters = INSTA_FILTERS
-            .iter()
-            .map(|(pattern, replacement)| (pattern.to_string(), replacement.to_string()))
-            .collect::<Vec<_>>();
-        filters.push((
-            cache_dir.to_str().unwrap().to_string(),
-            "[CACHE DIR]".to_string(),
-        ));
-        filters.push((
-            venv_dir.to_str().unwrap().to_string(),
-            "[VENV DIR]".to_string(),
-        ));
-        filters.push((
-            temp_dir.to_str().unwrap().to_string(),
-            "[TEMP DIR]".to_string(),
-        ));
+        filters.push((self.cache_dir_path.to_str().unwrap(), "[CACHE DIR]"));
+        filters.push((self.venv_path.to_str().unwrap(), "[VENV DIR]"));
+        // Note the temporary directoy comes last because the others are nested within
+        filters.push((self.temp_dir_path.to_str().unwrap(), "[TEMP DIR]"));
 
-        Ok(filters)
+        filters
     }
 }
 

@@ -815,16 +815,10 @@ fn install_git_public_https() {
 /// Install a package from a public GitHub repository at a ref that does not exist
 #[test]
 #[cfg(feature = "git")]
-fn install_git_public_https_missing_ref() -> Result<()> {
+fn install_git_public_https_missing_ref() {
     let context = TestContext::new("3.8");
 
-    let filters = context.filters()?;
-    let filters: Vec<(&str, &str)> = filters
-        .iter()
-        .map(|(a, b)| (a.as_str(), b.as_str()))
-        .collect();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         // 2.0.0 does not exist
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0")
         , @r###"
@@ -838,10 +832,6 @@ fn install_git_public_https_missing_ref() -> Result<()> {
       Caused by: failed to clone into: [CACHE DIR]/git-v0/db/8dab139913c4b566
       Caused by: failed to fetch all refspecs
     "###);
-
-    context.assert_installed("uv_public_pypackage", "0.1.0");
-
-    Ok(())
 }
 
 /// Install a package from a private GitHub repository using a PAT
@@ -940,18 +930,14 @@ fn install_git_private_https_pat_and_username() {
 /// Install a package from a private GitHub repository using a PAT
 #[test]
 #[cfg(all(not(windows), feature = "git"))]
-fn install_git_private_https_pat_not_authorized() -> Result<()> {
+fn install_git_private_https_pat_not_authorized() {
     let context = TestContext::new("3.8");
 
     // A revoked token
     let token = "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";
 
-    let mut filters = context.filters()?;
-    filters.insert(0, (token.to_string(), "***".to_string()));
-    let filters: Vec<(&str, &str)> = filters
-        .iter()
-        .map(|(a, b)| (a.as_str(), b.as_str()))
-        .collect();
+    let mut filters = context.filters();
+    filters.insert(0, (&token, "***"));
 
     // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
     // and hang the test
@@ -973,8 +959,6 @@ fn install_git_private_https_pat_not_authorized() -> Result<()> {
     fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
 
     "###);
-
-    Ok(())
 }
 
 /// Install a package without using pre-built wheels.
