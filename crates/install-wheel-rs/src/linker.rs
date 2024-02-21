@@ -280,68 +280,93 @@ fn clone_wheel_files(
     wheel: impl AsRef<Path>,
 ) -> Result<usize, Error> {
     let mut count = 0usize;
+    let mut attempt = CloneAttempt::default();
 
     // On macOS, directly can be recursively copied with a single `clonefile` call.
     // So we only need to iterate over the top-level of the directory, and copy each file or
     // subdirectory unless the subdirectory exists already in which case we'll need to recursively
     // merge its contents with the existing directory.
     for entry in fs::read_dir(wheel.as_ref())? {
-        clone_recursive(site_packages.as_ref(), wheel.as_ref(), &entry?)?;
+        clone_recursive(
+            site_packages.as_ref(),
+            wheel.as_ref(),
+            &entry?,
+            &mut attempt,
+        )?;
         count += 1;
     }
 
     Ok(count)
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+enum CloneAttempt {
+    #[default]
+    First,
+    Subsequent,
+    UseCopyFallback,
+}
+
 /// Recursively clone the contents of `from` into `to`.
-fn clone_recursive(site_packages: &Path, wheel: &Path, entry: &DirEntry) -> Result<(), Error> {
+fn clone_recursive(
+    site_packages: &Path,
+    wheel: &Path,
+    entry: &DirEntry,
+    attempt: &mut CloneAttempt,
+) -> Result<(), Error> {
     // Determine the existing and destination paths.
     let from = entry.path();
     let to = site_packages.join(from.strip_prefix(wheel).unwrap());
 
     debug!("Cloning {} to {}", from.display(), to.display());
 
-    // Attempt to copy the file or directory
-    let mut reflink = reflink_copy::reflink_or_copy(&from, &to);
-
-    let entry_file_type = entry.file_type()?;
-
-    // `reflink_or_copy` returns `InvalidInput` on macOS when reflinking a directory/symlink that already exists
-    // at the destination - macOS has the capability to reflink those, but `reflink_or_copy` doesn't make an exception
-    // and obscures the underlying `AlreadyExists` error. We need to properly fallback in this case,
-    // so we run `reflink` and check if that gives us an `AlreadyExists` error.
-    if reflink
-        .as_ref()
-        .is_err_and(|err| err.kind() == std::io::ErrorKind::InvalidInput)
-        && cfg!(target_os = "macos")
-        && !entry_file_type.is_file()
-    {
-        reflink = reflink_copy::reflink(&from, &to).map(|()| None);
-    }
-
-    if reflink
-        .as_ref()
-        .is_err_and(|err| err.kind() == std::io::ErrorKind::AlreadyExists)
-    {
-        // If copying fails and the directory exists already, it must be merged recursively.
-        if entry_file_type.is_dir() {
-            for entry in fs::read_dir(from)? {
-                clone_recursive(site_packages, wheel, &entry?)?;
+    match attempt {
+        CloneAttempt::First => {
+            *attempt = CloneAttempt::Subsequent;
+            if let Err(err) = reflink_copy::reflink(&from, &to) {
+                if err.kind() == std::io::ErrorKind::AlreadyExists {
+                    // If copying fails and the directory exists already, it must be merged recursively.
+                    if entry.file_type()?.is_dir() {
+                        for entry in fs::read_dir(from)? {
+                            clone_recursive(site_packages, wheel, &entry?, attempt)?;
+                        }
+                    } else {
+                        // If file already exists, overwrite it.
+                        let tempdir = tempdir_in(site_packages)?;
+                        let tempfile = tempdir.path().join(from.file_name().unwrap());
+                        reflink_copy::reflink(from, &tempfile)?;
+                        fs::rename(&tempfile, to)?;
+                    }
+                } else {
+                    // switch to copy fallback
+                    *attempt = CloneAttempt::UseCopyFallback;
+                    return clone_recursive(site_packages, wheel, entry, attempt);
+                }
             }
-        } else {
-            // If file already exists, overwrite it.
-            let tempdir = tempdir_in(site_packages)?;
-            let tempfile = tempdir.path().join(from.file_name().unwrap());
-            reflink_copy::reflink_or_copy(from, &tempfile)?;
-            fs::rename(&tempfile, to)?;
         }
-    } else {
-        // Other errors should be tracked
-        reflink.map_err(|err| Error::Reflink {
-            from: from.clone(),
-            to: to.clone(),
-            err,
-        })?;
+        CloneAttempt::Subsequent => {
+            if let Err(err) = reflink_copy::reflink(&from, &to) {
+                if err.kind() == std::io::ErrorKind::AlreadyExists {
+                    // If copying fails and the directory exists already, it must be merged recursively.
+                    if entry.file_type()?.is_dir() {
+                        for entry in fs::read_dir(from)? {
+                            clone_recursive(site_packages, wheel, &entry?, attempt)?;
+                        }
+                    } else {
+                        // If file already exists, overwrite it.
+                        let tempdir = tempdir_in(site_packages)?;
+                        let tempfile = tempdir.path().join(from.file_name().unwrap());
+                        reflink_copy::reflink(from, &tempfile)?;
+                        fs::rename(&tempfile, to)?;
+                    }
+                } else {
+                    return Err(Error::Reflink { to, from, err });
+                }
+            }
+        }
+        CloneAttempt::UseCopyFallback => {
+            fs::copy(&from, &to)?;
+        }
     }
 
     Ok(())
