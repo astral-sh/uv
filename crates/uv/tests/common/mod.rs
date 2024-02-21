@@ -132,13 +132,14 @@ impl TestContext {
                         .expect("Failed to create canonical path")
                         // Normalize the path to match display and remove UNC prefixes on Windows
                         .normalized()
-                        .to_string_lossy(),
+                        .display()
+                        .to_string(),
                 )
             ),
             // Include a non-canonicalized version
             format!(
                 r"{}\\?/?",
-                regex::escape(&path.as_ref().normalized().as_os_str().to_string_lossy())
+                regex::escape(&path.as_ref().normalized().display().to_string())
             ),
         ]
     }
