@@ -186,18 +186,50 @@ fn musl_ld_output_to_version(kind: &str, output: &[u8]) -> Result<Os, PlatformEr
     Ok(Os::Musllinux { major, minor })
 }
 
-/// Find musl libc path from executable's ELF header.
+/// Find musl ld path from executable's ELF header.
 fn find_ld_path() -> Result<PathBuf, PlatformError> {
-    let buffer = fs::read("/bin/sh")?;
-    let error_str = "Couldn't parse /bin/sh for detecting the ld version";
-    let elf = Elf::parse(&buffer)
-        .map_err(|err| PlatformError::OsVersionDetectionError(format!("{error_str}: {err}")))?;
+    // At first, we just looked for /bin/ls. But on some Linux distros, /bin/ls
+    // is a shell script that just calls /usr/bin/ls. So we switched to looking
+    // at /bin/sh. But apparently in some environments, /bin/sh is itself just
+    // a shell script that calls /bin/dash. So... We just try a few different
+    // paths. In most cases, /bin/sh should work.
+    //
+    // See: https://github.com/astral-sh/uv/pull/1493
+    // See: https://github.com/astral-sh/uv/issues/1810
+    let attempts = ["/bin/sh", "/bin/dash", "/bin/ls"];
+    for path in attempts {
+        match find_ld_path_at(path) {
+            Ok(ld_path) => return Ok(ld_path),
+            Err(err) => {
+                tracing::trace!("attempt to find `ld` path at {path} failed: {err}");
+            }
+        }
+    }
+    Err(PlatformError::OsVersionDetectionError(format!(
+        "Couldn't parse ELF interpreter path out of any of the following paths: {joined}",
+        joined = attempts.join(", "),
+    )))
+}
+
+/// Attempt to find the path to the `ld` executable by
+/// ELF parsing the given path. If this fails for any
+/// reason, then an error is returned.
+fn find_ld_path_at(path: impl AsRef<Path>) -> Result<PathBuf, PlatformError> {
+    let path = path.as_ref();
+    let buffer = fs::read(path)?;
+    let elf = Elf::parse(&buffer).map_err(|err| {
+        PlatformError::OsVersionDetectionError(format!(
+            "Couldn't parse {path} as an ELF file: {err}",
+            path = path.display()
+        ))
+    })?;
     if let Some(elf_interpreter) = elf.interpreter {
         Ok(PathBuf::from(elf_interpreter))
     } else {
-        Err(PlatformError::OsVersionDetectionError(
-            error_str.to_string(),
-        ))
+        Err(PlatformError::OsVersionDetectionError(format!(
+            "Couldn't find ELF interpreter path from {path}",
+            path = path.display()
+        )))
     }
 }
 
