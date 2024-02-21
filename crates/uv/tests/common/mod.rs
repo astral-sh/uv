@@ -136,6 +136,8 @@ impl TestContext {
         // Note the temporary directoy comes last because the others are nested within
         filters.push((&self.temp_dir_pattern, "[TEMP DIR]"));
 
+        dbg!(&filters);
+
         filters
     }
 }
