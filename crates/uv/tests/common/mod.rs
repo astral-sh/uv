@@ -276,7 +276,7 @@ pub fn create_bin_with_executables(
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
 pub fn run_and_format<'a>(
     mut command: impl BorrowMut<std::process::Command>,
-    filters: impl AsRef<[(&'a str, &'a str)]>,
+    filters: impl AsRef<[(AsRef<str>, AsRef<str>)]>,
     windows_filters: bool,
 ) -> (String, Output) {
     let program = command

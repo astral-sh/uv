@@ -43,6 +43,14 @@ pub(crate) enum GitReference {
     DefaultBranch,
 }
 
+/// Strategy when fetching refspecs for a [`GitReference`]
+enum RefspecStrategy {
+    // All refspecs should be fetched, if any fail then the fetch will fail
+    All,
+    // Stop after the first successful fetch, if none suceed then the fetch will fail
+    First,
+}
+
 impl GitReference {
     pub(crate) fn from_rev(rev: &str) -> Self {
         if rev.starts_with("refs/") {
@@ -903,13 +911,6 @@ pub(crate) fn fetch(
     maybe_gc_repo(repo)?;
 
     clean_repo_temp_files(repo);
-
-    enum RefspecStrategy {
-        // All refspecs should be fetched, if any fail then the fetch will fail
-        All,
-        // Stop after the first successful fetch, if none suceed then the fetch will fail
-        First,
-    }
 
     // Translate the reference desired here into an actual list of refspecs
     // which need to get fetched. Additionally record if we're fetching tags.
