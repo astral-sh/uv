@@ -821,6 +821,7 @@ fn install_git_public_https_missing_branch_or_tag() {
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
     filters.push(("`git fetch .*`", "`git fetch [...]`"));
+    filters.push(("exit status", "exit code"));
 
     uv_snapshot!(filters, command(&context)
         // 2.0.0 does not exist
@@ -835,7 +836,7 @@ fn install_git_public_https_missing_branch_or_tag() {
       Caused by: Git operation failed
       Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
       Caused by: failed to fetch branch or tag `2.0.0`
-      Caused by: process didn't exit successfully: `git fetch [...]` (exit status: 128)
+      Caused by: process didn't exit successfully: `git fetch [...]` (exit code: 128)
     --- stderr
     fatal: couldn't find remote ref refs/tags/2.0.0
 
@@ -851,6 +852,7 @@ fn install_git_public_https_missing_commit() {
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
     filters.push(("`git fetch .*`", "`git fetch [...]`"));
+    filters.push(("exit status", "exit code"));
 
     uv_snapshot!(filters, command(&context)
         // 2.0.0 does not exist
@@ -865,7 +867,7 @@ fn install_git_public_https_missing_commit() {
       Caused by: Git operation failed
       Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
       Caused by: failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
-      Caused by: process didn't exit successfully: `git fetch [...]` (exit status: 128)
+      Caused by: process didn't exit successfully: `git fetch [...]` (exit code: 128)
     --- stderr
     fatal: remote error: upload-pack: not our ref 79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
 
