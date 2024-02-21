@@ -334,8 +334,8 @@ enum Resolver {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct VenvCompatArgs {
-    #[clap(long, hide = true)]
-    clear: bool,
+    #[clap(long)]
+    pub clear: bool,
 
     #[clap(long, hide = true)]
     no_seed: bool,
@@ -357,12 +357,12 @@ impl CompatArgs for VenvCompatArgs {
     /// behavior. If an argument is passed that does _not_ match uv's behavior, this method will
     /// return an error.
     fn validate(&self) -> Result<()> {
-        if self.clear {
-            warn_user!(
-                "virtualenv's `--clear` has no effect (uv always clears the virtual environment)."
-            );
-        }
-
+        // if self.clear {
+        //     warn_user!(
+        //         "virtualenv's `--clear` has no effect (uv always clears the virtual environment)."
+        //     );
+        // }
+        //
         if self.no_seed {
             warn_user!(
                 "virtualenv's `--no-seed` has no effect (uv omits seed packages by default)."

@@ -1092,6 +1092,7 @@ async fn run() -> Result<ExitStatus> {
                 args.exclude_newer,
                 &cache,
                 printer,
+                args.compat_args.clear,
             )
             .await
         }
