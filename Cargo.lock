@@ -906,6 +906,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror",
+ "tracing",
  "url",
  "urlencoding",
  "uv-fs",
