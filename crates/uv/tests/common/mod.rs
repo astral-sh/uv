@@ -131,10 +131,10 @@ impl TestContext {
     pub fn filters(&self) -> Vec<(&str, &str)> {
         let mut filters = INSTA_FILTERS.to_vec();
 
-        filters.push((&self.cache_dir_pattern, "[CACHE DIR]"));
-        filters.push((&self.venv_pattern, "[VENV DIR]"));
+        filters.push((&self.cache_dir_pattern, "[CACHE DIR]/"));
+        filters.push((&self.venv_pattern, "[VENV DIR]/"));
         // Note the temporary directoy comes last because the others are nested within
-        filters.push((&self.temp_dir_pattern, "[TEMP DIR]"));
+        filters.push((&self.temp_dir_pattern, "[TEMP DIR]/"));
 
         dbg!(&filters);
 
