@@ -832,6 +832,25 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Package(package_name, extra, url) => {
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
+                    // If an extra is provided, wait for the metadata to be available, since it's
+                    // still required for reporting diagnostics.
+                    if extra.is_some() {
+                        // Determine the distribution to lookup.
+                        let dist = match url {
+                            Some(url) => PubGrubDistribution::from_url(package_name, url),
+                            None => PubGrubDistribution::from_registry(package_name, version),
+                        };
+                        let package_id = dist.package_id();
+
+                        // Wait for the metadata to be available.
+                        self.index
+                            .distributions
+                            .wait(&package_id)
+                            .instrument(info_span!("distributions_wait", %package_id))
+                            .await
+                            .ok_or(ResolveError::Unregistered)?;
+                    }
+
                     return Ok(Dependencies::Available(DependencyConstraints::default()));
                 }
 
