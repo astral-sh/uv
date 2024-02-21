@@ -78,6 +78,18 @@ impl GitReference {
             GitReference::DefaultBranch => "HEAD",
         }
     }
+
+    pub(crate) fn kind_str(&self) -> &str {
+        match self {
+            GitReference::Branch(_) => "branch",
+            GitReference::Tag(_) => "tag",
+            GitReference::BranchOrTag(_) => "branch or tag",
+            GitReference::FullCommit(_) => "commit",
+            GitReference::ShortCommit(_) => "short commit",
+            GitReference::Ref(_) => "ref",
+            GitReference::DefaultBranch => "default branch",
+        }
+    }
 }
 
 /// A short abbreviated OID.
@@ -245,6 +257,7 @@ impl GitDatabase {
 impl GitReference {
     /// Resolves self to an object ID with objects the `repo` currently has.
     pub(crate) fn resolve(&self, repo: &git2::Repository) -> Result<git2::Oid> {
+        let refkind = self.kind_str();
         let id = match self {
             // Note that we resolve the named tag here in sync with where it's
             // fetched into via `fetch` below.
@@ -255,7 +268,7 @@ impl GitReference {
                 let obj = obj.peel(ObjectType::Commit)?;
                 Ok(obj.id())
             })()
-            .with_context(|| format!("failed to find tag `{s}`"))?,
+            .with_context(|| format!("failed to find {refkind} `{s}`"))?,
 
             // Resolve the remote name since that's all we're configuring in
             // `fetch` below.
@@ -263,10 +276,10 @@ impl GitReference {
                 let name = format!("origin/{s}");
                 let b = repo
                     .find_branch(&name, git2::BranchType::Remote)
-                    .with_context(|| format!("failed to find branch `{s}`"))?;
+                    .with_context(|| format!("failed to find {refkind} `{s}`"))?;
                 b.get()
                     .target()
-                    .ok_or_else(|| anyhow::format_err!("branch `{s}` did not have a target"))?
+                    .ok_or_else(|| anyhow::format_err!("{refkind} `{s}` did not have a target"))?
             }
 
             // Attempt to resolve the branch, then the tag.
@@ -283,7 +296,7 @@ impl GitReference {
                         let obj = obj.peel(ObjectType::Commit).ok()?;
                         Some(obj.id())
                     })
-                    .ok_or_else(|| anyhow::format_err!("failed to find branch or tag `{s}`"))?
+                    .ok_or_else(|| anyhow::format_err!("failed to find {refkind} `{s}`"))?
             }
 
             // We'll be using the HEAD commit
