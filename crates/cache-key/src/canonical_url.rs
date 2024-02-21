@@ -107,13 +107,14 @@ impl RepositoryUrl {
     pub fn new(url: &Url) -> RepositoryUrl {
         let mut url = CanonicalUrl::new(url).0;
 
-        // Clone to avoid borrow checker issues
-        let immutable_url = url.clone();
-
         // If a Git URL ends in a reference (like a branch, tag, or commit), remove it.
         if url.scheme().starts_with("git+") {
-            if let Some((prefix, _)) = immutable_url.path().rsplit_once('@') {
-                url.set_path(prefix);
+            if let Some(prefix) = url
+                .path()
+                .rsplit_once('@')
+                .map(|(prefix, _suffix)| prefix.to_string())
+            {
+                url.set_path(&prefix);
             }
         }
 
