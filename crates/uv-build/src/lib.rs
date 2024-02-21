@@ -301,7 +301,9 @@ impl SourceBuild {
             let extracted = temp_dir.path().join("extracted");
 
             // Unzip the archive into the temporary directory.
-            uv_extract::archive(source, &extracted)
+            let reader = fs_err::tokio::File::open(source).await?;
+            uv_extract::stream::archive(tokio::io::BufReader::new(reader), source, &extracted)
+                .await
                 .map_err(|err| Error::Extraction(extracted.clone(), err))?;
 
             // Extract the top-level directory from the archive.

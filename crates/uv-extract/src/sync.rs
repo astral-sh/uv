@@ -73,42 +73,6 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
         .collect::<Result<_, Error>>()
 }
 
-/// Extract a `.zip` or `.tar.gz` archive into the target directory.
-pub fn archive(source: impl AsRef<Path>, target: impl AsRef<Path>) -> Result<(), Error> {
-    // `.zip`
-    if source
-        .as_ref()
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
-    {
-        unzip(fs_err::File::open(source.as_ref())?, target.as_ref())?;
-        return Ok(());
-    }
-
-    // `.tar.gz`
-    if source
-        .as_ref()
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
-    {
-        if source.as_ref().file_stem().is_some_and(|stem| {
-            Path::new(stem)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
-        }) {
-            let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(fs_err::File::open(
-                source.as_ref(),
-            )?));
-            // https://github.com/alexcrichton/tar-rs/issues/349
-            archive.set_preserve_mtime(false);
-            archive.unpack(target)?;
-            return Ok(());
-        }
-    }
-
-    Err(Error::UnsupportedArchive(source.as_ref().to_path_buf()))
-}
-
 /// Extract the top-level directory from an unpacked archive.
 ///
 /// The specification says:
