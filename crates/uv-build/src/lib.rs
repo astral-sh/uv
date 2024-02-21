@@ -54,6 +54,14 @@ static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
     ],
 });
 
+/// The backend for fastText because it depends on pybind11.
+/// <https://github.com/facebookresearch/fastText/blob/b733943e84263f432fa47588643822194ee03dd1/setup.py#L40>
+static FASTTEXT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
+    backend: "setuptools.build_meta:__legacy__".to_string(),
+    backend_path: None,
+    requirements: vec![Requirement::from_str("pybind11 >= 2.2").unwrap()],
+});
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -317,7 +325,11 @@ impl SourceBuild {
             source_root
         };
 
-        let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
+        let default_backend: Pep517Backend = if package_id.starts_with("fasttext") {
+            FASTTEXT_BACKEND.clone()
+        } else {
+            DEFAULT_BACKEND.clone()
+        };
 
         // Check if we have a PEP 517 build backend.
         let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)
