@@ -112,13 +112,18 @@ impl TestContext {
 
     /// Generate an escaped regex pattern for the given path.
     fn path_pattern(path: impl AsRef<Path>) -> String {
-        regex::escape(
-            &path
-                .as_ref()
-                .canonicalize()
-                .expect("Failed to create canonical path")
-                .normalized()
-                .to_string_lossy(),
+        format!(
+            // Remove the trailing `\` or `/` from directories for cross-platform filters
+            r"{}\\?/?",
+            regex::escape(
+                &path
+                    .as_ref()
+                    .canonicalize()
+                    .expect("Failed to create canonical path")
+                    // Normalize the path to match display and remove UNC prefixes on Windows
+                    .normalized()
+                    .to_string_lossy(),
+            )
         )
     }
 
