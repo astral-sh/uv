@@ -58,6 +58,10 @@ jobs:
       labels: ${{ matrix.runner }}
     name: "cargo test | ${{ matrix.os }}"
     steps:
+      - name: "Disable Windows defender"
+        if: ${{ matrix.os == 'windows' }}
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+        shell: powershell
       - uses: actions/checkout@v4
       - if: ${{ matrix.os == 'macos' }}
         name: "Install bootstrap dependencies"
