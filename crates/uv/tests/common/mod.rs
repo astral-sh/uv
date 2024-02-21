@@ -152,11 +152,9 @@ impl TestContext {
     pub fn filters(&self) -> Vec<(&str, &str)> {
         let mut filters = INSTA_FILTERS.to_vec();
 
-        for (pattern, replacement) in self.filters.iter() {
+        for (pattern, replacement) in &self.filters {
             filters.push((pattern, replacement));
         }
-
-        dbg!(&filters);
 
         filters
     }
