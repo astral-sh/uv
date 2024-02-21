@@ -9,7 +9,6 @@ use petgraph::Direction;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
-
 use rustc_hash::FxHashMap;
 use url::Url;
 
@@ -23,14 +22,17 @@ use uv_normalize::{ExtraName, PackageName};
 use crate::pins::FilePins;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority};
 use crate::resolver::VersionsResponse;
-
 use crate::ResolveError;
 
-/// Indicate the style of annotation comments
-#[derive(Debug, Copy, Clone, PartialEq)]
+/// Indicate the style of annotation comments, used to indicate the dependencies that requested each
+/// package.
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum AnnotationStyle {
+    /// Render the annotations on a single, comma-separated line.
     Line,
+    /// Render each annotation on its own line.
+    #[default]
     Split,
 }
 
@@ -264,13 +266,14 @@ pub struct DisplayResolutionGraph<'a> {
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
     /// requested each package.
     include_annotations: bool,
-    /// Format of annotation comments
+    /// The style of annotation comments, used to indicate the dependencies that requested each
+    /// package.
     annotation_style: AnnotationStyle,
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
     fn from(resolution: &'a ResolutionGraph) -> Self {
-        Self::new(resolution, false, true, AnnotationStyle::Split)
+        Self::new(resolution, false, true, AnnotationStyle::default())
     }
 }
 
@@ -351,17 +354,13 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // Print out the dependency graph.
         for (index, node) in nodes {
             // Display the node itself.
-            let mut line: String;
-            match node {
-                Node::Distribution(_, dist) => {
-                    line = format!("{}", dist.verbatim());
-                }
-                Node::Editable(_, editable) => {
-                    line = format!("-e {}", editable.verbatim());
-                }
-            }
+            let mut line = match node {
+                Node::Distribution(_, dist) => format!("{}", dist.verbatim()),
+                Node::Editable(_, editable) => format!("-e {}", editable.verbatim()),
+            };
 
             // Display the distribution hashes, if any.
+            let mut has_hashes = false;
             if self.show_hashes {
                 if let Some(hashes) = self
                     .resolution
@@ -371,15 +370,18 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 {
                     for hash in hashes {
                         if let Some(hash) = hash.to_string() {
+                            has_hashes = true;
                             line.push_str(" \\\n");
-                            line.push_str(&format!("    --hash={hash}"));
+                            line.push_str("    --hash=");
+                            line.push_str(&hash);
                         }
                     }
                 }
             }
 
-            let mut sep = "";
-            let mut annotation = String::new();
+            // Determine the annotation comment and separator (between comment and requirement).
+            let mut annotation = None;
+
             if self.include_annotations {
                 // Display all dependencies.
                 let mut edges = self
@@ -393,46 +395,47 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 match self.annotation_style {
                     AnnotationStyle::Line => {
                         if !edges.is_empty() {
-                            sep = if self.show_hashes { "\n    " } else { "  " };
+                            let separator = if has_hashes { "\n    " } else { "  " };
                             let deps = edges
                                 .into_iter()
-                                .map(|dependency| format!("{}", dependency.name()))
+                                .map(|dependency| dependency.name().to_string())
                                 .collect::<Vec<_>>()
                                 .join(", ");
-                            annotation = format!("{}", format!("# via {deps}").green());
+                            let comment = format!("# via {deps}").green().to_string();
+                            annotation = Some((separator, comment));
                         }
                     }
-                    AnnotationStyle::Split => {
-                        if !edges.is_empty() {
-                            sep = "\n";
+                    AnnotationStyle::Split => match edges.as_slice() {
+                        [] => {}
+                        [edge] => {
+                            let separator = "\n";
+                            let comment = format!("    # via {}", edge.name()).green().to_string();
+                            annotation = Some((separator, comment));
                         }
-                        match edges.len() {
-                            0 => {}
-                            1 => {
-                                annotation =
-                                    format!("{}", format!("    # via {}", edges[0].name()).green());
-                            }
-                            _ => {
-                                let deps = edges
-                                    .into_iter()
-                                    .map(|dependency| format!("    #   {}", dependency.name()))
-                                    .collect::<Vec<_>>()
-                                    .join("\n");
-                                annotation = format!("{}", format!("    # via\n{deps}").green());
-                            }
+                        edges => {
+                            let separator = "\n";
+                            let deps = edges
+                                .iter()
+                                .map(|dependency| format!("    #   {}", dependency.name()))
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            let comment = format!("    # via\n{deps}").green().to_string();
+                            annotation = Some((separator, comment));
                         }
-                    }
+                    },
                 }
             }
-            // Assemble the line with the annotations and remove trailing whitespaces.
-            line = format!("{line:24}{sep}{annotation}")
-                .split('\n')
-                .map(str::trim_end)
-                .collect::<Vec<_>>()
-                .join("\n");
 
-            // Write requirement line to the formatter.
-            writeln!(f, "{line}")?;
+            if let Some((separator, comment)) = annotation {
+                // Assemble the line with the annotations and remove trailing whitespaces.
+                for line in format!("{line:24}{separator}{comment}").lines() {
+                    let line = line.trim_end();
+                    writeln!(f, "{line}")?;
+                }
+            } else {
+                // Write the line as is.
+                writeln!(f, "{line}")?;
+            }
         }
 
         Ok(())

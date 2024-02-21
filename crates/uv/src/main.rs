@@ -354,7 +354,7 @@ struct PipCompileArgs {
     #[clap(long, hide = true)]
     emit_find_links: bool,
 
-    /// Choose the format of annotation comments
+    /// Choose the style of the annotation comments, which indicate the source of each package.
     #[clap(long, default_value_t=AnnotationStyle::Split, value_enum)]
     annotation_style: AnnotationStyle,
 
