@@ -6,6 +6,7 @@ use std::vec;
 use anstream::eprint;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use itertools::Itertools;
 use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
@@ -184,7 +185,10 @@ async fn venv_impl(
             .await
             .map_err(VenvError::Seed)?;
 
-        for distribution in resolution.distributions() {
+        for distribution in resolution
+            .distributions()
+            .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(&b.version())))
+        {
             writeln!(
                 printer,
                 " {} {}{}",
