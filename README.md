@@ -66,7 +66,7 @@ To activate the virtual environment:
 source .venv/bin/activate
 
 # On Windows.
-.\.venv\Scripts\activate.ps1
+.venv\Scripts\activate
 ```
 
 To install a package into the virtual environment:
