@@ -310,10 +310,12 @@ impl InterpreterQueryResult {
                 .extension()
                 .is_some_and(|extension| extension == "bat")
         {
-            // pyenv-win shims fail with a syntax error when using `-c`.
-            // I haven't been able to figure out the reason why.
-            // So we use `-` to read from stdin. That's more expensive
-            // so avoid doing it for regular exe files.
+            // Multiline arguments aren't well-supported in batch files and `pyenv-win`, for example, trips over it.
+            // We work around this batch limitation by passing the script via stdin instead.
+            // This is somewhat more expensive because we have to spawn a new thread to write the
+            // stdin to avoid deadlocks in case the child process waits for the parent to read stdout.
+            // The performance overhead is the reason why we only applies this to batch files.
+            // https://github.com/pyenv-win/pyenv-win/issues/589
             let mut child = Command::new(interpreter)
                 .arg("-")
                 .stdin(std::process::Stdio::piped())
