@@ -6,12 +6,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, str};
 
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{anyhow, Context, Result};
 use cargo_util::{paths, ProcessBuilder};
 use git2::{self, ErrorClass, ObjectType};
 use reqwest::Client;
 use reqwest::StatusCode;
-use tracing::{debug, error, warn};
+use tracing::{debug, warn};
 use url::Url;
 use uv_fs::Normalized;
 
@@ -996,32 +996,37 @@ pub(crate) fn fetch(
             match refspec_strategy {
                 RefspecStrategy::All => fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags),
                 RefspecStrategy::First => {
-                    let num_refspecs = refspecs.len();
-
                     // Try each refspec
-                    let errors = refspecs
-                        .into_iter()
-                        .map(|refspec| {
-                            (
-                                refspec.clone(),
-                                fetch_with_cli(repo, remote_url, &[refspec], tags),
-                            )
+                    let mut errors = refspecs
+                        .iter()
+                        .map_while(|refspec| {
+                            let fetch_result =
+                                fetch_with_cli(repo, remote_url, &[refspec.clone()], tags);
+
+                            // Stop after the first success and log failures
+                            match fetch_result {
+                                Err(err) => {
+                                    debug!("failed to fetch refspec `{refspec}`: {err}");
+                                    Some(err)
+                                }
+                                Ok(()) => None,
+                            }
                         })
-                        // Stop after the first success
-                        .take_while(|(_, result)| result.is_err())
                         .collect::<Vec<_>>();
 
-                    if errors.len() == num_refspecs {
-                        // If all of the fetches failed, report to the user
-                        for (refspec, err) in errors {
-                            if let Err(err) = err {
-                                error!("failed to fetch refspec `{refspec}`: {err}");
+                    if errors.len() == refspecs.len() {
+                        // Use the last error for the message
+                        if let Some(err) = errors.pop() {
+                            {
+                                return Err(err.context(format!(
+                                    "failed to fetch {} `{}`",
+                                    reference.kind_str(),
+                                    reference.as_str()
+                                )));
                             }
                         }
-                        Err(anyhow!("failed to fetch all refspecs"))
-                    } else {
-                        Ok(())
                     }
+                    Ok(())
                 }
             }
         }
