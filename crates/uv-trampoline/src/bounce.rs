@@ -1,10 +1,15 @@
+use alloc::string::String;
 use alloc::{ffi::CString, vec, vec::Vec};
+use core::ffi::c_char;
 use core::mem::MaybeUninit;
 use core::{
     ffi::CStr,
     ptr::{addr_of, addr_of_mut, null, null_mut},
 };
 
+use windows_sys::Win32::Storage::FileSystem::{
+    CreateFileA, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, OPEN_EXISTING,
+};
 use windows_sys::Win32::{
     Foundation::*,
     System::{
@@ -18,7 +23,7 @@ use windows_sys::Win32::{
 };
 
 use crate::helpers::SizeOf;
-use crate::{c, check, eprintln};
+use crate::{c, eprintln, format};
 
 fn getenv(name: &CStr) -> Option<CString> {
     unsafe {
@@ -57,11 +62,11 @@ fn make_child_cmdline(is_gui: bool) -> CString {
     child_cmdline.push(b'\0');
 
     // Helpful when debugging trampline issues
-    // eprintln!(
-    //     "executable_name: '{}'\nnew_cmdline: {}",
-    //     core::str::from_utf8(executable_name.to_bytes(),
-    //     core::str::from_utf8(child_cmdline.as_slice())
-    // );
+    eprintln!(
+        "executable_name: '{}'\nnew_cmdline: {}",
+        core::str::from_utf8(executable_name.to_bytes()).unwrap(),
+        core::str::from_utf8(child_cmdline.as_slice()).unwrap()
+    );
 
     // SAFETY: We push the null termination byte at the end.
     unsafe { CString::from_vec_with_nul_unchecked(child_cmdline) }
@@ -94,18 +99,15 @@ fn executable_filename() -> CString {
 
         // That's the error condition because len doesn't include the trailing null byte
         if len as usize == buffer.len() {
-            unsafe {
-                let last_error = GetLastError();
-                match last_error {
-                    ERROR_INSUFFICIENT_BUFFER => {
-                        SetLastError(ERROR_SUCCESS);
-                        // Try again with twice the size
-                        buffer.resize(buffer.len() * 2, 0);
-                    }
-                    err => {
-                        eprintln!("Failed to get executable name: code {}", err);
-                        ExitProcess(1);
-                    }
+            let last_error = unsafe { GetLastError() };
+            match last_error {
+                ERROR_INSUFFICIENT_BUFFER => {
+                    unsafe { SetLastError(ERROR_SUCCESS) };
+                    // Try again with twice the size
+                    buffer.resize(buffer.len() * 2, 0);
+                }
+                err => {
+                    print_error_and_exit(&format!("Failed to get executable name (code: {})", err));
                 }
             }
         } else {
@@ -128,9 +130,8 @@ fn find_python_exe(is_gui: bool, executable_name: &CStr) -> CString {
             "Invalid current exe path (missing backslash): `{}`",
             &*executable_name.to_string_lossy()
         );
-        unsafe {
-            ExitProcess(1);
-        }
+
+        exit_with_status(1);
     };
 
     let mut buffer = bytes[..last_backslash + 1].to_vec();
@@ -192,22 +193,30 @@ fn make_job_object() -> HANDLE {
         let job = CreateJobObjectW(null(), null());
         let mut job_info = MaybeUninit::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>::uninit();
         let mut retlen = 0u32;
-        check!(QueryInformationJobObject(
-            job,
-            JobObjectExtendedLimitInformation,
-            job_info.as_mut_ptr() as *mut _,
-            job_info.size_of(),
-            &mut retlen as *mut _,
-        ));
+        expect_result(
+            QueryInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                job_info.as_mut_ptr() as *mut _,
+                job_info.size_of(),
+                &mut retlen as *mut _,
+            ),
+            0,
+            || String::from("Error from QueryInformationJobObject"),
+        );
         let mut job_info = job_info.assume_init();
         job_info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         job_info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK;
-        check!(SetInformationJobObject(
-            job,
-            JobObjectExtendedLimitInformation,
-            addr_of!(job_info) as *const _,
-            job_info.size_of(),
-        ));
+        expect_result(
+            SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                addr_of!(job_info) as *const _,
+                job_info.size_of(),
+            ),
+            0,
+            || String::from("Error from SetInformationJobObject"),
+        );
         job
     }
 }
@@ -222,20 +231,24 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
             SetHandleInformation(si.hStdError, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
         }
         let mut child_process_info = MaybeUninit::<PROCESS_INFORMATION>::uninit();
-        check!(CreateProcessA(
-            null(),
-            // Why does this have to be mutable? Who knows. But it's not a mistake --
-            // MS explicitly documents that this buffer might be mutated by CreateProcess.
-            child_cmdline.into_bytes_with_nul().as_mut_ptr(),
-            null(),
-            null(),
-            1,
+        expect_result(
+            CreateProcessA(
+                null(),
+                // Why does this have to be mutable? Who knows. But it's not a mistake --
+                // MS explicitly documents that this buffer might be mutated by CreateProcess.
+                child_cmdline.into_bytes_with_nul().as_mut_ptr(),
+                null(),
+                null(),
+                1,
+                0,
+                null(),
+                null(),
+                addr_of!(*si),
+                child_process_info.as_mut_ptr(),
+            ),
             0,
-            null(),
-            null(),
-            addr_of!(*si),
-            child_process_info.as_mut_ptr(),
-        ));
+            || String::from("Failed to spawn python child process"),
+        );
         let child_process_info = child_process_info.assume_init();
         CloseHandle(child_process_info.hThread);
         child_process_info.hProcess
@@ -319,7 +332,9 @@ pub fn bounce(is_gui: bool) -> ! {
 
         let child_handle = spawn_child(&si, child_cmdline);
         let job = make_job_object();
-        check!(AssignProcessToJobObject(job, child_handle));
+        expect_result(AssignProcessToJobObject(job, child_handle), 0, || {
+            String::from("Error from AssignProcessToJobObject")
+        });
 
         // (best effort) Close all the handles that we can
         close_handles(&si);
@@ -345,7 +360,82 @@ pub fn bounce(is_gui: bool) -> ! {
 
         WaitForSingleObject(child_handle, INFINITE);
         let mut exit_code = 0u32;
-        check!(GetExitCodeProcess(child_handle, addr_of_mut!(exit_code)));
-        ExitProcess(exit_code);
+        expect_result(
+            GetExitCodeProcess(child_handle, addr_of_mut!(exit_code)),
+            0,
+            || String::from("Error from GetExitCodeProcess"),
+        );
+        exit_with_status(exit_code);
+    }
+}
+
+/// Unwraps the result of the C call by asserting that it doesn't match the `error_code`.
+///
+/// Prints the passed error message if the `actual_result` is equal to `error_code` and exits the process with status 1.
+#[inline]
+fn expect_result<T, F>(actual_result: T, error_code: T, error_message: F) -> T
+where
+    T: Eq,
+    F: FnOnce() -> String,
+{
+    if actual_result == error_code {
+        print_error_and_exit(&error_message());
+    }
+
+    actual_result
+}
+
+#[cold]
+fn print_error_and_exit(message: &str) -> ! {
+    use windows_sys::Win32::{
+        Foundation::*,
+        System::Diagnostics::Debug::{
+            FormatMessageA, FORMAT_MESSAGE_ALLOCATE_BUFFER, FORMAT_MESSAGE_FROM_SYSTEM,
+            FORMAT_MESSAGE_IGNORE_INSERTS,
+        },
+    };
+
+    let err = unsafe { GetLastError() };
+    eprintln!("Received error code: {}", err);
+    let mut msg_ptr: *mut u8 = core::ptr::null_mut();
+    let size = unsafe {
+        FormatMessageA(
+            FORMAT_MESSAGE_ALLOCATE_BUFFER
+                | FORMAT_MESSAGE_FROM_SYSTEM
+                | FORMAT_MESSAGE_IGNORE_INSERTS,
+            null(),
+            err,
+            0,
+            // Weird calling convention: this argument is typed as *mut u16,
+            // but if you pass FORMAT_MESSAGE_ALLOCATE_BUFFER then you have to
+            // *actually* pass in a *mut *mut u16 and just lie about the type.
+            // Getting Rust to do this requires some convincing.
+            core::ptr::addr_of_mut!(msg_ptr) as *mut _ as _,
+            0,
+            core::ptr::null(),
+        )
+    };
+
+    if size == 0 {
+        eprintln!(
+            "{}: with code {} (failed to get error message)",
+            message, err
+        );
+    } else {
+        let reason = unsafe {
+            let reason = core::slice::from_raw_parts(msg_ptr, size as usize + 1);
+            CStr::from_bytes_with_nul_unchecked(reason)
+        };
+        eprintln!("{}: {}", message, &*reason.to_string_lossy());
+    }
+
+    // Note: We don't need to free the buffer here because we're going to exit anyway.
+    exit_with_status(1);
+}
+
+#[cold]
+fn exit_with_status(code: u32) -> ! {
+    unsafe {
+        ExitProcess(code);
     }
 }
