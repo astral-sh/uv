@@ -829,8 +829,7 @@ fn install_git_public_https_missing_ref() {
     ----- stderr -----
     error: Failed to download and build: uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0
       Caused by: Git operation failed
-      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      Caused by: failed to fetch all refspecs
+      Caused by: failed to find branch or tag `2.0.0`
     "###);
 }
 
