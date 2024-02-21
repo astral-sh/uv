@@ -829,7 +829,7 @@ fn install_git_public_https_missing_ref() {
     ----- stderr -----
     error: Failed to download and build: uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0
       Caused by: Git operation failed
-      Caused by: failed to clone into: [CACHE DIR]/git-v0/db/8dab139913c4b566
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
       Caused by: failed to fetch all refspecs
     "###);
 }
@@ -908,7 +908,6 @@ fn install_git_private_https_pat_and_username() {
 
     let mut filters = INSTA_FILTERS.to_vec();
     filters.insert(0, (&token, "***"));
-    filters.push(("failed to clone into: .*", "failed to clone into: [PATH]"));
 
     uv_snapshot!(filters, command(&context)
         .arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
@@ -951,7 +950,7 @@ fn install_git_private_https_pat_not_authorized() {
     ----- stderr -----
     error: Failed to download and build: uv-private-pypackage @ git+https://git:***@github.com/astral-test/uv-private-pypackage
       Caused by: Git operation failed
-      Caused by: failed to clone into: [CACHE DIR]/git-v0/db/2496970ed6fdf08f
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/2496970ed6fdf08f
       Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
     --- stderr
     remote: Support for password authentication was removed on August 13, 2021.

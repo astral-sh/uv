@@ -45,10 +45,8 @@ pub struct TestContext {
     pub cache_dir: assert_fs::TempDir,
     pub venv: PathBuf,
 
-    // Escaped patterns matching the paths for filters
-    temp_dir_pattern: String,
-    cache_dir_pattern: String,
-    venv_pattern: String,
+    // Standard filters for this test context
+    filters: Vec<(String, String)>,
 }
 
 impl TestContext {
@@ -57,17 +55,28 @@ impl TestContext {
         let cache_dir = assert_fs::TempDir::new().expect("Failed to create cache dir");
         let venv = create_venv(&temp_dir, &cache_dir, python_version);
 
-        let cache_dir_pattern = Self::path_pattern(&cache_dir);
-        let temp_dir_pattern = Self::path_pattern(&temp_dir);
-        let venv_pattern = Self::path_pattern(&venv);
+        let mut filters = Vec::new();
+        filters.extend(
+            Self::path_patterns(&cache_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[CACHE_DIR]/".to_string())),
+        );
+        filters.extend(
+            Self::path_patterns(&temp_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[TEMP_DIR]/".to_string())),
+        );
+        filters.extend(
+            Self::path_patterns(&venv)
+                .into_iter()
+                .map(|pattern| (pattern, "[VENV]/".to_string())),
+        );
 
         Self {
             temp_dir,
             cache_dir,
             venv,
-            temp_dir_pattern,
-            cache_dir_pattern,
-            venv_pattern,
+            filters,
         }
     }
 
@@ -111,30 +120,36 @@ impl TestContext {
     }
 
     /// Generate an escaped regex pattern for the given path.
-    fn path_pattern(path: impl AsRef<Path>) -> String {
-        format!(
-            // Remove the trailing `\` or `/` from directories for cross-platform filters
-            r"{}\\?/?",
-            regex::escape(
-                &path
-                    .as_ref()
-                    .canonicalize()
-                    .expect("Failed to create canonical path")
-                    // Normalize the path to match display and remove UNC prefixes on Windows
-                    .normalized()
-                    .to_string_lossy(),
-            )
-        )
+    fn path_patterns(path: impl AsRef<Path>) -> Vec<String> {
+        vec![
+            format!(
+                // Remove the trailing `\` or `/` from directories for cross-platform filters
+                r"{}\\?/?",
+                regex::escape(
+                    &path
+                        .as_ref()
+                        .canonicalize()
+                        .expect("Failed to create canonical path")
+                        // Normalize the path to match display and remove UNC prefixes on Windows
+                        .normalized()
+                        .to_string_lossy(),
+                )
+            ),
+            // Include a non-canonicalized version
+            format!(
+                r"{}\\?/?",
+                regex::escape(&path.as_ref().normalized().as_os_str().to_string_lossy())
+            ),
+        ]
     }
 
     /// Canonical snapshot filters for this test context.
     pub fn filters(&self) -> Vec<(&str, &str)> {
         let mut filters = INSTA_FILTERS.to_vec();
 
-        filters.push((&self.cache_dir_pattern, "[CACHE DIR]/"));
-        filters.push((&self.venv_pattern, "[VENV DIR]/"));
-        // Note the temporary directoy comes last because the others are nested within
-        filters.push((&self.temp_dir_pattern, "[TEMP DIR]/"));
+        for (pattern, replacement) in self.filters.iter() {
+            filters.push((pattern, replacement));
+        }
 
         dbg!(&filters);
 
