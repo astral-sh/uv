@@ -9,7 +9,6 @@ use petgraph::Direction;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
-
 use rustc_hash::FxHashMap;
 use url::Url;
 
@@ -23,8 +22,19 @@ use uv_normalize::{ExtraName, PackageName};
 use crate::pins::FilePins;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority};
 use crate::resolver::VersionsResponse;
-
 use crate::ResolveError;
+
+/// Indicate the style of annotation comments, used to indicate the dependencies that requested each
+/// package.
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+pub enum AnnotationStyle {
+    /// Render the annotations on a single, comma-separated line.
+    Line,
+    /// Render each annotation on its own line.
+    #[default]
+    Split,
+}
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
@@ -256,11 +266,14 @@ pub struct DisplayResolutionGraph<'a> {
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
     /// requested each package.
     include_annotations: bool,
+    /// The style of annotation comments, used to indicate the dependencies that requested each
+    /// package.
+    annotation_style: AnnotationStyle,
 }
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
     fn from(resolution: &'a ResolutionGraph) -> Self {
-        Self::new(resolution, false, true)
+        Self::new(resolution, false, true, AnnotationStyle::default())
     }
 }
 
@@ -270,11 +283,13 @@ impl<'a> DisplayResolutionGraph<'a> {
         underlying: &'a ResolutionGraph,
         show_hashes: bool,
         include_annotations: bool,
+        annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
         Self {
             resolution: underlying,
             show_hashes,
             include_annotations,
+            annotation_style,
         }
     }
 }
@@ -339,16 +354,13 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // Print out the dependency graph.
         for (index, node) in nodes {
             // Display the node itself.
-            match node {
-                Node::Distribution(_, dist) => {
-                    write!(f, "{}", dist.verbatim())?;
-                }
-                Node::Editable(_, editable) => {
-                    write!(f, "-e {}", editable.verbatim())?;
-                }
-            }
+            let mut line = match node {
+                Node::Distribution(_, dist) => format!("{}", dist.verbatim()),
+                Node::Editable(_, editable) => format!("-e {}", editable.verbatim()),
+            };
 
             // Display the distribution hashes, if any.
+            let mut has_hashes = false;
             if self.show_hashes {
                 if let Some(hashes) = self
                     .resolution
@@ -358,13 +370,17 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 {
                     for hash in hashes {
                         if let Some(hash) = hash.to_string() {
-                            writeln!(f, " \\")?;
-                            write!(f, "    --hash={hash}")?;
+                            has_hashes = true;
+                            line.push_str(" \\\n");
+                            line.push_str("    --hash=");
+                            line.push_str(&hash);
                         }
                     }
                 }
             }
-            writeln!(f)?;
+
+            // Determine the annotation comment and separator (between comment and requirement).
+            let mut annotation = None;
 
             if self.include_annotations {
                 // Display all dependencies.
@@ -376,20 +392,49 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .collect::<Vec<_>>();
                 edges.sort_unstable_by_key(|package| package.name());
 
-                match edges.len() {
-                    0 => {}
-                    1 => {
-                        for dependency in edges {
-                            writeln!(f, "{}", format!("    # via {}", dependency.name()).green())?;
+                match self.annotation_style {
+                    AnnotationStyle::Line => {
+                        if !edges.is_empty() {
+                            let separator = if has_hashes { "\n    " } else { "  " };
+                            let deps = edges
+                                .into_iter()
+                                .map(|dependency| dependency.name().to_string())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            let comment = format!("# via {deps}").green().to_string();
+                            annotation = Some((separator, comment));
                         }
                     }
-                    _ => {
-                        writeln!(f, "{}", "    # via".green())?;
-                        for dependency in edges {
-                            writeln!(f, "{}", format!("    #   {}", dependency.name()).green())?;
+                    AnnotationStyle::Split => match edges.as_slice() {
+                        [] => {}
+                        [edge] => {
+                            let separator = "\n";
+                            let comment = format!("    # via {}", edge.name()).green().to_string();
+                            annotation = Some((separator, comment));
                         }
-                    }
+                        edges => {
+                            let separator = "\n";
+                            let deps = edges
+                                .iter()
+                                .map(|dependency| format!("    #   {}", dependency.name()))
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            let comment = format!("    # via\n{deps}").green().to_string();
+                            annotation = Some((separator, comment));
+                        }
+                    },
                 }
+            }
+
+            if let Some((separator, comment)) = annotation {
+                // Assemble the line with the annotations and remove trailing whitespaces.
+                for line in format!("{line:24}{separator}{comment}").lines() {
+                    let line = line.trim_end();
+                    writeln!(f, "{line}")?;
+                }
+            } else {
+                // Write the line as is.
+                writeln!(f, "{line}")?;
             }
         }
 

@@ -37,9 +37,6 @@ pub(crate) struct PipCompileCompatArgs {
     resolver: Option<Resolver>,
 
     #[clap(long, hide = true)]
-    annotation_style: Option<AnnotationStyle>,
-
-    #[clap(long, hide = true)]
     max_rounds: Option<usize>,
 
     #[clap(long, hide = true)]
@@ -139,21 +136,6 @@ impl CompatArgs for PipCompileCompatArgs {
                 Resolver::Legacy => {
                     return Err(anyhow!(
                         "pip-compile's `--resolver=legacy` is unsupported (uv always backtracks)."
-                    ));
-                }
-            }
-        }
-
-        if let Some(annotation_style) = self.annotation_style {
-            match annotation_style {
-                AnnotationStyle::Split => {
-                    warn_user!(
-                        "pip-compile's `--annotation-style=split` has no effect (uv always emits split annotations)."
-                    );
-                }
-                AnnotationStyle::Line => {
-                    return Err(anyhow!(
-                        "pip-compile's `--annotation-style=line` is unsupported (uv always emits split annotations)."
                     ));
                 }
             }
@@ -344,12 +326,6 @@ impl CompatArgs for PipSyncCompatArgs {
 enum Resolver {
     Backtracking,
     Legacy,
-}
-
-#[derive(Debug, Copy, Clone, ValueEnum)]
-enum AnnotationStyle {
-    Line,
-    Split,
 }
 
 /// Arguments for `venv` compatibility.
