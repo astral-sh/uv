@@ -1,11 +1,6 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
-use std::borrow::BorrowMut;
-use std::env;
-use std::path::{Path, PathBuf};
-use std::process::Output;
-
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
@@ -14,7 +9,12 @@ use assert_fs::fixture::PathChild;
 use fs_err::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
 use fs_err::os::windows::fs::symlink_file;
-use regex::Regex;
+use regex::{self, Regex};
+use std::borrow::BorrowMut;
+use std::env;
+use std::path::{Path, PathBuf};
+use std::process::Output;
+use uv_fs::Normalized;
 
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -45,10 +45,10 @@ pub struct TestContext {
     pub cache_dir: assert_fs::TempDir,
     pub venv: PathBuf,
 
-    // Canonical paths, we store these for creating filters
-    temp_dir_path: PathBuf,
-    cache_dir_path: PathBuf,
-    venv_path: PathBuf,
+    // Escaped patterns matching the paths for filters
+    temp_dir_pattern: String,
+    cache_dir_pattern: String,
+    venv_pattern: String,
 }
 
 impl TestContext {
@@ -57,23 +57,17 @@ impl TestContext {
         let cache_dir = assert_fs::TempDir::new().expect("Failed to create cache dir");
         let venv = create_venv(&temp_dir, &cache_dir, python_version);
 
-        let cache_dir_path = cache_dir
-            .canonicalize()
-            .expect("Failed to create canonical path");
-        let venv_path = venv
-            .canonicalize()
-            .expect("Failed to create canonical path");
-        let temp_dir_path = temp_dir
-            .canonicalize()
-            .expect("Failed to create canonical path");
+        let cache_dir_pattern = Self::path_pattern(&cache_dir);
+        let temp_dir_pattern = Self::path_pattern(&temp_dir);
+        let venv_pattern = Self::path_pattern(&venv);
 
         Self {
             temp_dir,
             cache_dir,
             venv,
-            temp_dir_path,
-            cache_dir_path,
-            venv_path,
+            temp_dir_pattern,
+            cache_dir_pattern,
+            venv_pattern,
         }
     }
 
@@ -116,14 +110,26 @@ impl TestContext {
         .stdout(version);
     }
 
+    /// Generate an escaped regex pattern for the given path.
+    fn path_pattern(path: impl AsRef<Path>) -> String {
+        regex::escape(
+            &path
+                .as_ref()
+                .canonicalize()
+                .expect("Failed to create canonical path")
+                .normalized()
+                .to_string_lossy(),
+        )
+    }
+
     /// Canonical snapshot filters for this test context.
     pub fn filters<'a>(&'a self) -> Vec<(&'a str, &'a str)> {
         let mut filters = INSTA_FILTERS.to_vec();
 
-        filters.push((self.cache_dir_path.to_str().unwrap(), "[CACHE DIR]"));
-        filters.push((self.venv_path.to_str().unwrap(), "[VENV DIR]"));
+        filters.push((&self.cache_dir_pattern, "[CACHE DIR]"));
+        filters.push((&self.venv_pattern, "[VENV DIR]"));
         // Note the temporary directoy comes last because the others are nested within
-        filters.push((self.temp_dir_path.to_str().unwrap(), "[TEMP DIR]"));
+        filters.push((&self.temp_dir_pattern, "[TEMP DIR]"));
 
         filters
     }
@@ -276,7 +282,7 @@ pub fn create_bin_with_executables(
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
 pub fn run_and_format<'a>(
     mut command: impl BorrowMut<std::process::Command>,
-    filters: impl AsRef<[(AsRef<str>, AsRef<str>)]>,
+    filters: impl AsRef<[(&'a str, &'a str)]>,
     windows_filters: bool,
 ) -> (String, Output) {
     let program = command
