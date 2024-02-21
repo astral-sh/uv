@@ -17,8 +17,9 @@ use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;
+use crate::python_query::try_find_default_python;
 use crate::virtual_env::detect_virtual_env;
-use crate::{find_default_python, find_requested_python, Error, PythonVersion};
+use crate::{find_requested_python, Error, PythonVersion};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -169,11 +170,7 @@ impl Interpreter {
         let interpreter = if let Some(python_version) = python_version {
             find_requested_python(&python_version.string, platform, cache)?
         } else {
-            match find_default_python(platform, cache) {
-                Ok(interpreter) => Some(interpreter),
-                Err(Error::NoPythonInstalled) => None,
-                Err(err) => return Err(err),
-            }
+            try_find_default_python(platform, cache)?
         };
 
         if let Some(interpreter) = interpreter {

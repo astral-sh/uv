@@ -271,7 +271,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-          × No Python 3.15 In `PATH`. Is Python 3.15 installed?
+          × No Python 3.15 found through `py --list-paths` or in `PATH`. Is Python 3.15 installed?
         "###
         );
     } else {
@@ -303,6 +303,10 @@ fn create_venv_unknown_python_patch() -> Result<()> {
         (
             r"Using Python 3\.\d+\.\d+ interpreter at .+",
             "Using Python [VERSION] interpreter at [PATH]",
+        ),
+        (
+            r"No Python 3\.8\.0 found through `py --list-paths` or in `PATH`\. Is Python 3\.8\.0 installed\?",
+            "No Python 3.8.0 In `PATH`. Is Python 3.8.0 installed?",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];

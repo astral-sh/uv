@@ -39,10 +39,20 @@ pub enum Error {
     },
     #[error("Failed to run `py --list-paths` to find Python installations. Is Python installed?")]
     PyList(#[source] io::Error),
+    #[cfg(windows)]
+    #[error(
+        "No Python {0} found through `py --list-paths` or in `PATH`. Is Python {0} installed?"
+    )]
+    NoSuchPython(String),
+    #[cfg(unix)]
     #[error("No Python {0} In `PATH`. Is Python {0} installed?")]
     NoSuchPython(String),
     #[error("Neither `python` nor `python3` are in `PATH`. Is Python installed?")]
-    NoPythonInstalled,
+    NoPythonInstalledUnix,
+    #[error(
+        "Could not find `python.exe` through `py --list-paths` or in 'PATH'. Is Python installed?"
+    )]
+    NoPythonInstalledWindows,
     #[error("{message}:\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     PythonSubcommandOutput {
         message: String,

@@ -1,6 +1,6 @@
 //! Find a user requested python version/interpreter.
 
-use std::collections::HashSet;
+use std::borrow::Cow;
 use std::env;
 use std::path::PathBuf;
 
@@ -23,7 +23,6 @@ use crate::{Error, Interpreter};
 /// version (e.g. `python3.12` on unix) and error when the version mismatches, as a binary with the
 /// patch version (e.g. `python3.12.1`) is often not in `PATH` and we make the simplifying
 /// assumption that the user has only this one patch version installed.
-#[instrument]
 pub fn find_requested_python(
     request: &str,
     platform: &Platform,
@@ -71,9 +70,22 @@ pub fn find_requested_python(
 ///
 /// We prefer the test overwrite `UV_TEST_PYTHON_PATH` if it is set, otherwise `python3`/`python` or
 /// `python.exe` respectively.
-#[instrument]
 pub fn find_default_python(platform: &Platform, cache: &Cache) -> Result<Interpreter, Error> {
-    find_python(PythonVersionSelector::Default, platform, cache)?.ok_or(Error::NoPythonInstalled)
+    try_find_default_python(platform, cache)?.ok_or(if cfg!(windows) {
+        Error::NoPythonInstalledWindows
+    } else if cfg!(unix) {
+        Error::NoPythonInstalledUnix
+    } else {
+        unreachable!("Only Unix and Windows are supported")
+    })
+}
+
+/// Same as [`find_default_python`] but returns `None` if no python is found instead of returning an `Err`.
+pub(crate) fn try_find_default_python(
+    platform: &Platform,
+    cache: &Cache,
+) -> Result<Option<Interpreter>, Error> {
+    find_python(PythonVersionSelector::Default, platform, cache)
 }
 
 /// Finds a python version matching `selector`.
@@ -88,6 +100,7 @@ pub fn find_default_python(platform: &Platform, cache: &Cache) -> Result<Interpr
 ///   * (windows): For each of the above, test for the existence of `python.bat` shim (pyenv-windows) last.
 ///
 /// (Windows): Filter out the windows store shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).
+#[instrument(skip_all, fields(? selector))]
 fn find_python(
     selector: PythonVersionSelector,
     platform: &Platform,
@@ -96,9 +109,8 @@ fn find_python(
     #[allow(non_snake_case)]
     let UV_TEST_PYTHON_PATH = env::var_os("UV_TEST_PYTHON_PATH");
 
-    if UV_TEST_PYTHON_PATH.is_none() {
+    if cfg!(windows) && UV_TEST_PYTHON_PATH.is_none() {
         // Use `py` to find the python installation on the system.
-        #[cfg(windows)]
         match windows::py_list_paths(selector, platform, cache) {
             Ok(Some(interpreter)) => return Ok(Some(interpreter)),
             Ok(None) => {
@@ -106,7 +118,7 @@ fn find_python(
             }
             Err(Error::PyList(error)) => {
                 if error.kind() == std::io::ErrorKind::NotFound {
-                    tracing::warn!(
+                    tracing::debug!(
                         "`py` is not installed. Falling back to searching Python on the path"
                     );
                     // Continue searching for python installations on the path.
@@ -117,23 +129,20 @@ fn find_python(
     }
 
     let possible_names = selector.possible_names();
-    let mut checked_installs = HashSet::new();
 
     #[allow(non_snake_case)]
     let PATH = UV_TEST_PYTHON_PATH
         .or(env::var_os("PATH"))
         .unwrap_or_default();
 
+    // We use `which` here instead of joining the paths ourselves because `which` checks for us if the python
+    // binary is executable and exists. It also has some extra logic that handles inconsistent casing on Windows
+    // and expands `~`.
     for path in env::split_paths(&PATH) {
         for name in possible_names.iter().flatten() {
             if let Ok(paths) = which::which_in_global(&**name, Some(&path)) {
                 for path in paths {
-                    if checked_installs.contains(&path) {
-                        continue;
-                    }
-
-                    #[cfg(windows)]
-                    if windows::is_windows_store_shim(&path) {
+                    if cfg!(windows) && windows::is_windows_store_shim(&path) {
                         continue;
                     }
 
@@ -144,8 +153,6 @@ fn find_python(
                     if let Some(interpreter) = installation.select(selector, platform, cache)? {
                         return Ok(Some(interpreter));
                     }
-
-                    checked_installs.insert(path);
                 }
             }
         }
@@ -153,23 +160,24 @@ fn find_python(
         // Python's `venv` model doesn't have this case because they use the `sys.executable` by default
         // which is sufficient to support pyenv-windows. Unfortunately, we can't rely on the executing Python version.
         // That's why we explicitly search for a Python shim as last resort.
-        #[cfg(windows)]
-        if let Ok(shims) = which::which_in_global("python.bat", Some(&path)) {
-            for shim in shims {
-                let interpreter = match Interpreter::query(&shim, platform, cache) {
-                    Ok(interpreter) => interpreter,
-                    Err(error) => {
-                        // Don't fail when querying the shim failed. E.g it's possible that no python version is selected
-                        // in the shim in which case pyenv prints to stdout.
-                        tracing::warn!("Failed to query python shim: {error}");
-                        continue;
-                    }
-                };
+        if cfg!(windows) {
+            if let Ok(shims) = which::which_in_global("python.bat", Some(&path)) {
+                for shim in shims {
+                    let interpreter = match Interpreter::query(&shim, platform, cache) {
+                        Ok(interpreter) => interpreter,
+                        Err(error) => {
+                            // Don't fail when querying the shim failed. E.g it's possible that no python version is selected
+                            // in the shim in which case pyenv prints to stdout.
+                            tracing::warn!("Failed to query python shim: {error}");
+                            continue;
+                        }
+                    };
 
-                if let Some(interpreter) = PythonInstallation::Interpreter(interpreter)
-                    .select(selector, platform, cache)?
-                {
-                    return Ok(Some(interpreter));
+                    if let Some(interpreter) = PythonInstallation::Interpreter(interpreter)
+                        .select(selector, platform, cache)?
+                    {
+                        return Ok(Some(interpreter));
+                    }
                 }
             }
         }
@@ -180,8 +188,6 @@ fn find_python(
 
 #[derive(Debug, Clone)]
 enum PythonInstallation {
-    // Used in the windows implementation.
-    #[allow(dead_code)]
     PyListPath {
         major: u8,
         minor: u8,
@@ -265,52 +271,43 @@ enum PythonVersionSelector {
 }
 
 impl PythonVersionSelector {
-    fn possible_names(self) -> [Option<std::borrow::Cow<'static, str>>; 4] {
+    fn possible_names(self) -> [Option<Cow<'static, str>>; 4] {
         let (python, python3, extension) = if cfg!(windows) {
             (
-                std::borrow::Cow::Borrowed("python.exe"),
-                std::borrow::Cow::Borrowed("python3.exe"),
+                Cow::Borrowed("python.exe"),
+                Cow::Borrowed("python3.exe"),
                 ".exe",
             )
         } else {
-            (
-                std::borrow::Cow::Borrowed("python"),
-                std::borrow::Cow::Borrowed("python3"),
-                "",
-            )
+            (Cow::Borrowed("python"), Cow::Borrowed("python3"), "")
         };
 
         match self {
             PythonVersionSelector::Default => [Some(python3), Some(python), None, None],
             PythonVersionSelector::Major(major) => [
-                Some(std::borrow::Cow::Owned(format!("python{major}{extension}"))),
+                Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
                 None,
                 None,
             ],
             PythonVersionSelector::MajorMinor(major, minor) => [
-                Some(std::borrow::Cow::Owned(format!(
-                    "python{major}.{minor}{extension}"
-                ))),
-                Some(std::borrow::Cow::Owned(format!("python{major}{extension}"))),
+                Some(Cow::Owned(format!("python{major}.{minor}{extension}"))),
+                Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
                 None,
             ],
             PythonVersionSelector::MajorMinorPatch(major, minor, patch) => [
-                Some(std::borrow::Cow::Owned(format!(
+                Some(Cow::Owned(format!(
                     "python{major}.{minor}.{patch}{extension}",
                 ))),
-                Some(std::borrow::Cow::Owned(format!(
-                    "python{major}.{minor}{extension}"
-                ))),
-                Some(std::borrow::Cow::Owned(format!("python{major}{extension}"))),
+                Some(Cow::Owned(format!("python{major}.{minor}{extension}"))),
+                Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
             ],
         }
     }
 }
 
-#[cfg(windows)]
 mod windows {
     use std::path::PathBuf;
     use std::process::Command;
@@ -394,7 +391,6 @@ mod windows {
     /// does not want us to do this as the format is unstable.  So this is a best effort way.
     /// we just hope that the reparse point has the python redirector in it, when it's not
     /// pointing to a valid Python.
-    #[allow(unsafe_code)]
     pub(super) fn is_windows_store_shim(path: &std::path::Path) -> bool {
         // Rye uses a more sophisticated test to identify the windows store shim.
         // Unfortunately, it only works with the `python.exe` shim but not `python3.exe`.
