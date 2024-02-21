@@ -123,7 +123,7 @@ impl TestContext {
     }
 
     /// Canonical snapshot filters for this test context.
-    pub fn filters<'a>(&'a self) -> Vec<(&'a str, &'a str)> {
+    pub fn filters(&self) -> Vec<(&str, &str)> {
         let mut filters = INSTA_FILTERS.to_vec();
 
         filters.push((&self.cache_dir_pattern, "[CACHE DIR]"));
