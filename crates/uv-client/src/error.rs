@@ -68,6 +68,10 @@ pub enum ErrorKind {
     #[error("Couldn't parse metadata of {0} from {1}")]
     MetadataParseError(WheelFilename, String, #[source] Box<pypi_types::Error>),
 
+    /// The metadata file was not found in the wheel.
+    #[error("Metadata file `{0}` was not found in {1}")]
+    MetadataNotFound(WheelFilename, String),
+
     /// The metadata file was not found in the registry.
     #[error("File `{0}` was not found in the registry at {1}.")]
     FileNotFound(String, #[source] reqwest::Error),

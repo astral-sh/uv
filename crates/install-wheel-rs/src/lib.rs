@@ -95,6 +95,36 @@ pub enum Error {
     MismatchedVersion(Version, Version),
 }
 
+/// Returns `true` if the file is a `METADATA` file in a `dist-info` directory that matches the
+/// wheel filename.
+pub fn is_metadata_entry(path: &str, filename: &WheelFilename) -> bool {
+    let Some((dist_info_dir, file)) = path.split_once('/') else {
+        return false;
+    };
+    if file != "METADATA" {
+        return false;
+    }
+    let Some(dir_stem) = dist_info_dir.strip_suffix(".dist-info") else {
+        return false;
+    };
+    let Some((name, version)) = dir_stem.rsplit_once('-') else {
+        return false;
+    };
+    let Ok(name) = PackageName::from_str(name) else {
+        return false;
+    };
+    if name != filename.name {
+        return false;
+    }
+    let Ok(version) = Version::from_str(version) else {
+        return false;
+    };
+    if version != filename.version {
+        return false;
+    }
+    true
+}
+
 /// Find the `dist-info` directory from a list of files.
 ///
 /// The metadata name may be uppercase, while the wheel and dist info names are lowercase, or
@@ -111,16 +141,21 @@ pub fn find_dist_info<'a, T: Copy>(
     let metadatas: Vec<_> = files
         .filter_map(|(payload, path)| {
             let (dist_info_dir, file) = path.split_once('/')?;
+            if file != "METADATA" {
+                return None;
+            }
+
             let dir_stem = dist_info_dir.strip_suffix(".dist-info")?;
             let (name, version) = dir_stem.rsplit_once('-')?;
-            if PackageName::from_str(name).ok()? == filename.name
-                && Version::from_str(version).ok()? == filename.version
-                && file == "METADATA"
-            {
-                Some((payload, dir_stem))
-            } else {
-                None
+            if PackageName::from_str(name).ok()? != filename.name {
+                return None;
             }
+
+            if Version::from_str(version).ok()? != filename.version {
+                return None;
+            }
+
+            Some((payload, dir_stem))
         })
         .collect();
     let (payload, dist_info_prefix) = match metadatas[..] {
