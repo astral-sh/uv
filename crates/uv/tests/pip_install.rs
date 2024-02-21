@@ -815,7 +815,7 @@ fn install_git_public_https() {
 /// Install a package from a public GitHub repository at a ref that does not exist
 #[test]
 #[cfg(feature = "git")]
-fn install_git_public_https_missing_ref() {
+fn install_git_public_https_missing_branch_or_tag() {
     let context = TestContext::new("3.8");
 
     uv_snapshot!(context.filters(), command(&context)
@@ -834,6 +834,32 @@ fn install_git_public_https_missing_ref() {
       Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/2.0.0:refs/remotes/origin/tags/2.0.0'` (exit status: 128)
     --- stderr
     fatal: couldn't find remote ref refs/tags/2.0.0
+
+    "###);
+}
+
+/// Install a package from a public GitHub repository at a ref that does not exist
+#[test]
+#[cfg(feature = "git")]
+fn install_git_public_https_missing_commit() {
+    let context = TestContext::new("3.8");
+
+    uv_snapshot!(context.filters(), command(&context)
+        // 2.0.0 does not exist
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b")
+        , @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      Caused by: failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
+      Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b:refs/remotes/origin/HEAD'` (exit status: 128)
+    --- stderr
+    fatal: remote error: upload-pack: not our ref 79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
 
     "###);
 }

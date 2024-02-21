@@ -993,7 +993,7 @@ pub(crate) fn fetch(
     debug!("Performing a Git fetch for: {remote_url}");
     match strategy {
         FetchStrategy::Cli => {
-            match refspec_strategy {
+            let result = match refspec_strategy {
                 RefspecStrategy::All => fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags),
                 RefspecStrategy::First => {
                     // Try each refspec
@@ -1005,9 +1005,9 @@ pub(crate) fn fetch(
 
                             // Stop after the first success and log failures
                             match fetch_result {
-                                Err(err) => {
+                                Err(ref err) => {
                                     debug!("failed to fetch refspec `{refspec}`: {err}");
-                                    Some(err)
+                                    Some(fetch_result)
                                 }
                                 Ok(()) => None,
                             }
@@ -1015,19 +1015,28 @@ pub(crate) fn fetch(
                         .collect::<Vec<_>>();
 
                     if errors.len() == refspecs.len() {
-                        // Use the last error for the message
-                        if let Some(err) = errors.pop() {
-                            {
-                                return Err(err.context(format!(
-                                    "failed to fetch {} `{}`",
-                                    reference.kind_str(),
-                                    reference.as_str()
-                                )));
-                            }
+                        if let Some(result) = errors.pop() {
+                            // Use the last error for the message
+                            result
+                        } else {
+                            // Can only occur if there were no refspecs to fetch
+                            Ok(())
                         }
+                    } else {
+                        Ok(())
                     }
-                    Ok(())
                 }
+            };
+            match reference {
+                // With the default branch, adding context is confusing
+                GitReference::DefaultBranch => result,
+                _ => result.with_context(|| {
+                    format!(
+                        "failed to fetch {} `{}`",
+                        reference.kind_str(),
+                        reference.as_str()
+                    )
+                }),
             }
         }
         FetchStrategy::Libgit2 => {
