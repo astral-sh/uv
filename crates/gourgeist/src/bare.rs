@@ -220,7 +220,10 @@ pub fn create_bare_venv(
     };
     let pyvenv_cfg_data = &[
         ("home", python_home),
-        ("implementation", "CPython".to_string()),
+        (
+            "implementation",
+            interpreter.markers().platform_python_implementation.clone(),
+        ),
         (
             "version_info",
             interpreter.markers().python_version.string.clone(),

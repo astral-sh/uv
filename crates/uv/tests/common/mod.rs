@@ -87,6 +87,15 @@ impl TestContext {
             .current_dir(&self.temp_dir)
             .assert()
     }
+
+    /// Assert a package is installed with the given version.
+    pub fn assert_installed(&self, package: &'static str, version: &'static str) {
+        self.assert_command(
+            format!("import {package} as package; print(package.__version__, end='')").as_str(),
+        )
+        .success()
+        .stdout(version);
+    }
 }
 
 pub fn venv_to_interpreter(venv: &Path) -> PathBuf {

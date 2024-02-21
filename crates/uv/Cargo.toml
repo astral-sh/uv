@@ -39,6 +39,7 @@ requirements-txt = { path = "../requirements-txt" }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
+base64 = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_complete_command = { workspace = true }
