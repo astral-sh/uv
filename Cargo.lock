@@ -1293,6 +1293,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uv-cache",
+ "uv-fs",
  "uv-interpreter",
  "which",
 ]
