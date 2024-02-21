@@ -812,6 +812,29 @@ fn install_git_public_https() {
     context.assert_installed("uv_public_pypackage", "0.1.0");
 }
 
+/// Install a package from a public GitHub repository at  
+#[test]
+#[cfg(feature = "git")]
+fn install_git_public_https_missing_ref() {
+    let context = TestContext::new("3.8");
+
+    uv_snapshot!(command(&context)
+        // 2.0.0 does not exist
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0")
+        , @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0
+      Caused by: Git operation failed
+      Caused by: failed to find branch or tag `2.0.0`
+    "###);
+
+    context.assert_installed("uv_public_pypackage", "0.1.0");
+}
+
 /// Install a package from a private GitHub repository using a PAT
 #[test]
 #[cfg(all(not(windows), feature = "git"))]
