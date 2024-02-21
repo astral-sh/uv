@@ -11,7 +11,7 @@ use cargo_util::{paths, ProcessBuilder};
 use git2::{self, ErrorClass, ObjectType};
 use reqwest::Client;
 use reqwest::StatusCode;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 use url::Url;
 use uv_fs::Normalized;
 
@@ -904,10 +904,18 @@ pub(crate) fn fetch(
 
     clean_repo_temp_files(repo);
 
+    enum RefspecStrategy {
+        // All refspecs should be fetched, if any fail then the fetch will fail
+        All,
+        // Stop after the first successful fetch, if none suceed then the fetch will fail
+        First,
+    }
+
     // Translate the reference desired here into an actual list of refspecs
     // which need to get fetched. Additionally record if we're fetching tags.
     let mut refspecs = Vec::new();
     let mut tags = false;
+    let mut refspec_strategy = RefspecStrategy::All;
     // The `+` symbol on the refspec means to allow a forced (fast-forward)
     // update which is needed if there is ever a force push that requires a
     // fast-forward.
@@ -929,6 +937,7 @@ pub(crate) fn fetch(
             refspecs.push(format!(
                 "+refs/tags/{branch_or_tag}:refs/remotes/origin/tags/{branch_or_tag}"
             ));
+            refspec_strategy = RefspecStrategy::First;
         }
 
         GitReference::DefaultBranch => {
@@ -970,27 +979,42 @@ pub(crate) fn fetch(
     debug!("Performing a Git fetch for: {remote_url}");
     match strategy {
         FetchStrategy::Cli => {
-            // Try each refspec
-            let results = refspecs
-                .into_iter()
-                .map(|refspec| fetch_with_cli(repo, remote_url, &[refspec], tags))
-                .collect::<Vec<_>>();
+            match refspec_strategy {
+                RefspecStrategy::All => fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags),
+                RefspecStrategy::First => {
+                    let num_refspecs = refspecs.len();
 
-            // Only fail if _all_ refspecs cannot be found
-            // This matches the Libgit2 behavior
-            if results.iter().all(Result::is_err) {
-                let mut combined_err = anyhow!("failed to fetch all refspecs");
-                for err in results {
-                    if let Err(err) = err {
-                        combined_err = combined_err.context(err.to_string());
+                    // Try each refspec
+                    let errors = refspecs
+                        .into_iter()
+                        .map(|refspec| {
+                            (
+                                refspec.clone(),
+                                fetch_with_cli(repo, remote_url, &[refspec], tags),
+                            )
+                        })
+                        // Stop after the first success
+                        .take_while(|(_, result)| result.is_err())
+                        .collect::<Vec<_>>();
+
+                    if errors.len() == num_refspecs {
+                        // If all of the fetches failed, report to the user
+                        for (refspec, err) in errors {
+                            if let Err(err) = err {
+                                error!("failed to fetch refspec `{refspec}`: {err}");
+                            }
+                        }
+                        Err(anyhow!("failed to fetch all refspecs"))
+                    } else {
+                        Ok(())
                     }
                 }
-                Err(combined_err)
-            } else {
-                Ok(())
             }
         }
         FetchStrategy::Libgit2 => {
+            // Libgit2 does not fail if a refspec is missing, so the `refspec_strategy`
+            // is not handled here
+
             let git_config = git2::Config::open_default()?;
             with_fetch_options(&git_config, remote_url, &mut |mut opts| {
                 if tags {

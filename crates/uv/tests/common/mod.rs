@@ -96,6 +96,31 @@ impl TestContext {
         .success()
         .stdout(version);
     }
+
+    pub fn filters(&self) -> std::io::Result<Vec<(String, String)>> {
+        let cache_dir = self.cache_dir.canonicalize()?;
+        let venv_dir = self.venv.canonicalize()?;
+        let temp_dir = self.temp_dir.canonicalize()?;
+
+        let mut filters = INSTA_FILTERS
+            .iter()
+            .map(|(pattern, replacement)| (pattern.to_string(), replacement.to_string()))
+            .collect::<Vec<_>>();
+        filters.push((
+            cache_dir.to_str().unwrap().to_string(),
+            "[CACHE DIR]".to_string(),
+        ));
+        filters.push((
+            venv_dir.to_str().unwrap().to_string(),
+            "[VENV DIR]".to_string(),
+        ));
+        filters.push((
+            temp_dir.to_str().unwrap().to_string(),
+            "[TEMP DIR]".to_string(),
+        ));
+
+        Ok(filters)
+    }
 }
 
 pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
