@@ -23,6 +23,7 @@ workspace = true
 [dependencies]
 platform-host = { path = "../platform-host" }
 uv-cache = { path = "../uv-cache" }
+uv-fs = { path = "../uv-fs" }
 uv-interpreter = { path = "../uv-interpreter" }
 
 anstream = { workspace = true }

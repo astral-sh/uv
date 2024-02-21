@@ -9,6 +9,7 @@ use camino::{FromPathBufError, Utf8Path, Utf8PathBuf};
 use fs_err as fs;
 use fs_err::File;
 use tracing::info;
+use uv_fs::Normalized;
 
 use uv_interpreter::Interpreter;
 
@@ -183,9 +184,16 @@ pub fn create_bare_venv(
     // cross-platform.
     for (name, template) in ACTIVATE_TEMPLATES {
         let activator = template
-            .replace("{{ VIRTUAL_ENV_DIR }}", location.as_str())
+            .replace(
+                "{{ VIRTUAL_ENV_DIR }}",
+                // SAFETY: `unwrap` is guaranteed to succeed because `location` is an `Utf8PathBuf`.
+                location.normalized().to_str().unwrap(),
+            )
             .replace("{{ BIN_NAME }}", bin_name)
-            .replace("{{ VIRTUAL_PROMPT }}", prompt.as_deref().unwrap_or(""))
+            .replace(
+                "{{ VIRTUAL_PROMPT }}",
+                prompt.as_deref().unwrap_or_default(),
+            )
             .replace(
                 "{{ RELATIVE_SITE_PACKAGES }}",
                 &format!(
