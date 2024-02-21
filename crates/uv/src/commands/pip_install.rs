@@ -454,7 +454,7 @@ async fn resolve(
         flat_index,
         index,
         build_dispatch,
-    )
+    )?
     .with_reporter(ResolverReporter::from(printer));
     let resolution = resolver.resolve().await?;
 

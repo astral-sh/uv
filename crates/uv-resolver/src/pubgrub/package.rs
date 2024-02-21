@@ -3,6 +3,8 @@ use derivative::Derivative;
 use pep508_rs::VerbatimUrl;
 use uv_normalize::{ExtraName, PackageName};
 
+use crate::resolver::Urls;
+
 /// A PubGrub-compatible wrapper around a "Python package", with two notable characteristics:
 ///
 /// 1. Includes a [`PubGrubPackage::Root`] variant, to satisfy `PubGrub`'s requirement that a
@@ -37,17 +39,7 @@ pub enum PubGrubPackage {
         /// Additionally, we need to ensure that we disallow multiple versions of the same package,
         /// even if requested from different URLs.
         ///
-        /// Removing the URL from the hash and equality operators is a hack to enable this behavior.
-        /// When we visit a URL dependency, we include the URL here. But that dependency "looks"
-        /// equal to the registry version from the solver's perspective, since they hash to the
-        /// same value.
-        ///
-        /// However, this creates the unfortunate requirement that we _must_ visit URL dependencies
-        /// before their registry variant, so that the URL-based version is used as the "canonical"
-        /// version. This is because the solver will always prefer the first version it sees, and
-        /// we need to ensure that the first version is the URL-based version.
-        ///
-        /// To enforce this requirement, we in turn require that all possible URL dependencies are
+        /// To enforce this requirement, we require that all possible URL dependencies are
         /// defined upfront, as `requirements.txt` or `constraints.txt` or similar. Otherwise,
         /// solving these graphs becomes far more complicated -- and the "right" behavior isn't
         /// even clear. For example, imagine that you define a direct dependency on Werkzeug, and
@@ -67,11 +59,16 @@ pub enum PubGrubPackage {
         /// we're going to have a dependency that's provided as a URL, we _need_ to visit the URL
         /// version before the registry version. So we could just error if we visit a URL variant
         /// _after_ a registry variant.
-        #[derivative(PartialEq = "ignore")]
-        #[derivative(PartialOrd = "ignore")]
-        #[derivative(Hash = "ignore")]
         Option<VerbatimUrl>,
     ),
+}
+
+impl PubGrubPackage {
+    /// Create a [`PubGrubPackage`] from a package name and optional extra name.
+    pub(crate) fn from_package(name: PackageName, extra: Option<ExtraName>, urls: &Urls) -> Self {
+        let url = urls.get(&name).cloned();
+        Self::Package(name, extra, url)
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]

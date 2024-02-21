@@ -1,6 +1,6 @@
-use itertools::Either;
 use std::hash::BuildHasherDefault;
 
+use itertools::Either;
 use rustc_hash::FxHashMap;
 
 use pep508_rs::Requirement;

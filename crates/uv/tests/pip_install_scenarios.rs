@@ -361,13 +361,13 @@ fn excluded_only_compatible_version() {
               albatross<2.0.0
               albatross>2.0.0
           depends on one of:
-              bluebird<=1.0.0
-              bluebird>=3.0.0
+              bluebird==1.0.0
+              bluebird==3.0.0
 
-          And because you require bluebird>=2.0.0,<3.0.0 and you require one of:
+          And because you require one of:
               albatross<2.0.0
               albatross>2.0.0
-          we can conclude that the requirements are unsatisfiable.
+          and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require
@@ -465,12 +465,12 @@ fn dependency_excludes_range_of_compatible_versions() {
               albatross<2.0.0
               albatross>=3.0.0
 
-          And because we know from (1) that albatross<2.0.0 depends on bluebird==1.0.0, we can conclude that albatross!=3.0.0, all versions of crow, bluebird!=1.0.0 are incompatible.
+          And because we know from (1) that albatross<2.0.0 depends on bluebird==1.0.0, we can conclude that bluebird!=1.0.0, albatross!=3.0.0, all versions of crow are incompatible.
           And because albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that all versions of crow depend on one of:
-              bluebird==1.0.0
-              bluebird==3.0.0
+              bluebird<=1.0.0
+              bluebird>=3.0.0
 
-          And because you require crow and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
+          And because you require bluebird>=2.0.0,<3.0.0 and you require crow, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
@@ -567,20 +567,21 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of crow are available:
+      ╰─▶ Because only the following versions of albatross are available:
+              albatross==1.0.0
+              albatross>=2.0.0,<=3.0.0
+          and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0. (1)
+
+          Because only the following versions of crow are available:
               crow==1.0.0
               crow==2.0.0
-          and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0. (1)
+          and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0.
+          And because crow==2.0.0 depends on albatross>=3.0.0, we can conclude that all versions of crow depend on one of:
+              albatross<2.0.0
+              albatross>=3.0.0
 
-          Because only the following versions of albatross are available:
-              albatross==1.0.0
-              albatross>=2.0.0
-          and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0.
-          And because we know from (1) that crow<2.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on bluebird==1.0.0.
-          And because crow==2.0.0 depends on albatross>=3.0.0, we can conclude that albatross<3.0.0, all versions of crow, bluebird!=1.0.0 are incompatible. (2)
-
-          Because only albatross<=3.0.0 is available and albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that albatross>=3.0.0 depends on bluebird==3.0.0.
-          And because we know from (2) that albatross<3.0.0, all versions of crow, bluebird!=1.0.0 are incompatible, we can conclude that all versions of crow depend on one of:
+          And because we know from (1) that albatross<2.0.0 depends on bluebird==1.0.0, we can conclude that bluebird!=1.0.0, all versions of crow, albatross!=3.0.0 are incompatible.
+          And because albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that all versions of crow depend on one of:
               bluebird<=1.0.0
               bluebird>=3.0.0
 
@@ -859,9 +860,9 @@ fn extra_incompatible_with_extra() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross[extra-b]==1.0.0 is available and albatross[extra-b]==1.0.0 depends on bluebird==1.0.0, we can conclude that all versions of albatross[extra-b] depend on bluebird==1.0.0.
-          And because albatross[extra-c]==1.0.0 depends on bluebird==2.0.0 and only albatross[extra-c]==1.0.0 is available, we can conclude that all versions of albatross[extra-c] and all versions of albatross[extra-b] are incompatible.
-          And because you require albatross[extra-c] and you require albatross[extra-b], we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only albatross[extra-c]==1.0.0 is available and albatross[extra-c]==1.0.0 depends on bluebird==2.0.0, we can conclude that all versions of albatross[extra-c] depend on bluebird==2.0.0.
+          And because albatross[extra-b]==1.0.0 depends on bluebird==1.0.0 and only albatross[extra-b]==1.0.0 is available, we can conclude that all versions of albatross[extra-c] and all versions of albatross[extra-b] are incompatible.
+          And because you require albatross[extra-b] and you require albatross[extra-c], we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Because both `extra_b` and `extra_c` are requested and they require incompatible
@@ -1069,7 +1070,7 @@ fn direct_incompatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ your requirements cannot be used because there are conflicting versions for `albatross`: `albatross==1.0.0` does not intersect with `albatross==2.0.0`
+      ╰─▶ Because you require albatross==1.0.0 and you require albatross==2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(&context.venv, "a_c0e7adfa", &context.temp_dir);
@@ -1173,9 +1174,9 @@ fn transitive_incompatible_with_transitive() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only bluebird==1.0.0 is available and bluebird==1.0.0 depends on crow==2.0.0, we can conclude that all versions of bluebird depend on crow==2.0.0.
-          And because albatross==1.0.0 depends on crow==1.0.0 and only albatross==1.0.0 is available, we can conclude that all versions of bluebird and all versions of albatross are incompatible.
-          And because you require bluebird and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 depends on crow==1.0.0, we can conclude that all versions of albatross depend on crow==1.0.0.
+          And because bluebird==1.0.0 depends on crow==2.0.0 and only bluebird==1.0.0 is available, we can conclude that all versions of bluebird and all versions of albatross are incompatible.
+          And because you require albatross and you require bluebird, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(&context.venv, "a_ec82e315", &context.temp_dir);
@@ -1940,10 +1941,10 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only bluebird==1.0.0 is available and bluebird==1.0.0 depends on crow, we can conclude that all versions of bluebird depend on crow.
-          And because only crow<2.0.0b1 is available, we can conclude that all versions of bluebird depend on crow<2.0.0b1.
-          And because albatross==1.0.0 depends on crow>=2.0.0b1 and only albatross==1.0.0 is available, we can conclude that all versions of bluebird and all versions of albatross are incompatible.
-          And because you require bluebird and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 depends on crow>=2.0.0b1, we can conclude that all versions of albatross depend on crow>=2.0.0b1.
+          And because only crow<2.0.0b1 is available, we can conclude that all versions of albatross depend on crow>3.0.0.
+          And because bluebird==1.0.0 depends on crow and only bluebird==1.0.0 is available, we can conclude that all versions of albatross and all versions of bluebird are incompatible.
+          And because you require albatross and you require bluebird, we can conclude that the requirements are unsatisfiable.
 
           hint: crow was requested with a pre-release marker (e.g., crow>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);

@@ -1,32 +1,34 @@
 use itertools::Itertools;
 use pubgrub::range::Range;
-use pubgrub::type_aliases::DependencyConstraints;
 use tracing::warn;
 
+use distribution_types::Verbatim;
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, Requirement, VerbatimUrl, VersionOrUrl};
+use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use uv_normalize::{ExtraName, PackageName};
 
+use crate::constraints::Constraints;
 use crate::overrides::Overrides;
 use crate::pubgrub::specifier::PubGrubSpecifier;
 use crate::pubgrub::PubGrubPackage;
+use crate::resolver::Urls;
 use crate::ResolveError;
 
 #[derive(Debug)]
-pub struct PubGrubDependencies(DependencyConstraints<PubGrubPackage, Range<Version>>);
+pub struct PubGrubDependencies(Vec<(PubGrubPackage, Range<Version>)>);
 
 impl PubGrubDependencies {
     /// Generate a set of `PubGrub` dependencies from a set of requirements.
     pub(crate) fn from_requirements(
         requirements: &[Requirement],
-        constraints: &[Requirement],
+        constraints: &Constraints,
         overrides: &Overrides,
         source_name: Option<&PackageName>,
-        source_url: Option<&VerbatimUrl>,
         source_extra: Option<&ExtraName>,
+        urls: &Urls,
         env: &MarkerEnvironment,
     ) -> Result<Self, ResolveError> {
-        let mut dependencies = DependencyConstraints::<PubGrubPackage, Range<Version>>::default();
+        let mut dependencies = Vec::default();
 
         // Iterate over all declared requirements.
         for requirement in overrides.apply(requirements) {
@@ -42,100 +44,63 @@ impl PubGrubDependencies {
             }
 
             // Add the package, plus any extra variants.
-            for result in std::iter::once(to_pubgrub(requirement, None)).chain(
+            for result in std::iter::once(to_pubgrub(requirement, None, urls)).chain(
                 requirement
                     .extras
                     .clone()
                     .into_iter()
-                    .map(|extra| to_pubgrub(requirement, Some(extra))),
+                    .map(|extra| to_pubgrub(requirement, Some(extra), urls)),
             ) {
                 let (mut package, version) = result?;
 
                 // Detect self-dependencies.
-                if let PubGrubPackage::Package(name, extra, url) = &mut package {
+                if let PubGrubPackage::Package(name, extra, ..) = &mut package {
                     if source_name.is_some_and(|source_name| source_name == name) {
                         // Allow, e.g., `black` to depend on `black[colorama]`.
                         if source_extra == extra.as_ref() {
                             warn!("{name} has a dependency on itself");
                             continue;
                         }
-                        // Propagate the source URL.
-                        if source_url.is_some() {
-                            *url = source_url.cloned();
-                        }
                     }
                 }
 
-                if let Some(entry) = dependencies.get_key_value(&package) {
-                    // Merge the versions.
-                    let version = merge_versions(&package, entry.1, &version)?;
+                dependencies.push((package.clone(), version.clone()));
 
-                    // Merge the package.
-                    if let Some(package) = merge_package(entry.0, &package)? {
-                        dependencies.remove(&package);
-                        dependencies.insert(package, version);
-                    } else {
-                        dependencies.insert(package, version);
-                    }
-                } else {
-                    dependencies.insert(package.clone(), version.clone());
-                }
-            }
-        }
-
-        // If any requirements were further constrained by the user, add those constraints.
-        for constraint in constraints {
-            // If a requirement was overridden, skip it.
-            if overrides.get(&constraint.name).is_some() {
-                continue;
-            }
-
-            // If the requirement isn't relevant for the current platform, skip it.
-            if let Some(extra) = source_extra {
-                if !constraint.evaluate_markers(env, std::slice::from_ref(extra)) {
-                    continue;
-                }
-            } else {
-                if !constraint.evaluate_markers(env, &[]) {
-                    continue;
-                }
-            }
-
-            // Add the package, plus any extra variants.
-            for result in std::iter::once(to_pubgrub(constraint, None)).chain(
-                constraint
-                    .extras
-                    .clone()
-                    .into_iter()
-                    .map(|extra| to_pubgrub(constraint, Some(extra))),
-            ) {
-                let (mut package, version) = result?;
-
-                // Detect self-dependencies.
-                if let PubGrubPackage::Package(name, extra, url) = &mut package {
-                    if source_name.is_some_and(|source_name| source_name == name) {
-                        // Allow, e.g., `black` to depend on `black[colorama]`.
-                        if source_extra == extra.as_ref() {
-                            warn!("{name} has a dependency on itself");
+                // If the requirement was constrained, add those constraints.
+                for constraint in constraints.get(&requirement.name).into_iter().flatten() {
+                    // If the requirement isn't relevant for the current platform, skip it.
+                    if let Some(extra) = source_extra {
+                        if !constraint.evaluate_markers(env, std::slice::from_ref(extra)) {
                             continue;
                         }
-                        // Propagate the source URL.
-                        if source_url.is_some() {
-                            *url = source_url.cloned();
+                    } else {
+                        if !constraint.evaluate_markers(env, &[]) {
+                            continue;
                         }
                     }
-                }
 
-                if let Some(entry) = dependencies.get_key_value(&package) {
-                    // Merge the versions.
-                    let version = merge_versions(&package, entry.1, &version)?;
+                    // Add the package, plus any extra variants.
+                    for result in std::iter::once(to_pubgrub(constraint, None, urls)).chain(
+                        constraint
+                            .extras
+                            .clone()
+                            .into_iter()
+                            .map(|extra| to_pubgrub(constraint, Some(extra), urls)),
+                    ) {
+                        let (mut package, version) = result?;
 
-                    // Merge the package.
-                    if let Some(package) = merge_package(entry.0, &package)? {
-                        dependencies.remove(&package);
-                        dependencies.insert(package, version);
-                    } else {
-                        dependencies.insert(package, version);
+                        // Detect self-dependencies.
+                        if let PubGrubPackage::Package(name, extra, ..) = &mut package {
+                            if source_name.is_some_and(|source_name| source_name == name) {
+                                // Allow, e.g., `black` to depend on `black[colorama]`.
+                                if source_extra == extra.as_ref() {
+                                    warn!("{name} has a dependency on itself");
+                                    continue;
+                                }
+                            }
+                        }
+
+                        dependencies.push((package.clone(), version.clone()));
                     }
                 }
             }
@@ -144,23 +109,19 @@ impl PubGrubDependencies {
         Ok(Self(dependencies))
     }
 
-    /// Insert a [`PubGrubPackage`] and [`Version`] range into the set of dependencies.
-    pub(crate) fn insert(
-        &mut self,
-        package: PubGrubPackage,
-        version: Range<Version>,
-    ) -> Option<Range<Version>> {
-        self.0.insert(package, version)
+    /// Add a [`PubGrubPackage`] and [`PubGrubVersion`] range into the dependencies.
+    pub(crate) fn push(&mut self, package: PubGrubPackage, version: Range<Version>) {
+        self.0.push((package, version));
     }
 
     /// Iterate over the dependencies.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&PubGrubPackage, &Range<Version>)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &(PubGrubPackage, Range<Version>)> {
         self.0.iter()
     }
 }
 
 /// Convert a [`PubGrubDependencies`] to a [`DependencyConstraints`].
-impl From<PubGrubDependencies> for DependencyConstraints<PubGrubPackage, Range<Version>> {
+impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>)> {
     fn from(dependencies: PubGrubDependencies) -> Self {
         dependencies.0
     }
@@ -170,18 +131,15 @@ impl From<PubGrubDependencies> for DependencyConstraints<PubGrubPackage, Range<V
 fn to_pubgrub(
     requirement: &Requirement,
     extra: Option<ExtraName>,
+    urls: &Urls,
 ) -> Result<(PubGrubPackage, Range<Version>), ResolveError> {
     match requirement.version_or_url.as_ref() {
         // The requirement has no specifier (e.g., `flask`).
         None => Ok((
-            PubGrubPackage::Package(requirement.name.clone(), extra, None),
+            PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
             Range::full(),
         )),
-        // The requirement has a URL (e.g., `flask @ file:///path/to/flask`).
-        Some(VersionOrUrl::Url(url)) => Ok((
-            PubGrubPackage::Package(requirement.name.clone(), extra, Some(url.clone())),
-            Range::full(),
-        )),
+
         // The requirement has a specifier (e.g., `flask>=1.0`).
         Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
             let version = specifiers
@@ -191,79 +149,32 @@ fn to_pubgrub(
                     range.intersection(&specifier.into())
                 })?;
             Ok((
-                PubGrubPackage::Package(requirement.name.clone(), extra, None),
+                PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
                 version,
             ))
         }
-    }
-}
 
-/// Merge two [`Version`] ranges.
-fn merge_versions(
-    package: &PubGrubPackage,
-    left: &Range<Version>,
-    right: &Range<Version>,
-) -> Result<Range<Version>, ResolveError> {
-    let result = left.intersection(right);
-    if result.is_empty() {
-        Err(ResolveError::ConflictingVersions(
-            package.to_string(),
-            format!("`{package}{left}` does not intersect with `{package}{right}`"),
-        ))
-    } else {
-        Ok(result)
-    }
-}
+        // The requirement has a URL (e.g., `flask @ file:///path/to/flask`).
+        Some(VersionOrUrl::Url(url)) => {
+            let Some(allowed) = urls.get(&requirement.name) else {
+                return Err(ResolveError::DisallowedUrl(
+                    requirement.name.clone(),
+                    url.verbatim().to_string(),
+                ));
+            };
 
-/// Merge two [`PubGrubPackage`] instances.
-fn merge_package(
-    left: &PubGrubPackage,
-    right: &PubGrubPackage,
-) -> Result<Option<PubGrubPackage>, ResolveError> {
-    match (left, right) {
-        // Either package is `root`.
-        (PubGrubPackage::Root(_), _) | (_, PubGrubPackage::Root(_)) => Ok(None),
-
-        // Either package is the Python installation.
-        (PubGrubPackage::Python(_), _) | (_, PubGrubPackage::Python(_)) => Ok(None),
-
-        // Left package has a URL. Propagate the URL.
-        (PubGrubPackage::Package(name, extra, Some(url)), PubGrubPackage::Package(.., None)) => {
-            Ok(Some(PubGrubPackage::Package(
-                name.clone(),
-                extra.clone(),
-                Some(url.clone()),
-            )))
-        }
-
-        // Right package has a URL.
-        (PubGrubPackage::Package(.., None), PubGrubPackage::Package(name, extra, Some(url))) => {
-            Ok(Some(PubGrubPackage::Package(
-                name.clone(),
-                extra.clone(),
-                Some(url.clone()),
-            )))
-        }
-
-        // Neither package has a URL.
-        (PubGrubPackage::Package(_name, _extra, None), PubGrubPackage::Package(.., None)) => {
-            Ok(None)
-        }
-
-        // Both packages have a URL.
-        (
-            PubGrubPackage::Package(name, _extra, Some(left)),
-            PubGrubPackage::Package(.., Some(right)),
-        ) => {
-            if cache_key::CanonicalUrl::new(left) == cache_key::CanonicalUrl::new(right) {
-                Ok(None)
-            } else {
-                Err(ResolveError::ConflictingUrls(
-                    name.clone(),
-                    left.to_string(),
-                    right.to_string(),
-                ))
+            if cache_key::CanonicalUrl::new(allowed) != cache_key::CanonicalUrl::new(url) {
+                return Err(ResolveError::ConflictingUrlsTransitive(
+                    requirement.name.clone(),
+                    allowed.verbatim().to_string(),
+                    url.verbatim().to_string(),
+                ));
             }
+
+            Ok((
+                PubGrubPackage::Package(requirement.name.clone(), extra, Some(allowed.clone())),
+                Range::full(),
+            ))
         }
     }
 }
