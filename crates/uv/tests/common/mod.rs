@@ -1,11 +1,6 @@
 // The `unreachable_pub` is to silence false positives in RustRover.
 #![allow(dead_code, unreachable_pub)]
 
-use std::borrow::BorrowMut;
-use std::env;
-use std::path::{Path, PathBuf};
-use std::process::Output;
-
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
@@ -14,7 +9,12 @@ use assert_fs::fixture::PathChild;
 use fs_err::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
 use fs_err::os::windows::fs::symlink_file;
-use regex::Regex;
+use regex::{self, Regex};
+use std::borrow::BorrowMut;
+use std::env;
+use std::path::{Path, PathBuf};
+use std::process::Output;
+use uv_fs::Normalized;
 
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -44,17 +44,39 @@ pub struct TestContext {
     pub temp_dir: assert_fs::TempDir,
     pub cache_dir: assert_fs::TempDir,
     pub venv: PathBuf,
+
+    // Standard filters for this test context
+    filters: Vec<(String, String)>,
 }
 
 impl TestContext {
     pub fn new(python_version: &str) -> Self {
         let temp_dir = assert_fs::TempDir::new().expect("Failed to create temp dir");
-        let cache_dir = assert_fs::TempDir::new().expect("Failed to create temp dir");
+        let cache_dir = assert_fs::TempDir::new().expect("Failed to create cache dir");
         let venv = create_venv(&temp_dir, &cache_dir, python_version);
+
+        let mut filters = Vec::new();
+        filters.extend(
+            Self::path_patterns(&cache_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[CACHE_DIR]/".to_string())),
+        );
+        filters.extend(
+            Self::path_patterns(&temp_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[TEMP_DIR]/".to_string())),
+        );
+        filters.extend(
+            Self::path_patterns(&venv)
+                .into_iter()
+                .map(|pattern| (pattern, "[VENV]/".to_string())),
+        );
+
         Self {
             temp_dir,
             cache_dir,
             venv,
+            filters,
         }
     }
 
@@ -95,6 +117,46 @@ impl TestContext {
         )
         .success()
         .stdout(version);
+    }
+
+    /// Generate an escaped regex pattern for the given path.
+    fn path_patterns(path: impl AsRef<Path>) -> Vec<String> {
+        vec![
+            format!(
+                // Trim the trailing separator for cross-platform directories filters
+                r"{}\\?/?",
+                regex::escape(
+                    &path
+                        .as_ref()
+                        .canonicalize()
+                        .expect("Failed to create canonical path")
+                        // Normalize the path to match display and remove UNC prefixes on Windows
+                        .normalized()
+                        .display()
+                        .to_string(),
+                )
+                // Make seprators platform agnostic because on Windows we will display
+                // paths with Unix-style separators sometimes
+                .replace(r"\\", r"(\\|\/)")
+            ),
+            // Include a non-canonicalized version
+            format!(
+                r"{}\\?/?",
+                regex::escape(&path.as_ref().normalized().display().to_string())
+                    .replace(r"\\", r"(\\|\/)")
+            ),
+        ]
+    }
+
+    /// Canonical snapshot filters for this test context.
+    pub fn filters(&self) -> Vec<(&str, &str)> {
+        let mut filters = INSTA_FILTERS.to_vec();
+
+        for (pattern, replacement) in &self.filters {
+            filters.push((pattern, replacement));
+        }
+
+        filters
     }
 }
 

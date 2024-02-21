@@ -812,6 +812,28 @@ fn install_git_public_https() {
     context.assert_installed("uv_public_pypackage", "0.1.0");
 }
 
+/// Install a package from a public GitHub repository at a ref that does not exist
+#[test]
+#[cfg(feature = "git")]
+fn install_git_public_https_missing_ref() {
+    let context = TestContext::new("3.8");
+
+    uv_snapshot!(context.filters(), command(&context)
+        // 2.0.0 does not exist
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0")
+        , @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      Caused by: failed to fetch all refspecs
+    "###);
+}
+
 /// Install a package from a private GitHub repository using a PAT
 #[test]
 #[cfg(all(not(windows), feature = "git"))]
@@ -886,7 +908,6 @@ fn install_git_private_https_pat_and_username() {
 
     let mut filters = INSTA_FILTERS.to_vec();
     filters.insert(0, (&token, "***"));
-    filters.push(("failed to clone into: .*", "failed to clone into: [PATH]"));
 
     uv_snapshot!(filters, command(&context)
         .arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
@@ -903,6 +924,40 @@ fn install_git_private_https_pat_and_username() {
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
+}
+
+/// Install a package from a private GitHub repository using a PAT
+#[test]
+#[cfg(all(not(windows), feature = "git"))]
+fn install_git_private_https_pat_not_authorized() {
+    let context = TestContext::new("3.8");
+
+    // A revoked token
+    let token = "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";
+
+    let mut filters = context.filters();
+    filters.insert(0, (&token, "***"));
+
+    // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
+    // and hang the test
+    uv_snapshot!(filters, command(&context)
+        .arg(format!("uv-private-pypackage @ git+https://git:{token}@github.com/astral-test/uv-private-pypackage"))
+        , @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: uv-private-pypackage @ git+https://git:***@github.com/astral-test/uv-private-pypackage
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/2496970ed6fdf08f
+      Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+    --- stderr
+    remote: Support for password authentication was removed on August 13, 2021.
+    remote: Please see https://docs.github.com/en/get-started/getting-started-with-git/about-remote-repositories#cloning-with-https-urls for information on currently recommended modes of authentication.
+    fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
+
+    "###);
 }
 
 /// Install a package without using pre-built wheels.
