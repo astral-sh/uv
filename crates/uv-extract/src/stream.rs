@@ -1,4 +1,4 @@
-use std::path::{Component, Path, PathBuf};
+use std::path::Path;
 use std::pin::Pin;
 
 use futures::StreamExt;
@@ -99,6 +99,44 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     Ok(())
 }
 
+/// Unpack the given tar archive into the destination directory.
+///
+/// This is equivalent to `archive.unpack_in(dst)`, but it also preserves the executable bit.
+async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
+    archive: &mut tokio_tar::Archive<R>,
+    dst: P,
+) -> std::io::Result<()> {
+    let mut entries = archive.entries()?;
+    let mut pinned = Pin::new(&mut entries);
+    while let Some(entry) = pinned.next().await {
+        // Unpack the file into the destination directory.
+        let mut file = entry?;
+        file.unpack_in(dst.as_ref()).await?;
+
+        // Preserve the executable bit.
+        #[cfg(unix)]
+        {
+            use std::fs::Permissions;
+            use std::os::unix::fs::PermissionsExt;
+
+            let mode = file.header().mode()?;
+
+            let has_any_executable_bit = mode & 0o111;
+            if has_any_executable_bit != 0 {
+                if let Some(path) = crate::tar::unpacked_at(dst.as_ref(), &file.path()?) {
+                    let permissions = fs_err::tokio::metadata(&path).await?.permissions();
+                    fs_err::tokio::set_permissions(
+                        &path,
+                        Permissions::from_mode(permissions.mode() | 0o111),
+                    )
+                    .await?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Unzip a `.tar.gz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
@@ -106,87 +144,11 @@ pub async fn untar<R: tokio::io::AsyncBufRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    /// Unpack the given tar archive into the destination directory.
-    ///
-    /// This is equivalent to `archive.unpack_in(dst)`, but it also preserves the executable bit.
-    async fn unpack<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
-        archive: &mut tokio_tar::Archive<R>,
-        dst: P,
-    ) -> std::io::Result<()> {
-        let mut entries = archive.entries()?;
-        let mut pinned = Pin::new(&mut entries);
-        while let Some(entry) = pinned.next().await {
-            // Unpack the file into the destination directory.
-            let mut file = entry?;
-            file.unpack_in(dst.as_ref()).await?;
-
-            // Preserve the executable bit.
-            #[cfg(unix)]
-            {
-                use std::fs::Permissions;
-                use std::os::unix::fs::PermissionsExt;
-
-                /// Determine the path at which the given tar entry will be unpacked, when unpacking into `dst`.
-                ///
-                /// See: <https://github.com/vorot93/tokio-tar/blob/87338a76092330bc6fe60de95d83eae5597332e1/src/entry.rs#L418>
-                fn unpacked_at(dst: &Path, entry: &Path) -> Option<PathBuf> {
-                    let mut file_dst = dst.to_path_buf();
-                    {
-                        for part in entry.components() {
-                            match part {
-                                // Leading '/' characters, root paths, and '.'
-                                // components are just ignored and treated as "empty
-                                // components"
-                                Component::Prefix(..) | Component::RootDir | Component::CurDir => {
-                                    continue
-                                }
-
-                                // If any part of the filename is '..', then skip over
-                                // unpacking the file to prevent directory traversal
-                                // security issues.  See, e.g.: CVE-2001-1267,
-                                // CVE-2002-0399, CVE-2005-1918, CVE-2007-4131
-                                Component::ParentDir => return None,
-
-                                Component::Normal(part) => file_dst.push(part),
-                            }
-                        }
-                    }
-
-                    // Skip cases where only slashes or '.' parts were seen, because
-                    // this is effectively an empty filename.
-                    if *dst == *file_dst {
-                        return None;
-                    }
-
-                    // Skip entries without a parent (i.e. outside of FS root)
-                    file_dst.parent()?;
-
-                    Some(file_dst)
-                }
-
-                let mode = file.header().mode()?;
-
-                let has_any_executable_bit = mode & 0o111;
-                if has_any_executable_bit != 0 {
-                    if let Some(path) = unpacked_at(dst.as_ref(), &file.path()?) {
-                        let permissions = fs_err::tokio::metadata(&path).await?.permissions();
-                        fs_err::tokio::set_permissions(
-                            &path,
-                            Permissions::from_mode(permissions.mode() | 0o111),
-                        )
-                        .await?;
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
     let decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
     let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
         .set_preserve_mtime(false)
         .build();
-    Ok(unpack(&mut archive, target.as_ref()).await?)
+    Ok(untar_in(&mut archive, target.as_ref()).await?)
 }
 
 /// Unzip a `.zip` or `.tar.gz` archive into the target directory, without requiring `Seek`.
