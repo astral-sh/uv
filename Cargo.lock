@@ -4127,7 +4127,7 @@ checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
 
 [[package]]
 name = "uv"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anstream",
  "anyhow",
