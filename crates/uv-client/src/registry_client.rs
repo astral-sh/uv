@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
+
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
@@ -247,21 +248,7 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let request_url = url;
-                let mut url = response.url().clone();
-
-                // We must ensure authentication is retained for hosts
-                if request_url.host() == url.host() {
-                    // These shouldn't fail, but we'll log if they do in case it's relevant for debugging
-                    url.set_username(request_url.username())
-                        .unwrap_or_else(|_| {
-                            warn!("Failed to transfer username to response URL: {url}")
-                        });
-                    url.set_password(request_url.password())
-                        .unwrap_or_else(|_| {
-                            warn!("Failed to transfer password to response URL: {url}")
-                        });
-                }
+                let url = RegistryClient::safe_copy_auth(&url, response.url().clone());
 
                 let content_type = response
                     .headers()
@@ -529,6 +516,26 @@ impl RegistryClient {
                 .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
                 .into_async_read(),
         ))
+    }
+
+    /// Copy authentication from one URL to another URL if applicable.
+    ///
+    /// See [`RegistryClient::should_retain_auth`] for details on when authentication is retained.
+    #[must_use]
+    fn safe_copy_auth(request_url: &Url, mut response_url: Url) -> Url {
+        if RegistryClient::should_retain_auth(request_url, &response_url) {
+            response_url
+                .set_username(request_url.username())
+                .unwrap_or_else(|_| {
+                    warn!("Failed to transfer username to response URL: {response_url}")
+                });
+            response_url
+                .set_password(request_url.password())
+                .unwrap_or_else(|_| {
+                    warn!("Failed to transfer password to response URL: {response_url}")
+                });
+        }
+        response_url
     }
 
     /// Determine if authentication information should be retained on a new URL.
