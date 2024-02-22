@@ -28,11 +28,15 @@ impl Urls {
 
             if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
                 if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
-                    return Err(ResolveError::ConflictingUrlsDirect(
-                        requirement.name.clone(),
-                        previous.verbatim().to_string(),
-                        url.verbatim().to_string(),
-                    ));
+                    if cache_key::CanonicalUrl::new(previous.raw())
+                        != cache_key::CanonicalUrl::new(url.raw())
+                    {
+                        return Err(ResolveError::ConflictingUrlsDirect(
+                            requirement.name.clone(),
+                            previous.verbatim().to_string(),
+                            url.verbatim().to_string(),
+                        ));
+                    }
                 }
             }
         }
@@ -42,21 +46,29 @@ impl Urls {
             if let Some(previous) =
                 urls.insert(metadata.name.clone(), editable_requirement.url.clone())
             {
-                return Err(ResolveError::ConflictingUrlsDirect(
-                    metadata.name.clone(),
-                    previous.verbatim().to_string(),
-                    editable_requirement.url.verbatim().to_string(),
-                ));
+                if cache_key::CanonicalUrl::new(previous.raw())
+                    != cache_key::CanonicalUrl::new(editable_requirement.raw())
+                {
+                    return Err(ResolveError::ConflictingUrlsDirect(
+                        metadata.name.clone(),
+                        previous.verbatim().to_string(),
+                        editable_requirement.url.verbatim().to_string(),
+                    ));
+                }
             }
 
             for req in &metadata.requires_dist {
                 if let Some(pep508_rs::VersionOrUrl::Url(url)) = &req.version_or_url {
                     if let Some(previous) = urls.insert(req.name.clone(), url.clone()) {
-                        return Err(ResolveError::ConflictingUrlsDirect(
-                            req.name.clone(),
-                            previous.verbatim().to_string(),
-                            url.verbatim().to_string(),
-                        ));
+                        if cache_key::CanonicalUrl::new(previous.raw())
+                            != cache_key::CanonicalUrl::new(url.raw())
+                        {
+                            return Err(ResolveError::ConflictingUrlsDirect(
+                                req.name.clone(),
+                                previous.verbatim().to_string(),
+                                url.verbatim().to_string(),
+                            ));
+                        }
                     }
                 }
             }
