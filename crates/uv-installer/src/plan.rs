@@ -117,7 +117,8 @@ impl<'a> Planner<'a> {
                     if let Some(dist) = site_packages.remove_editable(built.editable.raw()) {
                         // Remove any editable installs.
                         reinstalls.push(dist);
-                    } else if let Some(dist) = site_packages.remove(built.name()) {
+                    }
+                    if let Some(dist) = site_packages.remove(built.name()) {
                         // Remove any non-editable installs of the same package.
                         reinstalls.push(dist);
                     }

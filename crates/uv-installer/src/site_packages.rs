@@ -1,11 +1,9 @@
-use std::collections::hash_map::Entry;
 use std::hash::BuildHasherDefault;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxHashMap, FxHashSet};
-use tracing::warn;
 use url::Url;
 
 use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
@@ -24,7 +22,7 @@ pub struct SitePackages<'a> {
     /// The vector of all installed distributions.
     distributions: Vec<InstalledDist>,
     /// The installed distributions, keyed by name.
-    by_name: FxHashMap<PackageName, usize>,
+    by_name: FxHashMap<PackageName, Vec<usize>>,
     /// The installed editable distributions, keyed by URL.
     by_url: FxHashMap<Url, Vec<usize>>,
 }
@@ -51,34 +49,14 @@ impl<'a> SitePackages<'a> {
                 let idx = distributions.len();
 
                 // Index the distribution by name.
-                match by_name.entry(dist_info.name().clone()) {
-                    Entry::Occupied(occupied) => {
-                        let existing = occupied.get();
-                        let existing: &InstalledDist = &distributions[*existing];
-                        warn!(
-                            "Ignoring duplicate package in environment: {} ({} vs. {})",
-                            existing.name(),
-                            existing.path().display(),
-                            path.display()
-                        );
-                        continue;
-                    }
-                    Entry::Vacant(vacant) => {
-                        vacant.insert(idx);
-                    }
-                }
+                by_name
+                    .entry(dist_info.name().clone())
+                    .or_insert_with(Vec::new)
+                    .push(idx);
 
                 // Index the distribution by URL.
                 if let Some(url) = dist_info.as_editable() {
-                    if let Some(existing) = by_url.insert(url.clone(), idx) {
-                        let existing = &distributions[existing];
-                        warn!(
-                            "Found duplicate editable in environment: {} ({} vs. {})",
-                            existing.name(),
-                            existing.path().display(),
-                            path.display()
-                        );
-                    }
+                    by_url.entry(url.clone()).or_insert_with(Vec::new).push(idx);
                 }
 
                 // Add the distribution to the database.
@@ -119,8 +97,11 @@ impl<'a> SitePackages<'a> {
     }
 
     /// Returns the version of the given package, if it is installed.
-    pub fn get(&self, name: &PackageName) -> Option<&InstalledDist> {
-        self.by_name.get(name).map(|idx| &self.distributions[*idx])
+    pub fn get_all(&self, name: &PackageName) -> Vec<&InstalledDist> {
+        let Some(indexes) = self.by_name.get(name) else {
+            return Vec::new();
+        };
+        indexes.iter().map(|&index| &self.distributions[index]).collect()
     }
 
     /// Remove the given package from the index, returning its version if it was installed.
@@ -149,11 +130,19 @@ impl<'a> SitePackages<'a> {
         if idx < self.distributions.len() {
             let moved = &self.distributions[idx];
             if let Some(prev) = self.by_name.get_mut(moved.name()) {
-                *prev = idx;
+                for prev in prev {
+                    if *prev == self.distributions.len() {
+                        *prev = idx;
+                    }
+                }
             }
             if let Some(url) = moved.as_editable() {
                 if let Some(prev) = self.by_url.get_mut(url) {
-                    *prev = idx;
+                    for prev in prev {
+                        if *prev == self.distributions.len() {
+                            *prev = idx;
+                        }
+                    }
                 }
             }
         }
