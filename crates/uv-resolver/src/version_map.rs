@@ -181,6 +181,14 @@ impl From<FlatDistributions> for VersionMap {
     }
 }
 
+impl From<BTreeMap<Version, PrioritizedDist>> for VersionMap {
+    fn from(value: BTreeMap<Version, PrioritizedDist>) -> Self {
+        Self {
+            inner: VersionMapInner::Eager(value),
+        }
+    }
+}
+
 /// A lazily initialized distribution.
 ///
 /// This permits access to a handle that can be turned into a resolvable

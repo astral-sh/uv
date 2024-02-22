@@ -33,6 +33,8 @@ use crate::{find_dist_info, Error};
 /// `#!/usr/bin/env python`
 pub const SHEBANG_PYTHON: &str = "#!/usr/bin/env python";
 
+const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
+
 #[cfg(all(windows, target_arch = "x86_64"))]
 const LAUNCHER_X86_64_GUI: &[u8] =
     include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-x86_64-gui.exe");
@@ -281,19 +283,7 @@ fn unpack_wheel_files<R: Read + Seek>(
 }
 
 fn get_shebang(location: &InstallLocation<impl AsRef<Path>>) -> String {
-    let path = location.python().to_string_lossy().to_string();
-    let path = if cfg!(windows) {
-        // https://stackoverflow.com/a/50323079
-        const VERBATIM_PREFIX: &str = r"\\?\";
-        if let Some(stripped) = path.strip_prefix(VERBATIM_PREFIX) {
-            stripped.to_string()
-        } else {
-            path
-        }
-    } else {
-        path
-    };
-    format!("#!{path}")
+    format!("#!{}", location.python().normalized().display())
 }
 
 /// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
@@ -305,6 +295,7 @@ fn get_shebang(location: &InstallLocation<impl AsRef<Path>>) -> String {
 pub(crate) fn windows_script_launcher(
     launcher_python_script: &str,
     is_gui: bool,
+    installation: &InstallLocation<impl AsRef<Path>>,
 ) -> Result<Vec<u8>, Error> {
     // This method should only be called on Windows, but we avoid `#[cfg(windows)]` to retain
     // compilation on all platforms.
@@ -352,9 +343,20 @@ pub(crate) fn windows_script_launcher(
         archive.finish().expect(error_msg);
     }
 
+    let python = installation.python();
+    let python_path = python.normalized().to_string_lossy();
+
     let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len() + payload.len());
     launcher.extend_from_slice(launcher_bin);
     launcher.extend_from_slice(&payload);
+    launcher.extend_from_slice(python_path.as_bytes());
+    launcher.extend_from_slice(
+        &u32::try_from(python_path.as_bytes().len())
+            .expect("File Path to be smaller than 4GB")
+            .to_le_bytes(),
+    );
+    launcher.extend_from_slice(&LAUNCHER_MAGIC_NUMBER);
+
     Ok(launcher)
 }
 
@@ -393,7 +395,7 @@ pub(crate) fn write_script_entrypoints(
             write_file_recorded(
                 site_packages,
                 &entrypoint_relative,
-                &windows_script_launcher(&launcher_python_script, is_gui)?,
+                &windows_script_launcher(&launcher_python_script, is_gui, location)?,
                 record,
             )?;
         } else {
@@ -949,7 +951,7 @@ pub fn parse_key_value_file(
 ///
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
 #[allow(clippy::too_many_arguments)]
-#[instrument(skip_all, fields(name = %filename.name))]
+#[instrument(skip_all, fields(name = % filename.name))]
 pub fn install_wheel(
     location: &InstallLocation<LockedDir>,
     reader: impl Read + Seek,

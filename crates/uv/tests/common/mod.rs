@@ -12,6 +12,7 @@ use fs_err::os::windows::fs::symlink_file;
 use regex::{self, Regex};
 use std::borrow::BorrowMut;
 use std::env;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use uv_fs::Normalized;
@@ -271,7 +272,7 @@ pub fn get_bin() -> PathBuf {
 pub fn create_bin_with_executables(
     temp_dir: &assert_fs::TempDir,
     python_versions: &[&str],
-) -> anyhow::Result<PathBuf> {
+) -> anyhow::Result<OsString> {
     if let Some(bootstrapped_pythons) = bootstrapped_pythons() {
         let selected_pythons = bootstrapped_pythons.into_iter().filter(|path| {
             python_versions.iter().any(|python_version| {
@@ -281,7 +282,7 @@ pub fn create_bin_with_executables(
                     .contains(&format!("@{python_version}"))
             })
         });
-        return Ok(env::join_paths(selected_pythons)?.into());
+        return Ok(env::join_paths(selected_pythons)?);
     }
 
     let bin = temp_dir.child("bin");
@@ -299,7 +300,7 @@ pub fn create_bin_with_executables(
             .expect("Discovered executable must have a filename");
         symlink_file(interpreter.sys_executable(), bin.child(name))?;
     }
-    Ok(bin.canonicalize()?)
+    Ok(bin.canonicalize()?.into())
 }
 
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
@@ -318,7 +319,7 @@ pub fn run_and_format<'a>(
     let output = command
         .borrow_mut()
         .output()
-        .unwrap_or_else(|_| panic!("Failed to spawn {program}"));
+        .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"));
 
     let mut snapshot = format!(
         "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
