@@ -247,7 +247,21 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = response.url().clone();
+                let request_url = url;
+                let mut url = response.url().clone();
+
+                // We must ensure authentication is retained for hosts
+                if request_url.host() == url.host() {
+                    // These shouldn't fail, but we'll log if they do in case it's relevant for debugging
+                    url.set_username(request_url.username())
+                        .unwrap_or_else(|_| {
+                            warn!("Failed to transfer username to response URL: {url}")
+                        });
+                    url.set_password(request_url.password())
+                        .unwrap_or_else(|_| {
+                            warn!("Failed to transfer password to response URL: {url}")
+                        });
+                }
 
                 let content_type = response
                     .headers()
