@@ -1488,7 +1488,7 @@ fn direct_url_zip_file_bunk_permissions() -> Result<()> {
 }
 
 #[test]
-fn entrypoint_script() -> Result<()> {
+fn launcher() -> Result<()> {
     let context = TestContext::new("3.12");
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
 
@@ -1534,7 +1534,7 @@ fn entrypoint_script() -> Result<()> {
 }
 
 #[test]
-fn entrypoint_script_symlink() -> Result<()> {
+fn launcher_with_symlink() -> Result<()> {
     let context = TestContext::new("3.12");
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
 
