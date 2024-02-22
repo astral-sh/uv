@@ -1,9 +1,11 @@
+use std::collections::hash_map::Entry;
 use std::hash::BuildHasherDefault;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxHashMap, FxHashSet};
+use tracing::warn;
 use url::Url;
 
 use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
@@ -24,7 +26,7 @@ pub struct SitePackages<'a> {
     /// The installed distributions, keyed by name.
     by_name: FxHashMap<PackageName, usize>,
     /// The installed editable distributions, keyed by URL.
-    by_url: FxHashMap<Url, usize>,
+    by_url: FxHashMap<Url, Vec<usize>>,
 }
 
 impl<'a> SitePackages<'a> {
@@ -49,21 +51,28 @@ impl<'a> SitePackages<'a> {
                 let idx = distributions.len();
 
                 // Index the distribution by name.
-                if let Some(existing) = by_name.insert(dist_info.name().clone(), idx) {
-                    let existing = &distributions[existing];
-                    anyhow::bail!(
-                        "Found duplicate package in environment: {} ({} vs. {})",
-                        existing.name(),
-                        existing.path().display(),
-                        path.display()
-                    );
+                match by_name.entry(dist_info.name().clone()) {
+                    Entry::Occupied(occupied) => {
+                        let existing = occupied.get();
+                        let existing: &InstalledDist = &distributions[*existing];
+                        warn!(
+                            "Ignoring duplicate package in environment: {} ({} vs. {})",
+                            existing.name(),
+                            existing.path().display(),
+                            path.display()
+                        );
+                        continue;
+                    }
+                    Entry::Vacant(vacant) => {
+                        vacant.insert(idx);
+                    }
                 }
 
                 // Index the distribution by URL.
                 if let Some(url) = dist_info.as_editable() {
                     if let Some(existing) = by_url.insert(url.clone(), idx) {
                         let existing = &distributions[existing];
-                        anyhow::bail!(
+                        warn!(
                             "Found duplicate editable in environment: {} ({} vs. {})",
                             existing.name(),
                             existing.path().display(),
