@@ -7,7 +7,7 @@ use thiserror::Error;
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pypi_types::{DistInfoMetadata, Hashes, Yanked};
 use url::Url;
-use uv_auth::safe_copy_url_auth;
+use uv_auth::safe_copy_url_auth_to_str;
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, Error)]
@@ -53,12 +53,12 @@ impl File {
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(|dt| dt.timestamp_millis()),
             url: if file.url.contains("://") {
-                let url = safe_copy_url_auth(
-                    base,
-                    Url::parse(&file.url)
-                        .map_err(|err| FileConversionError::Url(file.url.clone(), err))?,
-                );
-                FileLocation::AbsoluteUrl(url.to_string())
+                let url = safe_copy_url_auth_to_str(base, &file.url)
+                    .map_err(|err| FileConversionError::Url(file.url.clone(), err))?
+                    .map(|url| url.to_string())
+                    .unwrap_or(file.url);
+
+                FileLocation::AbsoluteUrl(url)
             } else {
                 FileLocation::RelativeUrl(base.to_string(), file.url)
             },
