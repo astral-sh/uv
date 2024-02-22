@@ -130,14 +130,10 @@ impl ResolutionGraph {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_registry(package_name, version);
 
-                    if let Some((_, metadata)) = editables.get(package_name) {
+                    if let Some((editable, metadata)) = editables.get(package_name) {
                         if !metadata.provides_extras.contains(extra) {
-                            let pinned_package = pins
-                                .get(package_name, version)
-                                .unwrap_or_else(|| {
-                                    panic!("Every package should be pinned: {package_name:?}")
-                                })
-                                .clone();
+                            let pinned_package =
+                                Dist::from_editable(package_name.clone(), editable.clone())?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
                                 dist: pinned_package,
@@ -171,14 +167,10 @@ impl ResolutionGraph {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_url(package_name, url);
 
-                    if let Some((_, metadata)) = editables.get(package_name) {
+                    if let Some((editable, metadata)) = editables.get(package_name) {
                         if !metadata.provides_extras.contains(extra) {
-                            let pinned_package = pins
-                                .get(package_name, version)
-                                .unwrap_or_else(|| {
-                                    panic!("Every package should be pinned: {package_name:?}")
-                                })
-                                .clone();
+                            let pinned_package =
+                                Dist::from_editable(package_name.clone(), editable.clone())?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
                                 dist: pinned_package,
