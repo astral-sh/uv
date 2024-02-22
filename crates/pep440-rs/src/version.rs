@@ -743,35 +743,30 @@ impl FromStr for Version {
 /// * Bytes 6 and 7 correspond to the first release segment as a `u16`.
 /// * Bytes 5, 4 and 3 correspond to the second, third and fourth release
 /// segments, respectively.
-/// * Byte 2 corresponds to the post-release segment. If there is no
-/// post-release segment, then byte 2 is set to 0x00. This makes "no
-/// post-release" sort before "has post-release." The numeric value
-/// (constrained to be <u8::MAX) has 1 added to it so that 0x00 is reserved to
-/// indicate absence.
-/// * Byte 1 corresponds to the pre-release segment. If there is no pre-release
-/// segment, then byte 1 is set to 0xFF. This makes "no pre-release" sort
-/// after "has pre-release." The most significant two bits of byte 1 encode
-/// the type of pre-release (alpha, beta, rc) while the low 6 bits encode the
-/// pre-release numeric value.
-/// * Byte 0 corresponds to the dev-release segment. If there is no dev-release
-/// segment, then byte 0 is set to 0xFF. This makes "no dev-release" sort after
-/// "has dev-release." The dev-release value (constrained to be <u8::MAX) is
-/// stored in byte 0 as-is.
+/// * Bytes 2, 1 and 0 represent *one* of the following:
+///   `.devN, aN, bN, rcN, <no suffix>, .postN`. Its representation is thus:
+///   * The most significant 3 bits of Byte 2 corresponds to a value in
+///   the range 0-5 inclusive, corresponding to dev, pre-a, pre-b, pre-rc,
+///   no-suffix or post releases, respectively.
+///   * The low 5 bits combined with the bits in bytes 1 and 0 correspond
+///   to the release number of the suffix, if one exists. If there is no
+///   suffix, then this bits are always 0.
 ///
-/// The order of the encoding above is significant. For example, the
-/// post-release segment is encoded at a more significant byte in the `u64`
-/// than the pre-release segment because `1.2.3.post1 > 1.2.3rc9999`.
+/// The order of the encoding above is significant. For example, suffixes are
+/// encoded at a less significant location than the release numbers, so that
+/// `1.2.3 < 1.2.3.post4`.
 ///
-/// Notice also that nothing about the representation inherently prohibits
-/// storing any combination of pre, dev or post release components. We
-/// could absolutely store all three (assuming they fit into their various
-/// constraints outlined above). But, if we did that, a simple `u64::cmp` would
-/// no longer be correct. For example, `1.0.post456.dev34 < 1.0.post456`, but
-/// in the representation above, it would treat `1.0.post456.dev34` as greater
-/// than `1.0.post456`. To make comparisons cheap for multi-component versions
-/// like that, we'd need to use more space. Thankfully, such versions are
-/// incredibly rare. Virtually all versions have zero or one pre, dev or post
-/// release components.
+/// In a previous representation, we tried to enocode the suffixes in different
+/// locations so that, in theory, you could represent `1.2.3.dev2.post3` in the
+/// packed form. But getting the ordering right for this is difficult (perhaps
+/// impossible without extra space?). So we limited to only storing one suffix.
+/// But even then, we wound up with a bug where `1.0dev1 > 1.0a1`, when of
+/// course, all dev releases should compare less than pre releases. This was
+/// because the encoding recorded the pre-release as "absent", and this in turn
+/// screwed up the order comparisons.
+///
+/// Thankfully, such versions are incredibly rare. Virtually all versions have
+/// zero or one pre, dev or post release components.
 #[derive(Clone, Debug)]
 #[cfg_attr(
     feature = "rkyv",
@@ -815,10 +810,18 @@ struct VersionSmall {
 }
 
 impl VersionSmall {
+    const SUFFIX_DEV: u64 = 0;
+    const SUFFIX_PRE_ALPHA: u64 = 1;
+    const SUFFIX_PRE_BETA: u64 = 2;
+    const SUFFIX_PRE_RC: u64 = 3;
+    const SUFFIX_NONE: u64 = 4;
+    const SUFFIX_POST: u64 = 5;
+    const SUFFIX_MAX_VERSION: u64 = 0x1FFFFF;
+
     #[inline]
     fn new() -> VersionSmall {
         VersionSmall {
-            repr: 0x00000000_0000FFFF,
+            repr: 0x00000000_00800000,
             release: [0, 0, 0, 0],
             len: 0,
         }
@@ -876,29 +879,28 @@ impl VersionSmall {
 
     #[inline]
     fn post(&self) -> Option<u64> {
-        let v = (self.repr >> 16) & 0xFF;
-        if v == 0 {
-            None
+        if self.suffix_kind() == VersionSmall::SUFFIX_POST {
+            Some(self.suffix_version())
         } else {
-            Some(v - 1)
+            None
         }
     }
 
     #[inline]
     fn set_post(&mut self, value: Option<u64>) -> bool {
-        if value.is_some() && (self.pre().is_some() || self.dev().is_some()) {
-            return false;
+        if self.pre().is_some() || self.dev().is_some() {
+            return value.is_none();
         }
         match value {
             None => {
-                self.repr &= !(0xFF << 16);
+                self.set_suffix_kind(VersionSmall::SUFFIX_NONE);
             }
             Some(number) => {
-                if number > 0b1111_1110 {
+                if number > VersionSmall::SUFFIX_MAX_VERSION {
                     return false;
                 }
-                self.repr &= !(0xFF << 16);
-                self.repr |= (number + 1) << 16;
+                self.set_suffix_kind(VersionSmall::SUFFIX_POST);
+                self.set_suffix_version(number);
             }
         }
         true
@@ -906,40 +908,52 @@ impl VersionSmall {
 
     #[inline]
     fn pre(&self) -> Option<PreRelease> {
-        let v = (self.repr >> 8) & 0xFF;
-        if v == 0xFF {
-            return None;
+        let (kind, number) = (self.suffix_kind(), self.suffix_version());
+        if kind == VersionSmall::SUFFIX_PRE_ALPHA {
+            Some(PreRelease {
+                kind: PreReleaseKind::Alpha,
+                number,
+            })
+        } else if kind == VersionSmall::SUFFIX_PRE_BETA {
+            Some(PreRelease {
+                kind: PreReleaseKind::Beta,
+                number,
+            })
+        } else if kind == VersionSmall::SUFFIX_PRE_RC {
+            Some(PreRelease {
+                kind: PreReleaseKind::Rc,
+                number,
+            })
+        } else {
+            None
         }
-        let number = v & 0b0011_1111;
-        let kind = match v >> 6 {
-            0 => PreReleaseKind::Alpha,
-            1 => PreReleaseKind::Beta,
-            2 => PreReleaseKind::Rc,
-            _ => unreachable!(),
-        };
-        Some(PreRelease { kind, number })
     }
 
     #[inline]
     fn set_pre(&mut self, value: Option<PreRelease>) -> bool {
-        if value.is_some() && (self.post().is_some() || self.dev().is_some()) {
-            return false;
+        if self.dev().is_some() || self.post().is_some() {
+            return value.is_none();
         }
         match value {
             None => {
-                self.repr |= 0xFF << 8;
+                self.set_suffix_kind(VersionSmall::SUFFIX_NONE);
             }
             Some(PreRelease { kind, number }) => {
-                if number > 0b0011_1111 {
+                if number > VersionSmall::SUFFIX_MAX_VERSION {
                     return false;
                 }
-                let kind = match kind {
-                    PreReleaseKind::Alpha => 0,
-                    PreReleaseKind::Beta => 1,
-                    PreReleaseKind::Rc => 2,
-                };
-                self.repr &= !(0xFF << 8);
-                self.repr |= ((kind << 6) | number) << 8;
+                match kind {
+                    PreReleaseKind::Alpha => {
+                        self.set_suffix_kind(VersionSmall::SUFFIX_PRE_ALPHA);
+                    }
+                    PreReleaseKind::Beta => {
+                        self.set_suffix_kind(VersionSmall::SUFFIX_PRE_BETA);
+                    }
+                    PreReleaseKind::Rc => {
+                        self.set_suffix_kind(VersionSmall::SUFFIX_PRE_RC);
+                    }
+                }
+                self.set_suffix_version(number);
             }
         }
         true
@@ -947,29 +961,28 @@ impl VersionSmall {
 
     #[inline]
     fn dev(&self) -> Option<u64> {
-        let v = self.repr & 0xFF;
-        if v == 0xFF {
-            None
+        if self.suffix_kind() == VersionSmall::SUFFIX_DEV {
+            Some(self.suffix_version())
         } else {
-            Some(v)
+            None
         }
     }
 
     #[inline]
     fn set_dev(&mut self, value: Option<u64>) -> bool {
-        if value.is_some() && (self.pre().is_some() || self.post().is_some()) {
-            return false;
+        if self.pre().is_some() || self.post().is_some() {
+            return value.is_none();
         }
         match value {
             None => {
-                self.repr |= 0xFF;
+                self.set_suffix_kind(VersionSmall::SUFFIX_NONE);
             }
             Some(number) => {
-                if number > 0b1111_1110 {
+                if number > VersionSmall::SUFFIX_MAX_VERSION {
                     return false;
                 }
-                self.repr &= !0xFF;
-                self.repr |= number;
+                self.set_suffix_kind(VersionSmall::SUFFIX_DEV);
+                self.set_suffix_version(number);
             }
         }
         true
@@ -980,6 +993,35 @@ impl VersionSmall {
         // A "small" version is never used if the version has a non-zero number
         // of local segments.
         &[]
+    }
+
+    #[inline]
+    fn suffix_kind(&self) -> u64 {
+        let kind = (self.repr >> 21) & 0b111;
+        debug_assert!(kind <= VersionSmall::SUFFIX_POST);
+        kind
+    }
+
+    #[inline]
+    fn set_suffix_kind(&mut self, kind: u64) {
+        debug_assert!(kind <= VersionSmall::SUFFIX_POST);
+        self.repr &= !0xE00000;
+        self.repr |= kind << 21;
+        if kind == VersionSmall::SUFFIX_NONE {
+            self.set_suffix_version(0);
+        }
+    }
+
+    #[inline]
+    fn suffix_version(&self) -> u64 {
+        self.repr & 0x1FFFFF
+    }
+
+    #[inline]
+    fn set_suffix_version(&mut self, value: u64) {
+        debug_assert!(value <= 0x1FFFFF);
+        self.repr &= !0x1FFFFF;
+        self.repr |= value;
     }
 }
 
@@ -1368,9 +1410,9 @@ impl<'a> Parser<'a> {
                 | (u64::from(release[1]) << 40)
                 | (u64::from(release[2]) << 32)
                 | (u64::from(release[3]) << 24)
-                | (0x00 << 16)
-                | (0xFF << 8)
-                | (0xFF << 0),
+                | (0x80 << 16)
+                | (0x00 << 8)
+                | (0x00 << 0),
             release: [
                 u64::from(release[0]),
                 u64::from(release[1]),
@@ -3453,16 +3495,18 @@ mod tests {
             "1.0.15",
             "1.1.dev1",
         ];
-        for pair in versions.windows(2) {
-            let less = pair[0].parse::<Version>().unwrap();
-            let greater = pair[1].parse::<Version>().unwrap();
-            assert_eq!(
-                less.cmp(&greater),
-                Ordering::Less,
-                "less: {:?}\ngreater: {:?}",
-                less.as_bloated_debug(),
-                greater.as_bloated_debug()
-            );
+        for (i, v1) in versions.iter().enumerate() {
+            for v2 in versions[i + 1..].iter() {
+                let less = v1.parse::<Version>().unwrap();
+                let greater = v2.parse::<Version>().unwrap();
+                assert_eq!(
+                    less.cmp(&greater),
+                    Ordering::Less,
+                    "less: {:?}\ngreater: {:?}",
+                    less.as_bloated_debug(),
+                    greater.as_bloated_debug()
+                );
+            }
         }
     }
 
