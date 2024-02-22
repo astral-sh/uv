@@ -1,4 +1,5 @@
 use std::ffi::{OsStr, OsString};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -16,6 +17,7 @@ use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::write_atomic_sync;
 
 use crate::python_platform::PythonPlatform;
+use crate::python_query::try_find_default_python;
 use crate::virtual_env::detect_virtual_env;
 use crate::{find_requested_python, Error, PythonVersion};
 
@@ -35,12 +37,7 @@ impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
     pub fn query(executable: &Path, platform: &Platform, cache: &Cache) -> Result<Self, Error> {
         let info = InterpreterQueryResult::query_cached(executable, cache)?;
-        debug_assert!(
-            info.base_prefix == info.base_exec_prefix,
-            "Not a virtualenv (Python: {}, prefix: {})",
-            executable.display(),
-            info.base_prefix.display()
-        );
+
         debug_assert!(
             info.sys_executable.is_absolute(),
             "`sys.executable` is not an absolute Python; Python installation is broken: {}",
@@ -170,38 +167,18 @@ impl Interpreter {
 
         // Look for the requested version with by search for `python{major}.{minor}` in `PATH` on
         // Unix and `py --list-paths` on Windows.
-        if let Some(python_version) = python_version {
-            if let Some(interpreter) =
-                find_requested_python(&python_version.string, platform, cache)?
-            {
-                if version_matches(&interpreter) {
-                    return Ok(Some(interpreter));
-                }
-            }
-        }
-
-        // Python discovery failed to find the requested version, maybe the default Python in PATH
-        // matches?
-        if cfg!(unix) {
-            if let Some(executable) = Interpreter::find_executable("python3")? {
-                debug!("Resolved python3 to {}", executable.display());
-                let interpreter = Interpreter::query(&executable, &python_platform.0, cache)?;
-                if version_matches(&interpreter) {
-                    return Ok(Some(interpreter));
-                }
-            }
-        } else if cfg!(windows) {
-            if let Some(executable) = Interpreter::find_executable("python.exe")? {
-                let interpreter = Interpreter::query(&executable, &python_platform.0, cache)?;
-                if version_matches(&interpreter) {
-                    return Ok(Some(interpreter));
-                }
-            }
+        let interpreter = if let Some(python_version) = python_version {
+            find_requested_python(&python_version.string, platform, cache)?
         } else {
-            unimplemented!("Only Windows and Unix are supported");
-        }
+            try_find_default_python(platform, cache)?
+        };
 
-        Ok(None)
+        if let Some(interpreter) = interpreter {
+            debug_assert!(version_matches(&interpreter));
+            Ok(Some(interpreter))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Find the Python interpreter in `PATH`, respecting `UV_PYTHON_PATH`.
@@ -324,13 +301,50 @@ pub(crate) struct InterpreterQueryResult {
 impl InterpreterQueryResult {
     /// Return the resolved [`InterpreterQueryResult`] for the given Python executable.
     pub(crate) fn query(interpreter: &Path) -> Result<Self, Error> {
-        let output = Command::new(interpreter)
-            .args(["-c", include_str!("get_interpreter_info.py")])
-            .output()
-            .map_err(|err| Error::PythonSubcommandLaunch {
-                interpreter: interpreter.to_path_buf(),
-                err,
-            })?;
+        let script = include_str!("get_interpreter_info.py");
+        let output = if cfg!(windows)
+            && interpreter
+                .extension()
+                .is_some_and(|extension| extension == "bat")
+        {
+            // Multiline arguments aren't well-supported in batch files and `pyenv-win`, for example, trips over it.
+            // We work around this batch limitation by passing the script via stdin instead.
+            // This is somewhat more expensive because we have to spawn a new thread to write the
+            // stdin to avoid deadlocks in case the child process waits for the parent to read stdout.
+            // The performance overhead is the reason why we only applies this to batch files.
+            // https://github.com/pyenv-win/pyenv-win/issues/589
+            let mut child = Command::new(interpreter)
+                .arg("-")
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|err| Error::PythonSubcommandLaunch {
+                    interpreter: interpreter.to_path_buf(),
+                    err,
+                })?;
+
+            let mut stdin = child.stdin.take().unwrap();
+
+            // From the Rust documentation:
+            // If the child process fills its stdout buffer, it may end up
+            // waiting until the parent reads the stdout, and not be able to
+            // read stdin in the meantime, causing a deadlock.
+            // Writing from another thread ensures that stdout is being read
+            // at the same time, avoiding the problem.
+            std::thread::spawn(move || {
+                stdin
+                    .write_all(script.as_bytes())
+                    .expect("failed to write to stdin");
+            });
+
+            child.wait_with_output()
+        } else {
+            Command::new(interpreter).arg("-c").arg(script).output()
+        }
+        .map_err(|err| Error::PythonSubcommandLaunch {
+            interpreter: interpreter.to_path_buf(),
+            err,
+        })?;
 
         // stderr isn't technically a criterion for success, but i don't know of any cases where there
         // should be stderr output and if there is, we want to know
