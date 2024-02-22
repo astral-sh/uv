@@ -35,7 +35,7 @@ const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 /// Very basic `.cfg` file format writer.
 fn write_cfg(
     f: &mut impl Write,
-    data: &[(&str, String); 8],
+    data: &[(String, String)],
     prompt: Option<String>,
 ) -> io::Result<()> {
     for (key, value) in data {
@@ -73,6 +73,7 @@ pub fn create_bare_venv(
     location: &Utf8Path,
     interpreter: &Interpreter,
     prompt: Prompt,
+    extra_cfg: Vec<(String, String)>,
 ) -> io::Result<VenvPaths> {
     // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
     // This would make python-build-standalone fail with the encodings module not being found because its home is wrong.
@@ -226,31 +227,68 @@ pub fn create_bare_venv(
     } else {
         unimplemented!("Only Windows and Unix are supported")
     };
-    let pyvenv_cfg_data = &[
-        ("home", python_home),
-        (
-            "implementation",
-            interpreter.markers().platform_python_implementation.clone(),
-        ),
-        (
-            "version_info",
-            interpreter.markers().python_version.string.clone(),
-        ),
-        ("gourgeist", env!("CARGO_PKG_VERSION").to_string()),
-        // I wouldn't allow this option anyway
-        ("include-system-site-packages", "false".to_string()),
-        (
-            "base-prefix",
-            interpreter.base_prefix().to_string_lossy().to_string(),
-        ),
-        (
-            "base-exec-prefix",
-            interpreter.base_exec_prefix().to_string_lossy().to_string(),
-        ),
-        ("base-executable", base_python.to_string()),
+
+    // Validate extra_cfg
+    let reserved_keys = [
+        "home",
+        "implementation",
+        "version_info",
+        "gourgeist",
+        "include-system-site-packages",
+        "base-prefix",
+        "base-exec-prefix",
+        "base-executable",
+        "prompt",
     ];
+    for (key, _) in &extra_cfg {
+        if reserved_keys.contains(&key.as_str()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Reserved key found in extra_cfg: {key}"),
+            ));
+        }
+    }
+
+    let pyvenv_cfg_data: Vec<(String, String)> = [
+        vec![
+            ("home".to_string(), python_home),
+            (
+                "implementation".to_string(),
+                interpreter.markers().platform_python_implementation.clone(),
+            ),
+            (
+                "version_info".to_string(),
+                interpreter.markers().python_version.string.clone(),
+            ),
+            (
+                "gourgeist".to_string(),
+                env!("CARGO_PKG_VERSION").to_string(),
+            ),
+        ],
+        // Put custom cfg pairs after "gourgeist"
+        extra_cfg,
+        vec![
+            (
+                "include-system-site-packages".to_string(),
+                "false".to_string(),
+            ),
+            (
+                "base-prefix".to_string(),
+                interpreter.base_prefix().to_string_lossy().to_string(),
+            ),
+            (
+                "base-exec-prefix".to_string(),
+                interpreter.base_exec_prefix().to_string_lossy().to_string(),
+            ),
+            ("base-executable".to_string(), base_python.to_string()),
+        ],
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+
     let mut pyvenv_cfg = BufWriter::new(File::create(location.join("pyvenv.cfg"))?);
-    write_cfg(&mut pyvenv_cfg, pyvenv_cfg_data, prompt)?;
+    write_cfg(&mut pyvenv_cfg, &pyvenv_cfg_data, prompt)?;
     drop(pyvenv_cfg);
 
     let site_packages = if cfg!(unix) {

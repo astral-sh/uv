@@ -51,11 +51,12 @@ pub fn create_venv(
     location: &Path,
     interpreter: Interpreter,
     prompt: Prompt,
+    extra_cfg: Vec<(String, String)>,
 ) -> Result<Virtualenv, Error> {
     let location: &Utf8Path = location
         .try_into()
         .map_err(|err: FromPathError| err.into_io_error())?;
-    let paths = create_bare_venv(location, &interpreter, prompt)?;
+    let paths = create_bare_venv(location, &interpreter, prompt, extra_cfg)?;
     Ok(Virtualenv::from_interpreter(
         interpreter,
         paths.root.as_std_path(),

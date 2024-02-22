@@ -119,8 +119,12 @@ async fn venv_impl(
     )
     .into_diagnostic()?;
 
+    // Extra cfg for pyvenv.cfg to specify uv version
+    let extra_cfg = vec![("uv".to_string(), env!("CARGO_PKG_VERSION").to_string())];
+
     // Create the virtual environment.
-    let venv = gourgeist::create_venv(path, interpreter, prompt).map_err(VenvError::Creation)?;
+    let venv = gourgeist::create_venv(path, interpreter, prompt, extra_cfg)
+        .map_err(VenvError::Creation)?;
 
     // Install seed packages.
     if seed {

@@ -7,7 +7,9 @@ use assert_fs::prelude::*;
 
 use uv_fs::Normalized;
 
-use crate::common::{create_bin_with_executables, get_bin, uv_snapshot, EXCLUDE_NEWER};
+use crate::common::{
+    create_bin_with_executables, get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER,
+};
 
 mod common;
 
@@ -574,4 +576,21 @@ fn virtualenv_compatibility() -> Result<()> {
     venv.assert(predicates::path::is_dir());
 
     Ok(())
+}
+
+#[test]
+fn verify_pyvenv_cfg() {
+    let context = TestContext::new("3.12");
+    let venv = context.temp_dir.child(".venv");
+    let pyvenv_cfg = venv.child("pyvenv.cfg");
+
+    venv.assert(predicates::path::is_dir());
+
+    // Check pyvenv.cfg exists
+    pyvenv_cfg.assert(predicates::path::is_file());
+
+    // Check if "uv = version" is present in the file
+    let version = env!("CARGO_PKG_VERSION").to_string();
+    let search_string = format!("uv = {version}");
+    pyvenv_cfg.assert(predicates::str::contains(search_string));
 }
