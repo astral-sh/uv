@@ -173,6 +173,28 @@ Since uv has no dependency on Python, it can even install into virtual environme
 its own. For example, setting `VIRTUAL_ENV=/path/to/venv` will cause uv to install into
 `/path/to/venv`, no matter where uv is installed.
 
+### Git authentication
+
+uv allows packages to be installed from Git and supports the following schemes for authenticating with private
+repositories.
+
+Using SSH:
+
+- `git+ssh://git@<hostname>/...` (e.g. `git+ssh://git@github.com/astral-sh/uv`)
+- `git+ssh://git@<host>/...` (e.g. `git+ssh://git@github.com-key-2/astral-sh/uv`)
+
+See the [GitHub SSH documentation](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/about-ssh) for more details on how to configure SSH.
+
+Using a password or token:
+
+- `git+https://<user>:<token>@<hostname>/...` (e.g. `git+https://git:github_pat_asdf@github.com/astral-sh/uv`)
+- `git+https://<token>@<hostname>/...` (e.g. `git+https://github_pat_asdf@github.com/astral-sh/uv`)
+- `git+https://<user>@<hostname>/...` (e.g. `git+https://git@github.com/astral-sh/uv`)
+
+When using a GitHub personal access token, the username is arbitrary. GitHub does not support logging in with password directly, although other hosts may. If a username is provided without credentials, you will be prompted to enter them.
+
+If there are no credentials present in the URL and authentication is needed, the [Git credential helper](https://git-scm.com/doc/credential-helpers) will be queried.
+
 ### Dependency caching
 
 uv uses aggressive caching to avoid re-downloading (and re-building dependencies) that have
