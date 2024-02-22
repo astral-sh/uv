@@ -95,4 +95,15 @@ impl PreReleaseStrategy {
             ),
         }
     }
+
+    /// Returns `true` if a [`PackageName`] is allowed to have pre-release versions.
+    pub(crate) fn allows(&self, package: &PackageName) -> bool {
+        match self {
+            Self::Disallow => false,
+            Self::Allow => true,
+            Self::IfNecessary => false,
+            Self::Explicit(packages) => packages.contains(package),
+            Self::IfNecessaryOrExplicit(packages) => packages.contains(package),
+        }
+    }
 }

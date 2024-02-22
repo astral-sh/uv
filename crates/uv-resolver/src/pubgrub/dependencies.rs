@@ -9,6 +9,7 @@ use uv_normalize::{ExtraName, PackageName};
 
 use crate::constraints::Constraints;
 use crate::overrides::Overrides;
+use crate::prerelease_mode::PreReleaseStrategy;
 use crate::pubgrub::specifier::PubGrubSpecifier;
 use crate::pubgrub::PubGrubPackage;
 use crate::resolver::Urls;
@@ -19,6 +20,7 @@ pub struct PubGrubDependencies(Vec<(PubGrubPackage, Range<Version>)>);
 
 impl PubGrubDependencies {
     /// Generate a set of `PubGrub` dependencies from a set of requirements.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_requirements(
         requirements: &[Requirement],
         constraints: &Constraints,
@@ -26,6 +28,7 @@ impl PubGrubDependencies {
         source_name: Option<&PackageName>,
         source_extra: Option<&ExtraName>,
         urls: &Urls,
+        prerelease: &PreReleaseStrategy,
         env: &MarkerEnvironment,
     ) -> Result<Self, ResolveError> {
         let mut dependencies = Vec::default();
@@ -44,12 +47,12 @@ impl PubGrubDependencies {
             }
 
             // Add the package, plus any extra variants.
-            for result in std::iter::once(to_pubgrub(requirement, None, urls)).chain(
+            for result in std::iter::once(to_pubgrub(requirement, None, urls, prerelease)).chain(
                 requirement
                     .extras
                     .clone()
                     .into_iter()
-                    .map(|extra| to_pubgrub(requirement, Some(extra), urls)),
+                    .map(|extra| to_pubgrub(requirement, Some(extra), urls, prerelease)),
             ) {
                 let (mut package, version) = result?;
 
@@ -80,13 +83,15 @@ impl PubGrubDependencies {
                     }
 
                     // Add the package, plus any extra variants.
-                    for result in std::iter::once(to_pubgrub(constraint, None, urls)).chain(
-                        constraint
-                            .extras
-                            .clone()
-                            .into_iter()
-                            .map(|extra| to_pubgrub(constraint, Some(extra), urls)),
-                    ) {
+                    for result in std::iter::once(to_pubgrub(constraint, None, urls, prerelease))
+                        .chain(
+                            constraint
+                                .extras
+                                .clone()
+                                .into_iter()
+                                .map(|extra| to_pubgrub(constraint, Some(extra), urls, prerelease)),
+                        )
+                    {
                         let (mut package, version) = result?;
 
                         // Detect self-dependencies.
@@ -132,6 +137,7 @@ fn to_pubgrub(
     requirement: &Requirement,
     extra: Option<ExtraName>,
     urls: &Urls,
+    prerelease: &PreReleaseStrategy,
 ) -> Result<(PubGrubPackage, Range<Version>), ResolveError> {
     match requirement.version_or_url.as_ref() {
         // The requirement has no specifier (e.g., `flask`).
@@ -142,9 +148,12 @@ fn to_pubgrub(
 
         // The requirement has a specifier (e.g., `flask>=1.0`).
         Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
+            // If pre-releases are allowed for a given package, markers are interpreted slightly
+            // differently.
+            let allow_prerelease = prerelease.allows(&requirement.name);
             let version = specifiers
                 .iter()
-                .map(PubGrubSpecifier::try_from)
+                .map(|specifier| PubGrubSpecifier::for_package(specifier, allow_prerelease))
                 .fold_ok(Range::full(), |range, specifier| {
                     range.intersection(&specifier.into())
                 })?;
