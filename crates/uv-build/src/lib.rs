@@ -325,17 +325,11 @@ impl SourceBuild {
         let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)
             .map_err(|err| *err)?;
 
-        // Extra cfg for pyvenv.cfg to specify build backend
-        let extra_cfg = vec![(
-            "uv-build".to_string(),
-            env!("CARGO_PKG_VERSION").to_string(),
-        )];
-
         let venv = gourgeist::create_venv(
             &temp_dir.path().join(".venv"),
             interpreter.clone(),
             gourgeist::Prompt::None,
-            extra_cfg,
+            Vec::new(),
         )?;
 
         // Setup the build environment.
