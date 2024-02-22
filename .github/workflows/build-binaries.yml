@@ -34,6 +34,7 @@ env:
 
 jobs:
   sdist:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,6 +60,7 @@ jobs:
           path: dist
 
   macos-x86_64:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -97,6 +99,7 @@ jobs:
             *.sha256
 
   macos-universal:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -139,6 +142,7 @@ jobs:
             *.sha256
 
   windows:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: windows-latest
     strategy:
       matrix:
@@ -187,6 +191,7 @@ jobs:
             *.sha256
 
   linux:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -255,6 +260,7 @@ jobs:
             *.sha256
 
   linux-arm:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -324,6 +330,7 @@ jobs:
   # Like `linux-arm`, but use `--no-default-features --features flate2/rust_backend` when
   # building uv.
   linux-s390x:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -388,6 +395,7 @@ jobs:
   # Like `linux-arm`, but use `--no-default-features --features flate2/rust_backend` when
   # building uv, and install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -459,6 +467,7 @@ jobs:
             *.sha256
 
   musllinux:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -517,6 +526,7 @@ jobs:
             *.sha256
 
   musllinux-cross:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
