@@ -99,3 +99,15 @@ You can enable `trace` level logging using the `RUST_LOG` environment variable, 
 ```shell
 RUST_LOG=trace uv …
 ```
+
+## Releases
+
+Releases can only be performed by Astral team members.
+
+Changelog entries and version bumps are automated. Run:
+
+```
+./scripts/release/bump.sh
+```
+
+Then, editorialize the `CHANGELOG.md` file.
