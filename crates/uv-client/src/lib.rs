@@ -7,7 +7,6 @@ pub use registry_client::{
 };
 pub use rkyvutil::OwnedArchive;
 
-mod auth;
 mod cached_client;
 mod error;
 mod flat_index;

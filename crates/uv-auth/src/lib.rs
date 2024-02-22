@@ -1,13 +1,12 @@
+/// HTTP authentication utilities.
 use tracing::warn;
 use url::Url;
-
-/// HTTP authentication utilities.
 
 /// Copy authentication from one URL to another URL if applicable.
 ///
 /// See [`should_retain_auth`] for details on when authentication is retained.
 #[must_use]
-pub(crate) fn safe_copy_auth(request_url: &Url, mut response_url: Url) -> Url {
+pub fn safe_copy_url_auth(request_url: &Url, mut response_url: Url) -> Url {
     if should_retain_auth(request_url, &response_url) {
         response_url
             .set_username(request_url.username())
@@ -61,7 +60,7 @@ fn should_retain_auth(request_url: &Url, response_url: &Url) -> bool {
 mod tests {
     use url::{ParseError, Url};
 
-    use crate::auth::should_retain_auth;
+    use crate::should_retain_auth;
 
     #[test]
     fn test_should_retain_auth() -> Result<(), ParseError> {

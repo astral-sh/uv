@@ -1,0 +1,8 @@
+[package]
+name = "uv-auth"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+url = { workspace = true }
+tracing = { workspace = true }

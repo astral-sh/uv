@@ -11,6 +11,7 @@ install-wheel-rs = { path = "../install-wheel-rs" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
+uv-auth = { path = "../uv-auth" }
 uv-cache = { path = "../uv-cache" }
 uv-fs = { path = "../uv-fs", features = ["tokio"] }
 uv-normalize = { path = "../uv-normalize" }

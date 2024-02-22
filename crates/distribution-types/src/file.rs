@@ -6,6 +6,8 @@ use thiserror::Error;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pypi_types::{DistInfoMetadata, Hashes, Yanked};
+use url::Url;
+use uv_auth::safe_copy_url_auth;
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, Error)]
@@ -39,7 +41,7 @@ pub struct File {
 
 impl File {
     /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
-    pub fn try_from(file: pypi_types::File, base: &str) -> Result<Self, FileConversionError> {
+    pub fn try_from(file: pypi_types::File, base: &Url) -> Result<Self, FileConversionError> {
         Ok(Self {
             dist_info_metadata: file.dist_info_metadata,
             filename: file.filename,
@@ -51,7 +53,12 @@ impl File {
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(|dt| dt.timestamp_millis()),
             url: if file.url.contains("://") {
-                FileLocation::AbsoluteUrl(file.url)
+                let url = safe_copy_url_auth(
+                    base,
+                    Url::parse(&file.url)
+                        .map_err(|err| FileConversionError::Url(file.url.clone(), err))?,
+                );
+                FileLocation::AbsoluteUrl(url.to_string())
             } else {
                 FileLocation::RelativeUrl(base.to_string(), file.url)
             },
