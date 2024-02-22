@@ -107,7 +107,7 @@ jobs:
         run: |
           rustup target add x86_64-pc-windows-msvc
           rustup target add aarch64-pc-windows-msvc
-          rustup component add clippy rust-src --toolchain nightly-2024-02-09-x86_64-pc-windows-msvc
+          rustup component add clippy rust-src --toolchain nightly-2024-01-23-x86_64-pc-windows-msvc
       - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
