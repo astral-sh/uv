@@ -63,5 +63,4 @@ changelog_contributors = false
 version_files = [
   "README.md",
   "crates/uv/Cargo.toml",
-  "pyproject.toml",
 ]
