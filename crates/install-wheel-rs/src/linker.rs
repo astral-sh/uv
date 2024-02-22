@@ -7,6 +7,7 @@ use std::str::FromStr;
 use configparser::ini::Ini;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
+use reflink_copy as reflink;
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
 
@@ -280,55 +281,118 @@ fn clone_wheel_files(
     wheel: impl AsRef<Path>,
 ) -> Result<usize, Error> {
     let mut count = 0usize;
+    let mut attempt = Attempt::default();
 
     // On macOS, directly can be recursively copied with a single `clonefile` call.
     // So we only need to iterate over the top-level of the directory, and copy each file or
     // subdirectory unless the subdirectory exists already in which case we'll need to recursively
     // merge its contents with the existing directory.
     for entry in fs::read_dir(wheel.as_ref())? {
-        clone_recursive(site_packages.as_ref(), wheel.as_ref(), &entry?)?;
+        clone_recursive(
+            site_packages.as_ref(),
+            wheel.as_ref(),
+            &entry?,
+            &mut attempt,
+        )?;
         count += 1;
     }
 
     Ok(count)
 }
 
+// Hard linking / reflinking might not be supported but we (afaik) can't detect this ahead of time,
+// so we'll try hard linking / reflinking the first file - if this succeeds we'll know later
+// errors are not due to lack of os/fs support. If it fails, we'll switch to copying for the rest of the
+// install.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum Attempt {
+    #[default]
+    Initial,
+    Subsequent,
+    UseCopyFallback,
+}
+
 /// Recursively clone the contents of `from` into `to`.
-fn clone_recursive(site_packages: &Path, wheel: &Path, entry: &DirEntry) -> Result<(), Error> {
+fn clone_recursive(
+    site_packages: &Path,
+    wheel: &Path,
+    entry: &DirEntry,
+    attempt: &mut Attempt,
+) -> Result<(), Error> {
     // Determine the existing and destination paths.
     let from = entry.path();
     let to = site_packages.join(from.strip_prefix(wheel).unwrap());
 
     debug!("Cloning {} to {}", from.display(), to.display());
 
-    // Attempt to copy the file or directory
-    let reflink = reflink_copy::reflink(&from, &to);
-
-    if reflink
-        .as_ref()
-        .is_err_and(|err| matches!(err.kind(), std::io::ErrorKind::AlreadyExists))
-    {
-        // If copying fails and the directory exists already, it must be merged recursively.
-        if entry.file_type()?.is_dir() {
-            for entry in fs::read_dir(from)? {
-                clone_recursive(site_packages, wheel, &entry?)?;
+    match attempt {
+        Attempt::Initial => {
+            if let Err(err) = reflink::reflink(&from, &to) {
+                if matches!(err.kind(), std::io::ErrorKind::AlreadyExists) {
+                    // If cloning/copying fails and the directory exists already, it must be merged recursively.
+                    if entry.file_type()?.is_dir() {
+                        for entry in fs::read_dir(from)? {
+                            clone_recursive(site_packages, wheel, &entry?, attempt)?;
+                        }
+                    } else {
+                        // If file already exists, overwrite it.
+                        let tempdir = tempdir_in(site_packages)?;
+                        let tempfile = tempdir.path().join(from.file_name().unwrap());
+                        if reflink::reflink(&from, &tempfile).is_ok() {
+                            fs::rename(&tempfile, to)?;
+                        } else {
+                            debug!("Failed to clone {} to temporary location {} - attempting to copy files as a fallback", from.display(), tempfile.display());
+                            *attempt = Attempt::UseCopyFallback;
+                            fs::copy(&from, &to)?;
+                        }
+                    }
+                } else {
+                    debug!(
+                        "Failed to clone {} to {} - attempting to copy files as a fallback",
+                        from.display(),
+                        to.display()
+                    );
+                    // switch to copy fallback
+                    *attempt = Attempt::UseCopyFallback;
+                    clone_recursive(site_packages, wheel, entry, attempt)?;
+                }
             }
-        } else {
-            // If file already exists, overwrite it.
-            let tempdir = tempdir_in(site_packages)?;
-            let tempfile = tempdir.path().join(from.file_name().unwrap());
-            reflink_copy::reflink(from, &tempfile)?;
-            fs::rename(&tempfile, to)?;
         }
-    } else {
-        // Other errors should be tracked
-        reflink.map_err(|err| Error::Reflink {
-            from: from.clone(),
-            to: to.clone(),
-            err,
-        })?;
+        Attempt::Subsequent => {
+            if let Err(err) = reflink::reflink(&from, &to) {
+                if matches!(err.kind(), std::io::ErrorKind::AlreadyExists) {
+                    // If cloning/copying fails and the directory exists already, it must be merged recursively.
+                    if entry.file_type()?.is_dir() {
+                        for entry in fs::read_dir(from)? {
+                            clone_recursive(site_packages, wheel, &entry?, attempt)?;
+                        }
+                    } else {
+                        // If file already exists, overwrite it.
+                        let tempdir = tempdir_in(site_packages)?;
+                        let tempfile = tempdir.path().join(from.file_name().unwrap());
+                        reflink::reflink(&from, &tempfile)?;
+                        fs::rename(&tempfile, to)?;
+                    }
+                } else {
+                    return Err(Error::Reflink { from, to, err });
+                }
+            }
+        }
+        Attempt::UseCopyFallback => {
+            if entry.file_type()?.is_dir() {
+                fs::create_dir_all(&to)?;
+                for entry in fs::read_dir(from)? {
+                    clone_recursive(site_packages, wheel, &entry?, attempt)?;
+                }
+            } else {
+                fs::copy(&from, &to)?;
+            }
+        }
     }
 
+    if *attempt == Attempt::Initial {
+        *attempt = Attempt::Subsequent;
+    }
     Ok(())
 }
 
@@ -366,18 +430,6 @@ fn hardlink_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
 ) -> Result<usize, Error> {
-    // Hard linking might not be supported but we (afaik) can't detect this ahead of time, so we'll
-    // try hard linking the first file, if this succeeds we'll know later hard linking errors are
-    // not due to lack of os/fs support, if it fails we'll switch to copying for the rest of the
-    // install
-    #[derive(Debug, Default, Clone, Copy)]
-    enum Attempt {
-        #[default]
-        Initial,
-        Subsequent,
-        UseCopyFallback,
-    }
-
     let mut attempt = Attempt::default();
     let mut count = 0usize;
 
