@@ -148,15 +148,15 @@ impl TestContext {
         ]
     }
 
-    /// Canonical snapshot filters for this test context.
+    /// Standard snapshot filters _plus_ those for this test context.
     pub fn filters(&self) -> Vec<(&str, &str)> {
-        let mut filters = INSTA_FILTERS.to_vec();
-
-        for (pattern, replacement) in &self.filters {
-            filters.push((pattern, replacement));
-        }
-
-        filters
+        // Put test context snapshots before the default filters
+        // This ensures we don't replace other patterns inside paths from the test context first
+        self.filters
+            .iter()
+            .map(|(p, r)| (p.as_str(), r.as_str()))
+            .chain(INSTA_FILTERS.iter().copied())
+            .collect()
     }
 }
 
