@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
   workflow_dispatch:
 
@@ -32,7 +32,7 @@ jobs:
     name: "cargo clippy"
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ ubuntu-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -106,7 +106,8 @@ jobs:
         working-directory: crates/uv-trampoline
         run: |
           rustup target add x86_64-pc-windows-msvc
-          rustup component add clippy rust-src --toolchain nightly-2024-01-23-x86_64-pc-windows-msvc
+          rustup target add aarch64-pc-windows-msvc
+          rustup component add clippy rust-src --toolchain nightly-2024-02-09-x86_64-pc-windows-msvc
       - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
@@ -116,4 +117,13 @@ jobs:
         run: cargo clippy --all-features --locked -- -D warnings
       - name: "Build"
         working-directory: crates/uv-trampoline
-        run: cargo build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target x86_64-pc-windows-msvc
+        run: |
+          cargo build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target x86_64-pc-windows-msvc
+          cargo build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target aarch64-pc-windows-msvc
+      - name: "Verify committed trampolines are up to date"
+        working-directory: crates/uv-trampoline
+        run: |
+          fc.exe /B .\trampolines\uv-trampoline-x86_64-console.exe .\target\x86_64-pc-windows-msvc\release\uv-trampoline-console.exe
+          fc.exe /B .\trampolines\uv-trampoline-x86_64-gui.exe .\target\x86_64-pc-windows-msvc\release\uv-trampoline-gui.exe
+          fc.exe /B .\trampolines\uv-trampoline-aarch64-console.exe .\target\aarch64-pc-windows-msvc\release\uv-trampoline-console.exe
+          fc.exe /B .\trampolines\uv-trampoline-aarch64-gui.exe .\target\aarch64-pc-windows-msvc\release\uv-trampoline-gui.exe
