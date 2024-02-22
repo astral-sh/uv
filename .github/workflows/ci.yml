@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
   workflow_dispatch:
 
@@ -32,7 +32,7 @@ jobs:
     name: "cargo clippy"
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ ubuntu-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -113,7 +113,7 @@ jobs:
           workspaces: "crates/uv-trampoline"
       - name: "Clippy"
         working-directory: crates/uv-trampoline
-        run: cargo clippy --all-features --locked -- -D warnings
+        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
       - name: "Build"
         working-directory: crates/uv-trampoline
-        run: cargo build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target x86_64-pc-windows-msvc
+        run: cargo build --release --target x86_64-pc-windows-msvc

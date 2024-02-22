@@ -43,15 +43,7 @@ windows-sys = { version = "0.52.0", features = [
     "Win32_System_WindowsProgramming",
     "Win32_UI_WindowsAndMessaging",
 ] }
-# This provides implementations of memcpy, memset, etc., which the compiler assumes
-# are available. But there's also a hidden copy of this crate inside `core`/`alloc`,
-# and they may or may not conflict depending on how clever the linker is feeling.
-# The issue is that the hidden copy doesn't have the "mem" feature enabled, and we
-# need it. So two options:
-# - Uncomment this, and cross fingers that it doesn't cause conflicts
-# - Use -Zbuild-std=... -Zbuild-std-features=compiler-builtins-mem, which enables
-#   the mem feature on the built-in builtins.
-#compiler_builtins = { version = "*", features = ["mem"]}
+
 ufmt-write = "0.1.0"
 ufmt = "0.2.0"
 

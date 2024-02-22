@@ -319,7 +319,7 @@ pub fn run_and_format<'a>(
     let output = command
         .borrow_mut()
         .output()
-        .unwrap_or_else(|_| panic!("Failed to spawn {program}"));
+        .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"));
 
     let mut snapshot = format!(
         "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",

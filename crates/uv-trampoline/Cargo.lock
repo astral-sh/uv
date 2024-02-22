@@ -18,16 +18,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "uv-trampoline"
-version = "0.1.0"
-dependencies = [
- "embed-manifest",
- "ufmt",
- "ufmt-write",
- "windows-sys",
-]
-
-[[package]]
 name = "quote"
 version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -79,6 +69,16 @@ name = "unicode-ident"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
+
+[[package]]
+name = "uv-trampoline"
+version = "0.1.0"
+dependencies = [
+ "embed-manifest",
+ "ufmt",
+ "ufmt-write",
+ "windows-sys",
+]
 
 [[package]]
 name = "windows-sys"
