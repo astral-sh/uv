@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
+
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
@@ -24,6 +25,7 @@ use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
 
+use crate::auth::safe_copy_auth;
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
 use crate::middleware::OfflineMiddleware;
@@ -247,7 +249,7 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = response.url().clone();
+                let url = safe_copy_auth(&url, response.url().clone());
 
                 let content_type = response
                     .headers()

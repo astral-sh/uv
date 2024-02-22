@@ -19,6 +19,7 @@ use pypi_types::{Hashes, Yanked};
 use uv_cache::{Cache, CacheBucket};
 use uv_normalize::PackageName;
 
+use crate::auth::safe_copy_auth;
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
 use crate::{Connectivity, Error, ErrorKind, RegistryClient};
@@ -155,7 +156,7 @@ impl<'a> FlatIndexClient<'a> {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = response.url().clone();
+                let url = safe_copy_auth(url, response.url().clone());
 
                 let text = response.text().await.map_err(ErrorKind::RequestError)?;
                 let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
