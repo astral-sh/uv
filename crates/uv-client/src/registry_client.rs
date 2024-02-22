@@ -767,7 +767,7 @@ pub enum Connectivity {
 mod tests {
     use std::str::FromStr;
 
-    use url::{Url};
+    use url::Url;
 
     use pypi_types::{JoinRelativeError, SimpleJson};
     use uv_normalize::PackageName;

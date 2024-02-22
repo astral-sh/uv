@@ -48,15 +48,9 @@ fn should_retain_auth(request_url: &Url, response_url: &Url) -> bool {
 
     // Check the port.
     // The port is only allowed to differ if it it matches the "default port" for the scheme.
-    let default_port = match request_url.scheme() {
-        "http" => Some(80),
-        "https" => Some(443),
-        _ => None,
-    };
-    if request_url.port() != response_url.port()
-        && request_url.port() != default_port
-        && response_url.port() != default_port
-    {
+    // However, `reqwest` sets the `port` to `None` if it matches the default port so we do
+    // not need any special handling here.
+    if request_url.port() != response_url.port() {
         return false;
     }
 
