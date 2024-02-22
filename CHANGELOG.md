@@ -4,9 +4,9 @@
 
 ### Bug fixes
 
+- Allow duplicate URLs that resolve to the same canonical URL ([#1877](https://github.com/astral-sh/uv/pull/1877))
 - Retain authentication attached to URLs when making requests to the same host ([#1874](https://github.com/astral-sh/uv/pull/1874))
 - Win Trampoline: Use Python executable path encoded in binary ([#1803](https://github.com/astral-sh/uv/pull/1803))
-- Allow duplicate URLs that resolve to the same canonical URL ([#1877](https://github.com/astral-sh/uv/pull/1877))
 
 ### Documentation
 
@@ -14,19 +14,18 @@
 
 ### Other changes
 
-- Bump version to 0.1.8 ([#1880](https://github.com/astral-sh/uv/pull/1880))
-- Avoid displaying "root" package when formatting terms ([#1871](https://github.com/astral-sh/uv/pull/1871))
-- fix: expose types to implement custom `ResolverProvider` ([#1862](https://github.com/astral-sh/uv/pull/1862))
-- Search `PATH` when `python` can't be found with `py` ([#1711](https://github.com/astral-sh/uv/pull/1711))
 - Add musl to python bootstrapping script ([#1758](https://github.com/astral-sh/uv/pull/1758))
-
+- Avoid displaying "root" package when formatting terms ([#1871](https://github.com/astral-sh/uv/pull/1871))
+- Bump version to 0.1.8 ([#1880](https://github.com/astral-sh/uv/pull/1880))
+- Search `PATH` when `python` can't be found with `py` ([#1711](https://github.com/astral-sh/uv/pull/1711))
+- fix: expose types to implement custom `ResolverProvider` ([#1862](https://github.com/astral-sh/uv/pull/1862))
 
 ## 0.1.7
 
 ### Enhancements
 
-- Support setting request timeout with `UV_HTTP_TIMEOUT` and `HTTP_TIMEOUT` ([#1780](https://github.com/astral-sh/uv/pull/1780))
 - Stream zip archive when fetching non-range-request metadata ([#1792](https://github.com/astral-sh/uv/pull/1792))
+- Support setting request timeout with `UV_HTTP_TIMEOUT` and `HTTP_TIMEOUT` ([#1780](https://github.com/astral-sh/uv/pull/1780))
 
 ### Configuration
 
@@ -34,50 +33,49 @@
 
 ### Bug fixes
 
-- Treat ARM wheels as higher-priority than universal ([#1843](https://github.com/astral-sh/uv/pull/1843))
+- Add fixup for `prefect<1.0.0` ([#1825](https://github.com/astral-sh/uv/pull/1825))
+- Add support for `>dev` specifier ([#1776](https://github.com/astral-sh/uv/pull/1776))
+- Avoid enforcing URL correctness for installed distributions ([#1793](https://github.com/astral-sh/uv/pull/1793))
+- Don't expect pinned packages for editables with non-existent extras ([#1847](https://github.com/astral-sh/uv/pull/1847))
+- Linker copies files as a fallback when ref-linking fails ([#1773](https://github.com/astral-sh/uv/pull/1773))
+- Move conflicting dependencies into PubGrub ([#1796](https://github.com/astral-sh/uv/pull/1796))
+- Normalize `VIRTUAL_ENV` path in activation scripts ([#1817](https://github.com/astral-sh/uv/pull/1817))
 - Preserve executable bit when untarring archives ([#1790](https://github.com/astral-sh/uv/pull/1790))
 - Retain passwords in Git URLs ([#1717](https://github.com/astral-sh/uv/pull/1717))
-- platform-host: check /bin/sh, then /bin/dash and then /bin/ls ([#1818](https://github.com/astral-sh/uv/pull/1818))
-- Don't expect pinned packages for editables with non-existent extras ([#1847](https://github.com/astral-sh/uv/pull/1847))
-- Normalize `VIRTUAL_ENV` path in activation scripts ([#1817](https://github.com/astral-sh/uv/pull/1817))
-- Add fixup for `prefect<1.0.0` ([#1825](https://github.com/astral-sh/uv/pull/1825))
-- Use the right marker for the `implementation` field of `pyvenv.cfg` ([#1785](https://github.com/astral-sh/uv/pull/1785))
-- Add support for `>dev` specifier ([#1776](https://github.com/astral-sh/uv/pull/1776))
-- Use `git` command to fetch repositories instead of `libgit2` for robust SSH support ([#1781](https://github.com/astral-sh/uv/pull/1781))
-- Wait for distribution metadata with `--no-deps` ([#1812](https://github.com/astral-sh/uv/pull/1812))
 - Sort output when installing seed packages ([#1822](https://github.com/astral-sh/uv/pull/1822))
-- Move conflicting dependencies into PubGrub ([#1796](https://github.com/astral-sh/uv/pull/1796))
-- Avoid enforcing URL correctness for installed distributions ([#1793](https://github.com/astral-sh/uv/pull/1793))
-- Linker copies files as a fallback when ref-linking fails ([#1773](https://github.com/astral-sh/uv/pull/1773))
+- Treat ARM wheels as higher-priority than universal ([#1843](https://github.com/astral-sh/uv/pull/1843))
+- Use `git` command to fetch repositories instead of `libgit2` for robust SSH support ([#1781](https://github.com/astral-sh/uv/pull/1781))
 - Use redirected URL as base for relative paths ([#1816](https://github.com/astral-sh/uv/pull/1816))
+- Use the right marker for the `implementation` field of `pyvenv.cfg` ([#1785](https://github.com/astral-sh/uv/pull/1785))
+- Wait for distribution metadata with `--no-deps` ([#1812](https://github.com/astral-sh/uv/pull/1812))
+- platform-host: check /bin/sh, then /bin/dash and then /bin/ls ([#1818](https://github.com/astral-sh/uv/pull/1818))
 
 ### Documentation
 
-- [docs] Update README.md to include extras example ([#1806](https://github.com/astral-sh/uv/pull/1806))
 - Add docs for git authentication ([#1844](https://github.com/astral-sh/uv/pull/1844))
+- [docs] Update README.md to include extras example ([#1806](https://github.com/astral-sh/uv/pull/1806))
 
 ### Other changes
 
-- Improve error message when git ref cannot be fetched ([#1826](https://github.com/astral-sh/uv/pull/1826))
 - Bump version to v0.1.7 ([#1851](https://github.com/astral-sh/uv/pull/1851))
+- Ensure that builds within the cache aren't considered Git repositories ([#1782](https://github.com/astral-sh/uv/pull/1782))
+- Improve error message when git ref cannot be fetched ([#1826](https://github.com/astral-sh/uv/pull/1826))
 - docs: update venv activation for windows ([#1836](https://github.com/astral-sh/uv/pull/1836))
 - strip trailing `+` from version number of local Python builds ([#1771](https://github.com/astral-sh/uv/pull/1771))
-- Ensure that builds within the cache aren't considered Git repositories ([#1782](https://github.com/astral-sh/uv/pull/1782))
-
 
 ## 0.1.6
 
 ### Enhancements
 
-- Support `venv --prompt` ([#1570](https://github.com/astral-sh/uv/pull/1570))
-- feat: allow passing in a custom reqwest Client ([#1745](https://github.com/astral-sh/uv/pull/1745))
 - Expose find_uv_bin and declare typing support ([#1728](https://github.com/astral-sh/uv/pull/1728))
 - Implement `uv cache dir` ([#1734](https://github.com/astral-sh/uv/pull/1734))
+- Support `venv --prompt` ([#1570](https://github.com/astral-sh/uv/pull/1570))
+- feat: allow passing in a custom reqwest Client ([#1745](https://github.com/astral-sh/uv/pull/1745))
 
 ### CLI
 
-- Move `uv clean` to `uv cache clean` ([#1733](https://github.com/astral-sh/uv/pull/1733))
 - Add shell completions generation ([#1675](https://github.com/astral-sh/uv/pull/1675))
+- Move `uv clean` to `uv cache clean` ([#1733](https://github.com/astral-sh/uv/pull/1733))
 
 ### Configuration
 
@@ -85,15 +83,15 @@
 
 ### Bug fixes
 
-- Preserve trailing slash for `--find-links` URLs ([#1720](https://github.com/astral-sh/uv/pull/1720))
-- Set index URLs for seeding venv ([#1755](https://github.com/astral-sh/uv/pull/1755))
-- Support recursive extras for URL dependencies ([#1729](https://github.com/astral-sh/uv/pull/1729))
-- Respect `--index-url` provided via requirements.txt ([#1719](https://github.com/astral-sh/uv/pull/1719))
-- Ensure extras trigger an install ([#1727](https://github.com/astral-sh/uv/pull/1727))
-- Support dotted function paths for script entrypoints ([#1622](https://github.com/astral-sh/uv/pull/1622))
 - Add support for absolute paths on Windows ([#1725](https://github.com/astral-sh/uv/pull/1725))
-- Only preserve the executable bit ([#1743](https://github.com/astral-sh/uv/pull/1743))
 - Don't preserve timestamp in streaming unzip ([#1749](https://github.com/astral-sh/uv/pull/1749))
+- Ensure extras trigger an install ([#1727](https://github.com/astral-sh/uv/pull/1727))
+- Only preserve the executable bit ([#1743](https://github.com/astral-sh/uv/pull/1743))
+- Preserve trailing slash for `--find-links` URLs ([#1720](https://github.com/astral-sh/uv/pull/1720))
+- Respect `--index-url` provided via requirements.txt ([#1719](https://github.com/astral-sh/uv/pull/1719))
+- Set index URLs for seeding venv ([#1755](https://github.com/astral-sh/uv/pull/1755))
+- Support dotted function paths for script entrypoints ([#1622](https://github.com/astral-sh/uv/pull/1622))
+- Support recursive extras for URL dependencies ([#1729](https://github.com/astral-sh/uv/pull/1729))
 
 ### Documentation
 
@@ -102,18 +100,17 @@
 
 ### Other changes
 
-- Skip compile_html test on musl ([#1756](https://github.com/astral-sh/uv/pull/1756))
-- Ignore invalid extras from PyPI ([#1731](https://github.com/astral-sh/uv/pull/1731))
-- is_http_range_requests_unsupported should return true on Method Not Allowed ([#1713](https://github.com/astral-sh/uv/pull/1713))
-- Print activation instructions for a venv after one has been created ([#1580](https://github.com/astral-sh/uv/pull/1580))
-- re-introduce cache healing when we see an invalid cache entry ([#1707](https://github.com/astral-sh/uv/pull/1707))
-- Better error message for missing space before semicolon in requirements ([#1746](https://github.com/astral-sh/uv/pull/1746))
-- Bump version to v0.1.6 ([#1736](https://github.com/astral-sh/uv/pull/1736))
-- Improve Poetry warning ([#1730](https://github.com/astral-sh/uv/pull/1730))
 - Add warning when dependencies are empty with Poetry metadata ([#1650](https://github.com/astral-sh/uv/pull/1650))
 - Allow `-f` alias for `--find-links` ([#1735](https://github.com/astral-sh/uv/pull/1735))
+- Better error message for missing space before semicolon in requirements ([#1746](https://github.com/astral-sh/uv/pull/1746))
+- Bump version to v0.1.6 ([#1736](https://github.com/astral-sh/uv/pull/1736))
+- Ignore invalid extras from PyPI ([#1731](https://github.com/astral-sh/uv/pull/1731))
+- Improve Poetry warning ([#1730](https://github.com/astral-sh/uv/pull/1730))
+- Print activation instructions for a venv after one has been created ([#1580](https://github.com/astral-sh/uv/pull/1580))
+- Skip compile_html test on musl ([#1756](https://github.com/astral-sh/uv/pull/1756))
 - fix: remove uv version from uv pip compile header ([#1716](https://github.com/astral-sh/uv/pull/1716))
-
+- is_http_range_requests_unsupported should return true on Method Not Allowed ([#1713](https://github.com/astral-sh/uv/pull/1713))
+- re-introduce cache healing when we see an invalid cache entry ([#1707](https://github.com/astral-sh/uv/pull/1707))
 
 ## 0.1.5
 
@@ -123,36 +120,35 @@
 
 ### Bug fixes
 
+- Build source distributions in the cache directory instead of the global temporary directory ([#1628](https://github.com/astral-sh/uv/pull/1628))
 - Do not remove uv itself on pip sync ([#1649](https://github.com/astral-sh/uv/pull/1649))
 - Ensure we retain existing environment variables during `python -m uv` ([#1667](https://github.com/astral-sh/uv/pull/1667))
-- Build source distributions in the cache directory instead of the global temporary directory ([#1628](https://github.com/astral-sh/uv/pull/1628))
 
 ### Documentation
 
-- Document RUST_LOG=trace for additional logging verbosity ([#1670](https://github.com/astral-sh/uv/pull/1670))
-- Minimal markdown nits ([#1664](https://github.com/astral-sh/uv/pull/1664))
 - Add brew to readme ([#1629](https://github.com/astral-sh/uv/pull/1629))
+- Document RUST_LOG=trace for additional logging verbosity ([#1670](https://github.com/astral-sh/uv/pull/1670))
 - Document local testing instructions ([#1672](https://github.com/astral-sh/uv/pull/1672))
+- Minimal markdown nits ([#1664](https://github.com/astral-sh/uv/pull/1664))
 - fix: use --override rather than -o to specify overrides in README.md ([#1668](https://github.com/astral-sh/uv/pull/1668))
 
 ### Other changes
 
+- Add yank warnings at end of messages ([#1669](https://github.com/astral-sh/uv/pull/1669))
 - Bump version to v0.1.5 ([#1671](https://github.com/astral-sh/uv/pull/1671))
 - Remove setuptools & wheel from seed packages (#1602) ([#1613](https://github.com/astral-sh/uv/pull/1613))
-- Add yank warnings at end of messages ([#1669](https://github.com/astral-sh/uv/pull/1669))
-
 
 ## 0.1.4
 
 ### Bug fixes
 
-- Enforce URL constraints for non-URL dependencies ([#1565](https://github.com/astral-sh/uv/pull/1565))
+- Add graceful fallback for Artifactory indexes ([#1574](https://github.com/astral-sh/uv/pull/1574))
+- Allow URL requirements in editable installs ([#1614](https://github.com/astral-sh/uv/pull/1614))
+- Allow repeated dependencies when installing ([#1558](https://github.com/astral-sh/uv/pull/1558))
 - Always run `get_requires_for_build_wheel` ([#1590](https://github.com/astral-sh/uv/pull/1590))
 - Avoid propagating top-level options to sub-resolutions ([#1607](https://github.com/astral-sh/uv/pull/1607))
 - Consistent use of `BIN_NAME` in activation scripts ([#1577](https://github.com/astral-sh/uv/pull/1577))
-- Allow repeated dependencies when installing ([#1558](https://github.com/astral-sh/uv/pull/1558))
-- Allow URL requirements in editable installs ([#1614](https://github.com/astral-sh/uv/pull/1614))
-- Add graceful fallback for Artifactory indexes ([#1574](https://github.com/astral-sh/uv/pull/1574))
+- Enforce URL constraints for non-URL dependencies ([#1565](https://github.com/astral-sh/uv/pull/1565))
 
 ### Documentation
 
@@ -160,54 +156,52 @@
 
 ### Other changes
 
-- Avoid using `white` coloring in terminal output ([#1576](https://github.com/astral-sh/uv/pull/1576))
-- Bump version to v0.1.4 ([#1608](https://github.com/astral-sh/uv/pull/1608))
 - Add CMD support ([#1523](https://github.com/astral-sh/uv/pull/1523))
-- Better error messages on expect failures in resolver ([#1583](https://github.com/astral-sh/uv/pull/1583))
-- Improve tracing when encountering invalid `requires-python` values ([#1568](https://github.com/astral-sh/uv/pull/1568))
-- Bump simple metadata cache version ([#1617](https://github.com/astral-sh/uv/pull/1617))
 - Allow non-nested archives for `hexdump` and others ([#1564](https://github.com/astral-sh/uv/pull/1564))
-
+- Avoid using `white` coloring in terminal output ([#1576](https://github.com/astral-sh/uv/pull/1576))
+- Better error messages on expect failures in resolver ([#1583](https://github.com/astral-sh/uv/pull/1583))
+- Bump simple metadata cache version ([#1617](https://github.com/astral-sh/uv/pull/1617))
+- Bump version to v0.1.4 ([#1608](https://github.com/astral-sh/uv/pull/1608))
+- Improve tracing when encountering invalid `requires-python` values ([#1568](https://github.com/astral-sh/uv/pull/1568))
 
 ## 0.1.3
 
 ### Enhancements
 
-- Use the system trust store for HTTPS requests ([#1512](https://github.com/astral-sh/uv/pull/1512))
 - Add support for `UV_EXTRA_INDEX_URL` ([#1515](https://github.com/astral-sh/uv/pull/1515))
+- Use the system trust store for HTTPS requests ([#1512](https://github.com/astral-sh/uv/pull/1512))
 
 ### Bug fixes
 
-- Apply percent-decoding to file-based URLs ([#1541](https://github.com/astral-sh/uv/pull/1541))
-- Read from `/bin/sh` if `/bin/ls` cannot be found when determing libc path ([#1433](https://github.com/astral-sh/uv/pull/1433))
-- Fix trailing commas on `Requires-Python` in HTML indexes  ([#1507](https://github.com/astral-sh/uv/pull/1507))
-- only parse /bin/sh (not /bin/ls) ([#1493](https://github.com/astral-sh/uv/pull/1493))
-- fix OS detection for Alpine Linux ([#1545](https://github.com/astral-sh/uv/pull/1545))
-- Use comparable representation for `PackageId` ([#1543](https://github.com/astral-sh/uv/pull/1543))
-- Avoid attempting rename in copy fallback path ([#1546](https://github.com/astral-sh/uv/pull/1546))
 - Add support for extras in editable requirements ([#1531](https://github.com/astral-sh/uv/pull/1531))
-- pypi-types: fix lenient requirement parsing ([#1529](https://github.com/astral-sh/uv/pull/1529))
+- Apply percent-decoding to file-based URLs ([#1541](https://github.com/astral-sh/uv/pull/1541))
 - Apply percent-decoding to filepaths in HTML find-links ([#1544](https://github.com/astral-sh/uv/pull/1544))
+- Avoid attempting rename in copy fallback path ([#1546](https://github.com/astral-sh/uv/pull/1546))
+- Fix list rendering in `venv --help` output ([#1459](https://github.com/astral-sh/uv/pull/1459))
+- Fix trailing commas on `Requires-Python` in HTML indexes  ([#1507](https://github.com/astral-sh/uv/pull/1507))
+- Read from `/bin/sh` if `/bin/ls` cannot be found when determing libc path ([#1433](https://github.com/astral-sh/uv/pull/1433))
 - Remove URL encoding when determining file name ([#1555](https://github.com/astral-sh/uv/pull/1555))
 - Support recursive extras ([#1435](https://github.com/astral-sh/uv/pull/1435))
-- Fix list rendering in `venv --help` output ([#1459](https://github.com/astral-sh/uv/pull/1459))
+- Use comparable representation for `PackageId` ([#1543](https://github.com/astral-sh/uv/pull/1543))
+- fix OS detection for Alpine Linux ([#1545](https://github.com/astral-sh/uv/pull/1545))
+- only parse /bin/sh (not /bin/ls) ([#1493](https://github.com/astral-sh/uv/pull/1493))
+- pypi-types: fix lenient requirement parsing ([#1529](https://github.com/astral-sh/uv/pull/1529))
 
 ### Documentation
 
-- infra: source github templates ([#1425](https://github.com/astral-sh/uv/pull/1425))
 - Provide example of file based package install. ([#1424](https://github.com/astral-sh/uv/pull/1424))
 - fix(docs): adjust link ([#1434](https://github.com/astral-sh/uv/pull/1434))
+- infra: source github templates ([#1425](https://github.com/astral-sh/uv/pull/1425))
 
 ### Other changes
 
-- Bump version to v0.1.3 ([#1557](https://github.com/astral-sh/uv/pull/1557))
-- Automatically detect virtual environments when used via `python -m uv` ([#1504](https://github.com/astral-sh/uv/pull/1504))
-- Loosen package script regexp to match spec ([#1482](https://github.com/astral-sh/uv/pull/1482))
-- Add warning for empty requirements files ([#1519](https://github.com/astral-sh/uv/pull/1519))
-- Use string display instead of debug for url parse trace ([#1498](https://github.com/astral-sh/uv/pull/1498))
-- Support MD5 hashes ([#1556](https://github.com/astral-sh/uv/pull/1556))
 - Add troubleshooting section to benchmarks guide ([#1485](https://github.com/astral-sh/uv/pull/1485))
-
+- Add warning for empty requirements files ([#1519](https://github.com/astral-sh/uv/pull/1519))
+- Automatically detect virtual environments when used via `python -m uv` ([#1504](https://github.com/astral-sh/uv/pull/1504))
+- Bump version to v0.1.3 ([#1557](https://github.com/astral-sh/uv/pull/1557))
+- Loosen package script regexp to match spec ([#1482](https://github.com/astral-sh/uv/pull/1482))
+- Support MD5 hashes ([#1556](https://github.com/astral-sh/uv/pull/1556))
+- Use string display instead of debug for url parse trace ([#1498](https://github.com/astral-sh/uv/pull/1498))
 
 ## 0.1.2
 
@@ -218,31 +212,30 @@
 
 ### Bug fixes
 
+- Add fix-up for invalid star comparison with major-only version ([#1410](https://github.com/astral-sh/uv/pull/1410))
+- Add fix-up for trailing comma with trailing space ([#1409](https://github.com/astral-sh/uv/pull/1409))
+- Allow empty fragments in HTML parser ([#1443](https://github.com/astral-sh/uv/pull/1443))
 - Fix search for `python.exe` on Windows ([#1381](https://github.com/astral-sh/uv/pull/1381))
 - Ignore invalid extra named `.none` ([#1428](https://github.com/astral-sh/uv/pull/1428))
 - Parse `-r` and `-c` entries as relative to containing file ([#1421](https://github.com/astral-sh/uv/pull/1421))
-- Add fix-up for invalid star comparison with major-only version ([#1410](https://github.com/astral-sh/uv/pull/1410))
-- Allow empty fragments in HTML parser ([#1443](https://github.com/astral-sh/uv/pull/1443))
-- Add fix-up for trailing comma with trailing space ([#1409](https://github.com/astral-sh/uv/pull/1409))
 
 ### Documentation
 
-- Replace "novel" in README ([#1365](https://github.com/astral-sh/uv/pull/1365))
-- Update README.md to include venv activate ([#1411](https://github.com/astral-sh/uv/pull/1411))
-- Tweak some grammar in the README ([#1387](https://github.com/astral-sh/uv/pull/1387))
-- chore(docs): update wording and add `alt` tag ([#1423](https://github.com/astral-sh/uv/pull/1423))
 - Re-add license badge to the README ([#1333](https://github.com/astral-sh/uv/pull/1333))
+- Replace "novel" in README ([#1365](https://github.com/astral-sh/uv/pull/1365))
+- Tweak some grammar in the README ([#1387](https://github.com/astral-sh/uv/pull/1387))
+- Update README.md to include venv activate ([#1411](https://github.com/astral-sh/uv/pull/1411))
+- chore(docs): update wording and add `alt` tag ([#1423](https://github.com/astral-sh/uv/pull/1423))
 
 ### Other changes
 
 - Add `-U`/`-P` short flags for `--upgrade`/`--upgrade-package` ([#1394](https://github.com/astral-sh/uv/pull/1394))
+- Avoid import contextlib in `_virtualenv` ([#1406](https://github.com/astral-sh/uv/pull/1406))
 - Bump version to v0.1.2 ([#1439](https://github.com/astral-sh/uv/pull/1439))
+- Decode HTML escapes when extracting SHA ([#1440](https://github.com/astral-sh/uv/pull/1440))
 - Fix broken URLs parsed from relative paths in registries ([#1413](https://github.com/astral-sh/uv/pull/1413))
 - Improve error message for invalid sdist archives ([#1389](https://github.com/astral-sh/uv/pull/1389))
 - uv-cache: Add hidden alias for --no-cache-dir ([#1380](https://github.com/astral-sh/uv/pull/1380))
-- Avoid import contextlib in `_virtualenv` ([#1406](https://github.com/astral-sh/uv/pull/1406))
-- Decode HTML escapes when extracting SHA ([#1440](https://github.com/astral-sh/uv/pull/1440))
-
 
 ## 0.1.1
 
@@ -258,6 +251,5 @@
 ### Other changes
 
 - Bump version to 0.1.1 ([#1359](https://github.com/astral-sh/uv/pull/1359))
-
 
 
