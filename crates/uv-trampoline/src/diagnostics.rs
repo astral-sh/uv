@@ -1,7 +1,5 @@
-extern crate alloc;
-
-use alloc::{ffi::CString, string::String};
-use core::{
+use std::ffi::CString;
+use std::{
     convert::Infallible,
     ptr::{addr_of_mut, null, null_mut},
 };

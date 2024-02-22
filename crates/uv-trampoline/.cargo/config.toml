@@ -1,0 +1,4 @@
+[unstable]
+build-std = ["std", "panic_abort"]
+build-std-features = ["compiler-builtins-mem", "panic_immediate_abort"]
+

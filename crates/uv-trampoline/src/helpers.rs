@@ -14,6 +14,6 @@ impl<T: Sized> SizeOf for T {
 #[macro_export]
 macro_rules! c {
     ($s:literal) => {
-        core::ffi::CStr::from_bytes_with_nul_unchecked(concat!($s, "\0").as_bytes())
+        std::ffi::CStr::from_bytes_with_nul_unchecked(concat!($s, "\0").as_bytes())
     };
 }
