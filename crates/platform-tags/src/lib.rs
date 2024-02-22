@@ -236,20 +236,32 @@ impl Tags {
 
 /// The priority of a platform tag.
 ///
-/// A wrapper around [`NonZeroU32`]. Higher values indicate higher priority.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// A wrapper around [`NonZeroU32`]. Lower values indicate higher priority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TagPriority(NonZeroU32);
 
 impl TryFrom<usize> for TagPriority {
     type Error = TagsError;
 
-    /// Create a [`TagPriority`] from a `usize`, where higher `usize` values are given higher
+    /// Create a [`TagPriority`] from a `usize`, where lower `usize` values are given higher
     /// priority.
     fn try_from(priority: usize) -> Result<Self, TagsError> {
         match u32::try_from(priority).and_then(|priority| NonZeroU32::try_from(1 + priority)) {
             Ok(priority) => Ok(Self(priority)),
             Err(err) => Err(TagsError::InvalidPriority(priority, err)),
         }
+    }
+}
+
+impl Ord for TagPriority {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.0.cmp(&other.0).reverse()
+    }
+}
+
+impl PartialOrd for TagPriority {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
