@@ -137,7 +137,7 @@ async fn resolve(
         &flat_index,
         &index,
         &build_context,
-    );
+    )?;
     Ok(resolver.resolve().await?)
 }
 

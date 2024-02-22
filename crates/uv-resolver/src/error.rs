@@ -7,7 +7,6 @@ use indexmap::IndexMap;
 use pubgrub::range::Range;
 use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
 use rustc_hash::FxHashMap;
-use url::Url;
 
 use distribution_types::{BuiltDist, IndexLocations, PathBuiltDist, PathSourceDist, SourceDist};
 use once_map::OnceMap;
@@ -46,14 +45,20 @@ pub enum ResolveError {
     #[error("~= operator requires at least two release segments: {0}")]
     InvalidTildeEquals(pep440_rs::VersionSpecifier),
 
+    #[error("Requirements contain conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
+    ConflictingUrlsDirect(PackageName, String, String),
+
     #[error("There are conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
-    ConflictingUrls(PackageName, String, String),
+    ConflictingUrlsTransitive(PackageName, String, String),
 
     #[error("There are conflicting versions for `{0}`: {1}")]
     ConflictingVersions(String, String),
 
     #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
-    DisallowedUrl(PackageName, Url),
+    DisallowedUrl(PackageName, String),
+
+    #[error("There are conflicting editable requirements for package `{0}`:\n- {1}\n- {2}")]
+    ConflictingEditables(PackageName, String, String),
 
     #[error(transparent)]
     DistributionType(#[from] distribution_types::Error),

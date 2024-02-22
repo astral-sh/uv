@@ -121,7 +121,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.flat_index,
             self.index,
             self,
-        );
+        )?;
         let graph = resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",

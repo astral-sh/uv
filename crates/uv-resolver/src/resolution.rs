@@ -19,6 +19,7 @@ use pep508_rs::VerbatimUrl;
 use pypi_types::{Hashes, Metadata21};
 use uv_normalize::{ExtraName, PackageName};
 
+use crate::editables::Editables;
 use crate::pins::FilePins;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority};
 use crate::resolver::VersionsResponse;
@@ -45,7 +46,7 @@ pub struct ResolutionGraph {
     /// The metadata for every distribution in this resolution.
     hashes: FxHashMap<PackageName, Vec<Hashes>>,
     /// The set of editable requirements in this resolution.
-    editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
+    editables: Editables,
     /// Any diagnostics that were encountered while building the graph.
     diagnostics: Vec<Diagnostic>,
 }
@@ -59,7 +60,7 @@ impl ResolutionGraph {
         distributions: &OnceMap<PackageId, Metadata21>,
         redirects: &DashMap<Url, Url>,
         state: &State<PubGrubPackage, Range<Version>, PubGrubPriority>,
-        editables: FxHashMap<PackageName, (LocalEditable, Metadata21)>,
+        editables: Editables,
     ) -> Result<Self, ResolveError> {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
@@ -100,7 +101,9 @@ impl ResolutionGraph {
                 }
                 PubGrubPackage::Package(package_name, None, Some(url)) => {
                     // Create the distribution.
-                    let pinned_package = {
+                    let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
+                        Dist::from_editable(package_name.clone(), editable.clone())?
+                    } else {
                         let url = redirects.get(url).map_or_else(
                             || url.clone(),
                             |url| VerbatimUrl::unknown(url.value().clone()),
@@ -167,24 +170,41 @@ impl ResolutionGraph {
                 PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_url(package_name, url);
-                    let metadata = distributions.get(&dist.package_id()).unwrap_or_else(|| {
-                        panic!(
-                            "Every package should have metadata: {:?}",
-                            dist.package_id()
-                        )
-                    });
 
-                    if !metadata.provides_extras.contains(extra) {
-                        let url = redirects.get(url).map_or_else(
-                            || url.clone(),
-                            |url| VerbatimUrl::unknown(url.value().clone()),
-                        );
-                        let pinned_package = Dist::from_url(package_name.clone(), url)?;
+                    if let Some((_, metadata)) = editables.get(package_name) {
+                        if !metadata.provides_extras.contains(extra) {
+                            let pinned_package = pins
+                                .get(package_name, version)
+                                .unwrap_or_else(|| {
+                                    panic!("Every package should be pinned: {package_name:?}")
+                                })
+                                .clone();
 
-                        diagnostics.push(Diagnostic::MissingExtra {
-                            dist: pinned_package,
-                            extra: extra.clone(),
+                            diagnostics.push(Diagnostic::MissingExtra {
+                                dist: pinned_package,
+                                extra: extra.clone(),
+                            });
+                        }
+                    } else {
+                        let metadata = distributions.get(&dist.package_id()).unwrap_or_else(|| {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.package_id()
+                            )
                         });
+
+                        if !metadata.provides_extras.contains(extra) {
+                            let url = redirects.get(url).map_or_else(
+                                || url.clone(),
+                                |url| VerbatimUrl::unknown(url.value().clone()),
+                            );
+                            let pinned_package = Dist::from_url(package_name.clone(), url)?;
+
+                            diagnostics.push(Diagnostic::MissingExtra {
+                                dist: pinned_package,
+                                extra: extra.clone(),
+                            });
+                        }
                     }
                 }
                 _ => {}

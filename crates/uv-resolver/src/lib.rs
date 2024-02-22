@@ -12,7 +12,9 @@ pub use resolver::{
 };
 
 mod candidate_selector;
+mod constraints;
 mod dependency_mode;
+mod editables;
 mod error;
 mod finder;
 mod manifest;

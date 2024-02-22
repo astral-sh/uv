@@ -296,7 +296,7 @@ pub(crate) async fn pip_compile(
         &flat_index,
         &top_level_index,
         &build_dispatch,
-    )
+    )?
     .with_reporter(ResolverReporter::from(printer));
 
     let resolution = match resolver.resolve().await {
