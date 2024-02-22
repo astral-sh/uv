@@ -102,6 +102,7 @@ jobs:
     name: "check windows trampoline"
     steps:
       - uses: actions/checkout@v4
+      - run: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
       - name: "Install Rust toolchain"
         working-directory: crates/uv-trampoline
         run: |
