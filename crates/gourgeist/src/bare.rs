@@ -13,7 +13,7 @@ use uv_fs::Normalized;
 
 use uv_interpreter::Interpreter;
 
-use crate::Prompt;
+use crate::{Error, Prompt};
 
 /// The bash activate scripts with the venv dependent paths patches out
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -67,7 +67,7 @@ pub fn create_bare_venv(
     interpreter: &Interpreter,
     prompt: Prompt,
     extra_cfg: Vec<(String, String)>,
-) -> io::Result<VenvPaths> {
+) -> Result<VenvPaths, Error> {
     // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
     // This would make python-build-standalone fail with the encodings module not being found because its home is wrong.
     let base_python: Utf8PathBuf = fs_err::canonicalize(interpreter.sys_executable())?
@@ -78,10 +78,10 @@ pub fn create_bare_venv(
     match location.metadata() {
         Ok(metadata) => {
             if metadata.is_file() {
-                return Err(io::Error::new(
+                return Err(Error::IO(io::Error::new(
                     io::ErrorKind::AlreadyExists,
                     format!("File exists at `{location}`"),
-                ));
+                )));
             } else if metadata.is_dir() {
                 if location.join("pyvenv.cfg").is_file() {
                     info!("Removing existing directory");
@@ -93,17 +93,17 @@ pub fn create_bare_venv(
                 {
                     info!("Ignoring empty directory");
                 } else {
-                    return Err(io::Error::new(
+                    return Err(Error::IO(io::Error::new(
                         io::ErrorKind::AlreadyExists,
                         format!("The directory `{location}` exists, but it's not a virtualenv"),
-                    ));
+                    )));
                 }
             }
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             fs::create_dir_all(location)?;
         }
-        Err(err) => return Err(err),
+        Err(err) => return Err(Error::IO(err)),
     }
 
     // TODO(konstin): I bet on windows we'll have to strip the prefix again
@@ -234,10 +234,7 @@ pub fn create_bare_venv(
     ];
     for (key, _) in &extra_cfg {
         if reserved_keys.contains(&key.as_str()) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Reserved key found in extra_cfg: {key}"),
-            ));
+            return Err(Error::ReservedConfigKey(key.to_string()));
         }
     }
 

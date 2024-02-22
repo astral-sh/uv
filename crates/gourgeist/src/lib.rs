@@ -21,6 +21,8 @@ pub enum Error {
     InvalidPythonInterpreter(#[source] Box<dyn std::error::Error + Sync + Send>),
     #[error(transparent)]
     Platform(#[from] PlatformError),
+    #[error("Reserved key used for pyvenv.cfg: {0}")]
+    ReservedConfigKey(String),
 }
 
 /// The value to use for the shell prompt when inside a virtual environment.
