@@ -33,16 +33,9 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
 const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 
 /// Very basic `.cfg` file format writer.
-fn write_cfg(
-    f: &mut impl Write,
-    data: &[(String, String)],
-    prompt: Option<String>,
-) -> io::Result<()> {
+fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
     for (key, value) in data {
         writeln!(f, "{key} = {value}")?;
-    }
-    if let Some(prompt) = prompt {
-        writeln!(f, "prompt = {prompt}")?;
     }
     Ok(())
 }
@@ -233,7 +226,6 @@ pub fn create_bare_venv(
         "home",
         "implementation",
         "version_info",
-        "gourgeist",
         "include-system-site-packages",
         "base-prefix",
         "base-exec-prefix",
@@ -249,46 +241,40 @@ pub fn create_bare_venv(
         }
     }
 
-    let pyvenv_cfg_data: Vec<(String, String)> = [
-        vec![
-            ("home".to_string(), python_home),
-            (
-                "implementation".to_string(),
-                interpreter.markers().platform_python_implementation.clone(),
-            ),
-            (
-                "version_info".to_string(),
-                interpreter.markers().python_version.string.clone(),
-            ),
-            (
-                "gourgeist".to_string(),
-                env!("CARGO_PKG_VERSION").to_string(),
-            ),
-        ],
-        // Put custom cfg pairs after "gourgeist"
-        extra_cfg,
-        vec![
-            (
-                "include-system-site-packages".to_string(),
-                "false".to_string(),
-            ),
-            (
-                "base-prefix".to_string(),
-                interpreter.base_prefix().to_string_lossy().to_string(),
-            ),
-            (
-                "base-exec-prefix".to_string(),
-                interpreter.base_exec_prefix().to_string_lossy().to_string(),
-            ),
-            ("base-executable".to_string(), base_python.to_string()),
-        ],
+    let mut pyvenv_cfg_data: Vec<(String, String)> = vec![
+        ("home".to_string(), python_home),
+        (
+            "implementation".to_string(),
+            interpreter.markers().platform_python_implementation.clone(),
+        ),
+        (
+            "version_info".to_string(),
+            interpreter.markers().python_version.string.clone(),
+        ),
+        (
+            "include-system-site-packages".to_string(),
+            "false".to_string(),
+        ),
+        (
+            "base-prefix".to_string(),
+            interpreter.base_prefix().to_string_lossy().to_string(),
+        ),
+        (
+            "base-exec-prefix".to_string(),
+            interpreter.base_exec_prefix().to_string_lossy().to_string(),
+        ),
+        ("base-executable".to_string(), base_python.to_string()),
     ]
     .into_iter()
-    .flatten()
+    .chain(extra_cfg)
     .collect();
 
+    if let Some(prompt) = prompt {
+        pyvenv_cfg_data.push(("prompt".to_string(), prompt));
+    }
+
     let mut pyvenv_cfg = BufWriter::new(File::create(location.join("pyvenv.cfg"))?);
-    write_cfg(&mut pyvenv_cfg, &pyvenv_cfg_data, prompt)?;
+    write_cfg(&mut pyvenv_cfg, &pyvenv_cfg_data)?;
     drop(pyvenv_cfg);
 
     let site_packages = if cfg!(unix) {
