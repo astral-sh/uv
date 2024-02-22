@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -32,7 +32,8 @@ jobs:
     name: "cargo clippy"
     strategy:
       matrix:
-        os: [ ubuntu-latest, windows-latest ]
+        os: [ubuntu-latest, windows-latest]
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +55,7 @@ jobs:
           - { os: "ubuntu", runner: "ubuntu-latest-large" }
           - { os: "windows", runner: "windows-latest-large" }
           - { os: "macos", runner: "macos-14" }
+      fail-fast: false
     runs-on:
       labels: ${{ matrix.runner }}
     name: "cargo test | ${{ matrix.os }}"
