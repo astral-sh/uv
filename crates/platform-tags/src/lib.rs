@@ -154,7 +154,6 @@ impl Tags {
             "none".to_string(),
             "any".to_string(),
         ));
-        tags.sort();
         Ok(Self::new(tags))
     }
 
