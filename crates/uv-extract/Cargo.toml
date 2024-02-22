@@ -20,7 +20,6 @@ fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
-tar = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["io-util"] }
 tokio-tar = { workspace = true }

@@ -1,5 +1,7 @@
 use std::path::Path;
+use std::pin::Pin;
 
+use futures::StreamExt;
 use rustc_hash::FxHashSet;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 
@@ -97,6 +99,44 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     Ok(())
 }
 
+/// Unpack the given tar archive into the destination directory.
+///
+/// This is equivalent to `archive.unpack_in(dst)`, but it also preserves the executable bit.
+async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
+    archive: &mut tokio_tar::Archive<R>,
+    dst: P,
+) -> std::io::Result<()> {
+    let mut entries = archive.entries()?;
+    let mut pinned = Pin::new(&mut entries);
+    while let Some(entry) = pinned.next().await {
+        // Unpack the file into the destination directory.
+        let mut file = entry?;
+        file.unpack_in(dst.as_ref()).await?;
+
+        // Preserve the executable bit.
+        #[cfg(unix)]
+        {
+            use std::fs::Permissions;
+            use std::os::unix::fs::PermissionsExt;
+
+            let mode = file.header().mode()?;
+
+            let has_any_executable_bit = mode & 0o111;
+            if has_any_executable_bit != 0 {
+                if let Some(path) = crate::tar::unpacked_at(dst.as_ref(), &file.path()?) {
+                    let permissions = fs_err::tokio::metadata(&path).await?.permissions();
+                    fs_err::tokio::set_permissions(
+                        &path,
+                        Permissions::from_mode(permissions.mode() | 0o111),
+                    )
+                    .await?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Unzip a `.tar.gz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
@@ -108,7 +148,7 @@ pub async fn untar<R: tokio::io::AsyncBufRead + Unpin>(
     let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
         .set_preserve_mtime(false)
         .build();
-    Ok(archive.unpack(target.as_ref()).await?)
+    Ok(untar_in(&mut archive, target.as_ref()).await?)
 }
 
 /// Unzip a `.zip` or `.tar.gz` archive into the target directory, without requiring `Seek`.

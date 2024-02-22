@@ -153,7 +153,10 @@ impl<'a> FlatIndexClient<'a> {
             .map_err(ErrorKind::RequestError)?;
         let parse_simple_response = |response: Response| {
             async {
+                // Use the response URL, rather than the request URL, as the base for relative URLs.
+                // This ensures that we handle redirects and other URL transformations correctly.
                 let url = response.url().clone();
+
                 let text = response.text().await.map_err(ErrorKind::RequestError)?;
                 let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;

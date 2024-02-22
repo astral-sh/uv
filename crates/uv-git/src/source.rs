@@ -33,7 +33,7 @@ impl GitSource {
         Self {
             git,
             client: Client::new(),
-            strategy: FetchStrategy::Libgit2,
+            strategy: FetchStrategy::Cli,
             cache: cache.into(),
             reporter: None,
         }

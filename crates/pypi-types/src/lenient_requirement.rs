@@ -23,6 +23,9 @@ static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r",\s*$").unwrap())
 static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]([*\d])|([*\d])['"]"#).unwrap());
 /// Ex) `>dev`
 static GREATER_THAN_DEV: Lazy<Regex> = Lazy::new(|| Regex::new(r">dev").unwrap());
+/// Ex) `>=9.0.0a1.0`
+static TRAILING_ZERO: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(\d+(\.\d)*(a|b|rc|post|dev)\d+)\.0").unwrap());
 
 /// Regex to match the invalid specifier, replacement to fix it and message about was wrong and
 /// fixed
@@ -49,6 +52,8 @@ static FIXUPS: &[(&Lazy<Regex>, &str, &str)] = &[
     (&STRAY_QUOTES, r"$1$2", "removing stray quotes"),
     // Given `>dev`, rewrite to `>0.0.0dev`
     (&GREATER_THAN_DEV, r">0.0.0dev", "assuming 0.0.0dev"),
+    // Given `>=9.0.0a1.0`, rewrite to `>=9.0.0a1`
+    (&TRAILING_ZERO, r"${1}", "removing trailing zero"),
 ];
 
 fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -> Result<T, Err> {
@@ -332,6 +337,28 @@ mod tests {
     fn greater_than_dev() {
         let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(">dev").unwrap().into();
         let expected: VersionSpecifiers = VersionSpecifiers::from_str(">0.0.0dev").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    /// <https://github.com/astral-sh/uv/issues/1798>
+    #[test]
+    fn trailing_alpha_zero() {
+        let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(">=9.0.0a1.0")
+            .unwrap()
+            .into();
+        let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=9.0.0a1").unwrap();
+        assert_eq!(actual, expected);
+
+        let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(">=9.0a1.0")
+            .unwrap()
+            .into();
+        let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=9.0a1").unwrap();
+        assert_eq!(actual, expected);
+
+        let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str(">=9a1.0")
+            .unwrap()
+            .into();
+        let expected: VersionSpecifiers = VersionSpecifiers::from_str(">=9a1").unwrap();
         assert_eq!(actual, expected);
     }
 }

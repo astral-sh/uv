@@ -77,25 +77,21 @@ impl BuildContext for DummyContext {
         &self.index_locations
     }
 
-    async fn resolve<'a>(&'a self, _requirements: &'a [Requirement]) -> Result<Resolution> {
+    async fn resolve<'a>(&'a self, _: &'a [Requirement]) -> Result<Resolution> {
         panic!("The test should not need to build source distributions")
     }
 
-    async fn install<'a>(
-        &'a self,
-        _resolution: &'a Resolution,
-        _venv: &'a Virtualenv,
-    ) -> Result<()> {
+    async fn install<'a>(&'a self, _: &'a Resolution, _: &'a Virtualenv) -> Result<()> {
         panic!("The test should not need to build source distributions")
     }
 
     async fn setup_build<'a>(
         &'a self,
-        _source: &'a Path,
-        _subdirectory: Option<&'a Path>,
-        _package_id: &'a str,
-        _dist: Option<&'a SourceDist>,
-        _build_kind: BuildKind,
+        _: &'a Path,
+        _: Option<&'a Path>,
+        _: &'a str,
+        _: Option<&'a SourceDist>,
+        _: BuildKind,
     ) -> Result<Self::SourceDistBuilder> {
         Ok(DummyBuilder)
     }
@@ -108,7 +104,7 @@ impl SourceBuildTrait for DummyBuilder {
         panic!("The test should not need to build source distributions")
     }
 
-    async fn wheel<'a>(&'a self, _wheel_dir: &'a Path) -> Result<String> {
+    async fn wheel<'a>(&'a self, _: &'a Path) -> Result<String> {
         panic!("The test should not need to build source distributions")
     }
 }

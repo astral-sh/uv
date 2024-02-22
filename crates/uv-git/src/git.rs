@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, str};
 
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{anyhow, Context, Result};
 use cargo_util::{paths, ProcessBuilder};
 use git2::{self, ErrorClass, ObjectType};
 use reqwest::Client;
@@ -43,6 +43,14 @@ pub(crate) enum GitReference {
     DefaultBranch,
 }
 
+/// Strategy when fetching refspecs for a [`GitReference`]
+enum RefspecStrategy {
+    // All refspecs should be fetched, if any fail then the fetch will fail
+    All,
+    // Stop after the first successful fetch, if none suceed then the fetch will fail
+    First,
+}
+
 impl GitReference {
     pub(crate) fn from_rev(rev: &str) -> Self {
         if rev.starts_with("refs/") {
@@ -68,6 +76,18 @@ impl GitReference {
             | GitReference::ShortCommit(rev)
             | GitReference::Ref(rev) => rev,
             GitReference::DefaultBranch => "HEAD",
+        }
+    }
+
+    pub(crate) fn kind_str(&self) -> &str {
+        match self {
+            GitReference::Branch(_) => "branch",
+            GitReference::Tag(_) => "tag",
+            GitReference::BranchOrTag(_) => "branch or tag",
+            GitReference::FullCommit(_) => "commit",
+            GitReference::ShortCommit(_) => "short commit",
+            GitReference::Ref(_) => "ref",
+            GitReference::DefaultBranch => "default branch",
         }
     }
 }
@@ -237,6 +257,7 @@ impl GitDatabase {
 impl GitReference {
     /// Resolves self to an object ID with objects the `repo` currently has.
     pub(crate) fn resolve(&self, repo: &git2::Repository) -> Result<git2::Oid> {
+        let refkind = self.kind_str();
         let id = match self {
             // Note that we resolve the named tag here in sync with where it's
             // fetched into via `fetch` below.
@@ -247,7 +268,7 @@ impl GitReference {
                 let obj = obj.peel(ObjectType::Commit)?;
                 Ok(obj.id())
             })()
-            .with_context(|| format!("failed to find tag `{s}`"))?,
+            .with_context(|| format!("failed to find {refkind} `{s}`"))?,
 
             // Resolve the remote name since that's all we're configuring in
             // `fetch` below.
@@ -255,10 +276,10 @@ impl GitReference {
                 let name = format!("origin/{s}");
                 let b = repo
                     .find_branch(&name, git2::BranchType::Remote)
-                    .with_context(|| format!("failed to find branch `{s}`"))?;
+                    .with_context(|| format!("failed to find {refkind} `{s}`"))?;
                 b.get()
                     .target()
-                    .ok_or_else(|| anyhow::format_err!("branch `{s}` did not have a target"))?
+                    .ok_or_else(|| anyhow::format_err!("{refkind} `{s}` did not have a target"))?
             }
 
             // Attempt to resolve the branch, then the tag.
@@ -275,7 +296,7 @@ impl GitReference {
                         let obj = obj.peel(ObjectType::Commit).ok()?;
                         Some(obj.id())
                     })
-                    .ok_or_else(|| anyhow::format_err!("failed to find branch or tag `{s}`"))?
+                    .ok_or_else(|| anyhow::format_err!("failed to find {refkind} `{s}`"))?
             }
 
             // We'll be using the HEAD commit
@@ -908,6 +929,7 @@ pub(crate) fn fetch(
     // which need to get fetched. Additionally record if we're fetching tags.
     let mut refspecs = Vec::new();
     let mut tags = false;
+    let mut refspec_strategy = RefspecStrategy::All;
     // The `+` symbol on the refspec means to allow a forced (fast-forward)
     // update which is needed if there is ever a force push that requires a
     // fast-forward.
@@ -929,6 +951,7 @@ pub(crate) fn fetch(
             refspecs.push(format!(
                 "+refs/tags/{branch_or_tag}:refs/remotes/origin/tags/{branch_or_tag}"
             ));
+            refspec_strategy = RefspecStrategy::First;
         }
 
         GitReference::DefaultBranch => {
@@ -969,13 +992,63 @@ pub(crate) fn fetch(
 
     debug!("Performing a Git fetch for: {remote_url}");
     match strategy {
-        FetchStrategy::Cli => fetch_with_cli(repo, remote_url, &refspecs, tags),
+        FetchStrategy::Cli => {
+            let result = match refspec_strategy {
+                RefspecStrategy::All => fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags),
+                RefspecStrategy::First => {
+                    // Try each refspec
+                    let mut errors = refspecs
+                        .iter()
+                        .map_while(|refspec| {
+                            let fetch_result =
+                                fetch_with_cli(repo, remote_url, &[refspec.clone()], tags);
+
+                            // Stop after the first success and log failures
+                            match fetch_result {
+                                Err(ref err) => {
+                                    debug!("failed to fetch refspec `{refspec}`: {err}");
+                                    Some(fetch_result)
+                                }
+                                Ok(()) => None,
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    if errors.len() == refspecs.len() {
+                        if let Some(result) = errors.pop() {
+                            // Use the last error for the message
+                            result
+                        } else {
+                            // Can only occur if there were no refspecs to fetch
+                            Ok(())
+                        }
+                    } else {
+                        Ok(())
+                    }
+                }
+            };
+            match reference {
+                // With the default branch, adding context is confusing
+                GitReference::DefaultBranch => result,
+                _ => result.with_context(|| {
+                    format!(
+                        "failed to fetch {} `{}`",
+                        reference.kind_str(),
+                        reference.as_str()
+                    )
+                }),
+            }
+        }
         FetchStrategy::Libgit2 => {
+            // Libgit2 does not fail if a refspec is missing, so the `refspec_strategy`
+            // is not handled here
+
             let git_config = git2::Config::open_default()?;
             with_fetch_options(&git_config, remote_url, &mut |mut opts| {
                 if tags {
                     opts.download_tags(git2::AutotagOption::All);
                 }
+
                 // The `fetch` operation here may fail spuriously due to a corrupt
                 // repository. It could also fail, however, for a whole slew of other
                 // reasons (aka network related reasons). We want Cargo to automatically
@@ -1057,7 +1130,11 @@ fn fetch_with_cli(
         .env_remove("GIT_OBJECT_DIRECTORY")
         .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
         .cwd(repo.path());
-    cmd.exec()?;
+
+    // We capture the output to avoid streaming it to the user's console during clones.
+    // The required `on...line` callbacks currently do nothing.
+    // The output appears to be included in error messages by default.
+    cmd.exec_with_streaming(&mut |_| Ok(()), &mut |_| Ok(()), true)?;
     Ok(())
 }
 

@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
 use fs_err as fs;
+use tracing::warn;
 use url::Url;
 
 use pep440_rs::Version;
@@ -55,13 +56,23 @@ impl InstalledDist {
             let name = PackageName::from_str(name)?;
             let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
             return if let Some(direct_url) = Self::direct_url(path)? {
-                Ok(Some(Self::Url(InstalledDirectUrlDist {
-                    name,
-                    version,
-                    editable: matches!(&direct_url, pypi_types::DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
-                    url: Url::from(direct_url),
-                    path: path.to_path_buf(),
-                })))
+                match Url::try_from(&direct_url) {
+                    Ok(url) => Ok(Some(Self::Url(InstalledDirectUrlDist {
+                        name,
+                        version,
+                        editable: matches!(&direct_url, pypi_types::DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
+                        url,
+                        path: path.to_path_buf(),
+                    }))),
+                    Err(err) => {
+                        warn!("Failed to parse direct URL: {err}");
+                        Ok(Some(Self::Registry(InstalledRegistryDist {
+                            name,
+                            version,
+                            path: path.to_path_buf(),
+                        })))
+                    }
+                }
             } else {
                 Ok(Some(Self::Registry(InstalledRegistryDist {
                     name,
