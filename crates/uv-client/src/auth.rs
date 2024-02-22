@@ -30,8 +30,10 @@ pub(crate) fn safe_copy_auth(request_url: &Url, mut response_url: Url) -> Url {
 /// <https://datatracker.ietf.org/doc/html/rfc7230#section-5.5>
 fn should_retain_auth(request_url: &Url, response_url: &Url) -> bool {
     // The "scheme" and "authority" components must match to retain authentication
+    // The "authority", is composed of the host and port.
 
     // Check the scheme.
+    // The scheme must always be an exact match.
     // Note some clients such as Python's `requests` library allow an upgrade
     // from `http` to `https` but this is not spec-compliant.
     // <https://github.com/pypa/pip/blob/75f54cae9271179b8cc80435f92336c97e349f9d/src/pip/_vendor/requests/sessions.py#L133-L136>
@@ -39,27 +41,23 @@ fn should_retain_auth(request_url: &Url, response_url: &Url) -> bool {
         return false;
     }
 
-    // Check the authority, which is composed of the host and port.
+    // The host must always be an exact match.
     if request_url.host() != response_url.host() {
         return false;
     }
 
+    // Check the port.
+    // The port is only allowed to differ if it it matches the "default port" for the scheme.
     let default_port = match request_url.scheme() {
         "http" => Some(80),
         "https" => Some(443),
         _ => None,
     };
-
-    // Check the port
-    if request_url.port() != response_url.port() {
-        if (request_url.port() == default_port || request_url.port().is_none())
-            && (response_url.port() == default_port || response_url.port().is_none())
-        {
-            // Allow the ports to be different if they are the default port for the scheme
-            // or null
-        } else {
-            return false;
-        }
+    if request_url.port() != response_url.port()
+        && request_url.port() != default_port
+        && response_url.port() != default_port
+    {
+        return false;
     }
 
     true
@@ -149,6 +147,16 @@ mod tests {
         assert!(!should_retain_auth(
             &Url::parse("https://example.com:1234")?,
             &Url::parse("https://example.com:443")?,
+        ));
+
+        // Mismatched port, with default for a different scheme
+        assert!(!should_retain_auth(
+            &Url::parse("https://example.com")?,
+            &Url::parse("https://example.com:80")?,
+        ));
+        assert!(!should_retain_auth(
+            &Url::parse("https://example.com:80")?,
+            &Url::parse("https://example.com")?,
         ));
 
         Ok(())
