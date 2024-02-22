@@ -104,14 +104,8 @@ might not realize that, and still emit references to the unwinding helper
 `__CxxFrameHandler3`. And then the linker blows up because that symbol doesn't
 exist.
 
-Two approaches that are reasonably likely to work:
-
-- Uncomment `compiler-builtins` in `Cargo.toml`, and build normally: `cargo
-  build --profile release`.
-
-- Leave `compiler-builtins` commented-out, and build like: `cargo build
-  --release -Z build-std=core,panic_abort,alloc -Z
-  build-std-features=compiler-builtins-mem --target x86_64-pc-windows-msvc`
+`cargo build --release --target x86_64-pc-windows-msvc`
+or `cargo build --release --target aarch64-pc-windows-msvc`
 
 Hopefully in the future as `#![no_std]` develops, this will get smoother.
 
@@ -129,6 +123,6 @@ rustup target add aarch64-pc-windows-msvc
 ```
 
 ```shell
-cargo +nightly xwin build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target x86_64-pc-windows-msvc
-cargo +nightly xwin build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=compiler-builtins-mem --target aarch64-pc-windows-msvc
+cargo +nightly xwin build --release --target x86_64-pc-windows-msvc
+cargo +nightly xwin build --release --target aarch64-pc-windows-msvc
 ```

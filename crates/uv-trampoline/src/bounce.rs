@@ -28,7 +28,7 @@ use crate::{c, eprintln, format};
 
 const MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 const PATH_LEN_SIZE: usize = mem::size_of::<u32>();
-const MAX_PATH_LEN: u32 = 2 * 1024 * 1024;
+const MAX_PATH_LEN: u32 = 32 * 1024;
 
 fn getenv(name: &CStr) -> Option<CString> {
     unsafe {
@@ -235,11 +235,11 @@ fn find_python_exe(executable_name: &CStr) -> CString {
                 }));
 
                 if path_len > MAX_PATH_LEN {
-                    eprintln!("Only paths with a length up to 2MBs are supported but the python path has a length of {}.", path_len);
+                    eprintln!("Only paths with a length up to 32KBs are supported but the python path has a length of {}.", path_len);
                     exit_with_status(1);
                 }
 
-                // SAFETY: path len is guaranteed to be less than 2MB
+                // SAFETY: path len is guaranteed to be less than 32KBs
                 path_len as usize
             }
             None => {
@@ -260,7 +260,7 @@ fn find_python_exe(executable_name: &CStr) -> CString {
                 exit_with_status(1)
             });
         } else {
-            // SAFETY: Casting to u32 is safe because `path_len` is guaranteed to be less than 2MB,
+            // SAFETY: Casting to u32 is safe because `path_len` is guaranteed to be less than 32KBs,
             // MAGIC_NUMBER is 4 bytes and PATH_LEN_SIZE is 4 bytes.
             bytes_to_read = (path_len + MAGIC_NUMBER.len() + PATH_LEN_SIZE) as u32;
 
