@@ -123,7 +123,8 @@ jobs:
       - name: "Verify committed trampolines are up to date"
         working-directory: crates/uv-trampoline
         run: |
-          fc.exe /B .\trampolines\uv-trampoline-x86_64-console.exe .\target\x86_64-pc-windows-msvc\release\uv-trampoline-console.exe
-          fc.exe /B .\trampolines\uv-trampoline-x86_64-gui.exe .\target\x86_64-pc-windows-msvc\release\uv-trampoline-gui.exe
-          fc.exe /B .\trampolines\uv-trampoline-aarch64-console.exe .\target\aarch64-pc-windows-msvc\release\uv-trampoline-console.exe
-          fc.exe /B .\trampolines\uv-trampoline-aarch64-gui.exe .\target\aarch64-pc-windows-msvc\release\uv-trampoline-gui.exe
+          cp .\target\x86_64-pc-windows-msvc\release\uv-trampoline-console.exe .\trampolines\uv-trampoline-x86_64-console.exe
+          cp .\target\x86_64-pc-windows-msvc\release\uv-trampoline-gui.exe .\trampolines\uv-trampoline-x86_64-gui.exe
+          cp .\target\aarch64-pc-windows-msvc\release\uv-trampoline-console.exe .\trampolines\uv-trampoline-aarch64-console.exe
+          cp .\target\aarch64-pc-windows-msvc\release\uv-trampoline-gui.exe .\trampolines\uv-trampoline-aarch64-gui.exe
+          git diff --name-status --exit-code
