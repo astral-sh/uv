@@ -30,6 +30,13 @@ The intended use is:
   integer.
 * At the very end, write the magic number `UVUV` in bytes.
 
+|       `launcher.exe`        |
+|:---------------------------:|
+|  `<zipped python script>`   |
+|   `<path to python.exe>`    |
+| `<len(path to python.exe)>` |
+| `<b'U', b'V', b'U', b'V'>`  |
+
 Then when you run `python` on the `.exe`, it will see the `.zip` trailer at the
 end of the `.exe`, and automagically look inside to find and execute
 `__main__.py`. Easy-peasy.

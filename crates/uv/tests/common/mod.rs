@@ -115,8 +115,8 @@ impl TestContext {
         self.assert_command(
             format!("import {package} as package; print(package.__version__, end='')").as_str(),
         )
-            .success()
-            .stdout(version);
+        .success()
+        .stdout(version);
     }
 
     /// Generate an escaped regex pattern for the given path.
@@ -292,7 +292,7 @@ pub fn create_bin_with_executables(
             &Platform::current().unwrap(),
             &Cache::temp().unwrap(),
         )?
-            .ok_or(uv_interpreter::Error::NoSuchPython(request.to_string()))?;
+        .ok_or(uv_interpreter::Error::NoSuchPython(request.to_string()))?;
         let name = interpreter
             .sys_executable()
             .file_name()

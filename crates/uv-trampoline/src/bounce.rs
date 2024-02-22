@@ -28,6 +28,7 @@ use crate::{c, eprintln, format};
 
 const MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 const PATH_LEN_SIZE: usize = mem::size_of::<u32>();
+const MAX_PATH_LEN: u32 = 2 * 1024 * 1024;
 
 fn getenv(name: &CStr) -> Option<CString> {
     unsafe {
@@ -145,7 +146,7 @@ fn find_python_exe(executable_name: &CStr) -> CString {
     let file_handle = expect_result(
         unsafe {
             CreateFileA(
-                executable_name.to_bytes()[..0].as_ptr(),
+                executable_name.as_ptr() as _,
                 GENERIC_READ,
                 FILE_SHARE_READ,
                 null(),
@@ -179,15 +180,18 @@ fn find_python_exe(executable_name: &CStr) -> CString {
 
     // Start with a size of 1024 bytes which should be enough for most paths but avoids reading the
     // entire file.
-    let mut buffer: Vec<u8> = vec![0; 1024];
+    let mut buffer: Vec<u8> = Vec::new();
+    let mut bytes_to_read = 1024.min(u32::try_from(file_size).unwrap_or(u32::MAX));
+
     let path = loop {
-        let bytes_to_read = u32::try_from(buffer.capacity()).unwrap_or(u32::MAX);
+        // SAFETY: Casting to usize is safe because we only support 64bit systems where usize is guaranteed to be larger than u32.
+        buffer.resize(bytes_to_read as usize, 0);
 
         expect_result(
             unsafe {
                 SetFilePointerEx(
                     file_handle,
-                    file_size.saturating_sub(bytes_to_read as i64),
+                    file_size - i64::from(bytes_to_read),
                     null_mut(),
                     FILE_BEGIN,
                 )
@@ -225,11 +229,18 @@ fn find_python_exe(executable_name: &CStr) -> CString {
 
         let path_len = match buffer.get(buffer.len() - PATH_LEN_SIZE..) {
             Some(path_len) => {
-                // We only support 64bit systems where usize is guaranteed to be larger than u32.
-                u32::from_le_bytes(path_len.try_into().unwrap_or_else(|_| {
+                let path_len = u32::from_le_bytes(path_len.try_into().unwrap_or_else(|_| {
                     eprintln!("Slice length is not equal to 4 bytes");
                     exit_with_status(1)
-                })) as usize
+                }));
+
+                if path_len > MAX_PATH_LEN {
+                    eprintln!("Only paths with a length up to 2MBs are supported but the python path has a length of {}.", path_len);
+                    exit_with_status(1);
+                }
+
+                // SAFETY: path len is guaranteed to be less than 2MB
+                path_len as usize
             }
             None => {
                 eprintln!("Python executable length missing. Did you write the length of the path to the Python executable before the Magic number?");
@@ -249,16 +260,14 @@ fn find_python_exe(executable_name: &CStr) -> CString {
                 exit_with_status(1)
             });
         } else {
-            let new_len = path_len
-                .saturating_add(MAGIC_NUMBER.len())
-                .saturating_add(PATH_LEN_SIZE);
+            // SAFETY: Casting to u32 is safe because `path_len` is guaranteed to be less than 2MB,
+            // MAGIC_NUMBER is 4 bytes and PATH_LEN_SIZE is 4 bytes.
+            bytes_to_read = (path_len + MAGIC_NUMBER.len() + PATH_LEN_SIZE) as u32;
 
-            if path_len >= usize::try_from(file_size).unwrap_or(usize::MAX) {
-                eprintln!("The length of the path to the Python executable is larger than the file size. Did you write the length of the path to the Python executable before the Magic number?");
+            if i64::from(bytes_to_read) > file_size {
+                eprintln!("The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian.");
                 exit_with_status(1);
             }
-
-            buffer.resize(new_len, 0);
         }
     };
 
@@ -498,9 +507,9 @@ pub fn bounce(is_gui: bool) -> ! {
 /// Prints the passed error message if the `actual_result` is equal to `error_code` and exits the process with status 1.
 #[inline]
 fn expect_result<T, F>(actual_result: T, error_code: T, error_message: F) -> T
-    where
-        T: Eq,
-        F: FnOnce() -> String,
+where
+    T: Eq,
+    F: FnOnce() -> String,
 {
     if actual_result == error_code {
         print_last_error_and_exit(&error_message());
@@ -550,7 +559,11 @@ fn print_last_error_and_exit(message: &str) -> ! {
             let reason = core::slice::from_raw_parts(msg_ptr, size as usize + 1);
             CStr::from_bytes_with_nul_unchecked(reason)
         };
-        eprintln!("{}: {}", message, &*reason.to_string_lossy());
+        eprintln!(
+            "(uv internal error) {}: {}",
+            message,
+            &*reason.to_string_lossy()
+        );
     }
 
     // Note: We don't need to free the buffer here because we're going to exit anyway.
