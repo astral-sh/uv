@@ -4,12 +4,15 @@ pub use finder::{DistFinder, Reporter as FinderReporter};
 pub use manifest::Manifest;
 pub use options::{Options, OptionsBuilder};
 pub use prerelease_mode::PreReleaseMode;
+pub use python_requirement::PythonRequirement;
 pub use resolution::{AnnotationStyle, Diagnostic, DisplayResolutionGraph, ResolutionGraph};
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
-    BuildId, DefaultResolverProvider, InMemoryIndex, Reporter as ResolverReporter, Resolver,
-    ResolverProvider,
+    BuildId, DefaultResolverProvider, InMemoryIndex, PackageVersionsResult,
+    Reporter as ResolverReporter, Resolver, ResolverProvider, VersionsResponse,
+    WheelMetadataResult,
 };
+pub use version_map::VersionMap;
 
 mod candidate_selector;
 mod constraints;

@@ -47,9 +47,10 @@ use crate::pubgrub::{
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
 pub use crate::resolver::index::InMemoryIndex;
-pub use crate::resolver::provider::DefaultResolverProvider;
-pub use crate::resolver::provider::ResolverProvider;
-pub(crate) use crate::resolver::provider::VersionsResponse;
+pub use crate::resolver::provider::{
+    DefaultResolverProvider, PackageVersionsResult, ResolverProvider, VersionsResponse,
+    WheelMetadataResult,
+};
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
