@@ -523,6 +523,8 @@ impl std::fmt::Display for PackageTerm<'_> {
             Term::Positive(set) => write!(f, "{}", PackageRange::compatibility(self.package, set)),
             Term::Negative(set) => {
                 if let Some(version) = set.as_singleton() {
+                    // Note we do not handle the "root" package here but we should never
+                    // be displaying that the root package is inequal to some version
                     let package = self.package;
                     write!(f, "{package}!={version}")
                 } else {
@@ -587,11 +589,11 @@ impl std::fmt::Display for PackageRange<'_> {
                     PackageRangeKind::Available => write!(f, "are available:")?,
                 }
             }
+            let package = fmt_package(self.package);
             for segment in &segments {
                 if segments.len() > 1 {
                     write!(f, "\n    ")?;
                 }
-                let package = self.package;
                 match segment {
                     (Bound::Unbounded, Bound::Unbounded) => match self.kind {
                         PackageRangeKind::Dependency => write!(f, "{package}")?,
@@ -730,5 +732,13 @@ impl<T: std::fmt::Display> std::fmt::Display for Padded<'_, T> {
         }
 
         write!(f, "{result}")
+    }
+}
+
+fn fmt_package(package: &PubGrubPackage) -> String {
+    match package {
+        PubGrubPackage::Root(Some(name)) => name.to_string(),
+        PubGrubPackage::Root(None) => "you require".to_string(),
+        _ => format!("{package}"),
     }
 }
