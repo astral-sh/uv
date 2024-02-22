@@ -14,6 +14,11 @@ uv venv
 source ".venv/bin/activate"
 uv pip install -r requirements.txt
 
-echo "Calling rooster..."
+echo "Updating metadata with rooster..."
 cd "$project_root"
 rooster release "$@"
+
+echo "Generating contributors list..."
+echo ""
+echo ""
+rooster contributors --quiet
