@@ -2073,12 +2073,17 @@ fn compile_yanked_version_indirect() -> Result<()> {
       ╰─▶ Because only the following versions of attrs are available:
               attrs<=20.3.0
               attrs==21.1.0
-              attrs>=21.2.0
+              attrs>=21.2.0a0
           and attrs==21.1.0 is unusable because it was yanked (reason:
           Installable but not importable on Python 3.4), we can conclude that
-          attrs>20.3.0,<21.2.0 cannot be used.
-          And because you require attrs>20.3.0,<21.2.0, we can conclude that the
+          attrs>20.3.0,<21.2.0a0 cannot be used.
+          And because you require attrs>20.3.0,<21.2.0a0, we can conclude that the
           requirements are unsatisfiable.
+
+          hint: attrs was requested with a pre-release marker (e.g., any of:
+              attrs>20.3.0,<21.1.0
+              attrs>21.1.0,<21.2.0a0
+          ), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###
     );
 
@@ -3790,8 +3795,11 @@ fn compile_constraints_incompatible_url() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only anyio>=4 is available and you require anyio<4, we can
+      ╰─▶ Because only anyio>=4a0 is available and you require anyio<4a0, we can
           conclude that the requirements are unsatisfiable.
+
+          hint: anyio was requested with a pre-release marker (e.g., anyio<4a0),
+          but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###
     );
 
@@ -3814,8 +3822,11 @@ fn index_url_in_requirements() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio<4 was not found in the package registry and you require
-          anyio<4, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because anyio<4a0 was not found in the package registry and you require
+          anyio<4a0, we can conclude that the requirements are unsatisfiable.
+
+          hint: anyio was requested with a pre-release marker (e.g., anyio<4a0),
+          but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###
     );
 
@@ -4218,7 +4229,7 @@ fn override_with_incompatible_constraint() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require anyio>=3.0.0 and you require anyio<3.0.0, we can
+      ╰─▶ Because you require anyio>=3.0.0 and you require anyio<3.0.0a0, we can
           conclude that the requirements are unsatisfiable.
     "###
     );

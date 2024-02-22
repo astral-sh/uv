@@ -1,7 +1,7 @@
 use anyhow::Result;
 use pubgrub::range::Range;
 
-use pep440_rs::{Operator, PreRelease, Version, VersionSpecifier};
+use pep440_rs::{Operator, PreRelease, PreReleaseKind, Version, VersionSpecifier};
 
 use crate::ResolveError;
 
@@ -38,7 +38,7 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                 let [rest @ .., last, _] = specifier.version().release() else {
                     return Err(ResolveError::InvalidTildeEquals(specifier.clone()));
                 };
-                let upper = pep440_rs::Version::new(rest.iter().chain([&(last + 1)]))
+                let upper = Version::new(rest.iter().chain([&(last + 1)]))
                     .with_epoch(specifier.version().epoch())
                     .with_dev(Some(0));
                 let version = specifier.version().clone();
@@ -46,7 +46,17 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
             }
             Operator::LessThan => {
                 let version = specifier.version().clone();
-                Range::strictly_lower_than(version)
+                if version.any_prerelease() {
+                    Range::strictly_lower_than(version)
+                } else {
+                    // Per PEP 440: "The exclusive ordered comparison <V MUST NOT allow a
+                    // pre-release of the specified version unless the specified version is itself a
+                    // pre-release.
+                    Range::strictly_lower_than(version.with_pre(Some(PreRelease {
+                        kind: PreReleaseKind::Alpha,
+                        number: 0,
+                    })))
+                }
             }
             Operator::LessThanEqual => {
                 let version = specifier.version().clone();
