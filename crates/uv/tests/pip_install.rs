@@ -1,5 +1,6 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::io::ErrorKind;
 use std::process::Command;
 
 use anyhow::Result;
@@ -1483,6 +1484,98 @@ fn direct_url_zip_file_bunk_permissions() -> Result<()> {
      + typing-extensions==4.8.0
     "###
     );
+
+    Ok(())
+}
+
+#[test]
+fn entrypoint_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
+
+    uv_snapshot!(command(&context)
+        .arg(format!("simple_launcher@{}", project_root.join("scripts/wheels/simple_launcher-0.1.0-py3-none-any.whl").display()))
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + simple-launcher==0.1.0 (from file:///C:/Users/Micha/astral/puffin/scripts/wheels/simple_launcher-0.1.0-py3-none-any.whl)
+    "###
+    );
+
+    let bin_path = if cfg!(windows) { "Scripts" } else { "bin" };
+
+    uv_snapshot!(Command::new(
+        context.venv.join(bin_path).join("simple_launcher")
+    ), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hi from the simple launcher!
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn entrypoint_script_symlink() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
+
+    uv_snapshot!(command(&context)
+        .arg(format!("simple_launcher@{}", project_root.join("scripts/wheels/simple_launcher-0.1.0-py3-none-any.whl").display()))
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + simple-launcher==0.1.0 (from file:///C:/Users/Micha/astral/puffin/scripts/wheels/simple_launcher-0.1.0-py3-none-any.whl)
+    "###
+    );
+
+    #[cfg(windows)]
+    if let Err(error) = std::os::windows::fs::symlink_file(
+        context.venv.join("Scripts\\simple_launcher.exe"),
+        context.temp_dir.join("simple_launcher.exe"),
+    ) {
+        if error.kind() == ErrorKind::PermissionDenied {
+            // Not running as an administrator or developer mode isn't enabled.
+            // Ignore the test
+            return Ok(());
+        }
+    }
+
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(
+        context.venv.join("bin/simple_launcher"),
+        context.temp_dir.join("simple_launcher"),
+    )?;
+
+    // Only support windows or linux
+    #[cfg(not(any(windows, unix)))]
+    return Ok(());
+
+    uv_snapshot!(Command::new(
+        context.temp_dir.join("simple_launcher")
+    ), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hi from the simple launcher!
+
+    ----- stderr -----
+    "###);
 
     Ok(())
 }
