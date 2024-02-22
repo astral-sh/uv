@@ -13,7 +13,7 @@ use uv_fs::Normalized;
 
 use uv_interpreter::Interpreter;
 
-use crate::Prompt;
+use crate::{Error, Prompt};
 
 /// The bash activate scripts with the venv dependent paths patches out
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -33,16 +33,9 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
 const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
 
 /// Very basic `.cfg` file format writer.
-fn write_cfg(
-    f: &mut impl Write,
-    data: &[(&str, String); 8],
-    prompt: Option<String>,
-) -> io::Result<()> {
+fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
     for (key, value) in data {
         writeln!(f, "{key} = {value}")?;
-    }
-    if let Some(prompt) = prompt {
-        writeln!(f, "prompt = {prompt}")?;
     }
     Ok(())
 }
@@ -73,7 +66,8 @@ pub fn create_bare_venv(
     location: &Utf8Path,
     interpreter: &Interpreter,
     prompt: Prompt,
-) -> io::Result<VenvPaths> {
+    extra_cfg: Vec<(String, String)>,
+) -> Result<VenvPaths, Error> {
     // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
     // This would make python-build-standalone fail with the encodings module not being found because its home is wrong.
     let base_python: Utf8PathBuf = fs_err::canonicalize(interpreter.sys_executable())?
@@ -84,10 +78,10 @@ pub fn create_bare_venv(
     match location.metadata() {
         Ok(metadata) => {
             if metadata.is_file() {
-                return Err(io::Error::new(
+                return Err(Error::IO(io::Error::new(
                     io::ErrorKind::AlreadyExists,
                     format!("File exists at `{location}`"),
-                ));
+                )));
             } else if metadata.is_dir() {
                 if location.join("pyvenv.cfg").is_file() {
                     info!("Removing existing directory");
@@ -99,17 +93,17 @@ pub fn create_bare_venv(
                 {
                     info!("Ignoring empty directory");
                 } else {
-                    return Err(io::Error::new(
+                    return Err(Error::IO(io::Error::new(
                         io::ErrorKind::AlreadyExists,
                         format!("The directory `{location}` exists, but it's not a virtualenv"),
-                    ));
+                    )));
                 }
             }
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             fs::create_dir_all(location)?;
         }
-        Err(err) => return Err(err),
+        Err(err) => return Err(Error::IO(err)),
     }
 
     // TODO(konstin): I bet on windows we'll have to strip the prefix again
@@ -226,31 +220,58 @@ pub fn create_bare_venv(
     } else {
         unimplemented!("Only Windows and Unix are supported")
     };
-    let pyvenv_cfg_data = &[
-        ("home", python_home),
+
+    // Validate extra_cfg
+    let reserved_keys = [
+        "home",
+        "implementation",
+        "version_info",
+        "include-system-site-packages",
+        "base-prefix",
+        "base-exec-prefix",
+        "base-executable",
+        "prompt",
+    ];
+    for (key, _) in &extra_cfg {
+        if reserved_keys.contains(&key.as_str()) {
+            return Err(Error::ReservedConfigKey(key.to_string()));
+        }
+    }
+
+    let mut pyvenv_cfg_data: Vec<(String, String)> = vec![
+        ("home".to_string(), python_home),
         (
-            "implementation",
+            "implementation".to_string(),
             interpreter.markers().platform_python_implementation.clone(),
         ),
         (
-            "version_info",
+            "version_info".to_string(),
             interpreter.markers().python_version.string.clone(),
         ),
-        ("gourgeist", env!("CARGO_PKG_VERSION").to_string()),
-        // I wouldn't allow this option anyway
-        ("include-system-site-packages", "false".to_string()),
         (
-            "base-prefix",
+            "include-system-site-packages".to_string(),
+            "false".to_string(),
+        ),
+        (
+            "base-prefix".to_string(),
             interpreter.base_prefix().to_string_lossy().to_string(),
         ),
         (
-            "base-exec-prefix",
+            "base-exec-prefix".to_string(),
             interpreter.base_exec_prefix().to_string_lossy().to_string(),
         ),
-        ("base-executable", base_python.to_string()),
-    ];
+        ("base-executable".to_string(), base_python.to_string()),
+    ]
+    .into_iter()
+    .chain(extra_cfg)
+    .collect();
+
+    if let Some(prompt) = prompt {
+        pyvenv_cfg_data.push(("prompt".to_string(), prompt));
+    }
+
     let mut pyvenv_cfg = BufWriter::new(File::create(location.join("pyvenv.cfg"))?);
-    write_cfg(&mut pyvenv_cfg, pyvenv_cfg_data, prompt)?;
+    write_cfg(&mut pyvenv_cfg, &pyvenv_cfg_data)?;
     drop(pyvenv_cfg);
 
     let site_packages = if cfg!(unix) {

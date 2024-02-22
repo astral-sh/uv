@@ -329,6 +329,7 @@ impl SourceBuild {
             &temp_dir.path().join(".venv"),
             interpreter.clone(),
             gourgeist::Prompt::None,
+            Vec::new(),
         )?;
 
         // Setup the build environment.
