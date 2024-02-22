@@ -17,8 +17,8 @@ use uv_traits::{BuildContext, NoBinary};
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 
-type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
-type WheelMetadataResult = Result<(Metadata21, Option<Url>), uv_distribution::Error>;
+pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
+pub type WheelMetadataResult = Result<(Metadata21, Option<Url>), uv_distribution::Error>;
 
 /// The response when requesting versions for a package
 #[derive(Debug)]
