@@ -43,7 +43,6 @@ python-source = "python"
 strip = true
 include = ["rust-toolchain.toml"]
 
-
 [tool.rooster]
 major_labels = []  # We do not use the major version number
 minor_labels = ["breaking"]   # Bump the minor version on breaking changes
