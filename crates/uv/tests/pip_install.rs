@@ -1,6 +1,5 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::io::ErrorKind;
 use std::process::Command;
 
 use anyhow::Result;
@@ -1493,7 +1492,17 @@ fn entrypoint_script() -> Result<()> {
     let context = TestContext::new("3.12");
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
 
-    uv_snapshot!(command(&context)
+    let filters = [
+        (r"(\d+m )?(\d+\.)?\d+(ms|s)", "[TIME]"),
+        (
+            r"simple-launcher==0\.1\.0 \(from .+\.whl\)",
+            "simple_launcher.whl",
+        ),
+    ];
+
+    uv_snapshot!(
+        filters,
+        command(&context)
         .arg(format!("simple_launcher@{}", project_root.join("scripts/wheels/simple_launcher-0.1.0-py3-none-any.whl").display()))
         .arg("--strict"), @r###"
     success: true
@@ -1504,7 +1513,7 @@ fn entrypoint_script() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + simple-launcher==0.1.0 (from file:///C:/Users/Micha/astral/puffin/scripts/wheels/simple_launcher-0.1.0-py3-none-any.whl)
+     + simple_launcher.whl
     "###
     );
 
@@ -1529,9 +1538,19 @@ fn entrypoint_script_symlink() -> Result<()> {
     let context = TestContext::new("3.12");
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
 
-    uv_snapshot!(command(&context)
-        .arg(format!("simple_launcher@{}", project_root.join("scripts/wheels/simple_launcher-0.1.0-py3-none-any.whl").display()))
-        .arg("--strict"), @r###"
+    let filters = [
+        (r"(\d+m )?(\d+\.)?\d+(ms|s)", "[TIME]"),
+        (
+            r"simple-launcher==0\.1\.0 \(from .+\.whl\)",
+            "simple_launcher.whl",
+        ),
+    ];
+
+    uv_snapshot!(filters,
+        command(&context)
+            .arg(format!("simple_launcher@{}", project_root.join("scripts/wheels/simple_launcher-0.1.0-py3-none-any.whl").display()))
+            .arg("--strict"),
+        @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1540,7 +1559,7 @@ fn entrypoint_script_symlink() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + simple-launcher==0.1.0 (from file:///C:/Users/Micha/astral/puffin/scripts/wheels/simple_launcher-0.1.0-py3-none-any.whl)
+     + simple_launcher.whl
     "###
     );
 
@@ -1549,7 +1568,7 @@ fn entrypoint_script_symlink() -> Result<()> {
         context.venv.join("Scripts\\simple_launcher.exe"),
         context.temp_dir.join("simple_launcher.exe"),
     ) {
-        if error.kind() == ErrorKind::PermissionDenied {
+        if error.kind() == std::io::ErrorKind::PermissionDenied {
             // Not running as an administrator or developer mode isn't enabled.
             // Ignore the test
             return Ok(());
