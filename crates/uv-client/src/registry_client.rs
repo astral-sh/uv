@@ -25,6 +25,7 @@ use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
 
+use crate::auth::safe_copy_auth;
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
 use crate::middleware::OfflineMiddleware;
@@ -248,7 +249,7 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = RegistryClient::safe_copy_auth(&url, response.url().clone());
+                let url = safe_copy_auth(&url, response.url().clone());
 
                 let content_type = response
                     .headers()
@@ -517,68 +518,6 @@ impl RegistryClient {
                 .into_async_read(),
         ))
     }
-
-    /// Copy authentication from one URL to another URL if applicable.
-    ///
-    /// See [`RegistryClient::should_retain_auth`] for details on when authentication is retained.
-    #[must_use]
-    fn safe_copy_auth(request_url: &Url, mut response_url: Url) -> Url {
-        if RegistryClient::should_retain_auth(request_url, &response_url) {
-            response_url
-                .set_username(request_url.username())
-                .unwrap_or_else(|_| {
-                    warn!("Failed to transfer username to response URL: {response_url}")
-                });
-            response_url
-                .set_password(request_url.password())
-                .unwrap_or_else(|_| {
-                    warn!("Failed to transfer password to response URL: {response_url}")
-                });
-        }
-        response_url
-    }
-
-    /// Determine if authentication information should be retained on a new URL.
-    /// Implements the specification defined in RFC 7235 and 7230.
-    ///
-    /// <https://datatracker.ietf.org/doc/html/rfc7235#section-2.2>
-    /// <https://datatracker.ietf.org/doc/html/rfc7230#section-5.5>
-    fn should_retain_auth(request_url: &Url, response_url: &Url) -> bool {
-        // The "scheme" and "authority" components must match to retain authentication
-
-        // Check the scheme.
-        // Note some clients such as Python's `requests` library allow an upgrade
-        // from `http` to `https` but this is not spec-compliant.
-        // <https://github.com/pypa/pip/blob/75f54cae9271179b8cc80435f92336c97e349f9d/src/pip/_vendor/requests/sessions.py#L133-L136>
-        if request_url.scheme() != response_url.scheme() {
-            return false;
-        }
-
-        // Check the authority, which is composed of the host and port.
-        if request_url.host() != response_url.host() {
-            return false;
-        }
-
-        let default_port = match request_url.scheme() {
-            "http" => Some(80),
-            "https" => Some(443),
-            _ => None,
-        };
-
-        // Check the port
-        if request_url.port() != response_url.port() {
-            if (request_url.port() == default_port || request_url.port().is_none())
-                && (response_url.port() == default_port || response_url.port().is_none())
-            {
-                // Allow the ports to be different if they are the default port for the scheme
-                // or null
-            } else {
-                return false;
-            }
-        }
-
-        true
-    }
 }
 
 /// Read a wheel's `METADATA` file from a zip file.
@@ -828,12 +767,12 @@ pub enum Connectivity {
 mod tests {
     use std::str::FromStr;
 
-    use url::{ParseError, Url};
+    use url::{Url};
 
     use pypi_types::{JoinRelativeError, SimpleJson};
     use uv_normalize::PackageName;
 
-    use crate::{html::SimpleHtml, RegistryClient, SimpleMetadata, SimpleMetadatum};
+    use crate::{html::SimpleHtml, SimpleMetadata, SimpleMetadatum};
 
     #[test]
     fn ignore_failing_files() {
@@ -924,89 +863,6 @@ mod tests {
             "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/3.0.1/flask-3.0.1.tar.gz#sha256=6489f51bb3666def6f314e15f19d50a1869a19ae0e8c9a3641ffe66c77d42403",
         ]
         "###);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_should_retain_auth() -> Result<(), ParseError> {
-        // Exact match (https)
-        assert!(RegistryClient::should_retain_auth(
-            &Url::parse("https://example.com")?,
-            &Url::parse("https://example.com")?,
-        ));
-
-        // Exact match (with port)
-        assert!(RegistryClient::should_retain_auth(
-            &Url::parse("https://example.com:1234")?,
-            &Url::parse("https://example.com:1234")?,
-        ));
-
-        // Exact match (http)
-        assert!(RegistryClient::should_retain_auth(
-            &Url::parse("http://example.com")?,
-            &Url::parse("http://example.com")?,
-        ));
-
-        // Okay, path differs
-        assert!(RegistryClient::should_retain_auth(
-            &Url::parse("http://example.com/foo")?,
-            &Url::parse("http://example.com/bar")?,
-        ));
-
-        // Okay, default port differs (https)
-        assert!(RegistryClient::should_retain_auth(
-            &Url::parse("https://example.com:443")?,
-            &Url::parse("https://example.com")?,
-        ));
-        assert!(RegistryClient::should_retain_auth(
-            &Url::parse("https://example.com")?,
-            &Url::parse("https://example.com:443")?,
-        ));
-
-        // Okay, default port differs (http)
-        assert!(RegistryClient::should_retain_auth(
-            &Url::parse("http://example.com:80")?,
-            &Url::parse("http://example.com")?,
-        ));
-        assert!(RegistryClient::should_retain_auth(
-            &Url::parse("http://example.com")?,
-            &Url::parse("http://example.com:80")?,
-        ));
-
-        // Mismatched scheme
-        assert!(!RegistryClient::should_retain_auth(
-            &Url::parse("https://example.com")?,
-            &Url::parse("http://example.com")?,
-        ));
-
-        // Mismatched scheme, we explicitly do not allow upgrade to https
-        assert!(!RegistryClient::should_retain_auth(
-            &Url::parse("http://example.com")?,
-            &Url::parse("https://example.com")?,
-        ));
-
-        // Mismatched host
-        assert!(!RegistryClient::should_retain_auth(
-            &Url::parse("https://foo.com")?,
-            &Url::parse("https://bar.com")?,
-        ));
-
-        // Mismatched port
-        assert!(!RegistryClient::should_retain_auth(
-            &Url::parse("https://example.com:1234")?,
-            &Url::parse("https://example.com:5678")?,
-        ));
-
-        // Mismatched port, with one as default for scheme
-        assert!(!RegistryClient::should_retain_auth(
-            &Url::parse("https://example.com:443")?,
-            &Url::parse("https://example.com:5678")?,
-        ));
-        assert!(!RegistryClient::should_retain_auth(
-            &Url::parse("https://example.com:1234")?,
-            &Url::parse("https://example.com:443")?,
-        ));
 
         Ok(())
     }
