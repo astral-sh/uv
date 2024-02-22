@@ -50,9 +50,11 @@ minor_labels = ["breaking"]   # Bump the minor version on breaking changes
 changelog_ignore_labels = ["internal", "ci", "testing"]
 changelog_sections.breaking = "Breaking changes"
 changelog_sections.enhancement = "Enhancements"
+changelog_sections.compatibility = "Enhancements"
 changelog_sections.cli = "CLI"
 changelog_sections.configuration = "Configuration"
 changelog_sections.bug = "Bug fixes"
+changelog_sections.rustlib = "Rust API"
 changelog_sections.documentation = "Documentation"
 changelog_sections.__unknown__ = "Other changes"
 
