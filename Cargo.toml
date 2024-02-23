@@ -89,7 +89,7 @@ sha2 = { version = "0.10.8" }
 target-lexicon = { version = "0.12.13" }
 task-local-extensions = { version = "0.1.4" }
 tempfile = { version = "3.9.0" }
-textwrap = { version = "0.16.0" }
+textwrap = { version = "0.16.1" }
 thiserror = { version = "1.0.56" }
 tl = { version = "0.7.7" }
 tokio = { version = "1.35.1", features = ["rt-multi-thread"] }
