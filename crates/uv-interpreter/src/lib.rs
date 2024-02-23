@@ -59,6 +59,8 @@ pub enum Error {
         stdout: String,
         stderr: String,
     },
+    #[error("Python 2 or older is not supported. Please use Python 3 or newer.")]
+    Python2OrOlder,
     #[error("Failed to write to cache")]
     Encode(#[from] rmp_serde::encode::Error),
     #[error("Broken virtualenv: Failed to parse pyvenv.cfg")]

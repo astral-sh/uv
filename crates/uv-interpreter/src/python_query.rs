@@ -146,9 +146,20 @@ fn find_python(
                         continue;
                     }
 
-                    let installation = PythonInstallation::Interpreter(Interpreter::query(
-                        &path, platform, cache,
-                    )?);
+                    let interpreter = match Interpreter::query(&path, platform, cache) {
+                        Ok(interpreter) => interpreter,
+                        Err(Error::Python2OrOlder) => {
+                            if selector.major() <= Some(2) {
+                                return Err(Error::Python2OrOlder);
+                            }
+                            // Skip over Python 2 or older installation when querying for a recent python installation.
+                            tracing::debug!("Found a Python 2 installation that isn't supported by uv, skipping.");
+                            continue;
+                        }
+                        Err(error) => return Err(error),
+                    };
+
+                    let installation = PythonInstallation::Interpreter(interpreter);
 
                     if let Some(interpreter) = installation.select(selector, platform, cache)? {
                         return Ok(Some(interpreter));
@@ -304,6 +315,15 @@ impl PythonVersionSelector {
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
             ],
+        }
+    }
+
+    fn major(self) -> Option<u8> {
+        match self {
+            PythonVersionSelector::Default => None,
+            PythonVersionSelector::Major(major) => Some(major),
+            PythonVersionSelector::MajorMinor(major, _) => Some(major),
+            PythonVersionSelector::MajorMinorPatch(major, _, _) => Some(major),
         }
     }
 }
