@@ -909,6 +909,7 @@ dependencies = [
  "tracing",
  "url",
  "urlencoding",
+ "uv-auth",
  "uv-fs",
  "uv-git",
  "uv-normalize",
@@ -4194,6 +4195,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-auth"
+version = "0.0.1"
+dependencies = [
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "uv-build"
 version = "0.0.1"
 dependencies = [
@@ -4284,6 +4293,7 @@ dependencies = [
  "tracing",
  "url",
  "urlencoding",
+ "uv-auth",
  "uv-cache",
  "uv-fs",
  "uv-normalize",

@@ -1,26 +1,39 @@
+/// HTTP authentication utilities.
 use tracing::warn;
 use url::Url;
 
-/// HTTP authentication utilities.
+/// Optimized version of [`safe_copy_url_auth`] which avoids parsing a string
+/// into a URL unless the given URL has authentication to copy. Useful for patterns
+/// where the returned URL would immediately be cast into a string.
+///
+/// Returns [`Err`] if there is authentication to copy and `new_url` is not a valid URL.
+/// Returns [`None`] if there is no authentication to copy.
+pub fn safe_copy_url_auth_to_str(
+    trusted_url: &Url,
+    new_url: &str,
+) -> Result<Option<Url>, url::ParseError> {
+    if trusted_url.username().is_empty() && trusted_url.password().is_none() {
+        return Ok(None);
+    }
+
+    let new_url = Url::parse(new_url)?;
+    Ok(Some(safe_copy_url_auth(trusted_url, new_url)))
+}
 
 /// Copy authentication from one URL to another URL if applicable.
 ///
 /// See [`should_retain_auth`] for details on when authentication is retained.
 #[must_use]
-pub(crate) fn safe_copy_auth(request_url: &Url, mut response_url: Url) -> Url {
-    if should_retain_auth(request_url, &response_url) {
-        response_url
-            .set_username(request_url.username())
-            .unwrap_or_else(|_| {
-                warn!("Failed to transfer username to response URL: {response_url}")
-            });
-        response_url
-            .set_password(request_url.password())
-            .unwrap_or_else(|_| {
-                warn!("Failed to transfer password to response URL: {response_url}")
-            });
+pub fn safe_copy_url_auth(trusted_url: &Url, mut new_url: Url) -> Url {
+    if should_retain_auth(trusted_url, &new_url) {
+        new_url
+            .set_username(trusted_url.username())
+            .unwrap_or_else(|_| warn!("Failed to transfer username to response URL: {new_url}"));
+        new_url
+            .set_password(trusted_url.password())
+            .unwrap_or_else(|_| warn!("Failed to transfer password to response URL: {new_url}"));
     }
-    response_url
+    new_url
 }
 
 /// Determine if authentication information should be retained on a new URL.
@@ -28,7 +41,7 @@ pub(crate) fn safe_copy_auth(request_url: &Url, mut response_url: Url) -> Url {
 ///
 /// <https://datatracker.ietf.org/doc/html/rfc7235#section-2.2>
 /// <https://datatracker.ietf.org/doc/html/rfc7230#section-5.5>
-fn should_retain_auth(request_url: &Url, response_url: &Url) -> bool {
+fn should_retain_auth(trusted_url: &Url, new_url: &Url) -> bool {
     // The "scheme" and "authority" components must match to retain authentication
     // The "authority", is composed of the host and port.
 
@@ -37,12 +50,12 @@ fn should_retain_auth(request_url: &Url, response_url: &Url) -> bool {
     // Note some clients such as Python's `requests` library allow an upgrade
     // from `http` to `https` but this is not spec-compliant.
     // <https://github.com/pypa/pip/blob/75f54cae9271179b8cc80435f92336c97e349f9d/src/pip/_vendor/requests/sessions.py#L133-L136>
-    if request_url.scheme() != response_url.scheme() {
+    if trusted_url.scheme() != new_url.scheme() {
         return false;
     }
 
     // The host must always be an exact match.
-    if request_url.host() != response_url.host() {
+    if trusted_url.host() != new_url.host() {
         return false;
     }
 
@@ -50,7 +63,7 @@ fn should_retain_auth(request_url: &Url, response_url: &Url) -> bool {
     // The port is only allowed to differ if it it matches the "default port" for the scheme.
     // However, `reqwest` sets the `port` to `None` if it matches the default port so we do
     // not need any special handling here.
-    if request_url.port() != response_url.port() {
+    if trusted_url.port() != new_url.port() {
         return false;
     }
 
@@ -61,7 +74,7 @@ fn should_retain_auth(request_url: &Url, response_url: &Url) -> bool {
 mod tests {
     use url::{ParseError, Url};
 
-    use crate::auth::should_retain_auth;
+    use crate::should_retain_auth;
 
     #[test]
     fn test_should_retain_auth() -> Result<(), ParseError> {
