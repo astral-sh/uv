@@ -4258,7 +4258,7 @@ fn unsafe_package() -> Result<()> {
     werkzeug==3.0.1
         # via flask
 
-    # The following packages are considered to be unsafe in a requirements file:
+    # The following packages were included while generating the resolution:
     # jinja2
 
     ----- stderr -----

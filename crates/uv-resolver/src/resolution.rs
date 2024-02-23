@@ -281,7 +281,7 @@ pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolutionGraph,
     /// The packages to exclude from the output.
-    exclude: &'a [PackageName],
+    no_emit_packages: &'a [PackageName],
     /// Whether to include hashes in the output.
     show_hashes: bool,
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
@@ -302,14 +302,14 @@ impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
     pub fn new(
         underlying: &'a ResolutionGraph,
-        exclude: &'a [PackageName],
+        no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_annotations: bool,
         annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
         Self {
             resolution: underlying,
-            exclude,
+            no_emit_packages,
             show_hashes,
             include_annotations,
             annotation_style,
@@ -362,7 +362,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             .filter_map(|index| {
                 let dist = &self.resolution.petgraph[index];
                 let name = dist.name();
-                if self.exclude.contains(name) {
+                if self.no_emit_packages.contains(name) {
                     return None;
                 }
 
