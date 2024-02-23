@@ -378,7 +378,7 @@ impl<'a> Planner<'a> {
         if !site_packages.is_empty() {
             // If uv created the virtual environment, then remove all packages, regardless of
             // whether they're considered "seed" packages.
-            let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_gourgeist());
+            let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_uv());
             for dist_info in site_packages {
                 if seed_packages
                     && matches!(

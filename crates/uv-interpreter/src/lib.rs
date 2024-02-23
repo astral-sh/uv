@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-pub use crate::cfg::Configuration;
+pub use crate::cfg::PyVenvConfiguration;
 pub use crate::interpreter::Interpreter;
 pub use crate::python_query::{find_default_python, find_requested_python};
 pub use crate::python_version::PythonVersion;
