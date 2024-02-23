@@ -10,6 +10,7 @@ pub(crate) use pip_install::pip_install;
 pub(crate) use pip_sync::pip_sync;
 pub(crate) use pip_uninstall::pip_uninstall;
 pub(crate) use venv::venv;
+pub(crate) use version::version;
 
 mod cache_clean;
 mod cache_dir;
@@ -20,6 +21,7 @@ mod pip_sync;
 mod pip_uninstall;
 mod reporters;
 mod venv;
+mod version;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {
@@ -71,4 +73,10 @@ pub(super) enum ChangeEventKind {
 pub(super) struct ChangeEvent<T: InstalledMetadata> {
     dist: T,
     kind: ChangeEventKind,
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub(crate) enum VersionFormat {
+    Text,
+    Json,
 }
