@@ -8,7 +8,7 @@ use platform_host::Platform;
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Normalized};
 
-use crate::cfg::Configuration;
+use crate::cfg::PyVenvConfiguration;
 use crate::python_platform::PythonPlatform;
 use crate::{Error, Interpreter};
 
@@ -65,10 +65,10 @@ impl Virtualenv {
         &self.interpreter
     }
 
-    /// Return the [`Configuration`] for this virtual environment, as extracted from the
+    /// Return the [`PyVenvConfiguration`] for this virtual environment, as extracted from the
     /// `pyvenv.cfg` file.
-    pub fn cfg(&self) -> Result<Configuration, Error> {
-        Ok(Configuration::parse(self.root.join("pyvenv.cfg"))?)
+    pub fn cfg(&self) -> Result<PyVenvConfiguration, Error> {
+        Ok(PyVenvConfiguration::parse(self.root.join("pyvenv.cfg"))?)
     }
 
     /// Returns the path to the `site-packages` directory inside a virtual environment.
