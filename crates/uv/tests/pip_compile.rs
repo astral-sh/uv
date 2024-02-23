@@ -4258,7 +4258,7 @@ fn unsafe_package() -> Result<()> {
     werkzeug==3.0.1
         # via flask
 
-    # The following packages were included while generating the resolution:
+    # The following packages were excluded from the output:
     # jinja2
 
     ----- stderr -----
