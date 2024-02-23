@@ -36,7 +36,7 @@ fn run() -> Result<(), gourgeist::Error> {
         Cache::from_path(".gourgeist_cache")?
     };
     let info = Interpreter::query(python.as_std_path(), &platform, &cache).unwrap();
-    create_bare_venv(&location, &info, Prompt::from_args(cli.prompt))?;
+    create_bare_venv(&location, &info, Prompt::from_args(cli.prompt), Vec::new())?;
     Ok(())
 }
 

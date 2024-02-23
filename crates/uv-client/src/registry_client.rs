@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
+
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
@@ -20,6 +21,7 @@ use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Nam
 use install_wheel_rs::{find_dist_info, is_metadata_entry};
 use pep440_rs::Version;
 use pypi_types::{Metadata21, SimpleJson};
+use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
@@ -247,7 +249,7 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = response.url().clone();
+                let url = safe_copy_url_auth(&url, response.url().clone());
 
                 let content_type = response
                     .headers()
@@ -269,17 +271,16 @@ impl RegistryClient {
                         let bytes = response.bytes().await.map_err(ErrorKind::RequestError)?;
                         let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
-                        let metadata =
-                            SimpleMetadata::from_files(data.files, package_name, url.as_str());
-                        metadata
+
+                        SimpleMetadata::from_files(data.files, package_name, &url)
                     }
                     MediaType::Html => {
                         let text = response.text().await.map_err(ErrorKind::RequestError)?;
                         let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                             .map_err(|err| Error::from_html_err(err, url.clone()))?;
-                        let metadata =
-                            SimpleMetadata::from_files(files, package_name, base.as_url().as_str());
-                        metadata
+                        let base = safe_copy_url_auth(&url, base.into_url());
+
+                        SimpleMetadata::from_files(files, package_name, &base)
                     }
                 };
                 OwnedArchive::from_unarchived(&unarchived)
@@ -668,7 +669,7 @@ impl SimpleMetadata {
         self.0.iter()
     }
 
-    fn from_files(files: Vec<pypi_types::File>, package_name: &PackageName, base: &str) -> Self {
+    fn from_files(files: Vec<pypi_types::File>, package_name: &PackageName, base: &Url) -> Self {
         let mut map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 
         // Group the distributions by version and kind
@@ -808,11 +809,11 @@ mod tests {
         }
         "#;
         let data: SimpleJson = serde_json::from_str(response).unwrap();
-        let base = "https://pypi.org/simple/pyflyby/";
+        let base = Url::parse("https://pypi.org/simple/pyflyby/").unwrap();
         let simple_metadata = SimpleMetadata::from_files(
             data.files,
             &PackageName::from_str("pyflyby").unwrap(),
-            base,
+            &base,
         );
         let versions: Vec<String> = simple_metadata
             .iter()

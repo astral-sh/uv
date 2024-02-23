@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.1.7"
+version = "0.1.9"
 description = "An extremely fast Python package installer and resolver, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -42,3 +42,26 @@ module-name = "uv"
 python-source = "python"
 strip = true
 include = ["rust-toolchain.toml"]
+
+[tool.rooster]
+major_labels = []  # We do not use the major version number
+minor_labels = ["breaking"]   # Bump the minor version on breaking changes
+changelog_ignore_labels = ["internal", "ci", "testing"]
+changelog_sections.breaking = "Breaking changes"
+changelog_sections.enhancement = "Enhancements"
+changelog_sections.compatibility = "Enhancements"
+changelog_sections.cli = "CLI"
+changelog_sections.configuration = "Configuration"
+changelog_sections.bug = "Bug fixes"
+changelog_sections.rustlib = "Rust API"
+changelog_sections.documentation = "Documentation"
+changelog_sections.__unknown__ = "Other changes"
+
+# We exclude contributors from the CHANGELOG file
+# Generate separately with `rooster contributors` for the GitHub release page
+changelog_contributors = false
+
+version_files = [
+  "README.md",
+  "crates/uv/Cargo.toml",
+]

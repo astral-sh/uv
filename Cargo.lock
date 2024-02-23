@@ -909,6 +909,7 @@ dependencies = [
  "tracing",
  "url",
  "urlencoding",
+ "uv-auth",
  "uv-fs",
  "uv-git",
  "uv-normalize",
@@ -4127,7 +4128,7 @@ checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
 
 [[package]]
 name = "uv"
-version = "0.1.7"
+version = "0.1.9"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4191,6 +4192,14 @@ dependencies = [
  "uv-traits",
  "uv-warnings",
  "which",
+]
+
+[[package]]
+name = "uv-auth"
+version = "0.0.1"
+dependencies = [
+ "tracing",
+ "url",
 ]
 
 [[package]]
@@ -4284,6 +4293,7 @@ dependencies = [
  "tracing",
  "url",
  "urlencoding",
+ "uv-auth",
  "uv-cache",
  "uv-fs",
  "uv-normalize",
@@ -4590,9 +4600,12 @@ name = "uv-traits"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "clap",
  "distribution-types",
  "once-map",
  "pep508_rs",
+ "serde",
+ "serde_json",
  "tokio",
  "uv-cache",
  "uv-interpreter",

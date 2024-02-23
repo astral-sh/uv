@@ -1,0 +1,13 @@
+[project]
+name = "setuptools_editable"
+version = "0.1.0"
+description = "Default template for a setuptools project"
+authors = [
+    {name = "konstin", email = "konstin@mailbox.org"},
+]
+dependencies = ["iniconfig"]
+requires-python = ">=3.11,<3.13"
+license = {text = "MIT"}
+
+[project.optional-dependencies]
+anyio = ["anyio>=3.3.0"]

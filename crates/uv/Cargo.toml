@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.1.7"
+version = "0.1.9"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -82,7 +82,7 @@ indoc = { version = "2.0.4" }
 insta = { version = "1.34.0", features = ["filters"] }
 predicates = { version = "3.0.4" }
 regex = { version = "1.10.3" }
-reqwest = { version = "0.11.23", features = ["blocking", "rustls"], default-features = false }
+reqwest = { version = "0.11.23", features = ["blocking"], default-features = false }
 
 [features]
 default = ["flate2/zlib-ng", "python", "pypi", "git", "maturin"]
@@ -94,3 +94,4 @@ pypi = []
 git = []
 # Introduces a dependency on Maturin.
 maturin = []
+

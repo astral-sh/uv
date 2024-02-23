@@ -25,7 +25,7 @@ use uv_installer::{Downloader, NoBinary};
 use uv_interpreter::Virtualenv;
 use uv_normalize::PackageName;
 use uv_resolver::{DistFinder, InMemoryIndex};
-use uv_traits::{BuildContext, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildContext, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct InstallManyArgs {
@@ -65,12 +65,12 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
     let setup_py = SetupPyStrategy::default();
     let in_flight = InFlight::default();
     let tags = venv.interpreter().tags()?;
-
     let no_build = if args.no_build {
         NoBuild::All
     } else {
         NoBuild::None
     };
+    let config_settings = ConfigSettings::default();
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -82,6 +82,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
         &in_flight,
         venv.python_executable(),
         setup_py,
+        &config_settings,
         &no_build,
         &NoBinary::None,
     );
