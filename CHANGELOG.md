@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.10
+
+### Enhancements
+
+- Omit `--find-links` from annotation header unless requested ([#1898](https://github.com/astral-sh/uv/pull/1898))
+- Write to stdout when `--output-file` is present ([#1892](https://github.com/astral-sh/uv/pull/1892))
+
+### Bug fixes
+
+- Retain authentication when making range requests ([#1902](https://github.com/astral-sh/uv/pull/1902))
+- Fix uv-created venv detection ([#1908](https://github.com/astral-sh/uv/pull/1908))
+- Fix Windows `py` failure from spurious stderr ([#1885](https://github.com/astral-sh/uv/pull/1885))
+- Ignore Python 2 installations when querying for interpreters ([#1905](https://github.com/astral-sh/uv/pull/1905))
+
 ## 0.1.9
 
 ### Enhancements
