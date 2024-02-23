@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
 use std::ops::Deref;
@@ -38,6 +39,12 @@ impl FromStr for PythonVersion {
         }
 
         Ok(Self(version))
+    }
+}
+
+impl Display for PythonVersion {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
     }
 }
 

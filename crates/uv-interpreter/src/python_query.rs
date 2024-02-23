@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::env;
 use std::path::PathBuf;
 
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -23,11 +23,13 @@ use crate::{Error, Interpreter};
 /// version (e.g. `python3.12` on unix) and error when the version mismatches, as a binary with the
 /// patch version (e.g. `python3.12.1`) is often not in `PATH` and we make the simplifying
 /// assumption that the user has only this one patch version installed.
+#[instrument(skip_all, fields(%request))]
 pub fn find_requested_python(
     request: &str,
     platform: &Platform,
     cache: &Cache,
-) -> Result<Option<Interpreter>, Error> {
+) -> Result<Option<Interpreter>, Error>  {
+    debug!("Starting interpreter discovery for Python {}", request);
     let versions = request
         .splitn(3, '.')
         .map(str::parse::<u8>)
@@ -70,7 +72,9 @@ pub fn find_requested_python(
 ///
 /// We prefer the test overwrite `UV_TEST_PYTHON_PATH` if it is set, otherwise `python3`/`python` or
 /// `python.exe` respectively.
+#[instrument(skip_all)]
 pub fn find_default_python(platform: &Platform, cache: &Cache) -> Result<Interpreter, Error> {
+    debug!("Starting interpreter discovery for default Python");
     try_find_default_python(platform, cache)?.ok_or(if cfg!(windows) {
         Error::NoPythonInstalledWindows
     } else if cfg!(unix) {
@@ -100,7 +104,6 @@ pub(crate) fn try_find_default_python(
 ///   * (windows): For each of the above, test for the existence of `python.bat` shim (pyenv-windows) last.
 ///
 /// (Windows): Filter out the windows store shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).
-#[instrument(skip_all, fields(? selector))]
 fn find_python(
     selector: PythonVersionSelector,
     platform: &Platform,
@@ -339,8 +342,8 @@ mod windows {
     use platform_host::Platform;
     use uv_cache::Cache;
 
-    use crate::python_query::{PythonInstallation, PythonVersionSelector};
     use crate::{Error, Interpreter};
+    use crate::python_query::{PythonInstallation, PythonVersionSelector};
 
     /// ```text
     /// -V:3.12          C:\Users\Ferris\AppData\Local\Programs\Python\Python312\python.exe
@@ -435,7 +438,7 @@ mod windows {
         use platform_host::Platform;
         use uv_cache::Cache;
 
-        use crate::{find_requested_python, Error};
+        use crate::{Error, find_requested_python};
 
         fn format_err<T: Debug>(err: Result<T, Error>) -> String {
             anyhow::Error::new(err.unwrap_err())
@@ -477,8 +480,8 @@ mod tests {
     use platform_host::Platform;
     use uv_cache::Cache;
 
-    use crate::python_query::find_requested_python;
     use crate::Error;
+    use crate::python_query::find_requested_python;
 
     fn format_err<T: std::fmt::Debug>(err: Result<T, Error>) -> String {
         anyhow::Error::new(err.unwrap_err())
