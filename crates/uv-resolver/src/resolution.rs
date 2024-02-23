@@ -257,6 +257,13 @@ impl ResolutionGraph {
         self.petgraph.node_count() == 0
     }
 
+    /// Returns `true` if the graph contains the given package.
+    pub fn contains(&self, name: &PackageName) -> bool {
+        self.petgraph
+            .node_indices()
+            .any(|index| self.petgraph[index].name() == name)
+    }
+
     /// Return the [`Diagnostic`]s that were encountered while building the graph.
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics
@@ -273,6 +280,8 @@ impl ResolutionGraph {
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolutionGraph,
+    /// The packages to exclude from the output.
+    exclude: &'a [PackageName],
     /// Whether to include hashes in the output.
     show_hashes: bool,
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
@@ -285,7 +294,7 @@ pub struct DisplayResolutionGraph<'a> {
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
     fn from(resolution: &'a ResolutionGraph) -> Self {
-        Self::new(resolution, false, true, AnnotationStyle::default())
+        Self::new(resolution, &[], false, true, AnnotationStyle::default())
     }
 }
 
@@ -293,12 +302,14 @@ impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
     pub fn new(
         underlying: &'a ResolutionGraph,
+        exclude: &'a [PackageName],
         show_hashes: bool,
         include_annotations: bool,
         annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
         Self {
             resolution: underlying,
+            exclude,
             show_hashes,
             include_annotations,
             annotation_style,
@@ -348,15 +359,19 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             .resolution
             .petgraph
             .node_indices()
-            .map(|index| {
+            .filter_map(|index| {
                 let dist = &self.resolution.petgraph[index];
                 let name = dist.name();
+                if self.exclude.contains(name) {
+                    return None;
+                }
+
                 let node = if let Some((editable, _)) = self.resolution.editables.get(name) {
                     Node::Editable(name, editable)
                 } else {
                     Node::Distribution(name, dist)
                 };
-                (index, node)
+                Some((index, node))
             })
             .collect::<Vec<_>>();
 

@@ -51,6 +51,7 @@ pub(crate) async fn pip_compile(
     prerelease_mode: PreReleaseMode,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
+    unsafe_packages: Vec<PackageName>,
     generate_hashes: bool,
     include_annotations: bool,
     include_header: bool,
@@ -383,11 +384,29 @@ pub(crate) async fn pip_compile(
         "{}",
         DisplayResolutionGraph::new(
             &resolution,
+            &unsafe_packages,
             generate_hashes,
             include_annotations,
             annotation_style,
         )
     )?;
+
+    // If any "unsafe" packages were excluded, notify the user.
+    let excludes = unsafe_packages
+        .into_iter()
+        .filter(|name| resolution.contains(name))
+        .collect::<Vec<_>>();
+    if !excludes.is_empty() {
+        writeln!(writer)?;
+        writeln!(
+            writer,
+            "{}",
+            "# The following packages are considered to be unsafe in a requirements file:".green()
+        )?;
+        for package in excludes {
+            writeln!(writer, "# {package}")?;
+        }
+    }
 
     Ok(ExitStatus::Success)
 }

@@ -352,6 +352,11 @@ struct PipCompileArgs {
     #[arg(long, value_parser = date_or_datetime, hide = true)]
     exclude_newer: Option<DateTime<Utc>>,
 
+    /// Specify a package to consider unsafe. An unsafe package will be omitted from the output
+    /// resolution, though its dependencies will still be included.
+    #[clap(long)]
+    unsafe_package: Vec<PackageName>,
+
     /// Include `--index-url` and `--extra-index-url` entries in the generated output file.
     #[clap(long, hide = true)]
     emit_index_url: bool,
@@ -903,6 +908,7 @@ async fn run() -> Result<ExitStatus> {
                 args.prerelease,
                 dependency_mode,
                 upgrade,
+                args.unsafe_package,
                 args.generate_hashes,
                 !args.no_annotate,
                 !args.no_header,
