@@ -5,7 +5,7 @@ Generates and updates snapshot test cases from packse scenarios.
 Usage:
 
     Regenerate the scenario test file:
-    
+
         $ ./scripts/scenarios/update.py
 
     Scenarios are pinned to a specific commit. Change the `PACKSE_COMMIT` constant to update them.
@@ -45,7 +45,7 @@ import textwrap
 from pathlib import Path
 
 
-PACKSE_COMMIT = "de0bab473eeaa4445db5a8febd732c655fad3d52"
+PACKSE_COMMIT = "4f39539c1b858e28268554604e75c69e25272e5a"
 TOOL_ROOT = Path(__file__).parent
 TEMPLATES = TOOL_ROOT / "templates"
 INSTALL_TEMPLATE = TEMPLATES / "install.mustache"
