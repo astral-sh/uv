@@ -1,4 +1,5 @@
 use std::hash::BuildHasherDefault;
+use std::iter::Flatten;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -19,9 +20,13 @@ use uv_normalize::PackageName;
 #[derive(Debug)]
 pub struct SitePackages<'a> {
     venv: &'a Virtualenv,
-    /// The vector of all installed distributions.
-    distributions: Vec<InstalledDist>,
-    /// The installed distributions, keyed by name.
+    /// The vector of all installed distributions. The `by_name` and `by_url` indices index into
+    /// this vector. The vector may contain `None` values, which represent distributions that were
+    /// removed from the virtual environment.
+    distributions: Vec<Option<InstalledDist>>,
+    /// The installed distributions, keyed by name. Although the Python runtime does not support it,
+    /// it is possible to have multiple distributions with the same name to be present in the
+    /// virtual environment, which we handle gracefully.
     by_name: FxHashMap<PackageName, Vec<usize>>,
     /// The installed editable distributions, keyed by URL.
     by_url: FxHashMap<Url, Vec<usize>>,
@@ -30,7 +35,7 @@ pub struct SitePackages<'a> {
 impl<'a> SitePackages<'a> {
     /// Build an index of installed packages from the given Python executable.
     pub fn from_executable(venv: &'a Virtualenv) -> Result<SitePackages<'a>> {
-        let mut distributions: Vec<InstalledDist> = Vec::new();
+        let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name = FxHashMap::default();
         let mut by_url = FxHashMap::default();
 
@@ -60,7 +65,7 @@ impl<'a> SitePackages<'a> {
                 }
 
                 // Add the distribution to the database.
-                distributions.push(dist_info);
+                distributions.push(Some(dist_info));
             }
         }
 
@@ -74,7 +79,7 @@ impl<'a> SitePackages<'a> {
 
     /// Returns an iterator over the installed distributions.
     pub fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
-        self.distributions.iter()
+        self.distributions.iter().flatten()
     }
 
     /// Returns an iterator over the the installed distributions, represented as requirements.
@@ -96,126 +101,140 @@ impl<'a> SitePackages<'a> {
         })
     }
 
-    /// Returns the version of the given package, if it is installed.
-    pub fn get_all(&self, name: &PackageName) -> Vec<&InstalledDist> {
+    /// Returns the installed distributions for a given package.
+    pub fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
         let Some(indexes) = self.by_name.get(name) else {
             return Vec::new();
         };
-        indexes.iter().map(|&index| &self.distributions[index]).collect()
+        indexes
+            .iter()
+            .flat_map(|&index| &self.distributions[index])
+            .collect()
     }
 
-    /// Remove the given package from the index, returning its version if it was installed.
-    pub fn remove(&mut self, name: &PackageName) -> Option<InstalledDist> {
-        let idx = self.by_name.get(name)?;
-        Some(self.swap_remove(*idx))
+    /// Remove the given packages from the index, returning all installed versions, if any.
+    pub fn remove_packages(&mut self, name: &PackageName) -> Vec<InstalledDist> {
+        let Some(indexes) = self.by_name.get(name) else {
+            return Vec::new();
+        };
+        indexes
+            .iter()
+            .filter_map(|index| std::mem::take(&mut self.distributions[*index]))
+            .collect()
     }
 
     /// Returns the editable distribution installed from the given URL, if any.
-    pub fn get_editable(&self, url: &Url) -> Option<&InstalledDist> {
-        self.by_url.get(url).map(|idx| &self.distributions[*idx])
+    pub fn get_editables(&self, url: &Url) -> Vec<&InstalledDist> {
+        let Some(indexes) = self.by_url.get(url) else {
+            return Vec::new();
+        };
+        indexes
+            .iter()
+            .flat_map(|&index| &self.distributions[index])
+            .collect()
     }
 
     /// Remove the editable distribution installed from the given URL, if any.
-    pub fn remove_editable(&mut self, url: &Url) -> Option<InstalledDist> {
-        let idx = self.by_url.get(url)?;
-        Some(self.swap_remove(*idx))
+    pub fn remove_editables(&mut self, url: &Url) -> Vec<InstalledDist> {
+        let Some(indexes) = self.by_url.get(url) else {
+            return Vec::new();
+        };
+        indexes
+            .iter()
+            .filter_map(|index| std::mem::take(&mut self.distributions[*index]))
+            .collect()
     }
 
-    /// Remove the distribution at the given index.
-    fn swap_remove(&mut self, idx: usize) -> InstalledDist {
-        // Remove from the existing index.
-        let dist = self.distributions.swap_remove(idx);
-
-        // If the distribution wasn't at the end, rewrite the entries for the moved distribution.
-        if idx < self.distributions.len() {
-            let moved = &self.distributions[idx];
-            if let Some(prev) = self.by_name.get_mut(moved.name()) {
-                for prev in prev {
-                    if *prev == self.distributions.len() {
-                        *prev = idx;
-                    }
-                }
-            }
-            if let Some(url) = moved.as_editable() {
-                if let Some(prev) = self.by_url.get_mut(url) {
-                    for prev in prev {
-                        if *prev == self.distributions.len() {
-                            *prev = idx;
-                        }
-                    }
-                }
-            }
-        }
-
-        dist
-    }
-
-    /// Returns `true` if there are no installed packages.
-    pub fn is_empty(&self) -> bool {
-        self.distributions.is_empty()
-    }
-
-    /// Returns the number of installed packages.
-    pub fn len(&self) -> usize {
-        self.distributions.len()
+    /// Returns `true` if there are any installed packages.
+    pub fn any(&self) -> bool {
+        self.distributions.iter().any(Option::is_some)
     }
 
     /// Validate the installed packages in the virtual environment.
     pub fn diagnostics(&self) -> Result<Vec<Diagnostic>> {
         let mut diagnostics = Vec::new();
 
-        for (package, index) in &self.by_name {
-            let distribution = &self.distributions[*index];
+        for (package, indexes) in &self.by_name {
+            let mut distributions = indexes.iter().flat_map(|index| &self.distributions[*index]);
 
-            // Determine the dependencies for the given package.
-            let Ok(metadata) = distribution.metadata() else {
-                diagnostics.push(Diagnostic::IncompletePackage {
-                    package: package.clone(),
-                    path: distribution.path().to_owned(),
-                });
+            // Find the installed distribution for the given package.
+            let Some(distribution) = distributions.next() else {
                 continue;
             };
 
-            // Verify that the package is compatible with the current Python version.
-            if let Some(requires_python) = metadata.requires_python.as_ref() {
-                if !requires_python.contains(self.venv.interpreter().python_version()) {
-                    diagnostics.push(Diagnostic::IncompatiblePythonVersion {
-                        package: package.clone(),
-                        version: self.venv.interpreter().python_version().clone(),
-                        requires_python: requires_python.clone(),
-                    });
-                }
+            if let Some(conflict) = distributions.next() {
+                // There are multiple installed distributions for the same package.
+                diagnostics.push(Diagnostic::DuplicatePackage {
+                    package: package.clone(),
+                    paths: std::iter::once(distribution.path().to_owned())
+                        .chain(std::iter::once(conflict.path().to_owned()))
+                        .chain(distributions.map(|dist| dist.path().to_owned()))
+                        .collect(),
+                });
+                continue;
             }
 
-            // Verify that the dependencies are installed.
-            for dependency in &metadata.requires_dist {
-                if !dependency.evaluate_markers(self.venv.interpreter().markers(), &[]) {
+            for index in indexes {
+                let Some(distribution) = &self.distributions[*index] else {
                     continue;
-                }
+                };
 
-                let Some(installed) = self
-                    .by_name
-                    .get(&dependency.name)
-                    .map(|idx| &self.distributions[*idx])
-                else {
-                    diagnostics.push(Diagnostic::MissingDependency {
+                // Determine the dependencies for the given package.
+                let Ok(metadata) = distribution.metadata() else {
+                    diagnostics.push(Diagnostic::IncompletePackage {
                         package: package.clone(),
-                        requirement: dependency.clone(),
+                        path: distribution.path().to_owned(),
                     });
                     continue;
                 };
 
-                match &dependency.version_or_url {
-                    None | Some(pep508_rs::VersionOrUrl::Url(_)) => {
-                        // Nothing to do (accept any installed version).
+                // Verify that the package is compatible with the current Python version.
+                if let Some(requires_python) = metadata.requires_python.as_ref() {
+                    if !requires_python.contains(self.venv.interpreter().python_version()) {
+                        diagnostics.push(Diagnostic::IncompatiblePythonVersion {
+                            package: package.clone(),
+                            version: self.venv.interpreter().python_version().clone(),
+                            requires_python: requires_python.clone(),
+                        });
                     }
-                    Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
-                        if !version_specifier.contains(installed.version()) {
-                            diagnostics.push(Diagnostic::IncompatibleDependency {
+                }
+
+                // Verify that the dependencies are installed.
+                for dependency in &metadata.requires_dist {
+                    if !dependency.evaluate_markers(self.venv.interpreter().markers(), &[]) {
+                        continue;
+                    }
+
+                    let installed = self.get_packages(&dependency.name);
+                    match installed.as_slice() {
+                        [] => {
+                            // No version installed.
+                            diagnostics.push(Diagnostic::MissingDependency {
                                 package: package.clone(),
-                                version: installed.version().clone(),
                                 requirement: dependency.clone(),
                             });
+                        }
+                        [installed] => {
+                            match &dependency.version_or_url {
+                                None | Some(pep508_rs::VersionOrUrl::Url(_)) => {
+                                    // Nothing to do (accept any installed version).
+                                }
+                                Some(pep508_rs::VersionOrUrl::VersionSpecifier(
+                                    version_specifier,
+                                )) => {
+                                    // The installed version doesn't satisfy the requirement.
+                                    if !version_specifier.contains(installed.version()) {
+                                        diagnostics.push(Diagnostic::IncompatibleDependency {
+                                            package: package.clone(),
+                                            version: installed.version().clone(),
+                                            requirement: dependency.clone(),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        _ => {
+                            // There are multiple installed distributions for the same package.
                         }
                     }
                 }
@@ -247,84 +266,94 @@ impl<'a> SitePackages<'a> {
 
         // Verify that all editable requirements are met.
         for requirement in editables {
-            let Some(distribution) = self
-                .by_url
-                .get(requirement.raw())
-                .map(|idx| &self.distributions[*idx])
-            else {
-                // The package isn't installed.
-                return Ok(false);
-            };
+            let installed = self.get_editables(requirement.raw());
+            match installed.as_slice() {
+                [] => {
+                    // The package isn't installed.
+                    return Ok(false);
+                }
+                [distribution] => {
+                    // Recurse into the dependencies.
+                    let metadata = distribution
+                        .metadata()
+                        .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
 
-            // Recurse into the dependencies.
-            let metadata = distribution
-                .metadata()
-                .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
-
-            // Add the dependencies to the queue.
-            for dependency in metadata.requires_dist {
-                if dependency
-                    .evaluate_markers(self.venv.interpreter().markers(), &requirement.extras)
-                {
-                    if seen.insert(dependency.clone()) {
-                        stack.push(dependency);
+                    // Add the dependencies to the queue.
+                    for dependency in metadata.requires_dist {
+                        if dependency.evaluate_markers(
+                            self.venv.interpreter().markers(),
+                            &requirement.extras,
+                        ) {
+                            if seen.insert(dependency.clone()) {
+                                stack.push(dependency);
+                            }
+                        }
                     }
+                }
+                _ => {
+                    // There are multiple installed distributions for the same package.
+                    return Ok(false);
                 }
             }
         }
 
         // Verify that all non-editable requirements are met.
         while let Some(requirement) = stack.pop() {
-            let Some(distribution) = self
-                .by_name
-                .get(&requirement.name)
-                .map(|idx| &self.distributions[*idx])
-            else {
-                // The package isn't installed.
-                return Ok(false);
-            };
-
-            // Validate that the installed version matches the requirement.
-            match &requirement.version_or_url {
-                None | Some(pep508_rs::VersionOrUrl::Url(_)) => {}
-                Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
-                    // The installed version doesn't satisfy the requirement.
-                    if !version_specifier.contains(distribution.version()) {
-                        return Ok(false);
+            let installed = self.get_packages(&requirement.name);
+            match installed.as_slice() {
+                [] => {
+                    // The package isn't installed.
+                    return Ok(false);
+                }
+                [distribution] => {
+                    // Validate that the installed version matches the requirement.
+                    match &requirement.version_or_url {
+                        None | Some(pep508_rs::VersionOrUrl::Url(_)) => {}
+                        Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
+                            // The installed version doesn't satisfy the requirement.
+                            if !version_specifier.contains(distribution.version()) {
+                                return Ok(false);
+                            }
+                        }
                     }
-                }
-            }
 
-            // Validate that the installed version satisfies the constraints.
-            for constraint in constraints {
-                if !constraint.evaluate_markers(self.venv.interpreter().markers(), &[]) {
-                    continue;
-                }
+                    // Validate that the installed version satisfies the constraints.
+                    for constraint in constraints {
+                        if !constraint.evaluate_markers(self.venv.interpreter().markers(), &[]) {
+                            continue;
+                        }
 
-                match &constraint.version_or_url {
-                    None | Some(pep508_rs::VersionOrUrl::Url(_)) => {}
-                    Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
-                        // The installed version doesn't satisfy the constraint.
-                        if !version_specifier.contains(distribution.version()) {
-                            return Ok(false);
+                        match &constraint.version_or_url {
+                            None | Some(pep508_rs::VersionOrUrl::Url(_)) => {}
+                            Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
+                                // The installed version doesn't satisfy the constraint.
+                                if !version_specifier.contains(distribution.version()) {
+                                    return Ok(false);
+                                }
+                            }
+                        }
+                    }
+
+                    // Recurse into the dependencies.
+                    let metadata = distribution
+                        .metadata()
+                        .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
+
+                    // Add the dependencies to the queue.
+                    for dependency in metadata.requires_dist {
+                        if dependency.evaluate_markers(
+                            self.venv.interpreter().markers(),
+                            &requirement.extras,
+                        ) {
+                            if seen.insert(dependency.clone()) {
+                                stack.push(dependency);
+                            }
                         }
                     }
                 }
-            }
-
-            // Recurse into the dependencies.
-            let metadata = distribution
-                .metadata()
-                .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
-
-            // Add the dependencies to the queue.
-            for dependency in metadata.requires_dist {
-                if dependency
-                    .evaluate_markers(self.venv.interpreter().markers(), &requirement.extras)
-                {
-                    if seen.insert(dependency.clone()) {
-                        stack.push(dependency);
-                    }
+                _ => {
+                    // There are multiple installed distributions for the same package.
+                    return Ok(false);
                 }
             }
         }
@@ -335,10 +364,10 @@ impl<'a> SitePackages<'a> {
 
 impl IntoIterator for SitePackages<'_> {
     type Item = InstalledDist;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
+    type IntoIter = Flatten<std::vec::IntoIter<Option<InstalledDist>>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.distributions.into_iter()
+        self.distributions.into_iter().flatten()
     }
 }
 
@@ -372,6 +401,12 @@ pub enum Diagnostic {
         /// The dependency that is incompatible.
         requirement: Requirement,
     },
+    DuplicatePackage {
+        /// The package that has multiple installed distributions.
+        package: PackageName,
+        /// The installed versions of the package.
+        paths: Vec<PathBuf>,
+    },
 }
 
 impl Diagnostic {
@@ -401,6 +436,14 @@ impl Diagnostic {
             } => format!(
                 "The package `{package}` requires `{requirement}`, but `{version}` is installed."
             ),
+            Self::DuplicatePackage { package, paths} => {
+                let mut paths = paths.clone();
+                paths.sort();
+                format!(
+                    "The package `{package}` has multiple installed distributions:{}",
+                    paths.iter().fold(String::new(), |acc, path| acc + &format!("\n  - {}", path.display()))
+                )
+            },
         }
     }
 
@@ -415,6 +458,7 @@ impl Diagnostic {
                 requirement,
                 ..
             } => name == package || &requirement.name == name,
+            Self::DuplicatePackage { package, .. } => name == package,
         }
     }
 }

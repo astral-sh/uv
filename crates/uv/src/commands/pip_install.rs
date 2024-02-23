@@ -631,6 +631,7 @@ async fn install(
                 .name()
                 .cmp(b.dist.name())
                 .then_with(|| a.kind.cmp(&b.kind))
+                .then_with(|| a.dist.installed_version().cmp(&b.dist.installed_version()))
         })
     {
         match event.kind {

@@ -106,7 +106,8 @@ impl<'a> Planner<'a> {
                         warn!("Editable requirement is not editable: {installed}");
                         continue;
                     };
-                    if site_packages.remove_editable(editable).is_none() {
+                    let existing = site_packages.remove_editables(editable);
+                    if existing.is_empty() {
                         warn!("Editable requirement is not installed: {installed}");
                         continue;
                     }
@@ -114,14 +115,14 @@ impl<'a> Planner<'a> {
                 ResolvedEditable::Built(built) => {
                     debug!("Treating editable requirement as mutable: {built}");
 
-                    if let Some(dist) = site_packages.remove_editable(built.editable.raw()) {
-                        // Remove any editable installs.
-                        reinstalls.push(dist);
-                    }
-                    if let Some(dist) = site_packages.remove(built.name()) {
-                        // Remove any non-editable installs of the same package.
-                        reinstalls.push(dist);
-                    }
+                    // Remove any editable installs.
+                    let existing = site_packages.remove_editables(built.editable.raw());
+                    reinstalls.extend(existing);
+
+                    // Remove any non-editable installs of the same package.
+                    let existing = site_packages.remove_packages(built.name());
+                    reinstalls.extend(existing);
+
                     local.push(built.wheel.clone());
                 }
             }
@@ -166,42 +167,46 @@ impl<'a> Planner<'a> {
             };
 
             if reinstall {
-                if let Some(distribution) = site_packages.remove(&requirement.name) {
-                    reinstalls.push(distribution);
-                }
+                let installed = site_packages.remove_packages(&requirement.name);
+                reinstalls.extend(installed);
             } else {
-                if let Some(distribution) = site_packages.remove(&requirement.name) {
-                    // Filter out already-installed packages.
-                    match requirement.version_or_url.as_ref() {
-                        // If the requirement comes from a registry, check by name.
-                        None | Some(VersionOrUrl::VersionSpecifier(_)) => {
-                            if requirement.is_satisfied_by(distribution.version()) {
-                                debug!("Requirement already satisfied: {distribution}");
-                                continue;
+                let installed = site_packages.remove_packages(&requirement.name);
+                match installed.as_slice() {
+                    [] => {}
+                    [distribution] => {
+                        // Filter out already-installed packages.
+                        match requirement.version_or_url.as_ref() {
+                            // If the requirement comes from a registry, check by name.
+                            None | Some(VersionOrUrl::VersionSpecifier(_)) => {
+                                if requirement.is_satisfied_by(distribution.version()) {
+                                    debug!("Requirement already satisfied: {distribution}");
+                                    continue;
+                                }
                             }
-                        }
 
-                        // If the requirement comes from a direct URL, check by URL.
-                        Some(VersionOrUrl::Url(url)) => {
-                            if let InstalledDist::Url(distribution) = &distribution {
-                                if &distribution.url == url.raw() {
-                                    // If the requirement came from a local path, check freshness.
-                                    if let Ok(archive) = url.to_file_path() {
-                                        if not_modified_install(distribution, &archive)? {
-                                            debug!("Requirement already satisfied (and up-to-date): {distribution}");
+                            // If the requirement comes from a direct URL, check by URL.
+                            Some(VersionOrUrl::Url(url)) => {
+                                if let InstalledDist::Url(distribution) = &distribution {
+                                    if &distribution.url == url.raw() {
+                                        // If the requirement came from a local path, check freshness.
+                                        if let Ok(archive) = url.to_file_path() {
+                                            if not_modified_install(distribution, &archive)? {
+                                                debug!("Requirement already satisfied (and up-to-date): {distribution}");
+                                                continue;
+                                            }
+                                        } else {
+                                            // Otherwise, assume the requirement is up-to-date.
+                                            debug!("Requirement already satisfied (assumed up-to-date): {distribution}");
                                             continue;
                                         }
-                                    } else {
-                                        // Otherwise, assume the requirement is up-to-date.
-                                        debug!("Requirement already satisfied (assumed up-to-date): {distribution}");
-                                        continue;
                                     }
                                 }
                             }
                         }
-                    }
 
-                    reinstalls.push(distribution);
+                        reinstalls.push(distribution.clone());
+                    }
+                    _ => reinstalls.extend(installed),
                 }
             }
 
@@ -376,7 +381,7 @@ impl<'a> Planner<'a> {
         }
 
         // Remove any unnecessary packages.
-        if !site_packages.is_empty() {
+        if site_packages.any() {
             // If uv created the virtual environment, then remove all packages, regardless of
             // whether they're considered "seed" packages.
             let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_uv());

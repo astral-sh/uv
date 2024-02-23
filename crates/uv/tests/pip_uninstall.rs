@@ -3,8 +3,9 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use common::{uv_snapshot, INSTA_FILTERS};
 use url::Url;
+
+use common::{uv_snapshot, INSTA_FILTERS};
 use uv_fs::Normalized;
 
 use crate::common::{get_bin, venv_to_interpreter, TestContext};
@@ -549,6 +550,79 @@ fn uninstall_duplicate_editable() -> Result<()> {
         .arg("import poetry_editable")
         .assert()
         .failure();
+
+    Ok(())
+}
+
+/// Uninstall a duplicate package in a virtual environment.
+#[test]
+#[cfg(unix)]
+fn uninstall_duplicate() -> Result<()> {
+    use crate::common::copy_dir_all;
+
+    // Sync a version of `pip` into a virtual environment.
+    let context1 = TestContext::new("3.12");
+    let requirements_txt = context1.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("pip==21.3.1")?;
+
+    // Run `pip sync`.
+    Command::new(get_bin())
+        .arg("pip")
+        .arg("sync")
+        .arg(requirements_txt.path())
+        .arg("--cache-dir")
+        .arg(context1.cache_dir.path())
+        .env("VIRTUAL_ENV", context1.venv.as_os_str())
+        .assert()
+        .success();
+
+    // Sync a different version of `pip` into a virtual environment.
+    let context2 = TestContext::new("3.12");
+    let requirements_txt = context2.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("pip==22.1.1")?;
+
+    // Run `pip sync`.
+    Command::new(get_bin())
+        .arg("pip")
+        .arg("sync")
+        .arg(requirements_txt.path())
+        .arg("--cache-dir")
+        .arg(context2.cache_dir.path())
+        .env("VIRTUAL_ENV", context2.venv.as_os_str())
+        .assert()
+        .success();
+
+    // Copy the virtual environment to a new location.
+    copy_dir_all(
+        context2
+            .venv
+            .join("lib/python3.12/site-packages/pip-22.1.1.dist-info"),
+        context1
+            .venv
+            .join("lib/python3.12/site-packages/pip-22.1.1.dist-info"),
+    )?;
+
+    // Run `pip uninstall`.
+    uv_snapshot!(Command::new(get_bin())
+        .arg("pip")
+        .arg("uninstall")
+        .arg("pip")
+        .arg("--cache-dir")
+        .arg(context1.cache_dir.path())
+        .env("VIRTUAL_ENV", context1.venv.as_os_str())
+        .current_dir(&context1.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 2 packages in [TIME]
+     - pip==21.3.1
+     - pip==22.1.1
+    "###
+    );
 
     Ok(())
 }

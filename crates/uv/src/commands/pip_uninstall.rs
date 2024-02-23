@@ -78,9 +78,8 @@ pub(crate) async fn pip_uninstall(
 
         // Identify all packages that are installed.
         for package in &packages {
-            if let Some(distribution) = site_packages.get(package) {
-                distributions.push(distribution);
-            } else {
+            let installed = site_packages.get_packages(package);
+            if installed.is_empty() {
                 writeln!(
                     printer,
                     "{}{} Skipping {} as it is not installed.",
@@ -88,14 +87,15 @@ pub(crate) async fn pip_uninstall(
                     ":".bold(),
                     package.as_ref().bold()
                 )?;
-            };
+            } else {
+                distributions.extend(installed);
+            }
         }
 
         // Identify all editables that are installed.
         for editable in &editables {
-            if let Some(distribution) = site_packages.get_editable(editable) {
-                distributions.push(distribution);
-            } else {
+            let installed = site_packages.get_editables(editable);
+            if installed.is_empty() {
                 writeln!(
                     printer,
                     "{}{} Skipping {} as it is not installed.",
@@ -103,7 +103,9 @@ pub(crate) async fn pip_uninstall(
                     ":".bold(),
                     editable.as_ref().bold()
                 )?;
-            };
+            } else {
+                distributions.extend(installed);
+            }
         }
 
         // Deduplicate, since a package could be listed both by name and editable URL.

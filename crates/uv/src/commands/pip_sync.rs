@@ -300,6 +300,7 @@ pub(crate) async fn pip_sync(
                 .name()
                 .cmp(b.dist.name())
                 .then_with(|| a.kind.cmp(&b.kind))
+                .then_with(|| a.dist.installed_version().cmp(&b.dist.installed_version()))
         })
     {
         match event.kind {
@@ -397,24 +398,32 @@ async fn resolve_editables(
     for editable in editables {
         match reinstall {
             Reinstall::None => {
-                if let Some(dist) = site_packages.get_editable(editable.raw()) {
-                    installed.push(dist.clone());
-                } else {
-                    uninstalled.push(editable);
+                let existing = site_packages.get_editables(editable.raw());
+                match existing.as_slice() {
+                    [] => uninstalled.push(editable),
+                    [dist] => installed.push((*dist).clone()),
+                    _ => {
+                        uninstalled.push(editable);
+                    }
                 }
             }
             Reinstall::All => {
                 uninstalled.push(editable);
             }
             Reinstall::Packages(packages) => {
-                if let Some(dist) = site_packages.get_editable(editable.raw()) {
-                    if packages.contains(dist.name()) {
-                        uninstalled.push(editable);
-                    } else {
-                        installed.push(dist.clone());
+                let existing = site_packages.get_editables(editable.raw());
+                match existing.as_slice() {
+                    [] => uninstalled.push(editable),
+                    [dist] => {
+                        if packages.contains(dist.name()) {
+                            uninstalled.push(editable);
+                        } else {
+                            installed.push((*dist).clone());
+                        }
                     }
-                } else {
-                    uninstalled.push(editable);
+                    _ => {
+                        uninstalled.push(editable);
+                    }
                 }
             }
         }
