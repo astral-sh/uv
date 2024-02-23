@@ -32,7 +32,7 @@ pub(crate) fn pip_freeze(cache: &Cache, strict: bool, mut printer: Printer) -> R
     let site_packages = SitePackages::from_executable(&venv)?;
     for dist in site_packages
         .iter()
-        .sorted_unstable_by(|a, b| a.name().cmp(b.name()))
+        .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
     {
         println!("{dist}");
     }
