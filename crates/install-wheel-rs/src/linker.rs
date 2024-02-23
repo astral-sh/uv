@@ -4,7 +4,6 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use configparser::ini::Ini;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use reflink_copy as reflink;
@@ -17,9 +16,9 @@ use pypi_types::DirectUrl;
 use uv_normalize::PackageName;
 
 use crate::install_location::InstallLocation;
+use crate::script::scripts_from_ini;
 use crate::wheel::{
-    extra_dist_info, install_data, parse_metadata, parse_wheel_version, read_scripts_from_section,
-    write_script_entrypoints,
+    extra_dist_info, install_data, parse_metadata, parse_wheel_version, write_script_entrypoints,
 };
 use crate::{read_record_file, Error, Script};
 
@@ -99,7 +98,8 @@ pub fn install_wheel(
     let mut record = read_record_file(&mut record_file)?;
 
     debug!(name, "Writing entrypoints");
-    let (console_scripts, gui_scripts) = parse_scripts(&wheel, &dist_info_prefix, None)?;
+    let (console_scripts, gui_scripts) =
+        parse_scripts(&wheel, &dist_info_prefix, None, location.python_version().1)?;
     write_script_entrypoints(
         &site_packages,
         location,
@@ -200,11 +200,12 @@ fn dist_info_metadata(dist_info_prefix: &str, wheel: impl AsRef<Path>) -> Result
 ///
 /// Returns (`script_name`, module, function)
 ///
-/// Extras are supposed to be ignored, which happens if you pass None for extras
+/// Extras are supposed to be ignored, which happens if you pass None for extras.
 fn parse_scripts(
     wheel: impl AsRef<Path>,
     dist_info_prefix: &str,
     extras: Option<&[String]>,
+    python_minor: u8,
 ) -> Result<(Vec<Script>, Vec<Script>), Error> {
     let entry_points_path = wheel
         .as_ref()
@@ -215,23 +216,7 @@ fn parse_scripts(
         return Ok((Vec::new(), Vec::new()));
     };
 
-    let entry_points_mapping = Ini::new_cs()
-        .read(ini)
-        .map_err(|err| Error::InvalidWheel(format!("entry_points.txt is invalid: {err}")))?;
-
-    // TODO: handle extras
-    let console_scripts = match entry_points_mapping.get("console_scripts") {
-        Some(console_scripts) => {
-            read_scripts_from_section(console_scripts, "console_scripts", extras)?
-        }
-        None => Vec::new(),
-    };
-    let gui_scripts = match entry_points_mapping.get("gui_scripts") {
-        Some(gui_scripts) => read_scripts_from_section(gui_scripts, "gui_scripts", extras)?,
-        None => Vec::new(),
-    };
-
-    Ok((console_scripts, gui_scripts))
+    scripts_from_ini(extras, python_minor, ini)
 }
 
 #[derive(Debug, Clone, Copy)]

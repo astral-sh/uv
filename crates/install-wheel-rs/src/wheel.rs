@@ -5,7 +5,6 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
 use std::{env, io, iter};
 
-use configparser::ini::Ini;
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
@@ -27,7 +26,7 @@ use uv_normalize::PackageName;
 
 use crate::install_location::{InstallLocation, LockedDir};
 use crate::record::RecordEntry;
-use crate::script::Script;
+use crate::script::{scripts_from_ini, Script};
 use crate::{find_dist_info, Error};
 
 /// `#!/usr/bin/env python`
@@ -107,32 +106,16 @@ fn parse_scripts<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
     dist_info_dir: &str,
     extras: Option<&[String]>,
+    python_minor: u8,
 ) -> Result<(Vec<Script>, Vec<Script>), Error> {
     let entry_points_path = format!("{dist_info_dir}/entry_points.txt");
-    let entry_points_mapping = match archive.by_name(&entry_points_path) {
-        Ok(file) => {
-            let ini_text = std::io::read_to_string(file)?;
-            Ini::new_cs()
-                .read(ini_text)
-                .map_err(|err| Error::InvalidWheel(format!("entry_points.txt is invalid: {err}")))?
-        }
+    let ini = match archive.by_name(&entry_points_path) {
+        Ok(file) => std::io::read_to_string(file)?,
         Err(ZipError::FileNotFound) => return Ok((Vec::new(), Vec::new())),
         Err(err) => return Err(Error::Zip(entry_points_path, err)),
     };
 
-    // TODO: handle extras
-    let console_scripts = match entry_points_mapping.get("console_scripts") {
-        Some(console_scripts) => {
-            read_scripts_from_section(console_scripts, "console_scripts", extras)?
-        }
-        None => Vec::new(),
-    };
-    let gui_scripts = match entry_points_mapping.get("gui_scripts") {
-        Some(gui_scripts) => read_scripts_from_section(gui_scripts, "gui_scripts", extras)?,
-        None => Vec::new(),
-    };
-
-    Ok((console_scripts, gui_scripts))
+    scripts_from_ini(extras, python_minor, ini)
 }
 
 /// Shamelessly stolen (and updated for recent sha2)
@@ -1045,7 +1028,12 @@ pub fn install_wheel(
     );
 
     debug!(name = name.as_str(), "Writing entrypoints");
-    let (console_scripts, gui_scripts) = parse_scripts(&mut archive, &dist_info_prefix, None)?;
+    let (console_scripts, gui_scripts) = parse_scripts(
+        &mut archive,
+        &dist_info_prefix,
+        None,
+        location.python_version().1,
+    )?;
     write_script_entrypoints(
         &site_packages,
         location,

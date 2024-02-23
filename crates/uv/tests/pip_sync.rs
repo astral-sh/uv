@@ -1,5 +1,6 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::env::consts::EXE_SUFFIX;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -2754,6 +2755,47 @@ fn set_read_permissions() -> Result<()> {
     Installed 1 package in [TIME]
      + databricks==0.2
     "###);
+
+    Ok(())
+}
+
+/// Test special case to generate versioned pip launchers.
+/// <https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/operations/install/wheel.py#L283>
+/// <https://github.com/astral-sh/uv/issues/1593>
+#[test]
+fn pip_entrypoints() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("pip==24.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pip==24.0
+    "###
+    );
+
+    let bin_dir = context.venv.join(if cfg!(unix) {
+        "bin"
+    } else if cfg!(windows) {
+        "Scripts"
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    });
+    // Pip 24.0 contains a pip3.10 launcher.
+    // https://inspector.pypi.io/project/pip/24.0/packages/8a/6a/19e9fe04fca059ccf770861c7d5721ab4c2aebc539889e97c7977528a53b/pip-24.0-py3-none-any.whl/pip-24.0.dist-info/entry_points.txt
+    assert!(!bin_dir.join(format!("pip3.10{EXE_SUFFIX}")).exists());
+    assert!(bin_dir.join(format!("pip3.12{EXE_SUFFIX}")).exists());
 
     Ok(())
 }
