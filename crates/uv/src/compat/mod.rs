@@ -55,9 +55,6 @@ pub(crate) struct PipCompileCompatArgs {
     no_emit_trusted_host: bool,
 
     #[clap(long, hide = true)]
-    unsafe_package: Vec<String>,
-
-    #[clap(long, hide = true)]
     config: Option<String>,
 
     #[clap(long, hide = true)]
@@ -169,12 +166,6 @@ impl CompatArgs for PipCompileCompatArgs {
             warn_user!(
                 "pip-compile's `--no-emit-trusted-host` has no effect (uv never emits trusted hosts)."
             );
-        }
-
-        if !self.unsafe_package.is_empty() {
-            return Err(anyhow!(
-                "pip-compile's `--unsafe-package` is not supported."
-            ));
         }
 
         if self.config.is_some() {
