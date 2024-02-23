@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::env;
 use std::path::PathBuf;
 
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -23,11 +23,13 @@ use crate::{Error, Interpreter};
 /// version (e.g. `python3.12` on unix) and error when the version mismatches, as a binary with the
 /// patch version (e.g. `python3.12.1`) is often not in `PATH` and we make the simplifying
 /// assumption that the user has only this one patch version installed.
+#[instrument(skip_all, fields(%request))]
 pub fn find_requested_python(
     request: &str,
     platform: &Platform,
     cache: &Cache,
 ) -> Result<Option<Interpreter>, Error> {
+    debug!("Starting interpreter discovery for Python {}", request);
     let versions = request
         .splitn(3, '.')
         .map(str::parse::<u8>)
@@ -70,7 +72,9 @@ pub fn find_requested_python(
 ///
 /// We prefer the test overwrite `UV_TEST_PYTHON_PATH` if it is set, otherwise `python3`/`python` or
 /// `python.exe` respectively.
+#[instrument(skip_all)]
 pub fn find_default_python(platform: &Platform, cache: &Cache) -> Result<Interpreter, Error> {
+    debug!("Starting interpreter discovery for default Python");
     try_find_default_python(platform, cache)?.ok_or(if cfg!(windows) {
         Error::NoPythonInstalledWindows
     } else if cfg!(unix) {
@@ -100,7 +104,6 @@ pub(crate) fn try_find_default_python(
 ///   * (windows): For each of the above, test for the existence of `python.bat` shim (pyenv-windows) last.
 ///
 /// (Windows): Filter out the windows store shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).
-#[instrument(skip_all, fields(? selector))]
 fn find_python(
     selector: PythonVersionSelector,
     platform: &Platform,
@@ -146,9 +149,20 @@ fn find_python(
                         continue;
                     }
 
-                    let installation = PythonInstallation::Interpreter(Interpreter::query(
-                        &path, platform, cache,
-                    )?);
+                    let interpreter = match Interpreter::query(&path, platform, cache) {
+                        Ok(interpreter) => interpreter,
+                        Err(Error::Python2OrOlder) => {
+                            if selector.major() <= Some(2) {
+                                return Err(Error::Python2OrOlder);
+                            }
+                            // Skip over Python 2 or older installation when querying for a recent python installation.
+                            tracing::debug!("Found a Python 2 installation that isn't supported by uv, skipping.");
+                            continue;
+                        }
+                        Err(error) => return Err(error),
+                    };
+
+                    let installation = PythonInstallation::Interpreter(interpreter);
 
                     if let Some(interpreter) = installation.select(selector, platform, cache)? {
                         return Ok(Some(interpreter));
@@ -306,6 +320,15 @@ impl PythonVersionSelector {
             ],
         }
     }
+
+    fn major(self) -> Option<u8> {
+        match self {
+            PythonVersionSelector::Default => None,
+            PythonVersionSelector::Major(major) => Some(major),
+            PythonVersionSelector::MajorMinor(major, _) => Some(major),
+            PythonVersionSelector::MajorMinorPatch(major, _, _) => Some(major),
+        }
+    }
 }
 
 mod windows {
@@ -344,8 +367,8 @@ mod windows {
             .in_scope(|| Command::new("py").arg("--list-paths").output())
             .map_err(Error::PyList)?;
 
-        // There shouldn't be any output on stderr.
-        if !output.status.success() || !output.stderr.is_empty() {
+        // `py` sometimes prints "Installed Pythons found by py Launcher for Windows" to stderr which we ignore.
+        if !output.status.success() {
             return Err(Error::PythonSubcommandOutput {
                 message: format!(
                     "Running `py --list-paths` failed with status {}",

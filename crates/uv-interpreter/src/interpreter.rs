@@ -6,7 +6,7 @@ use std::process::Command;
 use fs_err as fs;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
+use tracing::{debug, instrument, warn};
 
 use cache_key::digest;
 use pep440_rs::Version;
@@ -35,8 +35,12 @@ pub struct Interpreter {
 
 impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
-    pub fn query(executable: &Path, platform: &Platform, cache: &Cache) -> Result<Self, Error> {
-        let info = InterpreterQueryResult::query_cached(executable, cache)?;
+    pub(crate) fn query(
+        executable: &Path,
+        platform: &Platform,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        let info = InterpreterInfo::query_cached(executable, cache)?;
 
         debug_assert!(
             info.sys_executable.is_absolute(),
@@ -77,7 +81,7 @@ impl Interpreter {
 
     /// Return a new [`Interpreter`] with the given base prefix.
     #[must_use]
-    pub fn with_base_prefix(self, base_prefix: PathBuf) -> Self {
+    pub(crate) fn with_base_prefix(self, base_prefix: PathBuf) -> Self {
         Self {
             base_prefix,
             ..self
@@ -94,11 +98,21 @@ impl Interpreter {
     /// the first available version.
     ///
     /// See [`Self::find_version`] for details on the precedence of Python lookup locations.
+    #[instrument(skip_all, fields(?python_version))]
     pub fn find_best(
         python_version: Option<&PythonVersion>,
         platform: &Platform,
         cache: &Cache,
     ) -> Result<Self, Error> {
+        if let Some(python_version) = python_version {
+            debug!(
+                "Starting interpreter discovery for Python {}",
+                python_version
+            );
+        } else {
+            debug!("Starting interpreter discovery for active Python");
+        }
+
         // First, check for an exact match (or the first available version if no Python version was provided)
         if let Some(interpreter) = Self::find_version(python_version, platform, cache)? {
             return Ok(interpreter);
@@ -139,7 +153,7 @@ impl Interpreter {
     ///
     /// If a version is provided and an interpreter cannot be found with the given version,
     /// we will return [`None`].
-    pub fn find_version(
+    pub(crate) fn find_version(
         python_version: Option<&PythonVersion>,
         platform: &Platform,
         cache: &Cache,
@@ -184,7 +198,7 @@ impl Interpreter {
     /// Find the Python interpreter in `PATH`, respecting `UV_PYTHON_PATH`.
     ///
     /// Returns `Ok(None)` if not found.
-    pub fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
+    pub(crate) fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
         requested: R,
     ) -> Result<Option<PathBuf>, Error> {
         let result = if let Some(isolated) = std::env::var_os("UV_TEST_PYTHON_PATH") {
@@ -290,7 +304,7 @@ impl Interpreter {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub(crate) struct InterpreterQueryResult {
+pub(crate) struct InterpreterInfo {
     pub(crate) markers: MarkerEnvironment,
     pub(crate) base_exec_prefix: PathBuf,
     pub(crate) base_prefix: PathBuf,
@@ -298,8 +312,8 @@ pub(crate) struct InterpreterQueryResult {
     pub(crate) sys_executable: PathBuf,
 }
 
-impl InterpreterQueryResult {
-    /// Return the resolved [`InterpreterQueryResult`] for the given Python executable.
+impl InterpreterInfo {
+    /// Return the resolved [`InterpreterInfo`] for the given Python executable.
     pub(crate) fn query(interpreter: &Path) -> Result<Self, Error> {
         let script = include_str!("get_interpreter_info.py");
         let output = if cfg!(windows)
@@ -349,6 +363,10 @@ impl InterpreterQueryResult {
         // stderr isn't technically a criterion for success, but i don't know of any cases where there
         // should be stderr output and if there is, we want to know
         if !output.status.success() || !output.stderr.is_empty() {
+            if output.status.code() == Some(3) {
+                return Err(Error::Python2OrOlder);
+            }
+
             return Err(Error::PythonSubcommandOutput {
                 message: format!(
                     "Querying Python at `{}` failed with status {}",
@@ -359,7 +377,8 @@ impl InterpreterQueryResult {
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             });
         }
-        let data = serde_json::from_slice::<Self>(&output.stdout).map_err(|err| {
+
+        let data: Self = serde_json::from_slice(&output.stdout).map_err(|err| {
             Error::PythonSubcommandOutput {
                 message: format!(
                     "Querying Python at `{}` did not return the expected data: {err}",
@@ -398,7 +417,11 @@ impl InterpreterQueryResult {
                 match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {
                     Ok(cached) => {
                         if cached.timestamp == modified {
-                            debug!("Using cached markers for: {}", executable.display());
+                            debug!(
+                                "Cached interpreter info for Python {}, skipping probing: {}",
+                                cached.data.markers.python_full_version,
+                                executable.display()
+                            );
                             return Ok(cached.data);
                         }
 
@@ -419,8 +442,13 @@ impl InterpreterQueryResult {
         }
 
         // Otherwise, run the Python script.
-        debug!("Detecting markers for: {}", executable.display());
+        debug!("Probing interpreter info for: {}", executable.display());
         let info = Self::query(executable)?;
+        debug!(
+            "Found Python {} for: {}",
+            info.markers.python_full_version,
+            executable.display()
+        );
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.

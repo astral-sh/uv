@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-pub use crate::cfg::Configuration;
+pub use crate::cfg::PyVenvConfiguration;
 pub use crate::interpreter::Interpreter;
 pub use crate::python_query::{find_default_python, find_requested_python};
 pub use crate::python_version::PythonVersion;
@@ -59,6 +59,8 @@ pub enum Error {
         stdout: String,
         stderr: String,
     },
+    #[error("Python 2 or older is not supported. Please use Python 3 or newer.")]
+    Python2OrOlder,
     #[error("Failed to write to cache")]
     Encode(#[from] rmp_serde::encode::Error),
     #[error("Broken virtualenv: Failed to parse pyvenv.cfg")]

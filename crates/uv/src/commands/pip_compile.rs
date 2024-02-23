@@ -52,6 +52,7 @@ pub(crate) async fn pip_compile(
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     generate_hashes: bool,
+    no_emit_packages: Vec<PackageName>,
     include_annotations: bool,
     include_header: bool,
     include_index_url: bool,
@@ -394,11 +395,29 @@ pub(crate) async fn pip_compile(
         "{}",
         DisplayResolutionGraph::new(
             &resolution,
+            &no_emit_packages,
             generate_hashes,
             include_annotations,
             annotation_style,
         )
     )?;
+
+    // If any "unsafe" packages were excluded, notify the user.
+    let excluded = no_emit_packages
+        .into_iter()
+        .filter(|name| resolution.contains(name))
+        .collect::<Vec<_>>();
+    if !excluded.is_empty() {
+        writeln!(writer)?;
+        writeln!(
+            writer,
+            "{}",
+            "# The following packages were included while generating the resolution:".green()
+        )?;
+        for package in excluded {
+            writeln!(writer, "# {package}")?;
+        }
+    }
 
     Ok(ExitStatus::Success)
 }

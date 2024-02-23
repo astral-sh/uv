@@ -203,9 +203,9 @@ dependencies = [
 
 [[package]]
 name = "async_http_range_reader"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5143aaae4ec035a5d7cfda666eab896fe5428a2a8ab09ca651a2dce3a8f06912"
+checksum = "cf8eeab30c68da4dc2c51f3afc4327ab06fe0f3f028ca423f7ca398c7ed8c5e7"
 dependencies = [
  "bisection",
  "futures",
@@ -4128,7 +4128,7 @@ checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
 
 [[package]]
 name = "uv"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "anstream",
  "anyhow",

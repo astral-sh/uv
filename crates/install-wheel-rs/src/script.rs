@@ -1,9 +1,10 @@
+use configparser::ini::Ini;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_hash::FxHashSet;
 use serde::Serialize;
 
-use crate::Error;
+use crate::{wheel, Error};
 
 /// A script defining the name of the runnable entrypoint and the module and function that should be
 /// run.
@@ -78,6 +79,43 @@ impl Script {
     }
 }
 
+pub(crate) fn scripts_from_ini(
+    extras: Option<&[String]>,
+    python_minor: u8,
+    ini: String,
+) -> Result<(Vec<Script>, Vec<Script>), Error> {
+    let entry_points_mapping = Ini::new_cs()
+        .read(ini)
+        .map_err(|err| Error::InvalidWheel(format!("entry_points.txt is invalid: {err}")))?;
+
+    // TODO: handle extras
+    let mut console_scripts = match entry_points_mapping.get("console_scripts") {
+        Some(console_scripts) => {
+            wheel::read_scripts_from_section(console_scripts, "console_scripts", extras)?
+        }
+        None => Vec::new(),
+    };
+    let gui_scripts = match entry_points_mapping.get("gui_scripts") {
+        Some(gui_scripts) => wheel::read_scripts_from_section(gui_scripts, "gui_scripts", extras)?,
+        None => Vec::new(),
+    };
+
+    // Special case to generate versioned pip launchers.
+    // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/operations/install/wheel.py#L283
+    // https://github.com/astral-sh/uv/issues/1593
+    for script in &mut console_scripts {
+        let Some((left, right)) = script.script_name.split_once('.') else {
+            continue;
+        };
+        if left != "pip3" || right.parse::<u8>().is_err() {
+            continue;
+        }
+        script.script_name = format!("pip3.{python_minor}");
+    }
+
+    Ok((console_scripts, gui_scripts))
+}
+
 #[cfg(test)]
 mod test {
     use crate::Script;
@@ -92,6 +130,7 @@ mod test {
             assert!(Script::from_value("script", case, None).is_ok());
         }
     }
+
     #[test]
     fn test_invalid_script_names() {
         for case in [

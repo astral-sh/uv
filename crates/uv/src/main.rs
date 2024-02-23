@@ -272,7 +272,7 @@ struct PipCompileArgs {
     #[clap(long)]
     refresh_package: Vec<PackageName>,
 
-    /// The URL of the Python package index (by default: https://pypi.org/simple).
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
 
@@ -352,6 +352,11 @@ struct PipCompileArgs {
     #[arg(long, value_parser = date_or_datetime, hide = true)]
     exclude_newer: Option<DateTime<Utc>>,
 
+    /// Specify a package to omit from the output resolution. Its dependencies will still be
+    /// included in the resolution. Equivalent to pip-compile's `--unsafe-package` option.
+    #[clap(long, alias = "unsafe-package")]
+    no_emit_package: Vec<PackageName>,
+
     /// Include `--index-url` and `--extra-index-url` entries in the generated output file.
     #[clap(long, hide = true)]
     emit_index_url: bool,
@@ -412,7 +417,7 @@ struct PipSyncArgs {
     #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
     link_mode: install_wheel_rs::linker::LinkMode,
 
-    /// The URL of the Python package index (by default: https://pypi.org/simple).
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
 
@@ -581,7 +586,7 @@ struct PipInstallArgs {
     #[clap(long, short)]
     output_file: Option<PathBuf>,
 
-    /// The URL of the Python package index (by default: https://pypi.org/simple).
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
 
@@ -719,7 +724,7 @@ struct VenvArgs {
     #[clap(long, verbatim_doc_comment)]
     prompt: Option<String>,
 
-    /// The URL of the Python package index (by default: https://pypi.org/simple).
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
 
@@ -912,6 +917,7 @@ async fn run() -> Result<ExitStatus> {
                 dependency_mode,
                 upgrade,
                 args.generate_hashes,
+                args.no_emit_package,
                 !args.no_annotate,
                 !args.no_header,
                 args.emit_index_url,
