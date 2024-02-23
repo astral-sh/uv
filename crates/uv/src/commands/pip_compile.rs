@@ -355,25 +355,7 @@ pub(crate) async fn pip_compile(
                 env::args_os()
                     .skip(1)
                     .map(|arg| arg.normalized_display().to_string())
-                    .scan(None, |skip_next, arg| {
-                        if let Some(true) = skip_next {
-                            *skip_next = None; // reset state and skip this iteration
-                            Some(None)
-                        } else if !include_index_url
-                            && (arg.starts_with("--extra-index-url=")
-                                || arg.starts_with("--index-url="))
-                        {
-                            *skip_next = None; // reset state and skip this iteration
-                            Some(None)
-                        } else if !include_index_url
-                            && (arg == "--extra-index-url" || arg == "--index-url")
-                        {
-                            *skip_next = Some(true); // mark next item to be skipped
-                            Some(None)
-                        } else {
-                            Some(Some(arg)) // keep this argument
-                        }
-                    })
+                    .scan(None, index_urls_filter(include_index_url))
                     .flatten()
                     .join(" ")
             )
@@ -421,6 +403,27 @@ pub(crate) async fn pip_compile(
     )?;
 
     Ok(ExitStatus::Success)
+}
+
+fn index_urls_filter(
+    include_index_url: bool,
+) -> impl FnMut(&mut Option<bool>, String) -> Option<Option<String>> {
+    move |skip_next, arg| {
+        if let Some(true) = skip_next {
+            *skip_next = None; // reset state and skip this iteration
+            Some(None)
+        } else if !include_index_url
+            && (arg.starts_with("--extra-index-url=") || arg.starts_with("--index-url="))
+        {
+            *skip_next = None; // reset state and skip this iteration
+            Some(None)
+        } else if !include_index_url && (arg == "--extra-index-url" || arg == "--index-url") {
+            *skip_next = Some(true); // mark next item to be skipped
+            Some(None)
+        } else {
+            Some(Some(arg)) // keep this argument
+        }
+    }
 }
 
 /// Whether to allow package upgrades.
