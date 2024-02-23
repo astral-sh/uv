@@ -34,7 +34,7 @@ tracing = { workspace = true }
 which = { workspace = true}
 
 [dev-dependencies]
-anyhow = { version = "1.0.79" }
+anyhow = { version = "1.0.80" }
 indoc = { version = "2.0.4" }
 insta = { version = "1.34.0" }
 itertools = { version = "0.12.0" }
