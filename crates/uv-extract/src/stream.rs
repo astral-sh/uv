@@ -116,7 +116,7 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
         // symlink target instead.
         #[cfg(windows)]
         if file.header().entry_type().is_symlink() {
-            warn!(
+            tracing::warn!(
                 "Skipping symlink in tar archive: {}",
                 file.path()?.display()
             );

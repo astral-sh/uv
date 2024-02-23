@@ -4432,6 +4432,7 @@ dependencies = [
  "tokio",
  "tokio-tar",
  "tokio-util",
+ "tracing",
  "zip",
 ]
 
