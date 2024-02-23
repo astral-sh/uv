@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prepare for a release
-# 
+#
 # All additional options are passed to `rooster`
 set -eu
 
@@ -17,6 +17,9 @@ uv pip install -r requirements.txt
 echo "Updating metadata with rooster..."
 cd "$project_root"
 rooster release "$@"
+
+echo "Updating lockfile..."
+cargo check
 
 echo "Generating contributors list..."
 echo ""
