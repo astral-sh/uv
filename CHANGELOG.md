@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.9
+
+### Enhancements
+
+- Add support for `config_settings` in PEP 517 hooks ([#1833](https://github.com/astral-sh/uv/pull/1833))
+- feat: allow passing extra config k,v pairs for pyvenv.cfg when creating a venv ([#1852](https://github.com/astral-sh/uv/pull/1852))
+
+### Bug fixes
+
+- Ensure authentication is passed from the index url to distribution files ([#1886](https://github.com/astral-sh/uv/pull/1886))
+- Use `rustls-tls-native-roots` in `uv` crate ([#1888](https://github.com/astral-sh/uv/pull/1888))
+- pep440: fix version ordering ([#1883](https://github.com/astral-sh/uv/pull/1883))
+
+### Documentation
+
+- Add changelog ([#1881](https://github.com/astral-sh/uv/pull/1881))
+
 ## 0.1.8
 
 ### Bug fixes
@@ -18,7 +35,6 @@
 ### Rust API
 
 - Expose types to implement custom ResolverProvider ([#1862](https://github.com/astral-sh/uv/pull/1862))
-
 
 ## 0.1.7
 
@@ -106,7 +122,6 @@
 
 - Allow passing in a custom reqwest Client ([#1745](https://github.com/astral-sh/uv/pull/1745))
 
-
 ## 0.1.5
 
 ### Enhancements
@@ -128,7 +143,6 @@
 - Minimal markdown nits ([#1664](https://github.com/astral-sh/uv/pull/1664))
 - Use `--override` rather than `-o` to specify overrides in README.md ([#1668](https://github.com/astral-sh/uv/pull/1668))
 - Remove setuptools & wheel from seed packages on Python 3.12+ (#1602) ([#1613](https://github.com/astral-sh/uv/pull/1613))
-
 
 ## 0.1.4
 
@@ -154,7 +168,6 @@
 ### Documentation
 
 - Add license to activator scripts ([#1610](https://github.com/astral-sh/uv/pull/1610))
-
 
 ## 0.1.3
 
@@ -191,7 +204,6 @@
 - Add troubleshooting section to benchmarks guide ([#1485](https://github.com/astral-sh/uv/pull/1485))
 - infra: source github templates ([#1425](https://github.com/astral-sh/uv/pull/1425))
 
-
 ## 0.1.2
 
 ### Enhancements
@@ -200,7 +212,6 @@
 - Add `-U`/`-P` short flags for `--upgrade`/`--upgrade-package` ([#1394](https://github.com/astral-sh/uv/pull/1394))
 - Add `UV_NO_CACHE` environment variable ([#1383](https://github.com/astral-sh/uv/pull/1383))
 - uv-cache: Add hidden alias for --no-cache-dir ([#1380](https://github.com/astral-sh/uv/pull/1380))
-
 
 ### Bug fixes
 
@@ -222,7 +233,6 @@
 - Tweak some grammar in the README ([#1387](https://github.com/astral-sh/uv/pull/1387))
 - Update README.md to include venv activate ([#1411](https://github.com/astral-sh/uv/pull/1411))
 - Update wording and add `alt` tag ([#1423](https://github.com/astral-sh/uv/pull/1423))
-
 
 ## 0.1.1
 
