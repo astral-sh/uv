@@ -35,7 +35,11 @@ pub struct Interpreter {
 
 impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
-    pub(crate) fn query(executable: &Path, platform: &Platform, cache: &Cache) -> Result<Self, Error> {
+    pub(crate) fn query(
+        executable: &Path,
+        platform: &Platform,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
         let info = InterpreterInfo::query_cached(executable, cache)?;
 
         debug_assert!(
@@ -101,7 +105,10 @@ impl Interpreter {
         cache: &Cache,
     ) -> Result<Self, Error> {
         if let Some(python_version) = python_version {
-            debug!("Starting interpreter discovery for Python {}", python_version);
+            debug!(
+                "Starting interpreter discovery for Python {}",
+                python_version
+            );
         } else {
             debug!("Starting interpreter discovery for active Python");
         }
@@ -410,7 +417,11 @@ impl InterpreterInfo {
                 match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {
                     Ok(cached) => {
                         if cached.timestamp == modified {
-                            debug!("Cached interpreter info for Python {}, skipping probing: {}", cached.data.markers.python_full_version, executable.display());
+                            debug!(
+                                "Cached interpreter info for Python {}, skipping probing: {}",
+                                cached.data.markers.python_full_version,
+                                executable.display()
+                            );
                             return Ok(cached.data);
                         }
 
@@ -433,7 +444,11 @@ impl InterpreterInfo {
         // Otherwise, run the Python script.
         debug!("Probing interpreter info for: {}", executable.display());
         let info = Self::query(executable)?;
-        debug!("Found Python {} for: {}", info.markers.python_full_version, executable.display());
+        debug!(
+            "Found Python {} for: {}",
+            info.markers.python_full_version,
+            executable.display()
+        );
 
         // If `executable` is a pyenv shim, a bash script that redirects to the activated
         // python executable at another path, we're not allowed to cache the interpreter info.

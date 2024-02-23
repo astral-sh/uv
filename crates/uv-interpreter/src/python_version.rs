@@ -1,6 +1,6 @@
-use std::fmt::{Display, Formatter};
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
+use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
 

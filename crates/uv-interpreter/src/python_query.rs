@@ -28,7 +28,7 @@ pub fn find_requested_python(
     request: &str,
     platform: &Platform,
     cache: &Cache,
-) -> Result<Option<Interpreter>, Error>  {
+) -> Result<Option<Interpreter>, Error> {
     debug!("Starting interpreter discovery for Python {}", request);
     let versions = request
         .splitn(3, '.')
@@ -342,8 +342,8 @@ mod windows {
     use platform_host::Platform;
     use uv_cache::Cache;
 
-    use crate::{Error, Interpreter};
     use crate::python_query::{PythonInstallation, PythonVersionSelector};
+    use crate::{Error, Interpreter};
 
     /// ```text
     /// -V:3.12          C:\Users\Ferris\AppData\Local\Programs\Python\Python312\python.exe
@@ -438,7 +438,7 @@ mod windows {
         use platform_host::Platform;
         use uv_cache::Cache;
 
-        use crate::{Error, find_requested_python};
+        use crate::{find_requested_python, Error};
 
         fn format_err<T: Debug>(err: Result<T, Error>) -> String {
             anyhow::Error::new(err.unwrap_err())
@@ -480,8 +480,8 @@ mod tests {
     use platform_host::Platform;
     use uv_cache::Cache;
 
-    use crate::Error;
     use crate::python_query::find_requested_python;
+    use crate::Error;
 
     fn format_err<T: std::fmt::Debug>(err: Result<T, Error>) -> String {
         anyhow::Error::new(err.unwrap_err())

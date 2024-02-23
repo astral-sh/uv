@@ -35,12 +35,18 @@ fn run() -> Result<(), gourgeist::Error> {
         Cache::from_path(".gourgeist_cache")?
     };
     let interpreter = if let Some(python_request) = &cli.python {
-        find_requested_python(python_request, &platform, &cache)?
-            .ok_or(uv_interpreter::Error::NoSuchPython(python_request.to_string()))?
+        find_requested_python(python_request, &platform, &cache)?.ok_or(
+            uv_interpreter::Error::NoSuchPython(python_request.to_string()),
+        )?
     } else {
         find_default_python(&platform, &cache)?
     };
-    create_bare_venv(&location, &interpreter, Prompt::from_args(cli.prompt), Vec::new())?;
+    create_bare_venv(
+        &location,
+        &interpreter,
+        Prompt::from_args(cli.prompt),
+        Vec::new(),
+    )?;
     Ok(())
 }
 
