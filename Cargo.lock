@@ -203,8 +203,9 @@ dependencies = [
 
 [[package]]
 name = "async_http_range_reader"
-version = "0.6.1"
-source = "git+https://github.com/zanieb/async_http_range_reader?rev=9649aef64155ff161e00212fdc4e092cfc82833a#9649aef64155ff161e00212fdc4e092cfc82833a"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf8eeab30c68da4dc2c51f3afc4327ab06fe0f3f028ca423f7ca398c7ed8c5e7"
 dependencies = [
  "bisection",
  "futures",
