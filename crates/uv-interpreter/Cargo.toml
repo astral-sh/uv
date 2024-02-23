@@ -37,5 +37,5 @@ which = { workspace = true}
 anyhow = { version = "1.0.79" }
 indoc = { version = "2.0.4" }
 insta = { version = "1.34.0" }
-itertools = { version = "0.12.0" }
+itertools = { version = "0.12.1" }
 tempfile = { version = "3.9.0" }
