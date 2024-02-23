@@ -1,9 +1,9 @@
 [workspace]
 members = ["crates/*"]
 exclude = [
-    "scripts",
-    # Needs nightly
-    "crates/uv-trampoline"
+  "scripts",
+  # Needs nightly
+  "crates/uv-trampoline"
 ]
 resolver = "2"
 
@@ -59,7 +59,7 @@ indoc = { version = "2.0.4" }
 itertools = { version = "0.12.0" }
 junction = { version = "1.0.0" }
 mailparse = { version = "0.14.0" }
-miette =  { version = "6.0.0" }
+miette = { version = "6.0.0" }
 nanoid = { version = "0.4.0" }
 once_cell = { version = "1.19.0" }
 owo-colors = { version = "4.0.0" }
@@ -68,7 +68,7 @@ platform-info = { version = "2.0.2" }
 plist = { version = "1.6.0" }
 pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "aab132a3d4d444dd8dd41d8c4e605abd69dacfe1" }
 pyo3 = { version = "0.20.2" }
-pyo3-log = { version = "0.9.0"}
+pyo3-log = { version = "0.9.0" }
 pyproject-toml = { version = "0.10.0" }
 rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
@@ -158,7 +158,7 @@ lto = "thin"
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.8.0"
+cargo-dist-version = "0.11.0"
 # CI backends to support
 ci = ["github"]
 # The installers to generate for each app
@@ -183,5 +183,3 @@ build-local-artifacts = false
 local-artifacts-jobs = ["./build-binaries"]
 # Publish jobs to run in CI
 publish-jobs = ["./publish-pypi"]
-# For: `permissions: packages: write`.
-allow-dirty = ["ci"]
