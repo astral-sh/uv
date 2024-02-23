@@ -54,7 +54,7 @@ jobs:
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
       - name: "Upload sdist"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: dist
@@ -76,7 +76,7 @@ jobs:
           target: x86_64
           args: --release --locked --out dist
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: dist
@@ -91,7 +91,7 @@ jobs:
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: artifacts
           path: |
@@ -119,7 +119,7 @@ jobs:
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: dist
@@ -134,7 +134,7 @@ jobs:
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: artifacts
           path: |
@@ -172,7 +172,7 @@ jobs:
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: dist
@@ -183,7 +183,7 @@ jobs:
           7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/uv.exe
           sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: artifacts
           path: |
@@ -234,7 +234,7 @@ jobs:
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: dist
@@ -252,7 +252,7 @@ jobs:
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: artifacts
           path: |
@@ -302,7 +302,7 @@ jobs:
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: dist
@@ -320,7 +320,7 @@ jobs:
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: artifacts
           path: |
@@ -367,7 +367,7 @@ jobs:
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: dist
@@ -385,7 +385,7 @@ jobs:
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: artifacts
           path: |
@@ -441,7 +441,7 @@ jobs:
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: dist
@@ -459,7 +459,7 @@ jobs:
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: artifacts
           path: |
@@ -500,7 +500,7 @@ jobs:
             .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             .venv/bin/${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: dist
@@ -518,7 +518,7 @@ jobs:
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: artifacts
           path: |
@@ -564,7 +564,7 @@ jobs:
             .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             .venv/bin/${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: dist
@@ -582,7 +582,7 @@ jobs:
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: artifacts
           path: |
