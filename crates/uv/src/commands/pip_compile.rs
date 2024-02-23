@@ -346,7 +346,7 @@ pub(crate) async fn pip_compile(
         writeln!(
             writer,
             "{}",
-            format!("#    {}", cmd(include_index_url)).green()
+            format!("#    {}", cmd(include_index_url, include_find_links)).green()
         )?;
     }
 
@@ -393,29 +393,49 @@ pub(crate) async fn pip_compile(
 }
 
 /// Format the `uv` command used to generate the output file.
-fn cmd(include_index_url: bool) -> String {
+fn cmd(include_index_url: bool, include_find_links: bool) -> String {
     let args = env::args_os()
         .skip(1)
         .map(|arg| arg.normalized_display().to_string())
         .scan(None, move |skip_next, arg| {
-            if let Some(true) = skip_next {
+            if matches!(skip_next, Some(true)) {
                 // Reset state; skip this iteration.
                 *skip_next = None;
-                Some(None)
-            } else if !include_index_url
-                && (arg.starts_with("--extra-index-url=") || arg.starts_with("--index-url="))
-            {
-                // Reset state; skip this iteration.
-                *skip_next = None;
-                Some(None)
-            } else if !include_index_url && (arg == "--extra-index-url" || arg == "--index-url") {
-                // Mark the next item as (to be) skipped.
-                *skip_next = Some(true);
-                Some(None)
-            } else {
-                // Return the argument.
-                Some(Some(arg))
+                return Some(None);
             }
+
+            // Skip any index URLs, unless requested.
+            if !include_index_url {
+                if arg.starts_with("--extra-index-url=") || arg.starts_with("--index-url=") {
+                    // Reset state; skip this iteration.
+                    *skip_next = None;
+                    return Some(None);
+                }
+
+                // Mark the next item as (to be) skipped.
+                if arg == "--index-url" || arg == "--extra-index-url" {
+                    *skip_next = Some(true);
+                    return Some(None);
+                }
+            }
+
+            // Skip any `--find-links` URLs, unless requested.
+            if !include_find_links {
+                if arg.starts_with("--find-links=") || arg.starts_with("-f=") {
+                    // Reset state; skip this iteration.
+                    *skip_next = None;
+                    return Some(None);
+                }
+
+                // Mark the next item as (to be) skipped.
+                if arg == "--find-links" || arg == "-f" {
+                    *skip_next = Some(true);
+                    return Some(None);
+                }
+            }
+
+            // Return the argument.
+            Some(Some(arg))
         })
         .flatten()
         .join(" ");
