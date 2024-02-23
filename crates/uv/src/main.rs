@@ -365,14 +365,6 @@ struct PipCompileArgs {
     #[clap(long, hide = true)]
     emit_find_links: bool,
 
-    /// Include `--upgrade` or `-U` entries in the generated output file.
-    #[clap(long, hide = true)]
-    emit_upgrade: bool,
-
-    /// Include `--quiet` or `-q` entries in the generated output file.
-    #[clap(long, hide = true)]
-    emit_quiet: bool,
-
     /// Choose the style of the annotation comments, which indicate the source of each package.
     #[clap(long, default_value_t=AnnotationStyle::Split, value_enum)]
     annotation_style: AnnotationStyle,
@@ -922,8 +914,6 @@ async fn run() -> Result<ExitStatus> {
                 !args.no_header,
                 args.emit_index_url,
                 args.emit_find_links,
-                args.emit_upgrade,
-                args.emit_quiet,
                 index_urls,
                 setup_py,
                 config_settings,

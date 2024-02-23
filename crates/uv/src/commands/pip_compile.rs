@@ -57,8 +57,6 @@ pub(crate) async fn pip_compile(
     include_header: bool,
     include_index_url: bool,
     include_find_links: bool,
-    include_upgrade: bool,
-    include_quiet: bool,
     index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
     config_settings: ConfigSettings,
@@ -349,16 +347,7 @@ pub(crate) async fn pip_compile(
         writeln!(
             writer,
             "{}",
-            format!(
-                "#    {}",
-                cmd(
-                    include_index_url,
-                    include_find_links,
-                    include_upgrade,
-                    include_quiet
-                )
-            )
-            .green()
+            format!("#    {}", cmd(include_index_url, include_find_links,)).green()
         )?;
     }
 
@@ -424,12 +413,7 @@ pub(crate) async fn pip_compile(
 
 /// Format the `uv` command used to generate the output file.
 #[allow(clippy::fn_params_excessive_bools)]
-fn cmd(
-    include_index_url: bool,
-    include_find_links: bool,
-    include_upgrade: bool,
-    include_quiet: bool,
-) -> String {
+fn cmd(include_index_url: bool, include_find_links: bool) -> String {
     let args = env::args_os()
         .skip(1)
         .map(|arg| arg.normalized_display().to_string())
@@ -470,14 +454,20 @@ fn cmd(
                 }
             }
 
-            // Skip --upgrade/-U flag
-            if !include_upgrade && (arg == "--upgrade" || arg == "-U") {
+            // Always skip the `--upgrade` flag.
+            if arg == "--upgrade" || arg == "-U" {
                 *skip_next = None;
                 return Some(None);
             }
 
-            // Skip --quiet/-q flag
-            if !include_quiet && (arg == "--quiet" || arg == "-q") {
+            // Always skip the `--quiet` flag.
+            if arg == "--quiet" || arg == "-q" {
+                *skip_next = None;
+                return Some(None);
+            }
+
+            // Always skip the `--verbose` flag.
+            if arg == "--verbose" || arg == "-v" {
                 *skip_next = None;
                 return Some(None);
             }
