@@ -1568,7 +1568,10 @@ fn launcher_with_symlink() -> Result<()> {
         context.venv.join("Scripts\\simple_launcher.exe"),
         context.temp_dir.join("simple_launcher.exe"),
     ) {
-        if error.kind() == std::io::ErrorKind::PermissionDenied {
+        // The error is
+        // Os { code: 1314, kind: Uncategorized, message: "A required privilege is not held by the client." }
+        // where `Uncategorized` is unstable.
+        if error.raw_os_error().is_some_and(|code| code == 1314) {
             // Not running as an administrator or developer mode isn't enabled.
             // Ignore the test
             return Ok(());
