@@ -56,7 +56,7 @@ http = { version = "0.2.11" }
 indexmap = { version = "2.1.0" }
 indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
-itertools = { version = "0.12.0" }
+itertools = { version = "0.12.1" }
 junction = { version = "1.0.0" }
 mailparse = { version = "0.14.0" }
 miette = { version = "6.0.0" }

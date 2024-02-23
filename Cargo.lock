@@ -2773,7 +2773,7 @@ dependencies = [
  "fs-err",
  "indoc",
  "insta",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "once_cell",
  "pep440_rs",
  "pep508_rs",
