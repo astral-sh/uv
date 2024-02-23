@@ -1648,9 +1648,9 @@ fn install_path_built_dist_cached() -> Result<()> {
         url_escaped.as_str(),
         "file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl",
     )]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect();
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     uv_snapshot!(filters, command(&context)
         .arg("requirements.txt")
@@ -1698,9 +1698,9 @@ fn install_path_built_dist_cached() -> Result<()> {
             "Removed 1 file for tomli",
             "Removed 1 file for tomli ([SIZE])",
         )]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect()
+            .into_iter()
+            .chain(INSTA_FILTERS.to_vec())
+            .collect()
     } else {
         INSTA_FILTERS.to_vec()
     };
@@ -2760,8 +2760,8 @@ fn set_read_permissions() -> Result<()> {
 }
 
 /// Test special case to generate versioned pip launchers.
-/// https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/operations/install/wheel.py#L283
-/// https://github.com/astral-sh/uv/issues/1593
+/// <https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/operations/install/wheel.py#L283>
+/// <https://github.com/astral-sh/uv/issues/1593>
 #[test]
 fn pip_entrypoints() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2794,8 +2794,8 @@ fn pip_entrypoints() -> Result<()> {
     });
     // Pip 24.0 contains a pip3.10 launcher.
     // https://inspector.pypi.io/project/pip/24.0/packages/8a/6a/19e9fe04fca059ccf770861c7d5721ab4c2aebc539889e97c7977528a53b/pip-24.0-py3-none-any.whl/pip-24.0.dist-info/entry_points.txt
-    assert!(!bin_dir.join(format!("pip3.10{}", EXE_SUFFIX)).exists());
-    assert!(bin_dir.join(format!("pip3.12{}", EXE_SUFFIX)).exists());
+    assert!(!bin_dir.join(format!("pip3.10{EXE_SUFFIX}")).exists());
+    assert!(bin_dir.join(format!("pip3.12{EXE_SUFFIX}")).exists());
 
     Ok(())
 }
