@@ -183,5 +183,3 @@ build-local-artifacts = false
 local-artifacts-jobs = ["./build-binaries"]
 # Publish jobs to run in CI
 publish-jobs = ["./publish-pypi"]
-# For: `permissions: packages: write`.
-allow-dirty = ["ci"]
