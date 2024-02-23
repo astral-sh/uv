@@ -7,6 +7,7 @@ use std::str::FromStr;
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 
+use http::HeaderMap;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
@@ -440,14 +441,28 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
+        let client = self.client_raw.clone();
+        let req = self
+            .client
+            .uncached()
+            .head(url.clone())
+            .build()
+            .map_err(ErrorKind::RequestError)?;
+
+        // Copy authorization headers from the HEAD request to subsequent requests
+        let mut headers = HeaderMap::default();
+        if let Some(authorization) = req.headers().get("authorization") {
+            headers.append("authorization", authorization.clone());
+        }
+
         // This response callback is special, we actually make a number of subsequent requests to
         // fetch the file from the remote zip.
-        let client = self.client_raw.clone();
         let read_metadata_range_request = |response: Response| {
             async {
-                let mut reader = AsyncHttpRangeReader::from_head_response(client, response)
-                    .await
-                    .map_err(ErrorKind::AsyncHttpRangeReader)?;
+                let mut reader =
+                    AsyncHttpRangeReader::from_head_response(client, response, headers)
+                        .await
+                        .map_err(ErrorKind::AsyncHttpRangeReader)?;
                 trace!("Getting metadata for {filename} by range request");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
                 let metadata = Metadata21::parse(text.as_bytes()).map_err(|err| {
@@ -463,12 +478,6 @@ impl RegistryClient {
             .instrument(info_span!("read_metadata_range_request", wheel = %filename))
         };
 
-        let req = self
-            .client
-            .uncached()
-            .head(url.clone())
-            .build()
-            .map_err(ErrorKind::RequestError)?;
         let result = self
             .client
             .get_serde(
