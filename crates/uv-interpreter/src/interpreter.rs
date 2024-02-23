@@ -36,7 +36,7 @@ pub struct Interpreter {
 impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
     pub fn query(executable: &Path, platform: &Platform, cache: &Cache) -> Result<Self, Error> {
-        let info = InterpreterQueryResult::query_cached(executable, cache)?;
+        let info = InterpreterInfo::query_cached(executable, cache)?;
 
         debug_assert!(
             info.sys_executable.is_absolute(),
@@ -290,7 +290,7 @@ impl Interpreter {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub(crate) struct InterpreterQueryResult {
+pub(crate) struct InterpreterInfo {
     pub(crate) markers: MarkerEnvironment,
     pub(crate) base_exec_prefix: PathBuf,
     pub(crate) base_prefix: PathBuf,
@@ -298,8 +298,8 @@ pub(crate) struct InterpreterQueryResult {
     pub(crate) sys_executable: PathBuf,
 }
 
-impl InterpreterQueryResult {
-    /// Return the resolved [`InterpreterQueryResult`] for the given Python executable.
+impl InterpreterInfo {
+    /// Return the resolved [`InterpreterInfo`] for the given Python executable.
     pub(crate) fn query(interpreter: &Path) -> Result<Self, Error> {
         let script = include_str!("get_interpreter_info.py");
         let output = if cfg!(windows)
@@ -349,6 +349,10 @@ impl InterpreterQueryResult {
         // stderr isn't technically a criterion for success, but i don't know of any cases where there
         // should be stderr output and if there is, we want to know
         if !output.status.success() || !output.stderr.is_empty() {
+            if output.status.code() == Some(3) {
+                return Err(Error::Python2OrOlder);
+            }
+
             return Err(Error::PythonSubcommandOutput {
                 message: format!(
                     "Querying Python at `{}` failed with status {}",
@@ -359,7 +363,8 @@ impl InterpreterQueryResult {
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             });
         }
-        let data = serde_json::from_slice::<Self>(&output.stdout).map_err(|err| {
+
+        let data: Self = serde_json::from_slice(&output.stdout).map_err(|err| {
             Error::PythonSubcommandOutput {
                 message: format!(
                     "Querying Python at `{}` did not return the expected data: {err}",

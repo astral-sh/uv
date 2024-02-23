@@ -1,3 +1,13 @@
+""""
+Queries information about the current Python interpreter and prints it as JSON.
+
+Exit Codes:
+    0: Success
+    1: General failure
+    3: Python version 3 or newer is required
+"""
+
+
 import json
 import os
 import platform
@@ -11,6 +21,10 @@ def format_full_version(info):
     if kind != "final":
         version += kind[0] + str(info.serial)
     return version
+
+
+if sys.version_info[0] < 3:
+    sys.exit(3)
 
 
 if hasattr(sys, "implementation"):
