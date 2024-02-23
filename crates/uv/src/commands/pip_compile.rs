@@ -347,7 +347,7 @@ pub(crate) async fn pip_compile(
         writeln!(
             writer,
             "{}",
-            format!("#    {}", cmd(include_index_url, include_find_links)).green()
+            format!("#    {}", cmd(include_index_url, include_find_links,)).green()
         )?;
     }
 
@@ -412,6 +412,7 @@ pub(crate) async fn pip_compile(
 }
 
 /// Format the `uv` command used to generate the output file.
+#[allow(clippy::fn_params_excessive_bools)]
 fn cmd(include_index_url: bool, include_find_links: bool) -> String {
     let args = env::args_os()
         .skip(1)
@@ -451,6 +452,24 @@ fn cmd(include_index_url: bool, include_find_links: bool) -> String {
                     *skip_next = Some(true);
                     return Some(None);
                 }
+            }
+
+            // Always skip the `--upgrade` flag.
+            if arg == "--upgrade" || arg == "-U" {
+                *skip_next = None;
+                return Some(None);
+            }
+
+            // Always skip the `--quiet` flag.
+            if arg == "--quiet" || arg == "-q" {
+                *skip_next = None;
+                return Some(None);
+            }
+
+            // Always skip the `--verbose` flag.
+            if arg == "--verbose" || arg == "-v" {
+                *skip_next = None;
+                return Some(None);
             }
 
             // Return the argument.
