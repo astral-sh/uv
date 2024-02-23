@@ -1572,6 +1572,7 @@ dependencies = [
  "lazy_static",
  "linked-hash-map",
  "regex",
+ "serde",
  "similar",
  "yaml-rust",
 ]
@@ -4168,6 +4169,8 @@ dependencies = [
  "requirements-txt",
  "reqwest",
  "rustc-hash",
+ "serde",
+ "serde_json",
  "tempfile",
  "textwrap",
  "thiserror",

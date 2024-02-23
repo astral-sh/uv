@@ -24,7 +24,7 @@ use uv_traits::{
     ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, SetupPyStrategy,
 };
 
-use crate::commands::{extra_name_with_clap_error, ExitStatus, Upgrade};
+use crate::commands::{extra_name_with_clap_error, ExitStatus, Upgrade, VersionFormat};
 use crate::compat::CompatArgs;
 use crate::requirements::RequirementsSource;
 
@@ -50,11 +50,12 @@ mod confirm;
 mod logging;
 mod printer;
 mod requirements;
+mod version;
 
 const DEFAULT_VENV_NAME: &str = ".venv";
 
 #[derive(Parser)]
-#[command(author, version, about)]
+#[command(author, version, long_version = crate::version::version(), about)]
 #[command(propagate_version = true)]
 #[allow(clippy::struct_excessive_bools)]
 struct Cli {
@@ -122,6 +123,11 @@ enum Commands {
     /// Remove all items from the cache.
     #[clap(hide = true)]
     Clean(CleanArgs),
+    /// Display uv's version
+    Version {
+        #[arg(long, value_enum, default_value = "text")]
+        output_format: VersionFormat,
+    },
     /// Generate shell completion
     #[clap(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion { shell: clap_complete_command::Shell },
@@ -1125,6 +1131,10 @@ async fn run() -> Result<ExitStatus> {
                 printer,
             )
             .await
+        }
+        Commands::Version { output_format } => {
+            commands::version(output_format, &mut stdout())?;
+            Ok(ExitStatus::Success)
         }
         Commands::GenerateShellCompletion { shell } => {
             shell.generate(&mut Cli::command(), &mut stdout());
