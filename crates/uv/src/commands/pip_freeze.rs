@@ -6,7 +6,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::Name;
+use distribution_types::{InstalledDist, Name};
 use platform_host::Platform;
 use uv_cache::Cache;
 use uv_fs::Normalized;
@@ -34,7 +34,18 @@ pub(crate) fn pip_freeze(cache: &Cache, strict: bool, mut printer: Printer) -> R
         .iter()
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
     {
-        println!("{dist}");
+        match dist {
+            InstalledDist::Registry(dist) => {
+                println!("{}=={}", dist.name().bold(), dist.version);
+            }
+            InstalledDist::Url(dist) => {
+                if dist.editable {
+                    println!("-e {}", dist.url);
+                } else {
+                    println!("{} @ {}", dist.name().bold(), dist.url);
+                }
+            }
+        }
     }
 
     // Validate that the environment is consistent.
