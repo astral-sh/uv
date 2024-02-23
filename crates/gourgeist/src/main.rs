@@ -11,16 +11,16 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
 
-use gourgeist::{create_bare_venv, parse_python_cli, Prompt};
+use gourgeist::{create_bare_venv, Prompt};
 use platform_host::Platform;
 use uv_cache::Cache;
-use uv_interpreter::Interpreter;
+use uv_interpreter::{find_default_python, find_requested_python};
 
 #[derive(Parser, Debug)]
 struct Cli {
     path: Option<Utf8PathBuf>,
     #[clap(short, long)]
-    python: Option<Utf8PathBuf>,
+    python: Option<String>,
     #[clap(long)]
     prompt: Option<String>,
 }
@@ -28,15 +28,25 @@ struct Cli {
 fn run() -> Result<(), gourgeist::Error> {
     let cli = Cli::parse();
     let location = cli.path.unwrap_or(Utf8PathBuf::from(".venv"));
-    let python = parse_python_cli(cli.python)?;
     let platform = Platform::current()?;
     let cache = if let Some(project_dirs) = ProjectDirs::from("", "", "gourgeist") {
         Cache::from_path(project_dirs.cache_dir())?
     } else {
         Cache::from_path(".gourgeist_cache")?
     };
-    let info = Interpreter::query(python.as_std_path(), &platform, &cache).unwrap();
-    create_bare_venv(&location, &info, Prompt::from_args(cli.prompt), Vec::new())?;
+    let interpreter = if let Some(python_request) = &cli.python {
+        find_requested_python(python_request, &platform, &cache)?.ok_or(
+            uv_interpreter::Error::NoSuchPython(python_request.to_string()),
+        )?
+    } else {
+        find_default_python(&platform, &cache)?
+    };
+    create_bare_venv(
+        &location,
+        &interpreter,
+        Prompt::from_args(cli.prompt),
+        Vec::new(),
+    )?;
     Ok(())
 }
 

@@ -272,7 +272,7 @@ struct PipCompileArgs {
     #[clap(long)]
     refresh_package: Vec<PackageName>,
 
-    /// The URL of the Python package index (by default: https://pypi.org/simple).
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
 
@@ -404,7 +404,7 @@ struct PipSyncArgs {
     #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
     link_mode: install_wheel_rs::linker::LinkMode,
 
-    /// The URL of the Python package index (by default: https://pypi.org/simple).
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
 
@@ -573,7 +573,7 @@ struct PipInstallArgs {
     #[clap(long, short)]
     output_file: Option<PathBuf>,
 
-    /// The URL of the Python package index (by default: https://pypi.org/simple).
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
 
@@ -711,7 +711,7 @@ struct VenvArgs {
     #[clap(long, verbatim_doc_comment)]
     prompt: Option<String>,
 
-    /// The URL of the Python package index (by default: https://pypi.org/simple).
+    /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
 

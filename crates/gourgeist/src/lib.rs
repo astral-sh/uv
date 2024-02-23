@@ -4,21 +4,19 @@ use std::path::Path;
 use camino::{FromPathError, Utf8Path};
 use thiserror::Error;
 
-pub use interpreter::parse_python_cli;
 use platform_host::PlatformError;
 use uv_interpreter::{Interpreter, Virtualenv};
 
 pub use crate::bare::create_bare_venv;
 
 mod bare;
-mod interpreter;
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
     #[error("Failed to determine python interpreter to use")]
-    InvalidPythonInterpreter(#[source] Box<dyn std::error::Error + Sync + Send>),
+    InterpreterError(#[from] uv_interpreter::Error),
     #[error(transparent)]
     Platform(#[from] PlatformError),
     #[error("Reserved key used for pyvenv.cfg: {0}")]

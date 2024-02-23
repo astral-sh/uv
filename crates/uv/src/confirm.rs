@@ -3,7 +3,7 @@ use console::{style, Key, Term};
 
 /// Prompt the user for confirmation in the given [`Term`].
 ///
-/// This is a slimmed-down version of [`dialoguer::Confirm`], with the post-confirmation report
+/// This is a slimmed-down version of `dialoguer::Confirm`, with the post-confirmation report
 /// enabled.
 pub(crate) fn confirm(message: &str, term: &Term, default: bool) -> Result<bool> {
     ctrlc::set_handler(move || {
