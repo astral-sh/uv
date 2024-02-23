@@ -14,7 +14,7 @@ use uv_dispatch::BuildDispatch;
 use uv_installer::NoBinary;
 use uv_interpreter::Virtualenv;
 use uv_resolver::InMemoryIndex;
-use uv_traits::{BuildContext, BuildKind, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildContext, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {
@@ -61,6 +61,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let index = InMemoryIndex::default();
     let setup_py = SetupPyStrategy::default();
     let in_flight = InFlight::default();
+    let config_settings = ConfigSettings::default();
 
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -72,6 +73,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &in_flight,
         venv.python_executable(),
         setup_py,
+        &config_settings,
         &NoBuild::None,
         &NoBinary::None,
     );
@@ -84,6 +86,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         SourceBuildContext::default(),
         args.sdist.display().to_string(),
         setup_py,
+        config_settings.clone(),
         build_kind,
     )
     .await?;

@@ -1598,3 +1598,105 @@ fn launcher_with_symlink() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+#[cfg(unix)]
+fn config_settings() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let current_dir = std::env::current_dir()?;
+    let workspace_dir = regex::escape(
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str(),
+    );
+
+    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    // Install the editable package.
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("pip")
+        .arg("install")
+        .arg("-e")
+        .arg("../../scripts/editable-installs/setuptools_editable")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/setuptools_editable)
+    "###
+    );
+
+    // When installed without `--editable_mode=compat`, the `finder.py` file should be present.
+    let finder = context
+        .venv
+        .join("lib/python3.12/site-packages")
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(finder.exists());
+
+    // Install the editable package with `--editable_mode=compat`.
+    let context = TestContext::new("3.12");
+
+    let current_dir = std::env::current_dir()?;
+    let workspace_dir = regex::escape(
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str(),
+    );
+
+    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("pip")
+        .arg("install")
+        .arg("-e")
+        .arg("../../scripts/editable-installs/setuptools_editable")
+        .arg("-C")
+        .arg("editable_mode=compat")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/setuptools_editable)
+    "###
+    );
+
+    // When installed without `--editable_mode=compat`, the `finder.py` file should _not_ be present.
+    let finder = context
+        .venv
+        .join("lib/python3.12/site-packages")
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(!finder.exists());
+
+    Ok(())
+}

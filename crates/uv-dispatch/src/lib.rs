@@ -18,7 +18,7 @@ use uv_client::{FlatIndex, RegistryClient};
 use uv_installer::{Downloader, Installer, NoBinary, Plan, Planner, Reinstall, SitePackages};
 use uv_interpreter::{Interpreter, Virtualenv};
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use uv_traits::{BuildContext, BuildKind, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildContext, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -34,6 +34,7 @@ pub struct BuildDispatch<'a> {
     setup_py: SetupPyStrategy,
     no_build: &'a NoBuild,
     no_binary: &'a NoBinary,
+    config_settings: &'a ConfigSettings,
     source_build_context: SourceBuildContext,
     options: Options,
 }
@@ -50,6 +51,7 @@ impl<'a> BuildDispatch<'a> {
         in_flight: &'a InFlight,
         base_python: PathBuf,
         setup_py: SetupPyStrategy,
+        config_settings: &'a ConfigSettings,
         no_build: &'a NoBuild,
         no_binary: &'a NoBinary,
     ) -> Self {
@@ -63,6 +65,7 @@ impl<'a> BuildDispatch<'a> {
             in_flight,
             base_python,
             setup_py,
+            config_settings,
             no_build,
             no_binary,
             source_build_context: SourceBuildContext::default(),
@@ -279,6 +282,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.source_build_context.clone(),
             package_id.to_string(),
             self.setup_py,
+            self.config_settings.clone(),
             build_kind,
         )
         .boxed()
