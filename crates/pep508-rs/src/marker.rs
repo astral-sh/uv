@@ -96,6 +96,8 @@ pub enum MarkerValueString {
     PlatformPythonImplementation,
     /// Deprecated `platform.python_implementation` from <https://peps.python.org/pep-0345/#environment-markers>
     PlatformPythonImplementationDeprecated,
+    /// Deprecated `python_implementation` from <https://github.com/pypa/packaging/issues/72>
+    PythonImplementationDeprecated,
     /// `platform_release`
     PlatformRelease,
     /// `platform_system`
@@ -119,9 +121,9 @@ impl Display for MarkerValueString {
             Self::PlatformMachine | Self::PlatformMachineDeprecated => {
                 f.write_str("platform_machine")
             }
-            Self::PlatformPythonImplementation | Self::PlatformPythonImplementationDeprecated => {
-                f.write_str("platform_python_implementation")
-            }
+            Self::PlatformPythonImplementation
+            | Self::PlatformPythonImplementationDeprecated
+            | Self::PythonImplementationDeprecated => f.write_str("platform_python_implementation"),
             Self::PlatformRelease => f.write_str("platform_release"),
             Self::PlatformSystem => f.write_str("platform_system"),
             Self::PlatformVersion | Self::PlatformVersionDeprecated => {
@@ -174,6 +176,9 @@ impl FromStr for MarkerValue {
             }
             "platform.python_implementation" => {
                 Self::MarkerEnvString(MarkerValueString::PlatformPythonImplementationDeprecated)
+            }
+            "python_implementation" => {
+                Self::MarkerEnvString(MarkerValueString::PythonImplementationDeprecated)
             }
             "platform_release" => Self::MarkerEnvString(MarkerValueString::PlatformRelease),
             "platform_system" => Self::MarkerEnvString(MarkerValueString::PlatformSystem),
@@ -389,7 +394,8 @@ impl MarkerEnvironment {
                 &self.platform_machine
             }
             MarkerValueString::PlatformPythonImplementation
-            | MarkerValueString::PlatformPythonImplementationDeprecated => {
+            | MarkerValueString::PlatformPythonImplementationDeprecated
+            | MarkerValueString::PythonImplementationDeprecated => {
                 &self.platform_python_implementation
             }
             MarkerValueString::PlatformRelease => &self.platform_release,
@@ -1064,6 +1070,15 @@ impl MarkerTree {
                             reporter(
                                 MarkerWarningKind::DeprecatedMarkerName,
                                 "platform.python_implementation is deprecated in favor of platform_python_implementation".to_string(),
+                                expression,
+                            );
+                        }
+                        MarkerValue::MarkerEnvString(
+                            MarkerValueString::PythonImplementationDeprecated,
+                        ) => {
+                            reporter(
+                                MarkerWarningKind::DeprecatedMarkerName,
+                                "python_implementation is deprecated in favor of platform_python_implementation".to_string(),
                                 expression,
                             );
                         }
