@@ -401,7 +401,7 @@ pub(crate) async fn pip_compile(
         writeln!(
             writer,
             "{}",
-            "# The following packages were included while generating the resolution:".green()
+            "# The following packages were excluded from the output:".green()
         )?;
         for package in excluded {
             writeln!(writer, "# {package}")?;
