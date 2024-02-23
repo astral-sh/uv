@@ -909,4 +909,403 @@ mod tests {
         }
         "###);
     }
+
+
+    #[test]
+    fn parse_devpi_listing() {
+        let text = r##"
+<!doctype html>
+<html>
+
+<head>
+    <title>packages/all/: puffling versions</title>
+
+    <link rel="icon" type="image/x-icon" href="http://localhost:3141/+static-4.2.1/favicon.ico" />
+
+    <link rel="stylesheet" type="text/css" href="http://localhost:3141/+static-4.2.1/style.css" />
+    <script src="http://localhost:3141/+static-4.2.1/jquery-3.6.0.min.js"></script>
+    <script src="http://localhost:3141/+static-4.2.1/common.js"></script>
+</head>
+
+<body>
+
+    <div class="header">
+
+        <form method="get" id="search" action="http://localhost:3141/+search">
+
+            <h1><a href="http://localhost:3141/">devpi</a></h1>
+
+            <input type="text" size="60" name="query" autofocus />
+            <input type="submit" value="Search" />
+            <span class="help">
+                <a href="http://localhost:3141/+searchhelp">How to<br /> search?</a>
+            </span>
+            <div class="query_doc inline" style="display: none">
+                <span class="help">
+                    <a href="#">Close help</a>
+                </span>
+
+                <p>
+                    To specify a term which contains spaces, use single quotes like this:
+                    <code>'term with spaces'</code>
+                </p>
+                <p>
+                    By using a search like <code>fieldname:term</code>,
+                    you can search in the following fields:<br />
+                <dl>
+                    <dt><code>classifiers</code></dt>
+                    <dd>
+                        The <a href="https://pypi.org/pypi?%3Aaction=list_classifiers" target="_blank">trove
+                            classifiers</a> of a package.
+                        Use single quotes to specify a classifier, as they contain spaces:
+                        <code>classifiers:'Programming Language :: Python :: 3'</code>
+                    </dd>
+                    <dt><code>index</code></dt>
+                    <dd>The name of the index. This is only the name part, without the user. For example:
+                        <code>index:pypi</code></dd>
+                    <dt><code>keywords</code></dt>
+                    <dd>The keywords of a package.</dd>
+                    <dt><code>name</code></dt>
+                    <dd>The package name. For example: <code>name:devpi-client</code></dd>
+                    <dt><code>path</code></dt>
+                    <dd>The path of the package in the form '/{user}/{index}/{name}'. For example:
+                        <code>path:/root/pypi/devpi-server</code></dd>
+                    <dt><code>serial</code></dt>
+                    <dd>Undocumented</dd>
+                    <dt><code>type</code></dt>
+                    <dd>
+                        The type of text.
+                        One of <code>project</code> for the project name,
+                        <code>title</code> for the title of a documentation page,
+                        <code>page</code> for a documentation page,
+                        or one of the following project metadata fields:
+                        <code>author</code>, <code>author_email</code>,
+                        <code>description</code>, <code>keywords</code>,
+                        <code>summary</code>. For example: <code>type:page</code>
+                    </dd>
+                    <dt><code>user</code></dt>
+                    <dd>The user name.</dd>
+                </dl>
+                </p>
+                <p>
+                    End a term with an asterisk to search by prefix like this: <code>path:/fschulze/*</code></p>
+                <p>
+                    Group query clauses with parentheses.</p>
+                <p>
+                    Use the <code>AND</code>, <code>OR</code>,
+                    <code>ANDNOT</code>, <code>ANDMAYBE</code>, and <code>NOT</code><br />
+                    operators to further refine your search.<br />
+                    Write them in all capital letters, otherwise they will be interpreted as search terms.<br />
+                    An example search would be: <code>devpi ANDNOT client</code>
+                </p>
+                <p>
+                    Boost a term by adding a circumflex followed by the boost value like this:
+                    <code>term^2</code>
+                </p>
+
+            </div>
+        </form>
+        <script type="text/javascript">
+            //<![CDATA[
+            $(function () {
+                $('.help a').click(function () {
+                    var $help = $('.query_doc.inline');
+                    // is there a docview iframe?
+                    var $iframe = $('iframe');
+                    if ($iframe.length && $help.is(':hidden')) {
+                        // then hide the iframe's scrollbar
+                        // (double scrollbar doesn't look nice)
+                        $('body', $iframe[0].contentWindow.document
+                        ).css('overflow', 'hidden');
+                    }
+                    $help.slideToggle({
+                        complete: function () {
+                            if ($iframe.length && $help.is(':hidden')) {
+                                // give focus and scrollbar back to iframe
+                                var iframeWindow = $iframe[0].contentWindow;
+                                iframeWindow.focus();
+                                $('body', iframeWindow.document
+                                ).css('overflow', 'auto');
+                            }
+                        }
+                    });
+                    return false;
+                });
+            });
+            //]]>
+        </script>
+
+        <div id="navigation">
+            <span>
+                <a href="http://localhost:3141/">devpi</a>
+            </span>
+            <span>
+                <a href="http://localhost:3141/packages">packages</a>
+            </span>
+            <span>
+                <a href="http://localhost:3141/packages/all">all</a>
+            </span>
+            <span>
+                <a href="http://localhost:3141/packages/all/puffling">puffling</a>
+            </span>
+
+            <a class="statusbadge ok" href="http://localhost:3141/+status">
+                ok
+            </a>
+
+        </div>
+    </div>
+
+    <div id="content">
+        <h1>packages/all/: puffling versions</h1>
+
+        <p class="projectnavigation">
+            <span><a href="http://localhost:3141/packages/all/+simple/puffling">Simple index</a></span>
+        </p>
+
+        <p>
+        <form action="http://localhost:3141/packages/all/puffling/refresh" method="post"><input name="refresh"
+                type="submit" value="Refresh mirror links" /></form>
+        </p>        <table class="versions">
+            <thead>
+                <tr>
+                    <th>Index</th>
+                    <th>Version</th>
+                    <th>Documentation</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><a href="http://localhost:3141/packages/pypi">packages/pypi</a></td>
+                    <td><a href="http://localhost:3141/packages/pypi/puffling/0.1.1">0.1.1</a></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td><a href="http://localhost:3141/packages/pypi">packages/pypi</a></td>
+                    <td><a href="http://localhost:3141/packages/pypi/puffling/0.1.0">0.1.0</a></td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <footer>        <ul class="footer-versions">
+            <li>devpi-server-6.10.0</li>
+            <li>devpi-web-4.2.1</li>
+        </ul>
+
+    </footer>
+
+</body>
+
+</html>
+        "##;
+        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleHtml::parse(text, &base).unwrap();
+        insta::assert_debug_snapshot!(result, @r###"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [
+                File {
+                    dist_info_metadata: None,
+                    filename: "",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "http://localhost:3141/",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "#",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "http://localhost:3141/",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "+searchhelp",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "http://localhost:3141/+searchhelp",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "+status",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "http://localhost:3141/+status",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "0.1.0",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "http://localhost:3141/packages/pypi/puffling/0.1.0",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "0.1.1",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "http://localhost:3141/packages/pypi/puffling/0.1.1",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "all",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "http://localhost:3141/packages/all",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "packages",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "http://localhost:3141/packages",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "puffling",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "http://localhost:3141/packages/all/puffling",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "puffling",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "http://localhost:3141/packages/all/+simple/puffling",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "pypi",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "http://localhost:3141/packages/pypi",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "pypi",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "http://localhost:3141/packages/pypi",
+                    yanked: None,
+                },
+                File {
+                    dist_info_metadata: None,
+                    filename: "pypi?:action=list_classifiers",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "https://pypi.org/pypi?%3Aaction=list_classifiers",
+                    yanked: None,
+                },
+            ],
+        }
+        "###);
+    }
 }
