@@ -12,6 +12,7 @@
 - Ensure authentication is passed from the index url to distribution files ([#1886](https://github.com/astral-sh/uv/pull/1886))
 - Use `rustls-tls-native-roots` in `uv` crate ([#1888](https://github.com/astral-sh/uv/pull/1888))
 - pep440: fix version ordering ([#1883](https://github.com/astral-sh/uv/pull/1883))
+- Hide index URLs from header if not emitted ([#1835](https://github.com/astral-sh/uv/pull/1835))
 
 ### Documentation
 
