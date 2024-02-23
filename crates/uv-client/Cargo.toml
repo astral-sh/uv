@@ -47,5 +47,5 @@ urlencoding = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-insta = { version = "1.34.0" }
+insta = { version = "1.35.1" }
 tokio = { workspace = true, features = ["fs", "macros"] }
