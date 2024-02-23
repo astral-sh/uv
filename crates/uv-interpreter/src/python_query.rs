@@ -364,8 +364,8 @@ mod windows {
             .in_scope(|| Command::new("py").arg("--list-paths").output())
             .map_err(Error::PyList)?;
 
-        // There shouldn't be any output on stderr.
-        if !output.status.success() || !output.stderr.is_empty() {
+        // `py` sometimes prints "Installed Pythons found by py Launcher for Windows" to stderr which we ignore.
+        if !output.status.success() {
             return Err(Error::PythonSubcommandOutput {
                 message: format!(
                     "Running `py --list-paths` failed with status {}",
