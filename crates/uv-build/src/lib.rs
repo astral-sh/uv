@@ -29,7 +29,7 @@ use distribution_types::Resolution;
 use pep508_rs::Requirement;
 use uv_fs::Normalized;
 use uv_interpreter::{Interpreter, Virtualenv};
-use uv_traits::{BuildContext, BuildKind, SetupPyStrategy, SourceBuildTrait};
+use uv_traits::{BuildContext, BuildKind, ConfigSettings, SetupPyStrategy, SourceBuildTrait};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
@@ -247,6 +247,7 @@ pub struct SourceBuildContext {
 pub struct SourceBuild {
     temp_dir: TempDir,
     source_tree: PathBuf,
+    config_settings: ConfigSettings,
     /// If performing a PEP 517 build, the backend to use.
     pep517_backend: Option<Pep517Backend>,
     /// The virtual environment in which to build the source distribution.
@@ -281,6 +282,7 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         package_id: String,
         setup_py: SetupPyStrategy,
+        config_settings: ConfigSettings,
         build_kind: BuildKind,
     ) -> Result<SourceBuild, Error> {
         let temp_dir = tempdir_in(build_context.cache().root())?;
@@ -354,6 +356,7 @@ impl SourceBuild {
                 build_context,
                 &package_id,
                 build_kind,
+                &config_settings,
             )
             .await?;
         }
@@ -364,6 +367,7 @@ impl SourceBuild {
             pep517_backend,
             venv,
             build_kind,
+            config_settings,
             metadata_directory: None,
             package_id,
         })
@@ -492,10 +496,13 @@ impl SourceBuild {
 
             prepare_metadata_for_build_wheel = getattr(backend, "prepare_metadata_for_build_wheel", None)
             if prepare_metadata_for_build_wheel:
-                print(prepare_metadata_for_build_wheel("{}"))
+                print(prepare_metadata_for_build_wheel("{}", config_settings={}))
             else:
                 print()
-            "#, pep517_backend.backend_import(), escape_path_for_python(&metadata_directory)
+            "#,
+            pep517_backend.backend_import(),
+            escape_path_for_python(&metadata_directory),
+            self.config_settings.escape_for_python(),
         };
         let span = info_span!(
             "run_python_script",
@@ -619,8 +626,13 @@ impl SourceBuild {
         let escaped_wheel_dir = escape_path_for_python(wheel_dir);
         let script = formatdoc! {
             r#"{}
-            print(backend.build_{}("{}", metadata_directory={}))
-            "#, pep517_backend.backend_import(), self.build_kind, escaped_wheel_dir, metadata_directory
+            print(backend.build_{}("{}", metadata_directory={}, config_settings={}))
+            "#,
+            pep517_backend.backend_import(),
+            self.build_kind,
+            escaped_wheel_dir,
+            metadata_directory,
+            self.config_settings.escape_for_python()
         };
         let span = info_span!(
             "run_python_script",
@@ -682,6 +694,7 @@ async fn create_pep517_build_environment(
     build_context: &impl BuildContext,
     package_id: &str,
     build_kind: BuildKind,
+    config_settings: &ConfigSettings,
 ) -> Result<(), Error> {
     debug!(
         "Calling `{}.get_requires_for_build_{}()`",
@@ -694,11 +707,11 @@ async fn create_pep517_build_environment(
 
             get_requires_for_build = getattr(backend, "get_requires_for_build_{}", None)
             if get_requires_for_build:
-                requires = get_requires_for_build()
+                requires = get_requires_for_build(config_settings={})
             else:
                 requires = []
             print(json.dumps(requires))
-        "#, pep517_backend.backend_import(), build_kind
+        "#, pep517_backend.backend_import(), build_kind, config_settings.escape_for_python()
     };
     let span = info_span!(
         "run_python_script",

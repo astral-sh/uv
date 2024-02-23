@@ -33,7 +33,7 @@ use uv_resolver::{
     DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_traits::{InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -58,6 +58,7 @@ pub(crate) async fn pip_install(
     link_mode: LinkMode,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
+    config_settings: &ConfigSettings,
     no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
@@ -173,6 +174,7 @@ pub(crate) async fn pip_install(
         &in_flight,
         venv.python_executable(),
         setup_py,
+        config_settings,
         no_build,
         no_binary,
     )
@@ -255,6 +257,7 @@ pub(crate) async fn pip_install(
             &in_flight,
             venv.python_executable(),
             setup_py,
+            config_settings,
             no_build,
             no_binary,
         )

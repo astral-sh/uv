@@ -13,6 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+clap = { workspace = true, optional = true }
 distribution-types = { path = "../distribution-types" }
 once-map = { path = "../once-map" }
 pep508_rs = { path = "../pep508-rs" }
@@ -21,4 +22,10 @@ uv-interpreter = { path = "../uv-interpreter" }
 uv-normalize = { path = "../uv-normalize" }
 
 anyhow = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["sync"] }
+
+[features]
+default = []
+serde = ["dep:serde", "dep:serde_json"]
