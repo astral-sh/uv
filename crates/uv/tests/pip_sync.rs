@@ -1648,9 +1648,9 @@ fn install_path_built_dist_cached() -> Result<()> {
         url_escaped.as_str(),
         "file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl",
     )]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    .into_iter()
+    .chain(INSTA_FILTERS.to_vec())
+    .collect();
 
     uv_snapshot!(filters, command(&context)
         .arg("requirements.txt")
@@ -1698,9 +1698,9 @@ fn install_path_built_dist_cached() -> Result<()> {
             "Removed 1 file for tomli",
             "Removed 1 file for tomli ([SIZE])",
         )]
-            .into_iter()
-            .chain(INSTA_FILTERS.to_vec())
-            .collect()
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect()
     } else {
         INSTA_FILTERS.to_vec()
     };
