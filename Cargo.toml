@@ -18,7 +18,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 anstream = { version = "0.6.5" }
-anyhow = { version = "1.0.79" }
+anyhow = { version = "1.0.80" }
 async-compression = { version = "0.4.6" }
 async-trait = { version = "0.1.77" }
 async_http_range_reader = { version = "0.7.0" }
