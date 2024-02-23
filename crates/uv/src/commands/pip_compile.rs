@@ -335,13 +335,7 @@ pub(crate) async fn pip_compile(
     }
 
     // Write the resolved dependencies to the output channel.
-    let mut writer: Box<dyn std::io::Write> = if let Some(output_file) = output_file {
-        Box::new(AutoStream::<std::fs::File>::auto(
-            fs_err::File::create(output_file)?.into(),
-        ))
-    } else {
-        Box::new(AutoStream::auto(stdout()))
-    };
+    let mut writer = OutputWriter::new(output_file)?;
 
     if include_header {
         writeln!(
@@ -426,6 +420,42 @@ fn cmd(include_index_url: bool) -> String {
         .flatten()
         .join(" ");
     format!("uv {args}")
+}
+
+/// A multi-casting writer that writes to both the standard output and an output file, if present.
+struct OutputWriter {
+    stdout: AutoStream<std::io::Stdout>,
+    output_file: Option<AutoStream<std::fs::File>>,
+}
+
+impl OutputWriter {
+    /// Create a new output writer.
+    fn new(output_file: Option<&Path>) -> Result<Self> {
+        let stdout = AutoStream::<std::io::Stdout>::auto(stdout());
+        let output_file = output_file
+            .map(|output_file| {
+                let output_file = fs_err::File::create(output_file)?;
+                let output_file = AutoStream::auto(output_file.into());
+                Ok::<AutoStream<std::fs::File>, std::io::Error>(output_file)
+            })
+            .transpose()?;
+        Ok(Self {
+            stdout,
+            output_file,
+        })
+    }
+
+    /// Write the given arguments to both the standard output and the output file, if present.
+    fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> std::io::Result<()> {
+        use std::io::Write;
+
+        if let Some(output_file) = &mut self.output_file {
+            write!(output_file, "{args}")?;
+        }
+        write!(self.stdout, "{args}")?;
+
+        Ok(())
+    }
 }
 
 /// Whether to allow package upgrades.
