@@ -1,4 +1,8 @@
 doc-valid-idents = [
   "PyPI",
   ".." # Include the defaults
-] 
+]
+
+disallowed-methods = [
+  "std::fs",
+]
