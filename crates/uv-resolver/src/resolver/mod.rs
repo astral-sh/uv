@@ -748,7 +748,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     None,
                     None,
                     &self.urls,
-                    self.selector.prerelease_strategy(),
                     self.markers,
                 );
 
@@ -824,7 +823,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         Some(package_name),
                         extra.as_ref(),
                         &self.urls,
-                        self.selector.prerelease_strategy(),
                         self.markers,
                     )?;
 
@@ -881,7 +879,6 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     Some(package_name),
                     extra.as_ref(),
                     &self.urls,
-                    self.selector.prerelease_strategy(),
                     self.markers,
                 )?;
 

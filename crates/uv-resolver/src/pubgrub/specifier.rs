@@ -16,11 +16,11 @@ impl From<PubGrubSpecifier> for Range<Version> {
     }
 }
 
-impl PubGrubSpecifier {
-    pub(crate) fn for_package(
-        specifier: &VersionSpecifier,
-        allow_prerelease: bool,
-    ) -> Result<Self, ResolveError> {
+impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
+    type Error = ResolveError;
+
+    /// Convert a PEP 508 specifier to a `PubGrub`-compatible version range.
+    fn try_from(specifier: &VersionSpecifier) -> Result<Self, ResolveError> {
         let ranges = match specifier.operator() {
             Operator::Equal => {
                 let version = specifier.version().clone();
@@ -46,7 +46,7 @@ impl PubGrubSpecifier {
             }
             Operator::LessThan => {
                 let version = specifier.version().clone();
-                if !allow_prerelease || version.any_prerelease() {
+                if version.any_prerelease() {
                     Range::strictly_lower_than(version)
                 } else {
                     // Per PEP 440: "The exclusive ordered comparison <V MUST NOT allow a
@@ -106,14 +106,5 @@ impl PubGrubSpecifier {
         };
 
         Ok(Self(ranges))
-    }
-}
-
-impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
-    type Error = ResolveError;
-
-    /// Convert a PEP 508 specifier to a `PubGrub`-compatible version range.
-    fn try_from(specifier: &VersionSpecifier) -> Result<Self, ResolveError> {
-        Self::for_package(specifier, false)
     }
 }

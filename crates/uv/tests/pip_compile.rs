@@ -4296,6 +4296,7 @@ fn pre_release_upper_bound_exclude() -> Result<()> {
         # via jinja2
     werkzeug==1.0.1
         # via flask
+
     ----- stderr -----
     Resolved 6 packages in [TIME]
     "###
@@ -4333,6 +4334,7 @@ fn pre_release_upper_bound_include() -> Result<()> {
         #   werkzeug
     werkzeug==3.0.1
         # via flask
+
     ----- stderr -----
     Resolved 6 packages in [TIME]
     "###
