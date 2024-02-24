@@ -52,7 +52,7 @@ impl PubGrubSpecifier {
                     // Per PEP 440: "The exclusive ordered comparison <V MUST NOT allow a
                     // pre-release of the specified version unless the specified version is itself a
                     // pre-release.
-                    Range::strictly_lower_than(version.with_dev(Some(0)))
+                    Range::strictly_lower_than(version.with_min(Some(0)))
                 }
             }
             Operator::LessThanEqual => {
