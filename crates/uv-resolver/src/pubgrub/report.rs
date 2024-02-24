@@ -16,7 +16,6 @@ use rustc_hash::FxHashMap;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
-use crate::prerelease_mode::PreReleaseStrategy;
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::UnavailablePackage;
 
@@ -346,25 +345,10 @@ impl PubGrubReportFormatter<'_> {
     ) -> IndexSet<PubGrubHint> {
         /// Returns `true` if pre-releases were allowed for a package.
         fn allowed_prerelease(package: &PubGrubPackage, selector: &CandidateSelector) -> bool {
-            match selector.prerelease_strategy() {
-                PreReleaseStrategy::Disallow => false,
-                PreReleaseStrategy::Allow => true,
-                PreReleaseStrategy::IfNecessary => false,
-                PreReleaseStrategy::Explicit(packages) => {
-                    if let PubGrubPackage::Package(package, ..) = package {
-                        packages.contains(package)
-                    } else {
-                        false
-                    }
-                }
-                PreReleaseStrategy::IfNecessaryOrExplicit(packages) => {
-                    if let PubGrubPackage::Package(package, ..) = package {
-                        packages.contains(package)
-                    } else {
-                        false
-                    }
-                }
-            }
+            let PubGrubPackage::Package(package, ..) = package else {
+                return false;
+            };
+            selector.prerelease_strategy().allows(package)
         }
 
         let mut hints = IndexSet::default();

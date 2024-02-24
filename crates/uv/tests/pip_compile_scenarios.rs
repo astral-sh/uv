@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
-//! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/de0bab473eeaa4445db5a8febd732c655fad3d52/scenarios>
+//! Generated with scripts/scenarios/update.py
+//! Scenarios from <https://github.com/zanieb/packse/tree/4f39539c1b858e28268554604e75c69e25272e5a/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -29,7 +29,7 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg("--index-url")
         .arg("https://test.pypi.org/simple")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/de0bab473eeaa4445db5a8febd732c655fad3d52/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/4f39539c1b858e28268554604e75c69e25272e5a/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())

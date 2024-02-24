@@ -521,7 +521,7 @@ impl CacheBucket {
             CacheBucket::FlatIndex => "flat-index-v0",
             CacheBucket::Git => "git-v0",
             CacheBucket::Interpreter => "interpreter-v0",
-            CacheBucket::Simple => "simple-v2",
+            CacheBucket::Simple => "simple-v3",
             CacheBucket::Wheels => "wheels-v0",
             CacheBucket::Archive => "archive-v0",
         }
@@ -677,13 +677,13 @@ impl ArchiveTimestamp {
     }
 }
 
-impl std::cmp::PartialOrd for ArchiveTimestamp {
+impl PartialOrd for ArchiveTimestamp {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.timestamp().cmp(&other.timestamp()))
     }
 }
 
-impl std::cmp::Ord for ArchiveTimestamp {
+impl Ord for ArchiveTimestamp {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.timestamp().cmp(&other.timestamp())
     }
