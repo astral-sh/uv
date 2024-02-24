@@ -334,6 +334,10 @@ impl<'a> SitePackages<'a> {
 
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints {
+                        if constraint.name != requirement.name {
+                            continue;
+                        }
+
                         if !constraint.evaluate_markers(self.venv.interpreter().markers(), &[]) {
                             continue;
                         }
