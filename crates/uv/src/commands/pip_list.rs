@@ -93,11 +93,11 @@ pub(crate) fn pip_list(
     // Name and package are always present
     let mut columns = vec![
         Column {
-            header: String::from("Name"),
+            header: String::from("Package"),
             rows: results.iter().map(|f| f.name().to_string()).collect_vec(),
         },
         Column {
-            header: String::from("Package"),
+            header: String::from("Version"),
             rows: results
                 .iter()
                 .map(|f| f.version().to_string())

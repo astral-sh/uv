@@ -37,7 +37,6 @@ fn empty() {
     success: true
     exit_code: 0
     ----- stdout -----
-    ------- ------- -------------------------
 
     ----- stderr -----
     "###
@@ -59,7 +58,6 @@ fn single_no_editable() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    package: 
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -69,7 +67,7 @@ fn single_no_editable() -> Result<()> {
     "###
     );
 
-    context.assert_command("import flask").success();
+    context.assert_command("import markupsafe").success();
 
     uv_snapshot!(Command::new(get_bin())
         .arg("pip")
@@ -83,7 +81,7 @@ fn single_no_editable() -> Result<()> {
     ----- stdout -----
     Package    Version
     ---------- -------
-    markupsafe 2.1.3
+    markupsafe 2.1.3  
 
     ----- stderr -----
     "###
@@ -135,7 +133,15 @@ fn editable() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(Command::new(get_bin())
+    let filters = [(
+        workspace_dir.as_str().strip_prefix("file://").unwrap(),
+        "[WORKSPACE_DIR]/",
+    )]
+    .into_iter()
+    .chain(INSTA_FILTERS.to_vec())
+    .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, Command::new(get_bin())
     .arg("pip")
     .arg("list")
     .arg("--cache-dir")
@@ -145,9 +151,9 @@ fn editable() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location
-    --------------- ------- ---------------------------------------------------------
-    numpy           1.26.2
+    Package         Version Editable project location                                                
+    --------------- ------- -------------------------------------------------------------------------
+    numpy           1.26.2                                                                           
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
     ----- stderr -----
@@ -200,7 +206,15 @@ fn editable_only() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(Command::new(get_bin())
+    let filters = [(
+        workspace_dir.as_str().strip_prefix("file://").unwrap(),
+        "[WORKSPACE_DIR]/",
+    )]
+    .into_iter()
+    .chain(INSTA_FILTERS.to_vec())
+    .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, Command::new(get_bin())
     .arg("pip")
     .arg("list")
     .arg("--editable")
@@ -211,8 +225,8 @@ fn editable_only() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location
-    --------------- ------- ---------------------------------------------------------
+    Package         Version Editable project location                                                
+    --------------- ------- -------------------------------------------------------------------------
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
     ----- stderr -----
