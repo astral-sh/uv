@@ -386,6 +386,10 @@ impl Version {
     }
 
     /// Returns the min-release part of this version, if it exists.
+    ///
+    /// The "min" component is internal-only, and does not exist in PEP 440.
+    /// The version `1.0min0` is smaller than all other `1.0` versions,
+    /// like `1.0a1`, `1.0dev0`, etc.
     #[inline]
     pub fn min(&self) -> Option<u64> {
         match *self.inner {
@@ -523,7 +527,9 @@ impl Version {
 
     /// Set the min-release component and return the updated version.
     ///
-    /// The min component is internal-only, and does not exist in PEP 440.
+    /// The "min" component is internal-only, and does not exist in PEP 440.
+    /// The version `1.0min0` is smaller than all other `1.0` versions,
+    /// like `1.0a1`, `1.0dev0`, etc.
     #[inline]
     pub fn with_min(mut self, value: Option<u64>) -> Version {
         if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
@@ -1126,7 +1132,6 @@ struct VersionFull {
     /// release](https://peps.python.org/pep-0440/#developmental-releases),
     /// if any
     dev: Option<u64>,
-    /// An internal-only segment that does not exist in PEP 440, used to
     /// A [local version
     /// identifier](https://peps.python.org/pep-0440/#local-version-identif
     /// iers) such as `+deadbeef` in `1.2.3+deadbeef`
@@ -1137,8 +1142,9 @@ struct VersionFull {
     /// > Local version labels have no specific semantics assigned, but
     /// > some syntactic restrictions are imposed.
     local: Vec<LocalSegment>,
-    /// represent the smallest possible version, preceding any `dev`,
-    /// `pre`, `post` or releases.
+    /// An internal-only segment that does not exist in PEP 440, used to
+    /// represent the smallest possible version of a release, preceding any
+    /// `dev`, `pre`, `post` or releases.
     min: Option<u64>,
 }
 
@@ -2328,7 +2334,7 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegm
             }),
             post,
             dev,
-            None
+            None,
         ) => (2, n, post, dev.unwrap_or(u64::MAX), version.local()),
         // beta release
         (
@@ -2353,7 +2359,9 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegm
         // final release
         (None, None, None, None) => (5, 0, None, 0, version.local()),
         // post release
-        (None, Some(post), dev, None) => (6, 0, Some(post), dev.unwrap_or(u64::MAX), version.local()),
+        (None, Some(post), dev, None) => {
+            (6, 0, Some(post), dev.unwrap_or(u64::MAX), version.local())
+        }
     }
 }
 

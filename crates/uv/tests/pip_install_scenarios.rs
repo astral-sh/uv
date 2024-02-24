@@ -2127,7 +2127,7 @@ fn package_prereleases_boundary() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==0.2.0a1
+     + albatross==0.1.0
     "###);
 
     // Since the user did not use a pre-release specifier, pre-releases at the boundary

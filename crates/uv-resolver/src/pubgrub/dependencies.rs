@@ -9,10 +9,10 @@ use uv_normalize::{ExtraName, PackageName};
 
 use crate::constraints::Constraints;
 use crate::overrides::Overrides;
-use crate::pubgrub::PubGrubPackage;
 use crate::pubgrub::specifier::PubGrubSpecifier;
-use crate::ResolveError;
+use crate::pubgrub::PubGrubPackage;
 use crate::resolver::Urls;
+use crate::ResolveError;
 
 #[derive(Debug)]
 pub struct PubGrubDependencies(Vec<(PubGrubPackage, Range<Version>)>);
@@ -80,15 +80,13 @@ impl PubGrubDependencies {
                     }
 
                     // Add the package, plus any extra variants.
-                    for result in std::iter::once(to_pubgrub(constraint, None, urls))
-                        .chain(
-                            constraint
-                                .extras
-                                .clone()
-                                .into_iter()
-                                .map(|extra| to_pubgrub(constraint, Some(extra), urls)),
-                        )
-                    {
+                    for result in std::iter::once(to_pubgrub(constraint, None, urls)).chain(
+                        constraint
+                            .extras
+                            .clone()
+                            .into_iter()
+                            .map(|extra| to_pubgrub(constraint, Some(extra), urls)),
+                    ) {
                         let (mut package, version) = result?;
 
                         // Detect self-dependencies.
