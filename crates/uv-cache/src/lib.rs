@@ -645,6 +645,7 @@ impl ArchiveTimestamp {
         if metadata.is_file() {
             Ok(Some(Self::Exact(Timestamp::from_metadata(&metadata))))
         } else {
+            // TODO(charlie): Take the maximum of `pyproject.toml`, `setup.py`, and `setup.cfg`.
             if let Some(metadata) = path
                 .as_ref()
                 .join("pyproject.toml")
@@ -673,6 +674,18 @@ impl ArchiveTimestamp {
             Self::Exact(timestamp) => *timestamp,
             Self::Approximate(timestamp) => *timestamp,
         }
+    }
+}
+
+impl std::cmp::PartialOrd for ArchiveTimestamp {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.timestamp().cmp(&other.timestamp()))
+    }
+}
+
+impl std::cmp::Ord for ArchiveTimestamp {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.timestamp().cmp(&other.timestamp())
     }
 }
 
