@@ -4,6 +4,7 @@ use std::pin::Pin;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tracing::warn;
 
 use crate::Error;
 
@@ -65,6 +66,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
         use std::fs::Permissions;
         use std::os::unix::fs::PermissionsExt;
 
+
         // To avoid lots of small reads to `reader` when parsing the central directory, wrap it in
         // a buffer.
         let mut buf = futures::io::BufReader::new(reader);
@@ -114,13 +116,14 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
 
         // On Windows, skip symlink entries, as they're not supported. pip recursively copies the
         // symlink target instead.
-        #[cfg(windows)]
-        if file.header().entry_type().is_symlink() {
-            tracing::warn!(
+        if cfg!(windows) {
+            if file.header().entry_type().is_symlink() {
+                warn!(
                 "Skipping symlink in tar archive: {}",
                 file.path()?.display()
             );
-            continue;
+                continue;
+            }
         }
 
         file.unpack_in(dst.as_ref()).await?;
@@ -162,7 +165,9 @@ pub async fn untar<R: tokio::io::AsyncBufRead + Unpin>(
     let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
         .set_preserve_mtime(false)
         .build();
-    Ok(untar_in(&mut archive, target.as_ref()).await?)
+    let x = Path::new("foo");
+
+    Ok(untar_in(&mut archive, x).await?)
 }
 
 /// Unzip a `.zip` or `.tar.gz` archive into the target directory, without requiring `Seek`.

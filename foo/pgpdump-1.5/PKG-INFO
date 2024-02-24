@@ -1,0 +1,18 @@
+Metadata-Version: 1.1
+Name: pgpdump
+Version: 1.5
+Summary: PGP packet parser library
+Home-page: https://github.com/toofishes/python-pgpdump
+Author: Dan McGee
+Author-email: UNKNOWN
+License: BSD
+Description: UNKNOWN
+Keywords: pgp gpg rfc2440 rfc4880 crypto cryptography
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Security :: Cryptography
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
