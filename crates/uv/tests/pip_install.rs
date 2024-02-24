@@ -49,6 +49,19 @@ fn command(context: &TestContext) -> Command {
     command
 }
 
+/// Create a `pip uninstall` command with options shared across scenarios.
+fn uninstall_command(context: &TestContext) -> Command {
+    let mut command = Command::new(get_bin());
+    command
+        .arg("pip")
+        .arg("uninstall")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir);
+    command
+}
+
 #[test]
 fn missing_requirements_txt() {
     let context = TestContext::new("3.12");
@@ -1769,4 +1782,39 @@ fn reinstall_duplicate() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Install a package that contains a symlink within the archive.
+#[test]
+fn install_symlink() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+        .arg("pgpdump==1.5")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pgpdump==1.5
+    "###
+    );
+
+    context.assert_command("import pgpdump").success();
+
+    uv_snapshot!(uninstall_command(&context)
+        .arg("pgpdump"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - pgpdump==1.5
+    "###
+    );
 }

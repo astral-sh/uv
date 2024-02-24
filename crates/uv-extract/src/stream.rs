@@ -4,6 +4,7 @@ use std::pin::Pin;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tracing::warn;
 
 use crate::Error;
 
@@ -41,7 +42,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             }
 
             // We don't know the file permissions here, because we haven't seen the central directory yet.
-            let file = fs_err::tokio::File::create(path).await?;
+            let file = fs_err::tokio::File::create(&path).await?;
             let mut writer =
                 if let Ok(size) = usize::try_from(entry.reader().entry().uncompressed_size()) {
                     tokio::io::BufWriter::with_capacity(size, file)
@@ -111,6 +112,19 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
     while let Some(entry) = pinned.next().await {
         // Unpack the file into the destination directory.
         let mut file = entry?;
+
+        // On Windows, skip symlink entries, as they're not supported. pip recursively copies the
+        // symlink target instead.
+        if cfg!(windows) {
+            if file.header().entry_type().is_symlink() {
+                warn!(
+                    "Skipping symlink in tar archive: {}",
+                    file.path()?.display()
+                );
+                continue;
+            }
+        }
+
         file.unpack_in(dst.as_ref()).await?;
 
         // Preserve the executable bit.
@@ -119,17 +133,19 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
             use std::fs::Permissions;
             use std::os::unix::fs::PermissionsExt;
 
-            let mode = file.header().mode()?;
-
-            let has_any_executable_bit = mode & 0o111;
-            if has_any_executable_bit != 0 {
-                if let Some(path) = crate::tar::unpacked_at(dst.as_ref(), &file.path()?) {
-                    let permissions = fs_err::tokio::metadata(&path).await?.permissions();
-                    fs_err::tokio::set_permissions(
-                        &path,
-                        Permissions::from_mode(permissions.mode() | 0o111),
-                    )
-                    .await?;
+            let entry_type = file.header().entry_type();
+            if entry_type.is_file() || entry_type.is_hard_link() {
+                let mode = file.header().mode()?;
+                let has_any_executable_bit = mode & 0o111;
+                if has_any_executable_bit != 0 {
+                    if let Some(path) = crate::tar::unpacked_at(dst.as_ref(), &file.path()?) {
+                        let permissions = fs_err::tokio::metadata(&path).await?.permissions();
+                        fs_err::tokio::set_permissions(
+                            &path,
+                            Permissions::from_mode(permissions.mode() | 0o111),
+                        )
+                        .await?;
+                    }
                 }
             }
         }
