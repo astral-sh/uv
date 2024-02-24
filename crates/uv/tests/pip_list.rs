@@ -133,10 +133,30 @@ fn editable() -> Result<()> {
     "###
     );
 
-    let filters = [(
-        workspace_dir.as_str().strip_prefix("file://").unwrap(),
-        "[WORKSPACE_DIR]/",
-    )]
+    // Account for difference length workspace dir
+    let workspace_len_difference = workspace_dir.as_str().len() - 23;
+
+    let find_divider = "-".repeat(57 + workspace_len_difference);
+    let replace_divider = "-".repeat(57);
+
+    let find_header = format!(
+        "Editable project location{0}",
+        " ".repeat(workspace_len_difference + 32)
+    );
+    let replace_header = format!("Editable project location{0}", " ".repeat(32));
+
+    let find_whitespace = " ".repeat(57 + workspace_len_difference);
+    let replace_whitespace = " ".repeat(57);
+
+    let filters = [
+        (
+            workspace_dir.as_str().strip_prefix("file://").unwrap(),
+            "[WORKSPACE_DIR]/",
+        ),
+        (find_divider.as_str(), replace_divider.as_str()),
+        (find_header.as_str(), replace_header.as_str()),
+        (find_whitespace.as_str(), replace_whitespace.as_str()),
+    ]
     .into_iter()
     .chain(INSTA_FILTERS.to_vec())
     .collect::<Vec<_>>();
@@ -151,9 +171,9 @@ fn editable() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location                                                
-    --------------- ------- -------------------------------------------------------------------------
-    numpy           1.26.2                                                                           
+    Package         Version Editable project location                                
+    --------------- ------- ---------------------------------------------------------
+    numpy           1.26.2                                                           
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
     ----- stderr -----
@@ -206,10 +226,26 @@ fn editable_only() -> Result<()> {
     "###
     );
 
-    let filters = [(
-        workspace_dir.as_str().strip_prefix("file://").unwrap(),
-        "[WORKSPACE_DIR]/",
-    )]
+    // Account for difference length workspace dir
+    let workspace_len_difference = workspace_dir.as_str().len() - 23;
+
+    let find_divider = "-".repeat(57 + workspace_len_difference);
+    let replace_divider = "-".repeat(57);
+
+    let find_header = format!(
+        "Editable project location{0}",
+        " ".repeat(workspace_len_difference + 32)
+    );
+    let replace_header = format!("Editable project location{0}", " ".repeat(32));
+
+    let filters = [
+        (
+            workspace_dir.as_str().strip_prefix("file://").unwrap(),
+            "[WORKSPACE_DIR]/",
+        ),
+        (find_divider.as_str(), replace_divider.as_str()),
+        (find_header.as_str(), replace_header.as_str()),
+    ]
     .into_iter()
     .chain(INSTA_FILTERS.to_vec())
     .collect::<Vec<_>>();
@@ -225,8 +261,8 @@ fn editable_only() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location                                                
-    --------------- ------- -------------------------------------------------------------------------
+    Package         Version Editable project location                                
+    --------------- ------- ---------------------------------------------------------
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
     ----- stderr -----
