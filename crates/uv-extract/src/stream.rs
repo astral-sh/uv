@@ -66,7 +66,6 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
         use std::fs::Permissions;
         use std::os::unix::fs::PermissionsExt;
 
-
         // To avoid lots of small reads to `reader` when parsing the central directory, wrap it in
         // a buffer.
         let mut buf = futures::io::BufReader::new(reader);
@@ -119,9 +118,9 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
         if cfg!(windows) {
             if file.header().entry_type().is_symlink() {
                 warn!(
-                "Skipping symlink in tar archive: {}",
-                file.path()?.display()
-            );
+                    "Skipping symlink in tar archive: {}",
+                    file.path()?.display()
+                );
                 continue;
             }
         }
@@ -165,9 +164,7 @@ pub async fn untar<R: tokio::io::AsyncBufRead + Unpin>(
     let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
         .set_preserve_mtime(false)
         .build();
-    let x = Path::new("foo");
-
-    Ok(untar_in(&mut archive, x).await?)
+    Ok(untar_in(&mut archive, target.as_ref()).await?)
 }
 
 /// Unzip a `.zip` or `.tar.gz` archive into the target directory, without requiring `Seek`.
