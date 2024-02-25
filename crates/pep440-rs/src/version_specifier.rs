@@ -1253,11 +1253,11 @@ mod tests {
         let result = VersionSpecifiers::from_str("~= 0.9, %‍= 1.0, != 1.3.4.*");
         assert_eq!(
             result.unwrap_err().to_string(),
-            indoc! {r#"
+            indoc! {r"
                 Failed to parse version: Unexpected end of version specifier, expected operator:
                 ~= 0.9, %‍= 1.0, != 1.3.4.*
                        ^^^^^^^
-            "#}
+            "}
         );
     }
 

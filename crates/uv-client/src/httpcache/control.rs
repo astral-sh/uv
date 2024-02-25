@@ -604,9 +604,9 @@ mod tests {
     #[test]
     fn cache_control_parse_multiple_directives_across_multiple_header_values() {
         let headers = [
-            r#"max-age=60, no-cache"#,
+            r"max-age=60, no-cache",
             r#"private="cookie""#,
-            r#"no-transform"#,
+            r"no-transform",
         ];
         let directives = CacheControlParser::new(headers).collect::<Vec<_>>();
         assert_eq!(
@@ -635,9 +635,9 @@ mod tests {
     #[test]
     fn cache_control_parse_one_header_invalid() {
         let headers = [
-            r#"max-age=60, no-cache"#,
+            r"max-age=60, no-cache",
             r#", private="cookie""#,
-            r#"no-transform"#,
+            r"no-transform",
         ];
         let directives = CacheControlParser::new(headers).collect::<Vec<_>>();
         assert_eq!(
@@ -688,7 +688,7 @@ mod tests {
 
     #[test]
     fn cache_control_parse_name_normalized() {
-        let header = r#"MAX-AGE=60"#;
+        let header = r"MAX-AGE=60";
         let directives = CacheControlParser::new([header]).collect::<Vec<_>>();
         assert_eq!(
             directives,
@@ -704,7 +704,7 @@ mod tests {
     // things are stale and the client should do a re-check.
     #[test]
     fn cache_control_parse_duplicate_directives() {
-        let header = r#"max-age=60, no-cache, max-age=30"#;
+        let header = r"max-age=60, no-cache, max-age=30";
         let directives = CacheControlParser::new([header]).collect::<Vec<_>>();
         assert_eq!(
             directives,
@@ -727,7 +727,7 @@ mod tests {
 
     #[test]
     fn cache_control_parse_duplicate_directives_across_headers() {
-        let headers = [r#"max-age=60, no-cache"#, r#"max-age=30"#];
+        let headers = [r"max-age=60, no-cache", r"max-age=30"];
         let directives = CacheControlParser::new(headers).collect::<Vec<_>>();
         assert_eq!(
             directives,
@@ -752,7 +752,7 @@ mod tests {
     // even when something is duplicated multiple times.
     #[test]
     fn cache_control_parse_duplicate_redux() {
-        let header = r#"max-age=60, no-cache, no-cache, max-age=30"#;
+        let header = r"max-age=60, no-cache, no-cache, max-age=30";
         let directives = CacheControlParser::new([header]).collect::<Vec<_>>();
         assert_eq!(
             directives,

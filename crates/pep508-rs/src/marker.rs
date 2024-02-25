@@ -1392,7 +1392,7 @@ mod test {
     #[test]
     fn test_marker_equivalence() {
         let values = [
-            (r#"python_version == '2.7'"#, r#"python_version == "2.7""#),
+            (r"python_version == '2.7'", r#"python_version == "2.7""#),
             (r#"python_version == "2.7""#, r#"python_version == "2.7""#),
             (
                 r#"python_version == "2.7" and os_name == "posix""#,

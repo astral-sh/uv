@@ -1122,7 +1122,7 @@ mod tests {
 
     #[test]
     fn basic_examples() {
-        let input = r#"requests[security,tests] >=2.8.1, ==2.8.* ; python_version < '2.7'"#;
+        let input = r"requests[security,tests] >=2.8.1, ==2.8.* ; python_version < '2.7'";
         let requests = Requirement::from_str(input).unwrap();
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
@@ -1364,7 +1364,7 @@ mod tests {
     #[test]
     fn error_marker_incomplete1() {
         assert_err(
-            r#"numpy; sys_platform"#,
+            r"numpy; sys_platform",
             indoc! {"
                 Expected a valid marker operator (such as '>=' or 'not in'), found ''
                 numpy; sys_platform
@@ -1376,7 +1376,7 @@ mod tests {
     #[test]
     fn error_marker_incomplete2() {
         assert_err(
-            r#"numpy; sys_platform =="#,
+            r"numpy; sys_platform ==",
             indoc! {"\
                 Expected marker value, found end of dependency specification
                 numpy; sys_platform ==
@@ -1421,7 +1421,7 @@ mod tests {
     #[test]
     fn error_pep440() {
         assert_err(
-            r#"numpy >=1.1.*"#,
+            r"numpy >=1.1.*",
             indoc! {"
                 Operator >= cannot be used with a wildcard version specifier
                 numpy >=1.1.*
@@ -1433,7 +1433,7 @@ mod tests {
     #[test]
     fn error_no_name() {
         assert_err(
-            r#"==0.0"#,
+            r"==0.0",
             indoc! {"
                 Expected package name starting with an alphanumeric character, found '='
                 ==0.0
@@ -1445,7 +1445,7 @@ mod tests {
     #[test]
     fn error_bare_url() {
         assert_err(
-            r#"git+https://github.com/pallets/flask.git"#,
+            r"git+https://github.com/pallets/flask.git",
             indoc! {"
                 URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).
                 git+https://github.com/pallets/flask.git
@@ -1457,7 +1457,7 @@ mod tests {
     #[test]
     fn error_no_comma_between_extras() {
         assert_err(
-            r#"name[bar baz]"#,
+            r"name[bar baz]",
             indoc! {"
                 Expected either ',' (separating extras) or ']' (ending the extras section), found 'b'
                 name[bar baz]
@@ -1469,7 +1469,7 @@ mod tests {
     #[test]
     fn error_extra_comma_after_extras() {
         assert_err(
-            r#"name[bar, baz,]"#,
+            r"name[bar, baz,]",
             indoc! {"
                 Expected an alphanumeric character starting the extra name, found ']'
                 name[bar, baz,]
@@ -1481,7 +1481,7 @@ mod tests {
     #[test]
     fn error_extras_not_closed() {
         assert_err(
-            r#"name[bar, baz >= 1.0"#,
+            r"name[bar, baz >= 1.0",
             indoc! {"
                 Expected either ',' (separating extras) or ']' (ending the extras section), found '>'
                 name[bar, baz >= 1.0
@@ -1493,7 +1493,7 @@ mod tests {
     #[test]
     fn error_no_space_after_url() {
         assert_err(
-            r#"name @ https://example.com/; extra == 'example'"#,
+            r"name @ https://example.com/; extra == 'example'",
             indoc! {"
                 Missing space before ';', the end of the URL is ambiguous
                 name @ https://example.com/; extra == 'example'
@@ -1505,7 +1505,7 @@ mod tests {
     #[test]
     fn error_name_at_nothing() {
         assert_err(
-            r#"name @"#,
+            r"name @",
             indoc! {"
                 Expected URL
                 name @
@@ -1517,7 +1517,7 @@ mod tests {
     #[test]
     fn test_error_invalid_marker_key() {
         assert_err(
-            r#"name; invalid_name"#,
+            r"name; invalid_name",
             indoc! {"
                 Expected a valid marker name, found 'invalid_name'
                 name; invalid_name
