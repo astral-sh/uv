@@ -8,7 +8,7 @@ use std::{env, str};
 
 use anyhow::{anyhow, Context, Result};
 use cargo_util::{paths, ProcessBuilder};
-use git2::{self, ErrorClass, ObjectType};
+use git2::{ErrorClass, ObjectType};
 use reqwest::Client;
 use reqwest::StatusCode;
 use tracing::{debug, warn};
