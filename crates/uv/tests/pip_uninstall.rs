@@ -328,7 +328,7 @@ fn missing_record() -> Result<()> {
         unimplemented!("Only Windows and Unix are supported")
     })
     .unwrap();
-    std::fs::remove_file(dist_info.join("RECORD"))?;
+    fs_err::remove_file(dist_info.join("RECORD"))?;
 
     let dist_info_str = regex::escape(&format!(
         "RECORD file not found at: {}",

@@ -550,8 +550,8 @@ fn windows_shims() -> Result<()> {
     assert!(py38.to_str().unwrap().contains("3.8"));
 
     // Write the shim script that forwards the arguments to the python3.8 installation.
-    std::fs::create_dir(&shim_path)?;
-    std::fs::write(
+    fs_err::create_dir(&shim_path)?;
+    fs_err::write(
         shim_path.child("python.bat"),
         format!("@echo off\r\n{}/python.exe %*", py38.display()),
     )?;
