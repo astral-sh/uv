@@ -496,14 +496,16 @@ async fn install(
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
 
-    // Partition into those that should be linked from the cache (`local`), those that need to be
-    // downloaded (`remote`), and those that should be removed (`extraneous`).
     let requirements = resolution.requirements();
+
+    // Map the built editables to their resolved form.
     let editables = built_editables
         .into_iter()
         .map(ResolvedEditable::Built)
         .collect::<Vec<_>>();
 
+    // Partition into those that should be linked from the cache (`local`), those that need to be
+    // downloaded (`remote`), and those that should be removed (`extraneous`).
     let Plan {
         local,
         remote,
