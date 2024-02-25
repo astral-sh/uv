@@ -16,7 +16,6 @@ use rustc_hash::FxHashMap;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
-use crate::prerelease_mode::PreReleaseStrategy;
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::UnavailablePackage;
 
@@ -96,7 +95,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                     format!("there is no version of {package}{set}")
                 } else {
                     let complement = set.complement();
-                    let segments = complement.iter().collect::<Vec<_>>().len();
+                    let segments = complement.iter().count();
                     // Simple case, there's a single range to report
                     if segments == 1 {
                         format!(
@@ -346,25 +345,10 @@ impl PubGrubReportFormatter<'_> {
     ) -> IndexSet<PubGrubHint> {
         /// Returns `true` if pre-releases were allowed for a package.
         fn allowed_prerelease(package: &PubGrubPackage, selector: &CandidateSelector) -> bool {
-            match selector.prerelease_strategy() {
-                PreReleaseStrategy::Disallow => false,
-                PreReleaseStrategy::Allow => true,
-                PreReleaseStrategy::IfNecessary => false,
-                PreReleaseStrategy::Explicit(packages) => {
-                    if let PubGrubPackage::Package(package, ..) = package {
-                        packages.contains(package)
-                    } else {
-                        false
-                    }
-                }
-                PreReleaseStrategy::IfNecessaryOrExplicit(packages) => {
-                    if let PubGrubPackage::Package(package, ..) = package {
-                        packages.contains(package)
-                    } else {
-                        false
-                    }
-                }
-            }
+            let PubGrubPackage::Package(package, ..) = package else {
+                return false;
+            };
+            selector.prerelease_strategy().allows(package)
         }
 
         let mut hints = IndexSet::default();
@@ -471,7 +455,7 @@ pub(crate) enum PubGrubHint {
 impl std::fmt::Display for PubGrubHint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PubGrubHint::PreReleaseAvailable { package, version } => {
+            Self::PreReleaseAvailable { package, version } => {
                 write!(
                     f,
                     "{}{} Pre-releases are available for {} in the requested range (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",
@@ -481,7 +465,7 @@ impl std::fmt::Display for PubGrubHint {
                     version.bold()
                 )
             }
-            PubGrubHint::PreReleaseRequested { package, range } => {
+            Self::PreReleaseRequested { package, range } => {
                 write!(
                     f,
                     "{}{} {} was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",
@@ -491,7 +475,7 @@ impl std::fmt::Display for PubGrubHint {
                     PackageRange::compatibility(package, range).bold()
                 )
             }
-            PubGrubHint::NoIndex => {
+            Self::NoIndex => {
                 write!(
                     f,
                     "{}{} Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)",
@@ -499,7 +483,7 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                 )
             }
-            PubGrubHint::Offline => {
+            Self::Offline => {
                 write!(
                     f,
                     "{}{} Packages were unavailable because the network was disabled",

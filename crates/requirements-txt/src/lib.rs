@@ -172,7 +172,7 @@ impl EditableRequirement {
     pub fn parse(
         given: &str,
         working_dir: impl AsRef<Path>,
-    ) -> Result<EditableRequirement, RequirementsTxtParserError> {
+    ) -> Result<Self, RequirementsTxtParserError> {
         // Identify the extras.
         let (requirement, extras) = if let Some((requirement, extras)) = Self::split_extras(given) {
             let extras = Extras::parse(extras).map_err(|err| {
@@ -241,7 +241,7 @@ impl EditableRequirement {
         // Add the verbatim representation of the URL to the `VerbatimUrl`.
         let url = url.with_given(requirement.to_string());
 
-        Ok(EditableRequirement { url, extras, path })
+        Ok(Self { url, extras, path })
     }
 
     /// Identify the extras in an editable URL (e.g., `../editable[dev]`).
@@ -434,7 +434,7 @@ impl RequirementsTxt {
     }
 
     /// Merges other into self
-    pub fn update_from(&mut self, other: RequirementsTxt) {
+    pub fn update_from(&mut self, other: Self) {
         self.requirements.extend(other.requirements);
         self.constraints.extend(other.constraints);
     }
@@ -766,57 +766,41 @@ impl RequirementsTxtParserError {
     #[must_use]
     fn with_offset(self, offset: usize) -> Self {
         match self {
-            RequirementsTxtParserError::IO(err) => RequirementsTxtParserError::IO(err),
-            RequirementsTxtParserError::InvalidEditablePath(given) => {
-                RequirementsTxtParserError::InvalidEditablePath(given)
-            }
-            RequirementsTxtParserError::Url {
+            Self::IO(err) => Self::IO(err),
+            Self::InvalidEditablePath(given) => Self::InvalidEditablePath(given),
+            Self::Url {
                 source,
                 url,
                 start,
                 end,
-            } => RequirementsTxtParserError::Url {
+            } => Self::Url {
                 source,
                 url,
                 start: start + offset,
                 end: end + offset,
             },
-            RequirementsTxtParserError::UnsupportedUrl(url) => {
-                RequirementsTxtParserError::UnsupportedUrl(url)
-            }
-            RequirementsTxtParserError::MissingRequirementPrefix(given) => {
-                RequirementsTxtParserError::MissingRequirementPrefix(given)
-            }
-            RequirementsTxtParserError::MissingEditablePrefix(given) => {
-                RequirementsTxtParserError::MissingEditablePrefix(given)
-            }
-            RequirementsTxtParserError::Parser { message, location } => {
-                RequirementsTxtParserError::Parser {
-                    message,
-                    location: location + offset,
-                }
-            }
-            RequirementsTxtParserError::UnsupportedRequirement { source, start, end } => {
-                RequirementsTxtParserError::UnsupportedRequirement {
-                    source,
-                    start: start + offset,
-                    end: end + offset,
-                }
-            }
-            RequirementsTxtParserError::Pep508 { source, start, end } => {
-                RequirementsTxtParserError::Pep508 {
-                    source,
-                    start: start + offset,
-                    end: end + offset,
-                }
-            }
-            RequirementsTxtParserError::Subfile { source, start, end } => {
-                RequirementsTxtParserError::Subfile {
-                    source,
-                    start: start + offset,
-                    end: end + offset,
-                }
-            }
+            Self::UnsupportedUrl(url) => Self::UnsupportedUrl(url),
+            Self::MissingRequirementPrefix(given) => Self::MissingRequirementPrefix(given),
+            Self::MissingEditablePrefix(given) => Self::MissingEditablePrefix(given),
+            Self::Parser { message, location } => Self::Parser {
+                message,
+                location: location + offset,
+            },
+            Self::UnsupportedRequirement { source, start, end } => Self::UnsupportedRequirement {
+                source,
+                start: start + offset,
+                end: end + offset,
+            },
+            Self::Pep508 { source, start, end } => Self::Pep508 {
+                source,
+                start: start + offset,
+                end: end + offset,
+            },
+            Self::Subfile { source, start, end } => Self::Subfile {
+                source,
+                start: start + offset,
+                end: end + offset,
+            },
         }
     }
 }
@@ -824,35 +808,35 @@ impl RequirementsTxtParserError {
 impl Display for RequirementsTxtParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            RequirementsTxtParserError::IO(err) => err.fmt(f),
-            RequirementsTxtParserError::InvalidEditablePath(given) => {
+            Self::IO(err) => err.fmt(f),
+            Self::InvalidEditablePath(given) => {
                 write!(f, "Invalid editable path: {given}")
             }
-            RequirementsTxtParserError::Url { url, start, .. } => {
+            Self::Url { url, start, .. } => {
                 write!(f, "Invalid URL at position {start}: `{url}`")
             }
-            RequirementsTxtParserError::UnsupportedUrl(url) => {
+            Self::UnsupportedUrl(url) => {
                 write!(f, "Unsupported URL (expected a `file://` scheme): `{url}`")
             }
-            RequirementsTxtParserError::MissingRequirementPrefix(given) => {
+            Self::MissingRequirementPrefix(given) => {
                 write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
             }
-            RequirementsTxtParserError::MissingEditablePrefix(given) => {
+            Self::MissingEditablePrefix(given) => {
                 write!(
                     f,
                     "Requirement `{given}` looks like a directory but was passed as a package name. Did you mean `-e {given}`?"
                 )
             }
-            RequirementsTxtParserError::Parser { message, location } => {
+            Self::Parser { message, location } => {
                 write!(f, "{message} at position {location}")
             }
-            RequirementsTxtParserError::UnsupportedRequirement { start, end, .. } => {
+            Self::UnsupportedRequirement { start, end, .. } => {
                 write!(f, "Unsupported requirement in position {start} to {end}")
             }
-            RequirementsTxtParserError::Pep508 { start, .. } => {
+            Self::Pep508 { start, .. } => {
                 write!(f, "Couldn't parse requirement at position {start}")
             }
-            RequirementsTxtParserError::Subfile { start, .. } => {
+            Self::Subfile { start, .. } => {
                 write!(f, "Error parsing included file at position {start}")
             }
         }
@@ -862,16 +846,16 @@ impl Display for RequirementsTxtParserError {
 impl std::error::Error for RequirementsTxtParserError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match &self {
-            RequirementsTxtParserError::IO(err) => err.source(),
-            RequirementsTxtParserError::Url { source, .. } => Some(source),
-            RequirementsTxtParserError::InvalidEditablePath(_) => None,
-            RequirementsTxtParserError::UnsupportedUrl(_) => None,
-            RequirementsTxtParserError::MissingRequirementPrefix(_) => None,
-            RequirementsTxtParserError::MissingEditablePrefix(_) => None,
-            RequirementsTxtParserError::UnsupportedRequirement { source, .. } => Some(source),
-            RequirementsTxtParserError::Pep508 { source, .. } => Some(source),
-            RequirementsTxtParserError::Subfile { source, .. } => Some(source.as_ref()),
-            RequirementsTxtParserError::Parser { .. } => None,
+            Self::IO(err) => err.source(),
+            Self::Url { source, .. } => Some(source),
+            Self::InvalidEditablePath(_) => None,
+            Self::UnsupportedUrl(_) => None,
+            Self::MissingRequirementPrefix(_) => None,
+            Self::MissingEditablePrefix(_) => None,
+            Self::UnsupportedRequirement { source, .. } => Some(source),
+            Self::Pep508 { source, .. } => Some(source),
+            Self::Subfile { source, .. } => Some(source.as_ref()),
+            Self::Parser { .. } => None,
         }
     }
 }

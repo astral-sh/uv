@@ -2799,3 +2799,86 @@ fn pip_entrypoints() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn invalidate_on_change() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package.
+    let editable_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = ">=3.8"
+"#,
+    )?;
+
+    // Write to a requirements file.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
+
+    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, command(&context)
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Installed 1 package in [TIME]
+     + example==0.0.0 (from [WORKSPACE_DIR])
+    "###
+    );
+
+    // Re-installing should be a no-op.
+    uv_snapshot!(filters, command(&context)
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Modify the editable package.
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==3.7.1"
+]
+requires-python = ">=3.8"
+"#,
+    )?;
+
+    // Re-installing should update the package.
+    uv_snapshot!(filters, command(&context)
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - example==0.0.0 (from [WORKSPACE_DIR])
+     + example==0.0.0 (from [WORKSPACE_DIR])
+    "###
+    );
+
+    Ok(())
+}

@@ -101,8 +101,8 @@ enum KnownHostError {
 }
 
 impl From<anyhow::Error> for KnownHostError {
-    fn from(err: anyhow::Error) -> KnownHostError {
-        KnownHostError::CheckError(err)
+    fn from(err: anyhow::Error) -> Self {
+        Self::CheckError(err)
     }
 }
 
@@ -118,10 +118,10 @@ enum KnownHostLocation {
 impl Display for KnownHostLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let loc = match self {
-            KnownHostLocation::File { path, lineno } => {
+            Self::File { path, lineno } => {
                 format!("{} line {lineno}", path.display())
             }
-            KnownHostLocation::Bundled => "bundled with cargo".to_string(),
+            Self::Bundled => "bundled with cargo".to_string(),
         };
         f.write_str(&loc)
     }

@@ -129,7 +129,7 @@ impl Metadata21 {
             })
             .collect::<Vec<_>>();
 
-        Ok(Metadata21 {
+        Ok(Self {
             metadata_version,
             name,
             version,
@@ -143,7 +143,7 @@ impl Metadata21 {
 impl FromStr for Metadata21 {
     type Err = Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Metadata21::parse(s.as_bytes())
+        Self::parse(s.as_bytes())
     }
 }
 

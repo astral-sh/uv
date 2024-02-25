@@ -989,7 +989,7 @@ fn install_git_private_https_pat_not_authorized() {
     let token = "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";
 
     let mut filters = context.filters();
-    filters.insert(0, (&token, "***"));
+    filters.insert(0, (token, "***"));
 
     // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
     // and hang the test
@@ -1817,4 +1817,94 @@ fn install_symlink() {
      - pgpdump==1.5
     "###
     );
+}
+
+#[test]
+fn invalidate_on_change() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package.
+    let editable_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = ">=3.8"
+"#,
+    )?;
+
+    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, command(&context)
+        .arg("--editable")
+        .arg(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 4 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from [WORKSPACE_DIR])
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    // Re-installing should be a no-op.
+    uv_snapshot!(filters, command(&context)
+        .arg("--editable")
+        .arg(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Modify the editable package.
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==3.7.1"
+]
+requires-python = ">=3.8"
+"#,
+    )?;
+
+    // Re-installing should update the package.
+    uv_snapshot!(filters, command(&context)
+        .arg("--editable")
+        .arg(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 4 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==4.0.0
+     + anyio==3.7.1
+     - example==0.0.0 (from [WORKSPACE_DIR])
+     + example==0.0.0 (from [WORKSPACE_DIR])
+    "###
+    );
+
+    Ok(())
 }

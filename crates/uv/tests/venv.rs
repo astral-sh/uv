@@ -30,7 +30,7 @@ fn create_venv() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            &filter_prompt,
+            filter_prompt,
             "Activate with: source /home/ferris/project/.venv/bin/activate",
         ),
     ];
@@ -68,7 +68,7 @@ fn create_venv() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            &filter_prompt,
+            filter_prompt,
             "Activate with: source /home/ferris/project/.venv/bin/activate",
         ),
     ];
@@ -115,7 +115,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
             "Using Python [VERSION] interpreter at [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
-        (&filter_prompt, "Activate with: source .venv/bin/activate"),
+        (filter_prompt, "Activate with: source .venv/bin/activate"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -160,7 +160,7 @@ fn seed() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            &filter_prompt,
+            filter_prompt,
             "Activate with: source /home/ferris/project/.venv/bin/activate",
         ),
     ];
@@ -210,7 +210,7 @@ fn seed_older_python_version() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            &filter_prompt,
+            filter_prompt,
             "Activate with: source /home/ferris/project/.venv/bin/activate",
         ),
     ];
@@ -352,7 +352,7 @@ fn create_venv_python_patch() -> Result<()> {
         (r"interpreter at .+", "interpreter at [PATH]"),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            &filter_prompt,
+            filter_prompt,
             "Activate with: source /home/ferris/project/.venv/bin/activate",
         ),
     ];
@@ -450,7 +450,7 @@ fn empty_dir_exists() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            &filter_prompt,
+            filter_prompt,
             "Activate with: source /home/ferris/project/.venv/bin/activate",
         ),
     ];
@@ -614,7 +614,7 @@ fn virtualenv_compatibility() -> Result<()> {
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
-            &filter_prompt,
+            filter_prompt,
             "Activate with: source /home/ferris/project/.venv/bin/activate",
         ),
     ];
@@ -628,7 +628,7 @@ fn virtualenv_compatibility() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("UV_TEST_PYTHON_PATH", bin.clone())
+        .env("UV_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0

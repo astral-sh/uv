@@ -11,6 +11,7 @@ use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Nam
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, VerbatimUrl};
 use requirements_txt::EditableRequirement;
+use uv_cache::ArchiveTimestamp;
 use uv_interpreter::Virtualenv;
 use uv_normalize::PackageName;
 
@@ -257,10 +258,10 @@ impl<'a> SitePackages<'a> {
 
         // Add the direct requirements to the queue.
         for dependency in requirements {
-            if dependency.evaluate_markers(self.venv.interpreter().markers(), &[]) {
-                if seen.insert(dependency.clone()) {
-                    stack.push(dependency.clone());
-                }
+            if dependency.evaluate_markers(self.venv.interpreter().markers(), &[])
+                && seen.insert(dependency.clone())
+            {
+                stack.push(dependency.clone());
             }
         }
 
@@ -273,6 +274,20 @@ impl<'a> SitePackages<'a> {
                     return Ok(false);
                 }
                 [distribution] => {
+                    // Is the editable out-of-date?
+                    let Ok(Some(installed_at)) =
+                        ArchiveTimestamp::from_path(distribution.path().join("METADATA"))
+                    else {
+                        return Ok(false);
+                    };
+                    let Ok(Some(modified_at)) = ArchiveTimestamp::from_path(&requirement.path)
+                    else {
+                        return Ok(false);
+                    };
+                    if modified_at > installed_at {
+                        return Ok(false);
+                    }
+
                     // Recurse into the dependencies.
                     let metadata = distribution
                         .metadata()
@@ -283,10 +298,9 @@ impl<'a> SitePackages<'a> {
                         if dependency.evaluate_markers(
                             self.venv.interpreter().markers(),
                             &requirement.extras,
-                        ) {
-                            if seen.insert(dependency.clone()) {
-                                stack.push(dependency);
-                            }
+                        ) && seen.insert(dependency.clone())
+                        {
+                            stack.push(dependency);
                         }
                     }
                 }
@@ -319,6 +333,10 @@ impl<'a> SitePackages<'a> {
 
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints {
+                        if constraint.name != requirement.name {
+                            continue;
+                        }
+
                         if !constraint.evaluate_markers(self.venv.interpreter().markers(), &[]) {
                             continue;
                         }
@@ -344,10 +362,9 @@ impl<'a> SitePackages<'a> {
                         if dependency.evaluate_markers(
                             self.venv.interpreter().markers(),
                             &requirement.extras,
-                        ) {
-                            if seen.insert(dependency.clone()) {
-                                stack.push(dependency);
-                            }
+                        ) && seen.insert(dependency.clone())
+                        {
+                            stack.push(dependency);
                         }
                     }
                 }

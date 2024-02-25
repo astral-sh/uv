@@ -54,9 +54,9 @@ impl PackageName {
     }
 }
 
-impl From<&PackageName> for PackageName {
+impl From<&Self> for PackageName {
     /// Required for `WaitMap::wait`.
-    fn from(package_name: &PackageName) -> Self {
+    fn from(package_name: &Self) -> Self {
         package_name.clone()
     }
 }

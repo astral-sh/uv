@@ -23,8 +23,8 @@ pub enum IndexUrl {
 impl Display for IndexUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            IndexUrl::Pypi => Display::fmt(&*PYPI_URL, f),
-            IndexUrl::Url(url) => Display::fmt(url, f),
+            Self::Pypi => Display::fmt(&*PYPI_URL, f),
+            Self::Url(url) => Display::fmt(url, f),
         }
     }
 }
@@ -61,8 +61,8 @@ impl Deref for IndexUrl {
 
     fn deref(&self) -> &Self::Target {
         match &self {
-            IndexUrl::Pypi => &PYPI_URL,
-            IndexUrl::Url(url) => url,
+            Self::Pypi => &PYPI_URL,
+            Self::Url(url) => url,
         }
     }
 }
@@ -123,8 +123,8 @@ impl FromStr for FlatIndexLocation {
 impl Display for FlatIndexLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            FlatIndexLocation::Path(path) => Display::fmt(&path.display(), f),
-            FlatIndexLocation::Url(url) => Display::fmt(url, f),
+            Self::Path(path) => Display::fmt(&path.display(), f),
+            Self::Url(url) => Display::fmt(url, f),
         }
     }
 }

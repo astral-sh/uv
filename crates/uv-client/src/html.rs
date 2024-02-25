@@ -557,7 +557,7 @@ mod tests {
 
     #[test]
     fn parse_missing_href() {
-        let text = r#"
+        let text = r"
 <!DOCTYPE html>
 <html>
   <body>
@@ -566,7 +566,7 @@ mod tests {
   </body>
 </html>
 <!--TIMESTAMP 1703347410-->
-        "#;
+        ";
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
         insta::assert_display_snapshot!(result, @"Missing href attribute on anchor link");

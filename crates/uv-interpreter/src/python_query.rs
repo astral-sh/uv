@@ -213,15 +213,15 @@ enum PythonInstallation {
 impl PythonInstallation {
     fn major(&self) -> u8 {
         match self {
-            PythonInstallation::PyListPath { major, .. } => *major,
-            PythonInstallation::Interpreter(interpreter) => interpreter.python_major(),
+            Self::PyListPath { major, .. } => *major,
+            Self::Interpreter(interpreter) => interpreter.python_major(),
         }
     }
 
     fn minor(&self) -> u8 {
         match self {
-            PythonInstallation::PyListPath { minor, .. } => *minor,
-            PythonInstallation::Interpreter(interpreter) => interpreter.python_minor(),
+            Self::PyListPath { minor, .. } => *minor,
+            Self::Interpreter(interpreter) => interpreter.python_minor(),
         }
     }
 
@@ -268,10 +268,10 @@ impl PythonInstallation {
         cache: &Cache,
     ) -> Result<Interpreter, Error> {
         match self {
-            PythonInstallation::PyListPath {
+            Self::PyListPath {
                 executable_path, ..
             } => Interpreter::query(&executable_path, platform, cache),
-            PythonInstallation::Interpreter(interpreter) => Ok(interpreter),
+            Self::Interpreter(interpreter) => Ok(interpreter),
         }
     }
 }
@@ -297,20 +297,20 @@ impl PythonVersionSelector {
         };
 
         match self {
-            PythonVersionSelector::Default => [Some(python3), Some(python), None, None],
-            PythonVersionSelector::Major(major) => [
+            Self::Default => [Some(python3), Some(python), None, None],
+            Self::Major(major) => [
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
                 None,
                 None,
             ],
-            PythonVersionSelector::MajorMinor(major, minor) => [
+            Self::MajorMinor(major, minor) => [
                 Some(Cow::Owned(format!("python{major}.{minor}{extension}"))),
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
                 None,
             ],
-            PythonVersionSelector::MajorMinorPatch(major, minor, patch) => [
+            Self::MajorMinorPatch(major, minor, patch) => [
                 Some(Cow::Owned(format!(
                     "python{major}.{minor}.{patch}{extension}",
                 ))),
@@ -323,10 +323,10 @@ impl PythonVersionSelector {
 
     fn major(self) -> Option<u8> {
         match self {
-            PythonVersionSelector::Default => None,
-            PythonVersionSelector::Major(major) => Some(major),
-            PythonVersionSelector::MajorMinor(major, _) => Some(major),
-            PythonVersionSelector::MajorMinorPatch(major, _, _) => Some(major),
+            Self::Default => None,
+            Self::Major(major) => Some(major),
+            Self::MajorMinor(major, _) => Some(major),
+            Self::MajorMinorPatch(major, _, _) => Some(major),
         }
     }
 }

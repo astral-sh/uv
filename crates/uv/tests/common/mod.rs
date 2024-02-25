@@ -9,7 +9,7 @@ use assert_fs::fixture::PathChild;
 use fs_err::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
 use fs_err::os::windows::fs::symlink_file;
-use regex::{self, Regex};
+use regex::Regex;
 use std::borrow::BorrowMut;
 use std::env;
 use std::ffi::OsString;

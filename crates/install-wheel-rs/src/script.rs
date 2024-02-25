@@ -40,7 +40,7 @@ impl Script {
         script_name: &str,
         value: &str,
         extras: Option<&[String]>,
-    ) -> Result<Option<Script>, Error> {
+    ) -> Result<Option<Self>, Error> {
         // "Within a value, readers must accept and ignore spaces (including multiple consecutive spaces) before or after the colon,
         //  between the object reference and the left square bracket, between the extra names and the square brackets and colons delimiting them,
         //  and after the right square bracket."
@@ -65,7 +65,7 @@ impl Script {
             }
         }
 
-        Ok(Some(Script {
+        Ok(Some(Self {
             script_name: script_name.to_string(),
             module: captures.name("module").unwrap().as_str().to_string(),
             function: captures.name("function").unwrap().as_str().to_string(),

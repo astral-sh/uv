@@ -37,10 +37,8 @@ impl PubGrubDependencies {
                 if !requirement.evaluate_markers(env, std::slice::from_ref(extra)) {
                     continue;
                 }
-            } else {
-                if !requirement.evaluate_markers(env, &[]) {
-                    continue;
-                }
+            } else if !requirement.evaluate_markers(env, &[]) {
+                continue;
             }
 
             // Add the package, plus any extra variants.
@@ -73,10 +71,8 @@ impl PubGrubDependencies {
                         if !constraint.evaluate_markers(env, std::slice::from_ref(extra)) {
                             continue;
                         }
-                    } else {
-                        if !constraint.evaluate_markers(env, &[]) {
-                            continue;
-                        }
+                    } else if !constraint.evaluate_markers(env, &[]) {
+                        continue;
                     }
 
                     // Add the package, plus any extra variants.

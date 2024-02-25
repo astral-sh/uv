@@ -66,13 +66,13 @@ impl Operator {
     pub(crate) fn is_local_compatible(&self) -> bool {
         !matches!(
             *self,
-            Operator::GreaterThan
-                | Operator::GreaterThanEqual
-                | Operator::LessThan
-                | Operator::LessThanEqual
-                | Operator::TildeEqual
-                | Operator::EqualStar
-                | Operator::NotEqualStar
+            Self::GreaterThan
+                | Self::GreaterThanEqual
+                | Self::LessThan
+                | Self::LessThanEqual
+                | Self::TildeEqual
+                | Self::EqualStar
+                | Self::NotEqualStar
         )
     }
 
@@ -80,10 +80,10 @@ impl Operator {
     ///
     /// This returns `None` when this operator doesn't have an analogous
     /// wildcard operator.
-    pub(crate) fn to_star(self) -> Option<Operator> {
+    pub(crate) fn to_star(self) -> Option<Self> {
         match self {
-            Operator::Equal => Some(Operator::EqualStar),
-            Operator::NotEqual => Some(Operator::NotEqualStar),
+            Self::Equal => Some(Self::EqualStar),
+            Self::NotEqual => Some(Self::NotEqualStar),
             _ => None,
         }
     }
@@ -124,18 +124,18 @@ impl std::fmt::Display for Operator {
     /// Note the `EqualStar` is also `==`.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let operator = match self {
-            Operator::Equal => "==",
+            Self::Equal => "==",
             // Beware, this doesn't print the star
-            Operator::EqualStar => "==",
+            Self::EqualStar => "==",
             #[allow(deprecated)]
-            Operator::ExactEqual => "===",
-            Operator::NotEqual => "!=",
-            Operator::NotEqualStar => "!=",
-            Operator::TildeEqual => "~=",
-            Operator::LessThan => "<",
-            Operator::LessThanEqual => "<=",
-            Operator::GreaterThan => ">",
-            Operator::GreaterThanEqual => ">=",
+            Self::ExactEqual => "===",
+            Self::NotEqual => "!=",
+            Self::NotEqualStar => "!=",
+            Self::TildeEqual => "~=",
+            Self::LessThan => "<",
+            Self::LessThanEqual => "<=",
+            Self::GreaterThan => ">",
+            Self::GreaterThanEqual => ">=",
         };
 
         write!(f, "{operator}")
@@ -285,12 +285,12 @@ impl Version {
     ///
     /// When the iterator yields no elements.
     #[inline]
-    pub fn new<I, R>(release_numbers: I) -> Version
+    pub fn new<I, R>(release_numbers: I) -> Self
     where
         I: IntoIterator<Item = R>,
         R: Borrow<u64>,
     {
-        Version {
+        Self {
             inner: Arc::new(VersionInner::Small {
                 small: VersionSmall::new(),
             }),
@@ -385,6 +385,19 @@ impl Version {
         }
     }
 
+    /// Returns the min-release part of this version, if it exists.
+    ///
+    /// The "min" component is internal-only, and does not exist in PEP 440.
+    /// The version `1.0min0` is smaller than all other `1.0` versions,
+    /// like `1.0a1`, `1.0dev0`, etc.
+    #[inline]
+    pub fn min(&self) -> Option<u64> {
+        match *self.inner {
+            VersionInner::Small { ref small } => small.min(),
+            VersionInner::Full { ref full } => full.min,
+        }
+    }
+
     /// Set the release numbers and return the updated version.
     ///
     /// Usually one can just use `Version::new` to create a new version with
@@ -396,7 +409,7 @@ impl Version {
     ///
     /// When the iterator yields no elements.
     #[inline]
-    pub fn with_release<I, R>(mut self, release_numbers: I) -> Version
+    pub fn with_release<I, R>(mut self, release_numbers: I) -> Self
     where
         I: IntoIterator<Item = R>,
         R: Borrow<u64>,
@@ -440,7 +453,7 @@ impl Version {
 
     /// Set the epoch and return the updated version.
     #[inline]
-    pub fn with_epoch(mut self, value: u64) -> Version {
+    pub fn with_epoch(mut self, value: u64) -> Self {
         if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_epoch(value) {
                 return self;
@@ -452,7 +465,7 @@ impl Version {
 
     /// Set the pre-release component and return the updated version.
     #[inline]
-    pub fn with_pre(mut self, value: Option<PreRelease>) -> Version {
+    pub fn with_pre(mut self, value: Option<PreRelease>) -> Self {
         if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_pre(value) {
                 return self;
@@ -464,7 +477,7 @@ impl Version {
 
     /// Set the post-release component and return the updated version.
     #[inline]
-    pub fn with_post(mut self, value: Option<u64>) -> Version {
+    pub fn with_post(mut self, value: Option<u64>) -> Self {
         if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_post(value) {
                 return self;
@@ -476,7 +489,7 @@ impl Version {
 
     /// Set the dev-release component and return the updated version.
     #[inline]
-    pub fn with_dev(mut self, value: Option<u64>) -> Version {
+    pub fn with_dev(mut self, value: Option<u64>) -> Self {
         if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_dev(value) {
                 return self;
@@ -488,7 +501,7 @@ impl Version {
 
     /// Set the local segments and return the updated version.
     #[inline]
-    pub fn with_local(mut self, value: Vec<LocalSegment>) -> Version {
+    pub fn with_local(mut self, value: Vec<LocalSegment>) -> Self {
         if value.is_empty() {
             self.without_local()
         } else {
@@ -502,13 +515,29 @@ impl Version {
     /// and local version labels MUST be ignored entirely when checking if
     /// candidate versions match a given version specifier."
     #[inline]
-    pub fn without_local(mut self) -> Version {
+    pub fn without_local(mut self) -> Self {
         // A "small" version is already guaranteed not to have a local
         // component, so we only need to do anything if we have a "full"
         // version.
         if let VersionInner::Full { ref mut full } = Arc::make_mut(&mut self.inner) {
             full.local.clear();
         }
+        self
+    }
+
+    /// Set the min-release component and return the updated version.
+    ///
+    /// The "min" component is internal-only, and does not exist in PEP 440.
+    /// The version `1.0min0` is smaller than all other `1.0` versions,
+    /// like `1.0a1`, `1.0dev0`, etc.
+    #[inline]
+    pub fn with_min(mut self, value: Option<u64>) -> Self {
+        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+            if small.set_min(value) {
+                return self;
+            }
+        }
+        self.make_full().min = value;
         self
     }
 
@@ -519,12 +548,13 @@ impl Version {
             let full = VersionFull {
                 epoch: small.epoch(),
                 release: small.release().to_vec(),
+                min: small.min(),
                 pre: small.pre(),
                 post: small.post(),
                 dev: small.dev(),
                 local: vec![],
             };
-            *self = Version {
+            *self = Self {
                 inner: Arc::new(VersionInner::Full { full }),
             };
         }
@@ -542,7 +572,7 @@ impl Version {
     /// representation.
     #[cold]
     #[inline(never)]
-    fn cmp_slow(&self, other: &Version) -> Ordering {
+    fn cmp_slow(&self, other: &Self) -> Ordering {
         match self.epoch().cmp(&other.epoch()) {
             Ordering::Less => {
                 return Ordering::Less;
@@ -636,7 +666,7 @@ impl std::fmt::Display for Version {
 
 impl std::fmt::Debug for Version {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "\"{}\"", self)
+        write!(f, "\"{self}\"")
     }
 }
 
@@ -744,10 +774,13 @@ impl FromStr for Version {
 /// * Bytes 5, 4 and 3 correspond to the second, third and fourth release
 /// segments, respectively.
 /// * Bytes 2, 1 and 0 represent *one* of the following:
-///   `.devN, aN, bN, rcN, <no suffix>, .postN`. Its representation is thus:
+///   `min, .devN, aN, bN, rcN, <no suffix>, .postN`.
+///   Its representation is thus:
 ///   * The most significant 3 bits of Byte 2 corresponds to a value in
-///   the range 0-5 inclusive, corresponding to dev, pre-a, pre-b, pre-rc,
-///   no-suffix or post releases, respectively.
+///   the range 0-6 inclusive, corresponding to min, dev, pre-a, pre-b, pre-rc,
+///   no-suffix or post releases, respectively. `min` is a special version that
+///   does not exist in PEP 440, but is used here to represent the smallest
+///   possible version, preceding any `dev`, `pre`, `post` or releases.
 ///   * The low 5 bits combined with the bits in bytes 1 and 0 correspond
 ///   to the release number of the suffix, if one exists. If there is no
 ///   suffix, then this bits are always 0.
@@ -810,18 +843,19 @@ struct VersionSmall {
 }
 
 impl VersionSmall {
-    const SUFFIX_DEV: u64 = 0;
-    const SUFFIX_PRE_ALPHA: u64 = 1;
-    const SUFFIX_PRE_BETA: u64 = 2;
-    const SUFFIX_PRE_RC: u64 = 3;
-    const SUFFIX_NONE: u64 = 4;
-    const SUFFIX_POST: u64 = 5;
+    const SUFFIX_MIN: u64 = 0;
+    const SUFFIX_DEV: u64 = 1;
+    const SUFFIX_PRE_ALPHA: u64 = 2;
+    const SUFFIX_PRE_BETA: u64 = 3;
+    const SUFFIX_PRE_RC: u64 = 4;
+    const SUFFIX_NONE: u64 = 5;
+    const SUFFIX_POST: u64 = 6;
     const SUFFIX_MAX_VERSION: u64 = 0x1FFFFF;
 
     #[inline]
-    fn new() -> VersionSmall {
-        VersionSmall {
-            repr: 0x00000000_00800000,
+    fn new() -> Self {
+        Self {
+            repr: 0x00000000_00A00000,
             release: [0, 0, 0, 0],
             len: 0,
         }
@@ -879,7 +913,7 @@ impl VersionSmall {
 
     #[inline]
     fn post(&self) -> Option<u64> {
-        if self.suffix_kind() == VersionSmall::SUFFIX_POST {
+        if self.suffix_kind() == Self::SUFFIX_POST {
             Some(self.suffix_version())
         } else {
             None
@@ -888,18 +922,18 @@ impl VersionSmall {
 
     #[inline]
     fn set_post(&mut self, value: Option<u64>) -> bool {
-        if self.pre().is_some() || self.dev().is_some() {
+        if self.min().is_some() || self.pre().is_some() || self.dev().is_some() {
             return value.is_none();
         }
         match value {
             None => {
-                self.set_suffix_kind(VersionSmall::SUFFIX_NONE);
+                self.set_suffix_kind(Self::SUFFIX_NONE);
             }
             Some(number) => {
-                if number > VersionSmall::SUFFIX_MAX_VERSION {
+                if number > Self::SUFFIX_MAX_VERSION {
                     return false;
                 }
-                self.set_suffix_kind(VersionSmall::SUFFIX_POST);
+                self.set_suffix_kind(Self::SUFFIX_POST);
                 self.set_suffix_version(number);
             }
         }
@@ -909,17 +943,17 @@ impl VersionSmall {
     #[inline]
     fn pre(&self) -> Option<PreRelease> {
         let (kind, number) = (self.suffix_kind(), self.suffix_version());
-        if kind == VersionSmall::SUFFIX_PRE_ALPHA {
+        if kind == Self::SUFFIX_PRE_ALPHA {
             Some(PreRelease {
                 kind: PreReleaseKind::Alpha,
                 number,
             })
-        } else if kind == VersionSmall::SUFFIX_PRE_BETA {
+        } else if kind == Self::SUFFIX_PRE_BETA {
             Some(PreRelease {
                 kind: PreReleaseKind::Beta,
                 number,
             })
-        } else if kind == VersionSmall::SUFFIX_PRE_RC {
+        } else if kind == Self::SUFFIX_PRE_RC {
             Some(PreRelease {
                 kind: PreReleaseKind::Rc,
                 number,
@@ -931,26 +965,26 @@ impl VersionSmall {
 
     #[inline]
     fn set_pre(&mut self, value: Option<PreRelease>) -> bool {
-        if self.dev().is_some() || self.post().is_some() {
+        if self.min().is_some() || self.dev().is_some() || self.post().is_some() {
             return value.is_none();
         }
         match value {
             None => {
-                self.set_suffix_kind(VersionSmall::SUFFIX_NONE);
+                self.set_suffix_kind(Self::SUFFIX_NONE);
             }
             Some(PreRelease { kind, number }) => {
-                if number > VersionSmall::SUFFIX_MAX_VERSION {
+                if number > Self::SUFFIX_MAX_VERSION {
                     return false;
                 }
                 match kind {
                     PreReleaseKind::Alpha => {
-                        self.set_suffix_kind(VersionSmall::SUFFIX_PRE_ALPHA);
+                        self.set_suffix_kind(Self::SUFFIX_PRE_ALPHA);
                     }
                     PreReleaseKind::Beta => {
-                        self.set_suffix_kind(VersionSmall::SUFFIX_PRE_BETA);
+                        self.set_suffix_kind(Self::SUFFIX_PRE_BETA);
                     }
                     PreReleaseKind::Rc => {
-                        self.set_suffix_kind(VersionSmall::SUFFIX_PRE_RC);
+                        self.set_suffix_kind(Self::SUFFIX_PRE_RC);
                     }
                 }
                 self.set_suffix_version(number);
@@ -961,7 +995,7 @@ impl VersionSmall {
 
     #[inline]
     fn dev(&self) -> Option<u64> {
-        if self.suffix_kind() == VersionSmall::SUFFIX_DEV {
+        if self.suffix_kind() == Self::SUFFIX_DEV {
             Some(self.suffix_version())
         } else {
             None
@@ -970,18 +1004,47 @@ impl VersionSmall {
 
     #[inline]
     fn set_dev(&mut self, value: Option<u64>) -> bool {
-        if self.pre().is_some() || self.post().is_some() {
+        if self.min().is_some() || self.pre().is_some() || self.post().is_some() {
             return value.is_none();
         }
         match value {
             None => {
-                self.set_suffix_kind(VersionSmall::SUFFIX_NONE);
+                self.set_suffix_kind(Self::SUFFIX_NONE);
             }
             Some(number) => {
-                if number > VersionSmall::SUFFIX_MAX_VERSION {
+                if number > Self::SUFFIX_MAX_VERSION {
                     return false;
                 }
-                self.set_suffix_kind(VersionSmall::SUFFIX_DEV);
+                self.set_suffix_kind(Self::SUFFIX_DEV);
+                self.set_suffix_version(number);
+            }
+        }
+        true
+    }
+
+    #[inline]
+    fn min(&self) -> Option<u64> {
+        if self.suffix_kind() == Self::SUFFIX_MIN {
+            Some(self.suffix_version())
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn set_min(&mut self, value: Option<u64>) -> bool {
+        if self.dev().is_some() || self.pre().is_some() || self.post().is_some() {
+            return value.is_none();
+        }
+        match value {
+            None => {
+                self.set_suffix_kind(Self::SUFFIX_NONE);
+            }
+            Some(number) => {
+                if number > Self::SUFFIX_MAX_VERSION {
+                    return false;
+                }
+                self.set_suffix_kind(Self::SUFFIX_MIN);
                 self.set_suffix_version(number);
             }
         }
@@ -998,16 +1061,16 @@ impl VersionSmall {
     #[inline]
     fn suffix_kind(&self) -> u64 {
         let kind = (self.repr >> 21) & 0b111;
-        debug_assert!(kind <= VersionSmall::SUFFIX_POST);
+        debug_assert!(kind <= Self::SUFFIX_POST);
         kind
     }
 
     #[inline]
     fn set_suffix_kind(&mut self, kind: u64) {
-        debug_assert!(kind <= VersionSmall::SUFFIX_POST);
+        debug_assert!(kind <= Self::SUFFIX_POST);
         self.repr &= !0xE00000;
         self.repr |= kind << 21;
-        if kind == VersionSmall::SUFFIX_NONE {
+        if kind == Self::SUFFIX_NONE {
             self.set_suffix_version(0);
         }
     }
@@ -1079,6 +1142,10 @@ struct VersionFull {
     /// > Local version labels have no specific semantics assigned, but
     /// > some syntactic restrictions are imposed.
     local: Vec<LocalSegment>,
+    /// An internal-only segment that does not exist in PEP 440, used to
+    /// represent the smallest possible version of a release, preceding any
+    /// `dev`, `pre`, `post` or releases.
+    min: Option<u64>,
 }
 
 /// A version number pattern.
@@ -1109,8 +1176,8 @@ impl VersionPattern {
     /// Creates a new verbatim version pattern that matches the given
     /// version exactly.
     #[inline]
-    pub fn verbatim(version: Version) -> VersionPattern {
-        VersionPattern {
+    pub fn verbatim(version: Version) -> Self {
+        Self {
             version,
             wildcard: false,
         }
@@ -1119,8 +1186,8 @@ impl VersionPattern {
     /// Creates a new wildcard version pattern that matches any version with
     /// the given version as a prefix.
     #[inline]
-    pub fn wildcard(version: Version) -> VersionPattern {
-        VersionPattern {
+    pub fn wildcard(version: Version) -> Self {
+        Self {
             version,
             wildcard: true,
         }
@@ -1148,7 +1215,7 @@ impl VersionPattern {
 impl FromStr for VersionPattern {
     type Err = VersionPatternParseError;
 
-    fn from_str(version: &str) -> Result<VersionPattern, VersionPatternParseError> {
+    fn from_str(version: &str) -> Result<Self, VersionPatternParseError> {
         Parser::new(version.as_bytes()).parse_pattern()
     }
 }
@@ -1410,7 +1477,7 @@ impl<'a> Parser<'a> {
                 | (u64::from(release[1]) << 40)
                 | (u64::from(release[2]) << 32)
                 | (u64::from(release[3]) << 24)
-                | (0x80 << 16)
+                | (0xA0 << 16)
                 | (0x00 << 8)
                 | (0x00 << 0),
             release: [
@@ -1768,8 +1835,8 @@ enum ReleaseNumbers {
 
 impl ReleaseNumbers {
     /// Create a new empty set of release numbers.
-    fn new() -> ReleaseNumbers {
-        ReleaseNumbers::Inline {
+    fn new() -> Self {
+        Self::Inline {
             numbers: [0; 4],
             len: 0,
         }
@@ -1779,7 +1846,7 @@ impl ReleaseNumbers {
     /// when the lengths grow too big.
     fn push(&mut self, n: u64) {
         match *self {
-            ReleaseNumbers::Inline {
+            Self::Inline {
                 ref mut numbers,
                 ref mut len,
             } => {
@@ -1787,13 +1854,13 @@ impl ReleaseNumbers {
                 if *len == 4 {
                     let mut numbers = numbers.to_vec();
                     numbers.push(n);
-                    *self = ReleaseNumbers::Vec(numbers.to_vec());
+                    *self = Self::Vec(numbers.clone());
                 } else {
                     numbers[*len] = n;
                     *len += 1;
                 }
             }
-            ReleaseNumbers::Vec(ref mut numbers) => {
+            Self::Vec(ref mut numbers) => {
                 numbers.push(n);
             }
         }
@@ -1807,8 +1874,8 @@ impl ReleaseNumbers {
     /// Returns the release components as a slice.
     fn as_slice(&self) -> &[u64] {
         match *self {
-            ReleaseNumbers::Inline { ref numbers, len } => &numbers[..len],
-            ReleaseNumbers::Vec(ref vec) => vec,
+            Self::Inline { ref numbers, len } => &numbers[..len],
+            Self::Vec(ref vec) => vec,
         }
     }
 }
@@ -1832,7 +1899,7 @@ impl StringSet {
     /// # Panics
     ///
     /// When the number of strings is too big.
-    const fn new(strings: &'static [&'static str]) -> StringSet {
+    const fn new(strings: &'static [&'static str]) -> Self {
         assert!(
             strings.len() <= 20,
             "only a small number of strings are supported"
@@ -1849,7 +1916,7 @@ impl StringSet {
             i += 1;
         }
         let first_byte = ByteSet::new(&firsts);
-        StringSet {
+        Self {
             first_byte,
             strings,
         }
@@ -1878,7 +1945,7 @@ struct ByteSet {
 
 impl ByteSet {
     /// Create a new byte set for searching from the given bytes.
-    const fn new(bytes: &[u8]) -> ByteSet {
+    const fn new(bytes: &[u8]) -> Self {
         let mut set = [false; 256];
         let mut i = 0;
         while i < bytes.len() {
@@ -1886,7 +1953,7 @@ impl ByteSet {
             set[bytes[i].to_ascii_lowercase() as usize] = true;
             i += 1;
         }
-        ByteSet { set }
+        Self { set }
     }
 
     /// Returns the first byte in the haystack if and only if that byte is in
@@ -1936,8 +2003,7 @@ impl std::fmt::Display for VersionParseError {
             ErrorKind::InvalidDigit { got } => {
                 write!(
                     f,
-                    "expected ASCII digit, but found non-ASCII byte \\x{:02X}",
-                    got
+                    "expected ASCII digit, but found non-ASCII byte \\x{got:02X}"
                 )
             }
             ErrorKind::NumberTooBig { ref bytes } => {
@@ -2030,8 +2096,8 @@ pub(crate) enum ErrorKind {
 }
 
 impl From<ErrorKind> for VersionParseError {
-    fn from(kind: ErrorKind) -> VersionParseError {
-        VersionParseError {
+    fn from(kind: ErrorKind) -> Self {
+        Self {
             kind: Box::new(kind),
         }
     }
@@ -2064,22 +2130,22 @@ pub(crate) enum PatternErrorKind {
 }
 
 impl From<PatternErrorKind> for VersionPatternParseError {
-    fn from(kind: PatternErrorKind) -> VersionPatternParseError {
-        VersionPatternParseError {
+    fn from(kind: PatternErrorKind) -> Self {
+        Self {
             kind: Box::new(kind),
         }
     }
 }
 
 impl From<ErrorKind> for VersionPatternParseError {
-    fn from(kind: ErrorKind) -> VersionPatternParseError {
-        VersionPatternParseError::from(VersionParseError::from(kind))
+    fn from(kind: ErrorKind) -> Self {
+        Self::from(VersionParseError::from(kind))
     }
 }
 
 impl From<VersionParseError> for VersionPatternParseError {
-    fn from(err: VersionParseError) -> VersionPatternParseError {
-        VersionPatternParseError {
+    fn from(err: VersionParseError) -> Self {
+        Self {
             kind: Box::new(PatternErrorKind::Version(err)),
         }
     }
@@ -2243,9 +2309,9 @@ pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
 /// According to [a summary of permitted suffixes and relative
 /// ordering][pep440-suffix-ordering] the order of pre/post-releases is: .devN,
 /// aN, bN, rcN, <no suffix (final)>, .postN but also, you can have dev/post
-/// releases on beta releases, so we make a three stage ordering: ({dev: 0, a:
-/// 1, b: 2, rc: 3, (): 4, post: 5}, <preN>, <postN or None as smallest>, <devN
-/// or Max as largest>, <local>)
+/// releases on beta releases, so we make a three stage ordering: ({min: 0,
+/// dev: 1, a: 2, b: 3, rc: 4, (): 5, post: 6}, <preN>, <postN or None as
+/// smallest>, <devN or Max as largest>, <local>)
 ///
 /// For post, any number is better than none (so None defaults to None<0),
 /// but for dev, no number is better (so None default to the maximum). For
@@ -2254,9 +2320,11 @@ pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
 ///
 /// [pep440-suffix-ordering]: https://peps.python.org/pep-0440/#summary-of-permitted-suffixes-and-relative-ordering
 fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegment]) {
-    match (version.pre(), version.post(), version.dev()) {
+    match (version.pre(), version.post(), version.dev(), version.min()) {
+        // min release
+        (_pre, post, _dev, Some(n)) => (0, 0, post, n, version.local()),
         // dev release
-        (None, None, Some(n)) => (0, 0, None, n, version.local()),
+        (None, None, Some(n), None) => (1, 0, None, n, version.local()),
         // alpha release
         (
             Some(PreRelease {
@@ -2265,7 +2333,8 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegm
             }),
             post,
             dev,
-        ) => (1, n, post, dev.unwrap_or(u64::MAX), version.local()),
+            None,
+        ) => (2, n, post, dev.unwrap_or(u64::MAX), version.local()),
         // beta release
         (
             Some(PreRelease {
@@ -2274,7 +2343,8 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegm
             }),
             post,
             dev,
-        ) => (2, n, post, dev.unwrap_or(u64::MAX), version.local()),
+            None,
+        ) => (3, n, post, dev.unwrap_or(u64::MAX), version.local()),
         // alpha release
         (
             Some(PreRelease {
@@ -2283,11 +2353,14 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegm
             }),
             post,
             dev,
-        ) => (3, n, post, dev.unwrap_or(u64::MAX), version.local()),
+            None,
+        ) => (4, n, post, dev.unwrap_or(u64::MAX), version.local()),
         // final release
-        (None, None, None) => (4, 0, None, 0, version.local()),
+        (None, None, None, None) => (5, 0, None, 0, version.local()),
         // post release
-        (None, Some(post), dev) => (5, 0, Some(post), dev.unwrap_or(u64::MAX), version.local()),
+        (None, Some(post), dev, None) => {
+            (6, 0, Some(post), dev.unwrap_or(u64::MAX), version.local())
+        }
     }
 }
 
@@ -3367,6 +3440,9 @@ mod tests {
             ])
         );
         assert_eq!(p("  \n5\n \t"), Version::new([5]));
+
+        // min tests
+        assert!(Parser::new("1.min0".as_bytes()).parse().is_err())
     }
 
     // Tests the error cases of our version parser.
@@ -3510,6 +3586,46 @@ mod tests {
         }
     }
 
+    #[test]
+    fn min_version() {
+        // Ensure that the `.min` suffix precedes all other suffixes.
+        let less = Version::new([1, 0]).with_min(Some(0));
+
+        let versions = &[
+            "1.dev0",
+            "1.0.dev456",
+            "1.0a1",
+            "1.0a2.dev456",
+            "1.0a12.dev456",
+            "1.0a12",
+            "1.0b1.dev456",
+            "1.0b2",
+            "1.0b2.post345.dev456",
+            "1.0b2.post345",
+            "1.0rc1.dev456",
+            "1.0rc1",
+            "1.0",
+            "1.0+abc.5",
+            "1.0+abc.7",
+            "1.0+5",
+            "1.0.post456.dev34",
+            "1.0.post456",
+            "1.0.15",
+            "1.1.dev1",
+        ];
+
+        for greater in versions.iter() {
+            let greater = greater.parse::<Version>().unwrap();
+            assert_eq!(
+                less.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                less.as_bloated_debug(),
+                greater.as_bloated_debug()
+            );
+        }
+    }
+
     // Tests our bespoke u64 decimal integer parser.
     #[test]
     fn parse_number_u64() {
@@ -3577,6 +3693,7 @@ mod tests {
                 .field("post", &self.0.post())
                 .field("dev", &self.0.dev())
                 .field("local", &self.0.local())
+                .field("min", &self.0.min())
                 .finish()
         }
     }
