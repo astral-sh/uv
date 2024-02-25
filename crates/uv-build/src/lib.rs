@@ -16,9 +16,10 @@ use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
 use once_cell::sync::Lazy;
-use pyproject_toml::{BuildSystem, Project};
+use pyproject_toml::Project;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::de::{value, SeqAccess, Visitor};
+use serde::{de, Deserialize, Deserializer, Serialize};
 use tempfile::{tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::process::Command;
@@ -183,6 +184,67 @@ pub struct PyProjectToml {
     pub project: Option<Project>,
 }
 
+/// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct BuildSystem {
+    /// PEP 508 dependencies required to execute the build system.
+    pub requires: Vec<Requirement>,
+    /// A string naming a Python object that will be used to perform the build.
+    pub build_backend: Option<String>,
+    /// Specify that their backend code is hosted in-tree, this key contains a list of directories.
+    pub backend_path: Option<BackendPath>,
+}
+
+impl BackendPath {
+    /// Return an iterator over the paths in the backend path.
+    fn iter(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(String::as_str)
+    }
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct BackendPath(Vec<String>);
+
+impl<'de> Deserialize<'de> for BackendPath {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct StringOrVec;
+
+        impl<'de> Visitor<'de> for StringOrVec {
+            type Value = Vec<String>;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str("list of strings")
+            }
+
+            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                // Allow exactly `backend-path = "."`, as used in `flit_core==2.3.0`.
+                if s == "." {
+                    Ok(vec![".".to_string()])
+                } else {
+                    Err(de::Error::invalid_value(de::Unexpected::Str(s), &self))
+                }
+            }
+
+            fn visit_seq<S>(self, seq: S) -> Result<Self::Value, S::Error>
+            where
+                S: SeqAccess<'de>,
+            {
+                Deserialize::deserialize(value::SeqAccessDeserializer::new(seq))
+            }
+        }
+
+        deserializer.deserialize_any(StringOrVec).map(BackendPath)
+    }
+}
+
 /// `[build-backend]` from pyproject.toml
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Pep517Backend {
@@ -194,7 +256,7 @@ struct Pep517Backend {
     /// `build-backend.requirements` in pyproject.toml
     requirements: Vec<Requirement>,
     /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
-    backend_path: Option<Vec<String>>,
+    backend_path: Option<BackendPath>,
 }
 
 impl Pep517Backend {
@@ -207,9 +269,8 @@ impl Pep517Backend {
 
         let backend_path_encoded = self
             .backend_path
-            .clone()
-            .unwrap_or_default()
             .iter()
+            .flat_map(BackendPath::iter)
             .map(|path| {
                 // Turn into properly escaped python string
                 '"'.to_string()
