@@ -103,9 +103,9 @@ pub enum ColorChoice {
 impl From<ColorChoice> for anstream::ColorChoice {
     fn from(value: ColorChoice) -> Self {
         match value {
-            ColorChoice::Auto => anstream::ColorChoice::Auto,
-            ColorChoice::Always => anstream::ColorChoice::Always,
-            ColorChoice::Never => anstream::ColorChoice::Never,
+            ColorChoice::Auto => Self::Auto,
+            ColorChoice::Always => Self::Always,
+            ColorChoice::Never => Self::Never,
         }
     }
 }
@@ -179,6 +179,8 @@ enum PipCommand {
     Uninstall(PipUninstallArgs),
     /// Enumerate the installed packages in the current environment.
     Freeze(PipFreezeArgs),
+    /// Enumerate the installed packages in the current environment.
+    List(PipListArgs),
 }
 
 /// Clap parser for the union of date and datetime
@@ -687,6 +689,19 @@ struct PipFreezeArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
+struct PipListArgs {
+    /// Validate the virtual environment, to detect packages with missing dependencies or other
+    /// issues.
+    #[clap(long)]
+    strict: bool,
+
+    /// List editable projects.
+    #[clap(short, long)]
+    editable: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     ///
@@ -800,6 +815,12 @@ async fn run() -> Result<ExitStatus> {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
                             ContextValue::String("uv pip freeze".to_string()),
+                        );
+                    }
+                    "list" => {
+                        err.insert(
+                            ContextKind::SuggestedSubcommand,
+                            ContextValue::String("uv pip list".to_string()),
                         );
                     }
                     _ => {}
@@ -932,6 +953,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python_version,
                 args.exclude_newer,
                 args.annotation_style,
+                cli.quiet,
                 cache,
                 printer,
             )
@@ -1085,6 +1107,9 @@ async fn run() -> Result<ExitStatus> {
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),
         }) => commands::pip_freeze(&cache, args.strict, printer),
+        Commands::Pip(PipNamespace {
+            command: PipCommand::List(args),
+        }) => commands::pip_list(&cache, args.strict, args.editable, printer),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })

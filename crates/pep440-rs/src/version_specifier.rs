@@ -223,8 +223,8 @@ impl std::fmt::Display for VersionSpecifiersParseError {
             start,
             end,
         } = *self.inner;
-        writeln!(f, "Failed to parse version: {}:", err)?;
-        writeln!(f, "{}", line)?;
+        writeln!(f, "Failed to parse version: {err}:")?;
+        writeln!(f, "{line}")?;
         let indent = line[..start].width();
         let point = line[start..end].width();
         writeln!(f, "{}{}", " ".repeat(indent), "^".repeat(point))?;
@@ -548,7 +548,7 @@ impl FromStr for VersionSpecifier {
         }
         let vpat = version.parse().map_err(ParseErrorKind::InvalidVersion)?;
         let version_specifier =
-            VersionSpecifier::new(operator, vpat).map_err(ParseErrorKind::InvalidSpecifier)?;
+            Self::new(operator, vpat).map_err(ParseErrorKind::InvalidSpecifier)?;
         s.eat_while(|c: char| c.is_whitespace());
         if !s.done() {
             return Err(ParseErrorKind::InvalidTrailing(s.after().to_string()).into());
@@ -636,8 +636,8 @@ enum BuildErrorKind {
 }
 
 impl From<BuildErrorKind> for VersionSpecifierBuildError {
-    fn from(kind: BuildErrorKind) -> VersionSpecifierBuildError {
-        VersionSpecifierBuildError {
+    fn from(kind: BuildErrorKind) -> Self {
+        Self {
             kind: Box::new(kind),
         }
     }
@@ -690,8 +690,8 @@ enum ParseErrorKind {
 }
 
 impl From<ParseErrorKind> for VersionSpecifierParseError {
-    fn from(kind: ParseErrorKind) -> VersionSpecifierParseError {
-        VersionSpecifierParseError {
+    fn from(kind: ParseErrorKind) -> Self {
+        Self {
             kind: Box::new(kind),
         }
     }
@@ -828,7 +828,7 @@ mod tests {
 
         // Below we'll generate every possible combination of VERSIONS_ALL that
         // should be true for the given operator
-        let operations: Vec<_> = [
+        let operations = [
             // Verify that the less than (<) operator works correctly
             versions
                 .iter()
@@ -852,8 +852,7 @@ mod tests {
                 .collect::<Vec<_>>(),
         ]
         .into_iter()
-        .flatten()
-        .collect();
+        .flatten();
 
         for (a, b, ordering) in operations {
             assert_eq!(a.cmp(b), ordering, "{a} {ordering:?} {b}");
@@ -984,24 +983,20 @@ mod tests {
     /// Well, except for <https://github.com/pypa/packaging/issues/617>
     #[test]
     fn test_operators_other() {
-        let versions: Vec<Version> = VERSIONS_0
+        let versions = VERSIONS_0
             .iter()
-            .map(|version| Version::from_str(version).unwrap())
-            .collect();
+            .map(|version| Version::from_str(version).unwrap());
         let specifiers: Vec<_> = SPECIFIERS_OTHER
             .iter()
             .map(|specifier| VersionSpecifier::from_str(specifier).unwrap())
             .collect();
 
-        for (version, expected) in versions.iter().zip(EXPECTED_OTHER) {
+        for (version, expected) in versions.zip(EXPECTED_OTHER) {
             let actual = specifiers
                 .iter()
-                .map(|specifier| specifier.contains(version))
-                .collect::<Vec<bool>>();
-            for ((actual, expected), _specifier) in
-                actual.iter().zip(expected).zip(SPECIFIERS_OTHER)
-            {
-                assert_eq!(actual, expected);
+                .map(|specifier| specifier.contains(&version));
+            for ((actual, expected), _specifier) in actual.zip(expected).zip(SPECIFIERS_OTHER) {
+                assert_eq!(actual, *expected);
             }
         }
     }
@@ -1253,11 +1248,11 @@ mod tests {
         let result = VersionSpecifiers::from_str("~= 0.9, %‍= 1.0, != 1.3.4.*");
         assert_eq!(
             result.unwrap_err().to_string(),
-            indoc! {r#"
+            indoc! {r"
                 Failed to parse version: Unexpected end of version specifier, expected operator:
                 ~= 0.9, %‍= 1.0, != 1.3.4.*
                        ^^^^^^^
-            "#}
+            "}
         );
     }
 

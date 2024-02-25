@@ -85,7 +85,7 @@ impl VersionMap {
             NoBinary::All => true,
             NoBinary::Packages(packages) => packages.contains(package_name),
         };
-        VersionMap {
+        Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
                 simple_metadata,
@@ -175,7 +175,7 @@ impl VersionMap {
 
 impl From<FlatDistributions> for VersionMap {
     fn from(flat_index: FlatDistributions) -> Self {
-        VersionMap {
+        Self {
             inner: VersionMapInner::Eager(flat_index.into()),
         }
     }

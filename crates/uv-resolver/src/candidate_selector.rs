@@ -282,17 +282,15 @@ impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
     fn from(value: &'a PrioritizedDist) -> Self {
         if let Some(dist) = value.get() {
             CandidateDist::Compatible(dist)
+        } else if value.exclude_newer() && value.incompatible_wheel().is_none() {
+            // If empty because of exclude-newer, mark as a special case
+            CandidateDist::ExcludeNewer
         } else {
-            if value.exclude_newer() && value.incompatible_wheel().is_none() {
-                // If empty because of exclude-newer, mark as a special case
-                CandidateDist::ExcludeNewer
-            } else {
-                CandidateDist::Incompatible(
-                    value
-                        .incompatible_wheel()
-                        .map(|(_, incompatibility)| incompatibility),
-                )
-            }
+            CandidateDist::Incompatible(
+                value
+                    .incompatible_wheel()
+                    .map(|(_, incompatibility)| incompatibility),
+            )
         }
     }
 }

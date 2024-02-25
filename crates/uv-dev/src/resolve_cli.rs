@@ -121,10 +121,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
             &[DotConfig::NodeNoLabel, DotConfig::EdgeNoLabel],
             &|_graph, edge_ref| format!("label={:?}", edge_ref.weight().to_string()),
             &|_graph, (_node_index, dist)| {
-                format!(
-                    "label={:?}",
-                    dist.to_string().replace("==", "\n").to_string()
-                )
+                format!("label={:?}", dist.to_string().replace("==", "\n"))
             },
         );
         write!(&mut writer, "{graphviz:?}")?;

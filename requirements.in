@@ -1,2 +1,0 @@
-apache-airflow[otel]
-opentelemetry-exporter-prometheus<0.44

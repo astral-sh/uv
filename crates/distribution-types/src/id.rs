@@ -27,8 +27,8 @@ impl PackageId {
 impl Display for PackageId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PackageId::NameVersion(name, version) => write!(f, "{name}-{version}"),
-            PackageId::Url(url) => write!(f, "{url}"),
+            Self::NameVersion(name, version) => write!(f, "{name}-{version}"),
+            Self::Url(url) => write!(f, "{url}"),
         }
     }
 }
@@ -59,23 +59,23 @@ impl ResourceId {
     }
 }
 
-impl From<&PackageId> for PackageId {
+impl From<&Self> for PackageId {
     /// Required for `WaitMap::wait`.
-    fn from(value: &PackageId) -> Self {
+    fn from(value: &Self) -> Self {
         value.clone()
     }
 }
 
-impl From<&DistributionId> for DistributionId {
+impl From<&Self> for DistributionId {
     /// Required for `WaitMap::wait`.
-    fn from(value: &DistributionId) -> Self {
+    fn from(value: &Self) -> Self {
         value.clone()
     }
 }
 
-impl From<&ResourceId> for ResourceId {
+impl From<&Self> for ResourceId {
     /// Required for `WaitMap::wait`.
-    fn from(value: &ResourceId) -> Self {
+    fn from(value: &Self) -> Self {
         value.clone()
     }
 }

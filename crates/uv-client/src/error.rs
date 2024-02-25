@@ -33,8 +33,8 @@ impl Error {
 }
 
 impl From<ErrorKind> for Error {
-    fn from(kind: ErrorKind) -> Error {
-        Error {
+    fn from(kind: ErrorKind) -> Self {
+        Self {
             kind: Box::new(kind),
         }
     }
@@ -149,7 +149,7 @@ impl ErrorKind {
     /// Returns true if this error kind corresponds to an I/O "not found"
     /// error.
     pub(crate) fn is_file_not_exists(&self) -> bool {
-        let ErrorKind::Io(ref err) = *self else {
+        let Self::Io(ref err) = *self else {
             return false;
         };
         matches!(err.kind(), std::io::ErrorKind::NotFound)
@@ -158,30 +158,28 @@ impl ErrorKind {
     pub(crate) fn from_middleware(err: reqwest_middleware::Error) -> Self {
         if let reqwest_middleware::Error::Middleware(ref underlying) = err {
             if let Some(err) = underlying.downcast_ref::<OfflineError>() {
-                return ErrorKind::Offline(err.url().to_string());
+                return Self::Offline(err.url().to_string());
             }
         }
 
         if let reqwest_middleware::Error::Reqwest(err) = err {
-            return ErrorKind::RequestError(err);
+            return Self::RequestError(err);
         }
 
-        ErrorKind::RequestMiddlewareError(err)
+        Self::RequestMiddlewareError(err)
     }
 
     /// Returns `true` if the error is due to the server not supporting HTTP range requests.
     pub(crate) fn is_http_range_requests_unsupported(&self) -> bool {
         match self {
             // The server doesn't support range requests (as reported by the `HEAD` check).
-            ErrorKind::AsyncHttpRangeReader(
-                AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
-            ) => {
+            Self::AsyncHttpRangeReader(AsyncHttpRangeReaderError::HttpRangeRequestUnsupported) => {
                 return true;
             }
 
             // The server returned a "Method Not Allowed" error, indicating it doesn't support
             // HEAD requests, so we can't check for range requests.
-            ErrorKind::RequestError(err) => {
+            Self::RequestError(err) => {
                 if let Some(status) = err.status() {
                     if status == reqwest::StatusCode::METHOD_NOT_ALLOWED {
                         return true;
@@ -191,7 +189,7 @@ impl ErrorKind {
 
             // The server doesn't support range requests, but we only discovered this while
             // unzipping due to erroneous server behavior.
-            ErrorKind::Zip(_, ZipError::UpstreamReadError(err)) => {
+            Self::Zip(_, ZipError::UpstreamReadError(err)) => {
                 if let Some(inner) = err.get_ref() {
                     if let Some(inner) = inner.downcast_ref::<AsyncHttpRangeReaderError>() {
                         if matches!(

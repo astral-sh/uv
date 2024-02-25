@@ -89,8 +89,8 @@ impl CachedDist {
     /// Return the [`DirectUrl`] of the distribution, if it exists.
     pub fn direct_url(&self) -> Result<Option<DirectUrl>> {
         match self {
-            CachedDist::Registry(_) => Ok(None),
-            CachedDist::Url(dist) => {
+            Self::Registry(_) => Ok(None),
+            Self::Url(dist) => {
                 if dist.editable {
                     assert_eq!(dist.url.scheme(), "file", "{}", dist.url);
                     Ok(Some(DirectUrl::LocalFile(LocalFileUrl {
@@ -106,15 +106,15 @@ impl CachedDist {
 
     pub fn editable(&self) -> bool {
         match self {
-            CachedDist::Registry(_) => false,
-            CachedDist::Url(dist) => dist.editable,
+            Self::Registry(_) => false,
+            Self::Url(dist) => dist.editable,
         }
     }
 
     pub fn filename(&self) -> &WheelFilename {
         match self {
-            CachedDist::Registry(dist) => &dist.filename,
-            CachedDist::Url(dist) => &dist.filename,
+            Self::Registry(dist) => &dist.filename,
+            Self::Url(dist) => &dist.filename,
         }
     }
 }

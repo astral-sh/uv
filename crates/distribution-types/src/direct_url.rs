@@ -120,9 +120,9 @@ impl TryFrom<&DirectUrl> for pypi_types::DirectUrl {
 
     fn try_from(value: &DirectUrl) -> std::result::Result<Self, Self::Error> {
         match value {
-            DirectUrl::LocalFile(value) => pypi_types::DirectUrl::try_from(value),
-            DirectUrl::Git(value) => pypi_types::DirectUrl::try_from(value),
-            DirectUrl::Archive(value) => pypi_types::DirectUrl::try_from(value),
+            DirectUrl::LocalFile(value) => Self::try_from(value),
+            DirectUrl::Git(value) => Self::try_from(value),
+            DirectUrl::Archive(value) => Self::try_from(value),
         }
     }
 }
@@ -131,7 +131,7 @@ impl TryFrom<&LocalFileUrl> for pypi_types::DirectUrl {
     type Error = Error;
 
     fn try_from(value: &LocalFileUrl) -> Result<Self, Self::Error> {
-        Ok(pypi_types::DirectUrl::LocalDirectory {
+        Ok(Self::LocalDirectory {
             url: value.url.to_string(),
             dir_info: pypi_types::DirInfo {
                 editable: value.editable.then_some(true),
@@ -144,7 +144,7 @@ impl TryFrom<&DirectArchiveUrl> for pypi_types::DirectUrl {
     type Error = Error;
 
     fn try_from(value: &DirectArchiveUrl) -> Result<Self, Self::Error> {
-        Ok(pypi_types::DirectUrl::ArchiveUrl {
+        Ok(Self::ArchiveUrl {
             url: value.url.to_string(),
             archive_info: pypi_types::ArchiveInfo {
                 hash: None,
@@ -159,7 +159,7 @@ impl TryFrom<&DirectGitUrl> for pypi_types::DirectUrl {
     type Error = Error;
 
     fn try_from(value: &DirectGitUrl) -> Result<Self, Self::Error> {
-        Ok(pypi_types::DirectUrl::VcsUrl {
+        Ok(Self::VcsUrl {
             url: value.url.repository().to_string(),
             vcs_info: pypi_types::VcsInfo {
                 vcs: pypi_types::VcsKind::Git,
@@ -199,7 +199,7 @@ impl From<DirectArchiveUrl> for Url {
 
 impl From<DirectGitUrl> for Url {
     fn from(value: DirectGitUrl) -> Self {
-        let mut url = Url::parse(&format!("{}{}", "git+", Url::from(value.url).as_str()))
+        let mut url = Self::parse(&format!("{}{}", "git+", Self::from(value.url).as_str()))
             .expect("Git URL is invalid");
         if let Some(subdirectory) = value.subdirectory {
             url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));

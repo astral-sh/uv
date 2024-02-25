@@ -7,6 +7,7 @@ use distribution_types::InstalledMetadata;
 pub(crate) use pip_compile::{extra_name_with_clap_error, pip_compile, Upgrade};
 pub(crate) use pip_freeze::pip_freeze;
 pub(crate) use pip_install::pip_install;
+pub(crate) use pip_list::pip_list;
 pub(crate) use pip_sync::pip_sync;
 pub(crate) use pip_uninstall::pip_uninstall;
 pub(crate) use venv::venv;
@@ -17,6 +18,7 @@ mod cache_dir;
 mod pip_compile;
 mod pip_freeze;
 mod pip_install;
+mod pip_list;
 mod pip_sync;
 mod pip_uninstall;
 mod reporters;
@@ -41,9 +43,9 @@ pub(crate) enum ExitStatus {
 impl From<ExitStatus> for ExitCode {
     fn from(status: ExitStatus) -> Self {
         match status {
-            ExitStatus::Success => ExitCode::from(0),
-            ExitStatus::Failure => ExitCode::from(1),
-            ExitStatus::Error => ExitCode::from(2),
+            ExitStatus::Success => Self::from(0),
+            ExitStatus::Failure => Self::from(1),
+            ExitStatus::Error => Self::from(2),
         }
     }
 }

@@ -444,16 +444,16 @@ fn not_modified_cache(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool,
 /// not-modified based on the modification time of the installed distribution.
 fn not_modified_install(dist: &InstalledDirectUrlDist, artifact: &Path) -> Result<bool, io::Error> {
     // Determine the modification time of the installed distribution.
-    let dist_metadata = fs_err::metadata(&dist.path)?;
+    let dist_metadata = fs_err::metadata(dist.path.join("METADATA"))?;
     let dist_timestamp = Timestamp::from_metadata(&dist_metadata);
 
     // Determine the modification time of the wheel.
-    if let Some(artifact_timestamp) = ArchiveTimestamp::from_path(artifact)? {
-        Ok(dist_timestamp >= artifact_timestamp.timestamp())
-    } else {
+    let Some(artifact_timestamp) = ArchiveTimestamp::from_path(artifact)? else {
         // The artifact doesn't exist, so it's not fresh.
-        Ok(false)
-    }
+        return Ok(false);
+    };
+
+    Ok(dist_timestamp >= artifact_timestamp.timestamp())
 }
 
 #[derive(Debug, Default)]

@@ -258,10 +258,10 @@ impl<'a> SitePackages<'a> {
 
         // Add the direct requirements to the queue.
         for dependency in requirements {
-            if dependency.evaluate_markers(self.venv.interpreter().markers(), &[]) {
-                if seen.insert(dependency.clone()) {
-                    stack.push(dependency.clone());
-                }
+            if dependency.evaluate_markers(self.venv.interpreter().markers(), &[])
+                && seen.insert(dependency.clone())
+            {
+                stack.push(dependency.clone());
             }
         }
 
@@ -298,10 +298,9 @@ impl<'a> SitePackages<'a> {
                         if dependency.evaluate_markers(
                             self.venv.interpreter().markers(),
                             &requirement.extras,
-                        ) {
-                            if seen.insert(dependency.clone()) {
-                                stack.push(dependency);
-                            }
+                        ) && seen.insert(dependency.clone())
+                        {
+                            stack.push(dependency);
                         }
                     }
                 }
@@ -363,10 +362,9 @@ impl<'a> SitePackages<'a> {
                         if dependency.evaluate_markers(
                             self.venv.interpreter().markers(),
                             &requirement.extras,
-                        ) {
-                            if seen.insert(dependency.clone()) {
-                                stack.push(dependency);
-                            }
+                        ) && seen.insert(dependency.clone())
+                        {
+                            stack.push(dependency);
                         }
                     }
                 }

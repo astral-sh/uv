@@ -15,8 +15,7 @@ impl AllowedYanks {
     pub(crate) fn allowed(&self, package_name: &PackageName, version: &Version) -> bool {
         self.0
             .get(package_name)
-            .map(|allowed_yanks| allowed_yanks.contains(version))
-            .unwrap_or_default()
+            .is_some_and(|allowed_yanks| allowed_yanks.contains(version))
     }
 }
 

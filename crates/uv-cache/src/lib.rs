@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::Write;
@@ -517,13 +518,13 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            CacheBucket::BuiltWheels => "built-wheels-v0",
-            CacheBucket::FlatIndex => "flat-index-v0",
-            CacheBucket::Git => "git-v0",
-            CacheBucket::Interpreter => "interpreter-v0",
-            CacheBucket::Simple => "simple-v3",
-            CacheBucket::Wheels => "wheels-v0",
-            CacheBucket::Archive => "archive-v0",
+            Self::BuiltWheels => "built-wheels-v0",
+            Self::FlatIndex => "flat-index-v0",
+            Self::Git => "git-v0",
+            Self::Interpreter => "interpreter-v0",
+            Self::Simple => "simple-v3",
+            Self::Wheels => "wheels-v0",
+            Self::Archive => "archive-v0",
         }
     }
 
@@ -533,7 +534,7 @@ impl CacheBucket {
     fn remove(self, cache: &Cache, name: &PackageName) -> Result<Removal, io::Error> {
         let mut summary = Removal::default();
         match self {
-            CacheBucket::Wheels => {
+            Self::Wheels => {
                 // For `pypi` wheels, we expect a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += rm_rf(root.join(name.to_string()))?;
@@ -552,7 +553,7 @@ impl CacheBucket {
                     summary += rm_rf(directory.join(name.to_string()))?;
                 }
             }
-            CacheBucket::BuiltWheels => {
+            Self::BuiltWheels => {
                 // For `pypi` wheels, we expect a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += rm_rf(root.join(name.to_string()))?;
@@ -587,7 +588,7 @@ impl CacheBucket {
                     }
                 }
             }
-            CacheBucket::Simple => {
+            Self::Simple => {
                 // For `pypi` wheels, we expect a rkyv file per package, indexed by name.
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += rm_rf(root.join(format!("{name}.rkyv")))?;
@@ -599,19 +600,19 @@ impl CacheBucket {
                     summary += rm_rf(directory.join(format!("{name}.rkyv")))?;
                 }
             }
-            CacheBucket::FlatIndex => {
+            Self::FlatIndex => {
                 // We can't know if the flat index includes a package, so we just remove the entire
                 // cache entry.
                 let root = cache.bucket(self);
                 summary += rm_rf(root)?;
             }
-            CacheBucket::Git => {
+            Self::Git => {
                 // Nothing to do.
             }
-            CacheBucket::Interpreter => {
+            Self::Interpreter => {
                 // Nothing to do.
             }
-            CacheBucket::Archive => {
+            Self::Archive => {
                 // Nothing to do.
             }
         }
@@ -638,33 +639,48 @@ impl ArchiveTimestamp {
     /// Return the modification timestamp for an archive, which could be a file (like a wheel or a zip
     /// archive) or a directory containing a Python package.
     ///
-    /// If the path is to a directory with no entrypoint (i.e., no `pyproject.toml` or `setup.py`),
-    /// returns `None`.
+    /// If the path is to a directory with no entrypoint (i.e., no `pyproject.toml`, `setup.py`, or
+    /// `setup.cfg`), returns `None`.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
         let metadata = fs_err::metadata(path.as_ref())?;
         if metadata.is_file() {
             Ok(Some(Self::Exact(Timestamp::from_metadata(&metadata))))
         } else {
-            // TODO(charlie): Take the maximum of `pyproject.toml`, `setup.py`, and `setup.cfg`.
-            if let Some(metadata) = path
+            // Compute the modification timestamp for the `pyproject.toml`, `setup.py`, and
+            // `setup.cfg` files, if they exist.
+            let pyproject_toml = path
                 .as_ref()
                 .join("pyproject.toml")
                 .metadata()
                 .ok()
                 .filter(std::fs::Metadata::is_file)
-            {
-                Ok(Some(Self::Approximate(Timestamp::from_metadata(&metadata))))
-            } else if let Some(metadata) = path
+                .as_ref()
+                .map(Timestamp::from_metadata);
+
+            let setup_py = path
                 .as_ref()
                 .join("setup.py")
                 .metadata()
                 .ok()
                 .filter(std::fs::Metadata::is_file)
-            {
-                Ok(Some(Self::Approximate(Timestamp::from_metadata(&metadata))))
-            } else {
-                Ok(None)
-            }
+                .as_ref()
+                .map(Timestamp::from_metadata);
+
+            let setup_cfg = path
+                .as_ref()
+                .join("setup.cfg")
+                .metadata()
+                .ok()
+                .filter(std::fs::Metadata::is_file)
+                .as_ref()
+                .map(Timestamp::from_metadata);
+
+            // Take the most recent timestamp of the three files.
+            let Some(timestamp) = max(pyproject_toml, max(setup_py, setup_cfg)) else {
+                return Ok(None);
+            };
+
+            Ok(Some(Self::Approximate(timestamp)))
         }
     }
 

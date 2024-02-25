@@ -132,6 +132,14 @@ impl InstalledDist {
         }
     }
 
+    /// Return true if the distribution is editable.
+    pub fn is_editable(&self) -> bool {
+        match self {
+            Self::Registry(_) => false,
+            Self::Url(dist) => dist.editable,
+        }
+    }
+
     /// Return the [`Url`] of the distribution, if it is editable.
     pub fn as_editable(&self) -> Option<&Url> {
         match self {

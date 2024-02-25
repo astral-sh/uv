@@ -47,10 +47,10 @@ impl PythonRequirement {
 
         // If the dist is a source distribution, and doesn't support the installed Python
         // version, return the failing version specifiers, since we won't be able to build it.
-        if matches!(dist.for_installation().dist, Dist::Source(_)) {
-            if !requires_python.contains(self.installed()) {
-                return Some(requires_python);
-            }
+        if matches!(dist.for_installation().dist, Dist::Source(_))
+            && !requires_python.contains(self.installed())
+        {
+            return Some(requires_python);
         }
 
         // Validate the resolved file.
@@ -60,10 +60,10 @@ impl PythonRequirement {
         // version, return the failing version specifiers, since we won't be able to build it.
         // This isn't strictly necessary, since if `dist.resolve_metadata()` is a source distribution, it
         // should be the same file as `dist.install_metadata()` (validated above).
-        if matches!(dist.for_resolution().dist, Dist::Source(_)) {
-            if !requires_python.contains(self.installed()) {
-                return Some(requires_python);
-            }
+        if matches!(dist.for_resolution().dist, Dist::Source(_))
+            && !requires_python.contains(self.installed())
+        {
+            return Some(requires_python);
         }
 
         None
