@@ -95,7 +95,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                     format!("there is no version of {package}{set}")
                 } else {
                     let complement = set.complement();
-                    let segments = complement.iter().collect::<Vec<_>>().len();
+                    let segments = complement.iter().count();
                     // Simple case, there's a single range to report
                     if segments == 1 {
                         format!(

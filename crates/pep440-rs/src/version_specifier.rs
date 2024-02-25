@@ -828,7 +828,7 @@ mod tests {
 
         // Below we'll generate every possible combination of VERSIONS_ALL that
         // should be true for the given operator
-        let operations: Vec<_> = [
+        let operations = [
             // Verify that the less than (<) operator works correctly
             versions
                 .iter()
@@ -852,8 +852,7 @@ mod tests {
                 .collect::<Vec<_>>(),
         ]
         .into_iter()
-        .flatten()
-        .collect();
+        .flatten();
 
         for (a, b, ordering) in operations {
             assert_eq!(a.cmp(b), ordering, "{a} {ordering:?} {b}");
@@ -984,24 +983,20 @@ mod tests {
     /// Well, except for <https://github.com/pypa/packaging/issues/617>
     #[test]
     fn test_operators_other() {
-        let versions: Vec<Version> = VERSIONS_0
+        let versions = VERSIONS_0
             .iter()
-            .map(|version| Version::from_str(version).unwrap())
-            .collect();
+            .map(|version| Version::from_str(version).unwrap());
         let specifiers: Vec<_> = SPECIFIERS_OTHER
             .iter()
             .map(|specifier| VersionSpecifier::from_str(specifier).unwrap())
             .collect();
 
-        for (version, expected) in versions.iter().zip(EXPECTED_OTHER) {
+        for (version, expected) in versions.zip(EXPECTED_OTHER) {
             let actual = specifiers
                 .iter()
-                .map(|specifier| specifier.contains(version))
-                .collect::<Vec<bool>>();
-            for ((actual, expected), _specifier) in
-                actual.iter().zip(expected).zip(SPECIFIERS_OTHER)
-            {
-                assert_eq!(actual, expected);
+                .map(|specifier| specifier.contains(&version));
+            for ((actual, expected), _specifier) in actual.zip(expected).zip(SPECIFIERS_OTHER) {
+                assert_eq!(actual, *expected);
             }
         }
     }
