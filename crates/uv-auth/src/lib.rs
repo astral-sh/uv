@@ -28,10 +28,10 @@ pub fn safe_copy_url_auth(trusted_url: &Url, mut new_url: Url) -> Url {
     if should_retain_auth(trusted_url, &new_url) {
         new_url
             .set_username(trusted_url.username())
-            .unwrap_or_else(|_| warn!("Failed to transfer username to response URL: {new_url}"));
+            .unwrap_or_else(|()| warn!("Failed to transfer username to response URL: {new_url}"));
         new_url
             .set_password(trusted_url.password())
-            .unwrap_or_else(|_| warn!("Failed to transfer password to response URL: {new_url}"));
+            .unwrap_or_else(|()| warn!("Failed to transfer password to response URL: {new_url}"));
     }
     new_url
 }
