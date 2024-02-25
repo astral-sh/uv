@@ -134,32 +134,41 @@ fn editable() -> Result<()> {
     );
 
     // Account for difference length workspace dir
-    let workspace_len_difference = workspace_dir.as_str().len() - 23;
+    let prefix = if cfg!(windows) { "file:///" } else { "file://" };
 
-    let find_divider = "-".repeat(57 + workspace_len_difference);
+    // Origin of lengths used below:
+    // - |Editable project location| = 25
+    // - expected length = 57
+    // - expected length - |Editable project location| = 32
+    // - |`[WORKSPACE_DIR]/`| = 16
+    // - |`file://`| = 7, |`file:///`| = 8 (windows)
+
+    let workspace_len_difference = workspace_dir.as_str().len() + 32 - 16 - prefix.len();
+    let find_divider = "-".repeat(25 + workspace_len_difference);
     let replace_divider = "-".repeat(57);
 
     let find_header = format!(
         "Editable project location{0}",
-        " ".repeat(workspace_len_difference + 32)
+        " ".repeat(workspace_len_difference)
     );
     let replace_header = format!("Editable project location{0}", " ".repeat(32));
 
-    let find_whitespace = " ".repeat(57 + workspace_len_difference);
+    let find_whitespace = " ".repeat(25 + workspace_len_difference);
     let replace_whitespace = " ".repeat(57);
 
-    let filters = [
-        (
-            workspace_dir.as_str().strip_prefix("file://").unwrap(),
-            "[WORKSPACE_DIR]/",
-        ),
-        (find_divider.as_str(), replace_divider.as_str()),
-        (find_header.as_str(), replace_header.as_str()),
-        (find_whitespace.as_str(), replace_whitespace.as_str()),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect::<Vec<_>>();
+    let search_workspace = workspace_dir.as_str().strip_prefix(prefix).unwrap();
+    let replace_workspace = "[WORKSPACE_DIR]/";
+
+    let filters = INSTA_FILTERS
+        .iter()
+        .copied()
+        .chain(vec![
+            (search_workspace, replace_workspace),
+            (find_divider.as_str(), replace_divider.as_str()),
+            (find_header.as_str(), replace_header.as_str()),
+            (find_whitespace.as_str(), replace_whitespace.as_str()),
+        ])
+        .collect::<Vec<_>>();
 
     uv_snapshot!(filters, Command::new(get_bin())
     .arg("pip")
@@ -227,28 +236,34 @@ fn editable_only() -> Result<()> {
     );
 
     // Account for difference length workspace dir
-    let workspace_len_difference = workspace_dir.as_str().len() - 23;
+    let prefix = if cfg!(windows) { "file:///" } else { "file://" };
 
-    let find_divider = "-".repeat(57 + workspace_len_difference);
+    let workspace_len_difference = workspace_dir.as_str().len() + 32 - 16 - prefix.len();
+    let find_divider = "-".repeat(25 + workspace_len_difference);
     let replace_divider = "-".repeat(57);
 
     let find_header = format!(
         "Editable project location{0}",
-        " ".repeat(workspace_len_difference + 32)
+        " ".repeat(workspace_len_difference)
     );
     let replace_header = format!("Editable project location{0}", " ".repeat(32));
 
-    let filters = [
-        (
-            workspace_dir.as_str().strip_prefix("file://").unwrap(),
-            "[WORKSPACE_DIR]/",
-        ),
-        (find_divider.as_str(), replace_divider.as_str()),
-        (find_header.as_str(), replace_header.as_str()),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect::<Vec<_>>();
+    let find_whitespace = " ".repeat(25 + workspace_len_difference);
+    let replace_whitespace = " ".repeat(57);
+
+    let search_workspace = workspace_dir.as_str().strip_prefix(prefix).unwrap();
+    let replace_workspace = "[WORKSPACE_DIR]/";
+
+    let filters = INSTA_FILTERS
+        .iter()
+        .copied()
+        .chain(vec![
+            (search_workspace, replace_workspace),
+            (find_divider.as_str(), replace_divider.as_str()),
+            (find_header.as_str(), replace_header.as_str()),
+            (find_whitespace.as_str(), replace_whitespace.as_str()),
+        ])
+        .collect::<Vec<_>>();
 
     uv_snapshot!(filters, Command::new(get_bin())
     .arg("pip")
