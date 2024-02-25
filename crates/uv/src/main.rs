@@ -103,9 +103,9 @@ pub enum ColorChoice {
 impl From<ColorChoice> for anstream::ColorChoice {
     fn from(value: ColorChoice) -> Self {
         match value {
-            ColorChoice::Auto => anstream::ColorChoice::Auto,
-            ColorChoice::Always => anstream::ColorChoice::Always,
-            ColorChoice::Never => anstream::ColorChoice::Never,
+            ColorChoice::Auto => Self::Auto,
+            ColorChoice::Always => Self::Always,
+            ColorChoice::Never => Self::Never,
         }
     }
 }

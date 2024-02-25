@@ -711,7 +711,7 @@ impl SimpleMetadata {
                 }
             }
         }
-        SimpleMetadata(
+        Self(
             map.into_iter()
                 .map(|(version, files)| SimpleMetadatum { version, files })
                 .collect(),

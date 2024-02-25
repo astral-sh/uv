@@ -102,8 +102,8 @@ pub enum Yanked {
 impl Yanked {
     pub fn is_yanked(&self) -> bool {
         match self {
-            Yanked::Bool(is_yanked) => *is_yanked,
-            Yanked::Reason(_) => true,
+            Self::Bool(is_yanked) => *is_yanked,
+            Self::Reason(_) => true,
         }
     }
 }

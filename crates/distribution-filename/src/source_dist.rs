@@ -36,8 +36,8 @@ impl FromStr for SourceDistExtension {
 impl Display for SourceDistExtension {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            SourceDistExtension::Zip => f.write_str("zip"),
-            SourceDistExtension::TarGz => f.write_str("tar.gz"),
+            Self::Zip => f.write_str("zip"),
+            Self::TarGz => f.write_str("tar.gz"),
         }
     }
 }

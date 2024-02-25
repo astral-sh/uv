@@ -284,7 +284,7 @@ impl SourceBuild {
         setup_py: SetupPyStrategy,
         config_settings: ConfigSettings,
         build_kind: BuildKind,
-    ) -> Result<SourceBuild, Error> {
+    ) -> Result<Self, Error> {
         let temp_dir = tempdir_in(build_context.cache().root())?;
 
         let metadata = match fs::metadata(source) {

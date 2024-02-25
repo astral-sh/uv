@@ -342,15 +342,15 @@ impl Dist {
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
     pub fn file(&self) -> Option<&File> {
         match self {
-            Dist::Built(built) => built.file(),
-            Dist::Source(source) => source.file(),
+            Self::Built(built) => built.file(),
+            Self::Source(source) => source.file(),
         }
     }
 
     pub fn version(&self) -> Option<&Version> {
         match self {
-            Dist::Built(wheel) => Some(wheel.version()),
-            Dist::Source(source_dist) => source_dist.version(),
+            Self::Built(wheel) => Some(wheel.version()),
+            Self::Source(source_dist) => source_dist.version(),
         }
     }
 }
@@ -359,16 +359,16 @@ impl BuiltDist {
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
     pub fn file(&self) -> Option<&File> {
         match self {
-            BuiltDist::Registry(registry) => Some(&registry.file),
-            BuiltDist::DirectUrl(_) | BuiltDist::Path(_) => None,
+            Self::Registry(registry) => Some(&registry.file),
+            Self::DirectUrl(_) | Self::Path(_) => None,
         }
     }
 
     pub fn version(&self) -> &Version {
         match self {
-            BuiltDist::Registry(wheel) => &wheel.filename.version,
-            BuiltDist::DirectUrl(wheel) => &wheel.filename.version,
-            BuiltDist::Path(wheel) => &wheel.filename.version,
+            Self::Registry(wheel) => &wheel.filename.version,
+            Self::DirectUrl(wheel) => &wheel.filename.version,
+            Self::Path(wheel) => &wheel.filename.version,
         }
     }
 }
@@ -377,26 +377,26 @@ impl SourceDist {
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
     pub fn file(&self) -> Option<&File> {
         match self {
-            SourceDist::Registry(registry) => Some(&registry.file),
-            SourceDist::DirectUrl(_) | SourceDist::Git(_) | SourceDist::Path(_) => None,
+            Self::Registry(registry) => Some(&registry.file),
+            Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) => None,
         }
     }
 
     pub fn version(&self) -> Option<&Version> {
         match self {
-            SourceDist::Registry(source_dist) => Some(&source_dist.filename.version),
-            SourceDist::DirectUrl(_) | SourceDist::Git(_) | SourceDist::Path(_) => None,
+            Self::Registry(source_dist) => Some(&source_dist.filename.version),
+            Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) => None,
         }
     }
 
     #[must_use]
     pub fn with_url(self, url: Url) -> Self {
         match self {
-            SourceDist::DirectUrl(dist) => SourceDist::DirectUrl(DirectUrlSourceDist {
+            Self::DirectUrl(dist) => Self::DirectUrl(DirectUrlSourceDist {
                 url: VerbatimUrl::unknown(url),
                 ..dist
             }),
-            SourceDist::Git(dist) => SourceDist::Git(GitSourceDist {
+            Self::Git(dist) => Self::Git(GitSourceDist {
                 url: VerbatimUrl::unknown(url),
                 ..dist
             }),
@@ -799,17 +799,17 @@ impl Identifier for (&Url, &str) {
 impl Identifier for FileLocation {
     fn distribution_id(&self) -> DistributionId {
         match self {
-            FileLocation::RelativeUrl(base, url) => (base.as_str(), url.as_str()).distribution_id(),
-            FileLocation::AbsoluteUrl(url) => url.distribution_id(),
-            FileLocation::Path(path) => path.distribution_id(),
+            Self::RelativeUrl(base, url) => (base.as_str(), url.as_str()).distribution_id(),
+            Self::AbsoluteUrl(url) => url.distribution_id(),
+            Self::Path(path) => path.distribution_id(),
         }
     }
 
     fn resource_id(&self) -> ResourceId {
         match self {
-            FileLocation::RelativeUrl(base, url) => (base.as_str(), url.as_str()).resource_id(),
-            FileLocation::AbsoluteUrl(url) => url.resource_id(),
-            FileLocation::Path(path) => path.resource_id(),
+            Self::RelativeUrl(base, url) => (base.as_str(), url.as_str()).resource_id(),
+            Self::AbsoluteUrl(url) => url.resource_id(),
+            Self::Path(path) => path.resource_id(),
         }
     }
 }

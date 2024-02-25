@@ -18,7 +18,7 @@ use crate::cache_key::{CacheKey, CacheKeyHasher};
 pub struct CanonicalUrl(Url);
 
 impl CanonicalUrl {
-    pub fn new(url: &Url) -> CanonicalUrl {
+    pub fn new(url: &Url) -> Self {
         let mut url = url.clone();
 
         // Strip a trailing slash.
@@ -62,7 +62,7 @@ impl CanonicalUrl {
             }
         }
 
-        CanonicalUrl(url)
+        Self(url)
     }
 
     pub fn parse(url: &str) -> Result<Self, url::ParseError> {
@@ -104,7 +104,7 @@ impl std::fmt::Display for CanonicalUrl {
 pub struct RepositoryUrl(Url);
 
 impl RepositoryUrl {
-    pub fn new(url: &Url) -> RepositoryUrl {
+    pub fn new(url: &Url) -> Self {
         let mut url = CanonicalUrl::new(url).0;
 
         // If a Git URL ends in a reference (like a branch, tag, or commit), remove it.
@@ -122,7 +122,7 @@ impl RepositoryUrl {
         url.set_fragment(None);
         url.set_query(None);
 
-        RepositoryUrl(url)
+        Self(url)
     }
 
     pub fn parse(url: &str) -> Result<Self, url::ParseError> {

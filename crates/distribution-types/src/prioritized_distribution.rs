@@ -326,7 +326,7 @@ impl Ord for WheelCompatibility {
 
 impl PartialOrd for WheelCompatibility {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(WheelCompatibility::cmp(self, other))
+        Some(Self::cmp(self, other))
     }
 }
 
@@ -339,10 +339,8 @@ impl WheelCompatibility {
 impl From<TagCompatibility> for WheelCompatibility {
     fn from(value: TagCompatibility) -> Self {
         match value {
-            TagCompatibility::Compatible(priority) => WheelCompatibility::Compatible(priority),
-            TagCompatibility::Incompatible(tag) => {
-                WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
-            }
+            TagCompatibility::Compatible(priority) => Self::Compatible(priority),
+            TagCompatibility::Incompatible(tag) => Self::Incompatible(IncompatibleWheel::Tag(tag)),
         }
     }
 }

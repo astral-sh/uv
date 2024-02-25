@@ -64,20 +64,20 @@ pub struct CacheControl {
 
 impl CacheControl {
     /// Convert this to an owned archive value.
-    pub fn to_archived(&self) -> OwnedArchive<CacheControl> {
+    pub fn to_archived(&self) -> OwnedArchive<Self> {
         // There's no way (other than OOM) for serializing this type to fail.
         OwnedArchive::from_unarchived(self).expect("all possible values can be archived")
     }
 }
 
 impl<'b, B: 'b + ?Sized + AsRef<[u8]>> FromIterator<&'b B> for CacheControl {
-    fn from_iter<T: IntoIterator<Item = &'b B>>(it: T) -> CacheControl {
-        CacheControl::from_iter(CacheControlParser::new(it))
+    fn from_iter<T: IntoIterator<Item = &'b B>>(it: T) -> Self {
+        Self::from_iter(CacheControlParser::new(it))
     }
 }
 
 impl FromIterator<CacheControlDirective> for CacheControl {
-    fn from_iter<T: IntoIterator<Item = CacheControlDirective>>(it: T) -> CacheControl {
+    fn from_iter<T: IntoIterator<Item = CacheControlDirective>>(it: T) -> Self {
         fn parse_int(value: &[u8]) -> Option<u64> {
             if !value.iter().all(u8::is_ascii_digit) {
                 return None;
@@ -85,7 +85,7 @@ impl FromIterator<CacheControlDirective> for CacheControl {
             std::str::from_utf8(value).ok()?.parse().ok()
         }
 
-        let mut cc = CacheControl::default();
+        let mut cc = Self::default();
         for ccd in it {
             // Note that when we see invalid directive values, we follow [RFC
             // 9111 S4.2.1]. It says that invalid cache-control directives
@@ -441,8 +441,8 @@ impl CacheControlDirective {
     /// Returns a `must-revalidate` directive. This is useful for forcing a
     /// cache decision that the response is stale, and thus the server should
     /// be consulted for whether the cached response ought to be used or not.
-    fn must_revalidate() -> CacheControlDirective {
-        CacheControlDirective {
+    fn must_revalidate() -> Self {
+        Self {
             name: "must-revalidate".to_string(),
             value: vec![],
         }

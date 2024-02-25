@@ -85,9 +85,9 @@ pub enum FileLocation {
 impl Display for FileLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileLocation::RelativeUrl(_base, url) => Display::fmt(&url, f),
-            FileLocation::AbsoluteUrl(url) => Display::fmt(&url, f),
-            FileLocation::Path(path) => Display::fmt(&path.display(), f),
+            Self::RelativeUrl(_base, url) => Display::fmt(&url, f),
+            Self::AbsoluteUrl(url) => Display::fmt(&url, f),
+            Self::Path(path) => Display::fmt(&path.display(), f),
         }
     }
 }

@@ -548,7 +548,7 @@ impl FromStr for VersionSpecifier {
         }
         let vpat = version.parse().map_err(ParseErrorKind::InvalidVersion)?;
         let version_specifier =
-            VersionSpecifier::new(operator, vpat).map_err(ParseErrorKind::InvalidSpecifier)?;
+            Self::new(operator, vpat).map_err(ParseErrorKind::InvalidSpecifier)?;
         s.eat_while(|c: char| c.is_whitespace());
         if !s.done() {
             return Err(ParseErrorKind::InvalidTrailing(s.after().to_string()).into());
@@ -636,8 +636,8 @@ enum BuildErrorKind {
 }
 
 impl From<BuildErrorKind> for VersionSpecifierBuildError {
-    fn from(kind: BuildErrorKind) -> VersionSpecifierBuildError {
-        VersionSpecifierBuildError {
+    fn from(kind: BuildErrorKind) -> Self {
+        Self {
             kind: Box::new(kind),
         }
     }
@@ -690,8 +690,8 @@ enum ParseErrorKind {
 }
 
 impl From<ParseErrorKind> for VersionSpecifierParseError {
-    fn from(kind: ParseErrorKind) -> VersionSpecifierParseError {
-        VersionSpecifierParseError {
+    fn from(kind: ParseErrorKind) -> Self {
+        Self {
             kind: Box::new(kind),
         }
     }

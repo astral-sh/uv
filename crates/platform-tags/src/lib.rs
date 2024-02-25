@@ -45,7 +45,7 @@ impl Ord for TagCompatibility {
 
 impl PartialOrd for TagCompatibility {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some(TagCompatibility::cmp(self, other))
+        Some(Self::cmp(self, other))
     }
 }
 
@@ -264,16 +264,16 @@ impl Implementation {
     pub fn language_tag(&self, python_version: (u8, u8)) -> String {
         match self {
             // Ex) `cp39`
-            Implementation::CPython => format!("cp{}{}", python_version.0, python_version.1),
+            Self::CPython => format!("cp{}{}", python_version.0, python_version.1),
             // Ex) `pp39`
-            Implementation::PyPy => format!("pp{}{}", python_version.0, python_version.1),
+            Self::PyPy => format!("pp{}{}", python_version.0, python_version.1),
         }
     }
 
     pub fn abi_tag(&self, python_version: (u8, u8), implementation_version: (u8, u8)) -> String {
         match self {
             // Ex) `cp39`
-            Implementation::CPython => {
+            Self::CPython => {
                 if python_version.1 <= 7 {
                     format!("cp{}{}m", python_version.0, python_version.1)
                 } else {
@@ -281,7 +281,7 @@ impl Implementation {
                 }
             }
             // Ex) `pypy39_pp73`
-            Implementation::PyPy => format!(
+            Self::PyPy => format!(
                 "pypy{}{}_pp{}{}",
                 python_version.0,
                 python_version.1,
