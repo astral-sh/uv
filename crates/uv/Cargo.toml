@@ -69,6 +69,7 @@ tracing-subscriber = { workspace = true }
 tracing-tree = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
+unicode-width = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = "0.1.39"

@@ -4183,6 +4183,7 @@ dependencies = [
  "tracing-durations-export",
  "tracing-subscriber",
  "tracing-tree",
+ "unicode-width",
  "url",
  "uv-build",
  "uv-cache",
