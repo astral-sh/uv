@@ -980,7 +980,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
 /// Read an existing HTTP-cached [`Manifest`], if it exists.
 pub(crate) fn read_http_manifest(cache_entry: &CacheEntry) -> Result<Option<Manifest>, Error> {
-    match std::fs::File::open(cache_entry.path()) {
+    match fs_err::File::open(cache_entry.path()) {
         Ok(file) => {
             let data = DataWithCachePolicy::from_reader(file)?.data;
             Ok(Some(rmp_serde::from_slice::<Manifest>(&data)?))
@@ -998,7 +998,7 @@ pub(crate) fn read_timestamp_manifest(
     modified: ArchiveTimestamp,
 ) -> Result<Option<Manifest>, Error> {
     // If the cache entry is up-to-date, return it.
-    match std::fs::read(cache_entry.path()) {
+    match fs_err::read(cache_entry.path()) {
         Ok(cached) => {
             let cached = rmp_serde::from_slice::<CachedByTimestamp<Manifest>>(&cached)?;
             if cached.timestamp == modified.timestamp() {

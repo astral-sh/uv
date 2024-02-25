@@ -1,4 +1,5 @@
-use std::{fs, path::Path, process::Command};
+use fs_err as fs;
+use std::{path::Path, process::Command};
 
 fn main() {
     // The workspace root directory is not available without walking up the tree

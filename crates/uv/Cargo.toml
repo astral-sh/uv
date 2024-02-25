@@ -96,3 +96,6 @@ pypi = []
 git = []
 # Introduces a dependency on Maturin.
 maturin = []
+
+[build-dependencies]
+fs-err.workspace = true

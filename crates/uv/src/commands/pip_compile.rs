@@ -481,11 +481,13 @@ fn cmd(include_index_url: bool, include_find_links: bool) -> String {
 }
 
 /// A multi-casting writer that writes to both the standard output and an output file, if present.
+#[allow(clippy::disallowed_types)]
 struct OutputWriter {
     stdout: AutoStream<std::io::Stdout>,
     output_file: Option<AutoStream<std::fs::File>>,
 }
 
+#[allow(clippy::disallowed_types)]
 impl OutputWriter {
     /// Create a new output writer.
     fn new(output_file: Option<&Path>) -> Result<Self> {
