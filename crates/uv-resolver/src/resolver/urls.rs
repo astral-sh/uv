@@ -42,29 +42,27 @@ impl Urls {
         }
 
         // Add any editable requirements. If there are any conflicts, return an error.
-        for (editable_requirement, metadata) in &manifest.editables {
-            if let Some(previous) =
-                urls.insert(metadata.name.clone(), editable_requirement.url.clone())
-            {
+        for (requirement, metadata) in &manifest.editables {
+            if let Some(previous) = urls.insert(metadata.name.clone(), requirement.url.clone()) {
                 if cache_key::CanonicalUrl::new(previous.raw())
-                    != cache_key::CanonicalUrl::new(editable_requirement.raw())
+                    != cache_key::CanonicalUrl::new(requirement.raw())
                 {
                     return Err(ResolveError::ConflictingUrlsDirect(
                         metadata.name.clone(),
                         previous.verbatim().to_string(),
-                        editable_requirement.url.verbatim().to_string(),
+                        requirement.verbatim().to_string(),
                     ));
                 }
             }
 
-            for req in &metadata.requires_dist {
-                if let Some(pep508_rs::VersionOrUrl::Url(url)) = &req.version_or_url {
-                    if let Some(previous) = urls.insert(req.name.clone(), url.clone()) {
+            for requirement in &metadata.requires_dist {
+                if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
+                    if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
                         if cache_key::CanonicalUrl::new(previous.raw())
                             != cache_key::CanonicalUrl::new(url.raw())
                         {
                             return Err(ResolveError::ConflictingUrlsDirect(
-                                req.name.clone(),
+                                requirement.name.clone(),
                                 previous.verbatim().to_string(),
                                 url.verbatim().to_string(),
                             ));
