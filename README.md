@@ -75,15 +75,17 @@ To install a package into the virtual environment:
 uv pip install flask                # Install Flask.
 uv pip install -r requirements.txt  # Install from a requirements.txt file.
 uv pip install -e .                 # Install the current project in editable mode.
-uv pip install "package @ ."        # Install the current project from disk
+uv pip install "package @ ."        # Install the current project from disk.
 uv pip install "flask[dotenv]"      # Install Flask with "dotenv" extra.
 ```
 
-To generate a set of locked dependencies from an input file:
+To generate a set of locked dependencies:
 
 ```shell
 uv pip compile pyproject.toml -o requirements.txt   # Read a pyproject.toml file.
 uv pip compile requirements.in -o requirements.txt  # Read a requirements.in file.
+uv pip compile - -o requirements.txt  # Read from stdin.
+uv pip freeze | uv pip compile - -o requirements.txt  # Read from env packages.
 ```
 
 To sync a set of locked dependencies with the virtual environment:
