@@ -1,10 +1,10 @@
 # uv
 
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
-[![image](https://img.shields.io/pypi/v/uv?logo=python&logoColor=D7FF64&color=261230)](https://pypi.python.org/pypi/uv)
-[![image](https://img.shields.io/pypi/l/uv?logo=python&logoColor=D7FF64&color=261230)](https://pypi.python.org/pypi/uv)
-[![image](https://img.shields.io/pypi/pyversions/uv?logo=python&logoColor=D7FF64&color=261230)](https://pypi.python.org/pypi/uv)
-[![Actions status](https://img.shields.io/github/actions/workflow/status/astral-sh/uv/ci.yml?logo=github&logoColor=D7FF64&label=CI&color=261230)](https://github.com/astral-sh/uv/actions)
+[![PyPI Version](https://img.shields.io/pypi/v/uv?logo=python&logoColor=D7FF64&color=261230&label=Verson)](https://pypi.python.org/pypi/uv)
+[![License](https://img.shields.io/pypi/l/uv?logo=python&logoColor=D7FF64&color=261230&label=License)](https://pypi.python.org/pypi/uv)
+[![Python Versions](https://img.shields.io/pypi/pyversions/uv?logo=python&logoColor=D7FF64&color=261230&label=Python)](https://pypi.python.org/pypi/uv)
+[![Actions Status](https://img.shields.io/github/actions/workflow/status/astral-sh/uv/ci.yml?logo=github&logoColor=D7FF64&label=CI&color=261230)](https://github.com/astral-sh/uv/actions)
 [![Astral Discord](https://img.shields.io/discord/1039017663004942429?logo=discord&logoColor=D7FF64&label=Astral%20Discord&color=261230)](https://discord.gg/astral-sh)
 
 An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in
