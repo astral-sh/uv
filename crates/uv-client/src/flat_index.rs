@@ -329,7 +329,7 @@ impl FlatIndex {
                     file: Box::new(file),
                     index,
                 }));
-                match distributions.0.entry(filename.version.clone()) {
+                match distributions.0.entry(filename.version) {
                     Entry::Occupied(mut entry) => {
                         entry
                             .get_mut()

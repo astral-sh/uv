@@ -409,7 +409,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for {source_dist}");
-            return Ok(metadata.clone());
+            return Ok(metadata);
         }
 
         // Otherwise, we either need to build the metadata or the wheel.
@@ -580,7 +580,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         {
             if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
                 debug!("Using cached metadata for {source_dist}");
-                return Ok(metadata.clone());
+                return Ok(metadata);
             }
         }
 
@@ -708,7 +708,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         {
             if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
                 debug!("Using cached metadata for {source_dist}");
-                return Ok(metadata.clone());
+                return Ok(metadata);
             }
         }
 

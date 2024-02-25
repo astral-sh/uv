@@ -628,7 +628,7 @@ fn virtualenv_compatibility() -> Result<()> {
         .arg(cache_dir.path())
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
-        .env("UV_TEST_PYTHON_PATH", bin.clone())
+        .env("UV_TEST_PYTHON_PATH", bin)
         .current_dir(&temp_dir), @r###"
     success: true
     exit_code: 0
