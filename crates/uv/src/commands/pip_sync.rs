@@ -437,12 +437,10 @@ async fn resolve_editables(
                     [dist] if not_modified(&editable, dist) => {
                         if packages.contains(dist.name()) {
                             uninstalled.push(editable);
+                        } else if not_modified(&editable, dist) {
+                            installed.push((*dist).clone());
                         } else {
-                            if not_modified(&editable, dist) {
-                                installed.push((*dist).clone());
-                            } else {
-                                uninstalled.push(editable);
-                            }
+                            uninstalled.push(editable);
                         }
                     }
                     _ => {
