@@ -115,14 +115,12 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
 
         // On Windows, skip symlink entries, as they're not supported. pip recursively copies the
         // symlink target instead.
-        if cfg!(windows) {
-            if file.header().entry_type().is_symlink() {
-                warn!(
-                    "Skipping symlink in tar archive: {}",
-                    file.path()?.display()
-                );
-                continue;
-            }
+        if cfg!(windows) && file.header().entry_type().is_symlink() {
+            warn!(
+                "Skipping symlink in tar archive: {}",
+                file.path()?.display()
+            );
+            continue;
         }
 
         file.unpack_in(dst.as_ref()).await?;
@@ -188,15 +186,14 @@ pub async fn archive<R: tokio::io::AsyncBufRead + Unpin>(
         .as_ref()
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("gz"))
-    {
-        if source.as_ref().file_stem().is_some_and(|stem| {
+        && source.as_ref().file_stem().is_some_and(|stem| {
             Path::new(stem)
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
-        }) {
-            untar(reader, target).await?;
-            return Ok(());
-        }
+        })
+    {
+        untar(reader, target).await?;
+        return Ok(());
     }
 
     Err(Error::UnsupportedArchive(source.as_ref().to_path_buf()))
