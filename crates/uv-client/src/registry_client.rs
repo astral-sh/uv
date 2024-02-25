@@ -88,19 +88,24 @@ impl RegistryClientBuilder {
     }
 
     pub fn build(self) -> RegistryClient {
-        let client_raw = self.client.unwrap_or_else(|| {
-            // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
-            // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-            let default_timeout = 5 * 60;
-            let timeout = env::var("UV_HTTP_TIMEOUT").or_else(|_| env::var("UV_REQUEST_TIMEOUT")).or_else(|_| env::var("HTTP_TIMEOUT")).and_then(|value| {
+        // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
+        // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
+        let default_timeout = 5 * 60;
+        let timeout = env::var("UV_HTTP_TIMEOUT")
+            .or_else(|_| env::var("UV_REQUEST_TIMEOUT"))
+            .or_else(|_| env::var("HTTP_TIMEOUT"))
+            .and_then(|value| {
                 value.parse::<u64>()
                     .or_else(|_| {
-                        // On parse error, warn and  use the default timeout
-                        warn_user_once!("Ignoring invalid value from environment for UV_REQUEST_TIMEOUT. Expected integer number of seconds, got \"{value}\".");
+                        // On parse error, warn and use the default timeout
+                        warn_user_once!("Ignoring invalid value from environment for UV_HTTP_TIMEOUT. Expected integer number of seconds, got \"{value}\".");
                         Ok(default_timeout)
                     })
-            }).unwrap_or(default_timeout);
-            debug!("Using registry request timeout of {}s", timeout);
+            })
+            .unwrap_or(default_timeout);
+        debug!("Using registry request timeout of {}s", timeout);
+
+        let client_raw = self.client.unwrap_or_else(|| {
             // Disallow any connections.
             let client_core = ClientBuilder::new()
                 .user_agent("uv")
@@ -130,6 +135,7 @@ impl RegistryClientBuilder {
             connectivity: self.connectivity,
             client_raw: client_raw.clone(),
             client: CachedClient::new(uncached_client.clone()),
+            timeout,
         }
     }
 }
@@ -148,6 +154,8 @@ pub struct RegistryClient {
     cache: Cache,
     /// The connectivity mode to use.
     connectivity: Connectivity,
+    /// Configured client timeout
+    timeout: u64,
 }
 
 impl RegistryClient {
@@ -159,6 +167,11 @@ impl RegistryClient {
     /// Return the [`Connectivity`] mode used by this client.
     pub fn connectivity(&self) -> Connectivity {
         self.connectivity
+    }
+
+    /// Return the timeout this client is configured with.
+    pub fn timeout(&self) -> u64 {
+        self.timeout
     }
 
     /// Fetch a package from the `PyPI` simple API.
