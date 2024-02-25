@@ -45,6 +45,14 @@ pub struct DistributionDatabase<'a, Context: BuildContext + Send + Sync> {
     builder: SourceDistCachedBuilder<'a, Context>,
 }
 
+fn handle_response_errors(err: reqwest::Error) -> io::Error {
+    if err.is_timeout() {
+        io::Error::new(io::ErrorKind::TimedOut, "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT.")
+    } else {
+        io::Error::new(io::ErrorKind::Other, err)
+    }
+}
+
 impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> {
     pub fn new(
         cache: &'a Cache,
@@ -150,7 +158,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     async {
                         let reader = response
                             .bytes_stream()
-                            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                            .map_err(handle_response_errors)
                             .into_async_read();
 
                         // Download and unzip the wheel to a temporary directory.
@@ -212,7 +220,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     async {
                         let reader = response
                             .bytes_stream()
-                            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                            .map_err(handle_response_errors)
                             .into_async_read();
 
                         // Download and unzip the wheel to a temporary directory.
