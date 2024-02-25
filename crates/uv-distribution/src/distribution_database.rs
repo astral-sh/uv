@@ -73,6 +73,20 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         }
     }
 
+    /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
+    fn handle_response_errors(&self, err: reqwest::Error) -> io::Error {
+        if err.is_timeout() {
+            io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!(
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",  self.client.timeout()
+                ),
+            )
+        } else {
+            io::Error::new(io::ErrorKind::Other, err)
+        }
+    }
+
     /// Either fetch the wheel or fetch and build the source distribution
     ///
     /// If `no_remote_wheel` is set, the wheel will be built from a source distribution
@@ -150,7 +164,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     async {
                         let reader = response
                             .bytes_stream()
-                            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                            .map_err(|err| self.handle_response_errors(err))
                             .into_async_read();
 
                         // Download and unzip the wheel to a temporary directory.
@@ -212,7 +226,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     async {
                         let reader = response
                             .bytes_stream()
-                            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                            .map_err(|err| self.handle_response_errors(err))
                             .into_async_read();
 
                         // Download and unzip the wheel to a temporary directory.
