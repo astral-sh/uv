@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::Write;
@@ -638,33 +639,48 @@ impl ArchiveTimestamp {
     /// Return the modification timestamp for an archive, which could be a file (like a wheel or a zip
     /// archive) or a directory containing a Python package.
     ///
-    /// If the path is to a directory with no entrypoint (i.e., no `pyproject.toml` or `setup.py`),
-    /// returns `None`.
+    /// If the path is to a directory with no entrypoint (i.e., no `pyproject.toml`, `setup.py`, or
+    /// `setup.cfg`), returns `None`.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
         let metadata = fs_err::metadata(path.as_ref())?;
         if metadata.is_file() {
             Ok(Some(Self::Exact(Timestamp::from_metadata(&metadata))))
         } else {
-            // TODO(charlie): Take the maximum of `pyproject.toml`, `setup.py`, and `setup.cfg`.
-            if let Some(metadata) = path
+            // Compute the modification timestamp for the `pyproject.toml`, `setup.py`, and
+            // `setup.cfg` files, if they exist.
+            let pyproject_toml = path
                 .as_ref()
                 .join("pyproject.toml")
                 .metadata()
                 .ok()
                 .filter(std::fs::Metadata::is_file)
-            {
-                Ok(Some(Self::Approximate(Timestamp::from_metadata(&metadata))))
-            } else if let Some(metadata) = path
+                .as_ref()
+                .map(Timestamp::from_metadata);
+
+            let setup_py = path
                 .as_ref()
                 .join("setup.py")
                 .metadata()
                 .ok()
                 .filter(std::fs::Metadata::is_file)
-            {
-                Ok(Some(Self::Approximate(Timestamp::from_metadata(&metadata))))
-            } else {
-                Ok(None)
-            }
+                .as_ref()
+                .map(Timestamp::from_metadata);
+
+            let setup_cfg = path
+                .as_ref()
+                .join("setup.cfg")
+                .metadata()
+                .ok()
+                .filter(std::fs::Metadata::is_file)
+                .as_ref()
+                .map(Timestamp::from_metadata);
+
+            // Take the most recent timestamp of the three files.
+            let Some(timestamp) = max(pyproject_toml, max(setup_py, setup_cfg)) else {
+                return Ok(None);
+            };
+
+            Ok(Some(Self::Approximate(timestamp)))
         }
     }
 
