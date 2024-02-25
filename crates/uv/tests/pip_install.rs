@@ -1908,3 +1908,193 @@ requires-python = ">=3.8"
 
     Ok(())
 }
+
+#[test]
+fn dry_run_install() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let context = TestContext::new("3.12");
+
+    // Set up a requirements.txt with some packages
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("litestar==2.0.0")?;
+
+    // Run the installation command with our dry-run and strict flags set
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--dry-run")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 17 packages in [TIME]
+    Would download 17 packages
+    Would install 17 packages
+     + anyio==4.0.0
+     + certifi==2023.11.17
+     + faker==20.0.3
+     + fast-query-parsers==1.0.3
+     + h11==0.14.0
+     + httpcore==1.0.2
+     + httpx==0.25.1
+     + idna==3.4
+     + litestar==2.0.0
+     + msgspec==0.18.4
+     + multidict==6.0.4
+     + polyfactory==2.12.0
+     + python-dateutil==2.8.2
+     + pyyaml==6.0.1
+     + six==1.16.0
+     + sniffio==1.3.0
+     + typing-extensions==4.8.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    // Test that --dry-run properly audits when the package is already installed
+    let context = TestContext::new("3.12");
+
+    // Set up a requirements.txt with some packages
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("litestar==2.0.0")?;
+
+    // Actually install the package
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 17 packages in [TIME]
+    Downloaded 17 packages in [TIME]
+    Installed 17 packages in [TIME]
+     + anyio==4.0.0
+     + certifi==2023.11.17
+     + faker==20.0.3
+     + fast-query-parsers==1.0.3
+     + h11==0.14.0
+     + httpcore==1.0.2
+     + httpx==0.25.1
+     + idna==3.4
+     + litestar==2.0.0
+     + msgspec==0.18.4
+     + multidict==6.0.4
+     + polyfactory==2.12.0
+     + python-dateutil==2.8.2
+     + pyyaml==6.0.1
+     + six==1.16.0
+     + sniffio==1.3.0
+     + typing-extensions==4.8.0
+    "###
+    );
+
+    // Install it again, but with --dry-run. Shouldn't actually install anything
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--dry-run")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn dry_run_install_then_upgrade() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    // Test that --dry-run + --upgrade properly displays the "would be" upgrade of an installed package
+    let context = TestContext::new("3.12");
+
+    // Set up a requirements.txt with some packages
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("litestar==2.0.0")?;
+
+    // Actually install the package
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 17 packages in [TIME]
+    Downloaded 17 packages in [TIME]
+    Installed 17 packages in [TIME]
+     + anyio==4.0.0
+     + certifi==2023.11.17
+     + faker==20.0.3
+     + fast-query-parsers==1.0.3
+     + h11==0.14.0
+     + httpcore==1.0.2
+     + httpx==0.25.1
+     + idna==3.4
+     + litestar==2.0.0
+     + msgspec==0.18.4
+     + multidict==6.0.4
+     + polyfactory==2.12.0
+     + python-dateutil==2.8.2
+     + pyyaml==6.0.1
+     + six==1.16.0
+     + sniffio==1.3.0
+     + typing-extensions==4.8.0
+    "###
+    );
+
+    // Upgrade the package, but with no version changes and --dry-run to see what would happen
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--upgrade")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 17 packages in [TIME]
+    Audited 17 packages in [TIME]
+    "###
+    );
+
+    // Bump the version, and upgrade the package with --dry-run to see what would happen
+    requirements_txt.write_str("litestar==2.0.1")?;
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--upgrade")
+        .arg("--dry-run"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 17 packages in [TIME]
+    Would download 1 package
+    Would uninstall 1 package
+    Would install 1 package
+     - litestar==2.0.0
+     + litestar==2.0.1
+    "###
+    );
+
+    Ok(())
+}

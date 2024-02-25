@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt::Write;
 
 use std::path::Path;
+use std::time::Instant;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
@@ -40,7 +41,7 @@ use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
-use super::Upgrade;
+use super::{DryRunEvent, Upgrade};
 
 /// Install packages into the current environment.
 #[allow(clippy::too_many_arguments)]
@@ -344,7 +345,7 @@ async fn build_editables(
     build_dispatch: &BuildDispatch<'_>,
     mut printer: Printer,
 ) -> Result<Vec<BuiltEditable>, Error> {
-    let start = std::time::Instant::now();
+    let start = Instant::now();
 
     let downloader = Downloader::new(cache, tags, client, build_dispatch)
         .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
@@ -509,12 +510,7 @@ async fn install(
 
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
-    let Plan {
-        local,
-        remote,
-        reinstalls,
-        extraneous: _,
-    } = Planner::with_requirements(&requirements)
+    let plan = Planner::with_requirements(&requirements)
         .with_editable_requirements(&editables)
         .build(
             site_packages,
@@ -528,70 +524,15 @@ async fn install(
         .context("Failed to determine installation plan")?;
 
     if dry_run {
-        if !remote.is_empty() {
-            writeln!(
-                printer,
-                "{} The following packages would be downloaded:",
-                "DRY RUN".white().bold()
-            )?;
-            for dist in &remote {
-                let version = resolution
-                    .get(&dist.name)
-                    .map(|r| r.version().map_or(String::new(), |v| format!("=={v}")))
-                    .unwrap_or_default();
-                writeln!(
-                    printer,
-                    " {} {}{}",
-                    "~".blue(),
-                    dist.name.as_ref().white().bold(),
-                    version.dimmed()
-                )?;
-            }
-        }
-
-        if !reinstalls.is_empty() {
-            writeln!(
-                printer,
-                "{} The following packages would be reinstalled:",
-                "DRY RUN".white().bold()
-            )?;
-            for dist_info in &reinstalls {
-                let version = resolution
-                    .get(dist_info.name())
-                    .map(|r| r.version().map_or(String::new(), |v| format!("=={v}")))
-                    .unwrap_or_default();
-                writeln!(
-                    printer,
-                    " {} {}{}",
-                    "~".blue(),
-                    dist_info.name().white().bold(),
-                    version.dimmed()
-                )?;
-            }
-        }
-
-        if !local.is_empty() {
-            writeln!(
-                printer,
-                "{} The following packages would be installed from local cache:",
-                "DRY RUN".white().bold()
-            )?;
-            for local_dist in &local {
-                let version = resolution
-                    .get(local_dist.name())
-                    .map(|r| r.version().map_or(String::new(), |v| format!("=={v}")))
-                    .unwrap_or_default();
-                writeln!(
-                    printer,
-                    " {} {}{}",
-                    "~".blue(),
-                    local_dist.name().white().bold(),
-                    version.dimmed()
-                )?;
-            }
-        }
-        return Ok(());
+        return report_dry_run(resolution, plan, start, printer);
     }
+
+    let Plan {
+        local,
+        remote,
+        reinstalls,
+        extraneous: _,
+    } = plan;
 
     // Nothing to do.
     if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
@@ -606,7 +547,6 @@ async fn install(
             )
             .dimmed()
         )?;
-
         return Ok(());
     }
 
@@ -625,7 +565,7 @@ async fn install(
     let wheels = if remote.is_empty() {
         vec![]
     } else {
-        let start = std::time::Instant::now();
+        let start = Instant::now();
 
         let downloader = Downloader::new(cache, tags, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
@@ -725,6 +665,137 @@ async fn install(
                 )?;
             }
         }
+    }
+
+    #[allow(clippy::items_after_statements)]
+    fn report_dry_run(
+        resolution: &Resolution,
+        plan: Plan,
+        start: Instant,
+        mut printer: Printer,
+    ) -> Result<(), Error> {
+        let Plan {
+            local,
+            remote,
+            reinstalls,
+            extraneous: _,
+        } = plan;
+
+        // Nothing to do.
+        if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
+            let s = if resolution.len() == 1 { "" } else { "s" };
+            writeln!(
+                printer,
+                "{}",
+                format!(
+                    "Audited {} in {}",
+                    format!("{} package{}", resolution.len(), s).bold(),
+                    elapsed(start.elapsed())
+                )
+                .dimmed()
+            )?;
+            writeln!(printer, "Would make no changes")?;
+            return Ok(());
+        }
+
+        // Map any registry-based requirements back to those returned by the resolver.
+        let remote = remote
+            .iter()
+            .map(|dist| {
+                resolution
+                    .get(&dist.name)
+                    .cloned()
+                    .expect("Resolution should contain all packages")
+            })
+            .collect::<Vec<_>>();
+
+        // Download, build, and unzip any missing distributions.
+        let wheels = if remote.is_empty() {
+            vec![]
+        } else {
+            let s = if remote.len() == 1 { "" } else { "s" };
+            writeln!(
+                printer,
+                "{}",
+                format!(
+                    "Would download {}",
+                    format!("{} package{}", remote.len(), s).bold(),
+                )
+                .dimmed()
+            )?;
+            remote
+        };
+
+        // Remove any existing installations.
+        if !reinstalls.is_empty() {
+            let s = if reinstalls.len() == 1 { "" } else { "s" };
+            writeln!(
+                printer,
+                "{}",
+                format!(
+                    "Would uninstall {}",
+                    format!("{} package{}", reinstalls.len(), s).bold(),
+                )
+                .dimmed()
+            )?;
+        }
+
+        // Install the resolved distributions.
+        let installs = wheels.len() + local.len();
+
+        if installs > 0 {
+            let s = if installs == 1 { "" } else { "s" };
+            writeln!(
+                printer,
+                "{}",
+                format!("Would install {}", format!("{installs} package{s}").bold(),).dimmed()
+            )?;
+        }
+
+        for event in reinstalls
+            .into_iter()
+            .map(|distribution| DryRunEvent {
+                name: distribution.name().clone(),
+                version: distribution.version().to_string(),
+                kind: ChangeEventKind::Removed,
+            })
+            .chain(wheels.into_iter().map(|distribution| DryRunEvent {
+                name: distribution.name().clone(),
+                version: distribution.version().unwrap().to_string(),
+                kind: ChangeEventKind::Added,
+            }))
+            .chain(local.into_iter().map(|distribution| DryRunEvent {
+                name: distribution.name().clone(),
+                version: distribution.installed_version().to_string(),
+                kind: ChangeEventKind::Added,
+            }))
+            .sorted_unstable_by(|a, b| a.name.cmp(&b.name).then_with(|| a.kind.cmp(&b.kind)))
+        {
+            match event.kind {
+                ChangeEventKind::Added => {
+                    writeln!(
+                        printer,
+                        " {} {}{}{}",
+                        "+".green(),
+                        event.name.as_ref().bold(),
+                        "==".dimmed(),
+                        event.version.dimmed()
+                    )?;
+                }
+                ChangeEventKind::Removed => {
+                    writeln!(
+                        printer,
+                        " {} {}{}{}",
+                        "-".red(),
+                        event.name.as_ref().bold(),
+                        "==".dimmed(),
+                        event.version.dimmed()
+                    )?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     // TODO(konstin): Also check the cache whether any cached or installed dist is already known to

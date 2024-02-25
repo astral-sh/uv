@@ -1,5 +1,5 @@
-use std::process::ExitCode;
 use std::time::Duration;
+use std::{fmt::Display, process::ExitCode};
 
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
@@ -9,6 +9,7 @@ pub(crate) use pip_freeze::pip_freeze;
 pub(crate) use pip_install::pip_install;
 pub(crate) use pip_sync::pip_sync;
 pub(crate) use pip_uninstall::pip_uninstall;
+use uv_normalize::PackageName;
 pub(crate) use venv::venv;
 pub(crate) use version::version;
 
@@ -72,6 +73,13 @@ pub(super) enum ChangeEventKind {
 #[derive(Debug)]
 pub(super) struct ChangeEvent<T: InstalledMetadata> {
     dist: T,
+    kind: ChangeEventKind,
+}
+
+#[derive(Debug)]
+pub(super) struct DryRunEvent<T: Display> {
+    name: PackageName,
+    version: T,
     kind: ChangeEventKind,
 }
 
