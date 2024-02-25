@@ -711,9 +711,8 @@ impl DataWithCachePolicy {
         let len_u64 = u64::from_le_bytes(cache_policy_len_bytes);
         let Ok(len_usize) = usize::try_from(len_u64) else {
             let msg = format!(
-                "data-with-cache-policy has cache policy length of {}, \
+                "data-with-cache-policy has cache policy length of {len_u64}, \
                  but overflows usize",
-                len_u64,
             );
             return Err(ErrorKind::ArchiveRead(msg).into());
         };

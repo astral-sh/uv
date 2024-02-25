@@ -223,8 +223,8 @@ impl std::fmt::Display for VersionSpecifiersParseError {
             start,
             end,
         } = *self.inner;
-        writeln!(f, "Failed to parse version: {}:", err)?;
-        writeln!(f, "{}", line)?;
+        writeln!(f, "Failed to parse version: {err}:")?;
+        writeln!(f, "{line}")?;
         let indent = line[..start].width();
         let point = line[start..end].width();
         writeln!(f, "{}{}", " ".repeat(indent), "^".repeat(point))?;

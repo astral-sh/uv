@@ -143,7 +143,7 @@ mod tests {
     fn check() {
         let inputs = ["friendly-bard", "friendlybard"];
         for input in inputs {
-            assert!(is_normalized(input).unwrap(), "{:?}", input);
+            assert!(is_normalized(input).unwrap(), "{input:?}");
         }
 
         let inputs = [
@@ -155,7 +155,7 @@ mod tests {
             "FrIeNdLy-._.-bArD",
         ];
         for input in inputs {
-            assert!(!is_normalized(input).unwrap(), "{:?}", input);
+            assert!(!is_normalized(input).unwrap(), "{input:?}");
         }
     }
 

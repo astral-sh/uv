@@ -666,7 +666,7 @@ impl std::fmt::Display for Version {
 
 impl std::fmt::Debug for Version {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "\"{}\"", self)
+        write!(f, "\"{self}\"")
     }
 }
 
@@ -2003,8 +2003,7 @@ impl std::fmt::Display for VersionParseError {
             ErrorKind::InvalidDigit { got } => {
                 write!(
                     f,
-                    "expected ASCII digit, but found non-ASCII byte \\x{:02X}",
-                    got
+                    "expected ASCII digit, but found non-ASCII byte \\x{got:02X}"
                 )
             }
             ErrorKind::NumberTooBig { ref bytes } => {
