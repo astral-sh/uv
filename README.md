@@ -208,8 +208,8 @@ The specifics of uv's caching semantics vary based on the nature of the dependen
 - **For Git dependencies**, uv caches based on the fully-resolved Git commit hash. As such,
   `uv pip compile` will pin Git dependencies to a specific commit hash when writing the resolved
   dependency set.
-- **For local dependencies**, uv caches based on the last-modified time of the `setup.py` or
-  `pyproject.toml` file.
+- **For local dependencies**, uv caches based on the last-modified time of the `setup.cfg`,
+  `setup.py` or `pyproject.toml` file.
 
 If you're running into caching issues, uv includes a few escape hatches:
 

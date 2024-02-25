@@ -630,7 +630,7 @@ pub enum ArchiveTimestamp {
     /// The archive consists of a single file with the given modification time.
     Exact(Timestamp),
     /// The archive consists of a directory. The modification time is the latest modification time
-    /// of the `pyproject.toml` or `setup.py` file in the directory.
+    /// of the `pyproject.toml`, `setup.cfg` or `setup.py` file in the directory.
     Approximate(Timestamp),
 }
 
@@ -638,8 +638,8 @@ impl ArchiveTimestamp {
     /// Return the modification timestamp for an archive, which could be a file (like a wheel or a zip
     /// archive) or a directory containing a Python package.
     ///
-    /// If the path is to a directory with no entrypoint (i.e., no `pyproject.toml` or `setup.py`),
-    /// returns `None`.
+    /// If the path is to a directory with no entrypoint (i.e., no `pyproject.toml`, `setup.cfg` or
+    /// `setup.py`), returns `None`.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
         let metadata = fs_err::metadata(path.as_ref())?;
         if metadata.is_file() {
@@ -648,6 +648,14 @@ impl ArchiveTimestamp {
             if let Some(metadata) = path
                 .as_ref()
                 .join("pyproject.toml")
+                .metadata()
+                .ok()
+                .filter(std::fs::Metadata::is_file)
+            {
+                Ok(Some(Self::Approximate(Timestamp::from_metadata(&metadata))))
+            } else if let Some(metadata) = path
+                .as_ref()
+                .join("setup.cfg")
                 .metadata()
                 .ok()
                 .filter(std::fs::Metadata::is_file)
