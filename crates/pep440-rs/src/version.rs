@@ -1854,7 +1854,7 @@ impl ReleaseNumbers {
                 if *len == 4 {
                     let mut numbers = numbers.to_vec();
                     numbers.push(n);
-                    *self = Self::Vec(numbers.to_vec());
+                    *self = Self::Vec(numbers.clone());
                 } else {
                     numbers[*len] = n;
                     *len += 1;

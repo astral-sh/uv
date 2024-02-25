@@ -238,7 +238,7 @@ impl<'a> FlatIndexClient<'a> {
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,
-                url: FileLocation::Path(entry.path().to_path_buf()),
+                url: FileLocation::Path(entry.path().clone()),
                 yanked: None,
             };
 
