@@ -163,7 +163,7 @@ impl WheelFilename {
             .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?;
         let version = Version::from_str(version)
             .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
-        Ok(WheelFilename {
+        Ok(Self {
             name,
             version,
             python_tag: python_tag.split('.').map(String::from).collect(),

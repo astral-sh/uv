@@ -43,15 +43,15 @@ impl DistFilename {
 
     pub fn name(&self) -> &PackageName {
         match self {
-            DistFilename::SourceDistFilename(filename) => &filename.name,
-            DistFilename::WheelFilename(filename) => &filename.name,
+            Self::SourceDistFilename(filename) => &filename.name,
+            Self::WheelFilename(filename) => &filename.name,
         }
     }
 
     pub fn version(&self) -> &Version {
         match self {
-            DistFilename::SourceDistFilename(filename) => &filename.version,
-            DistFilename::WheelFilename(filename) => &filename.version,
+            Self::SourceDistFilename(filename) => &filename.version,
+            Self::WheelFilename(filename) => &filename.version,
         }
     }
 }
@@ -59,8 +59,8 @@ impl DistFilename {
 impl Display for DistFilename {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            DistFilename::SourceDistFilename(filename) => Display::fmt(filename, f),
-            DistFilename::WheelFilename(filename) => Display::fmt(filename, f),
+            Self::SourceDistFilename(filename) => Display::fmt(filename, f),
+            Self::WheelFilename(filename) => Display::fmt(filename, f),
         }
     }
 }

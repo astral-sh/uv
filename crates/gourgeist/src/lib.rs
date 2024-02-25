@@ -39,9 +39,9 @@ impl Prompt {
     /// Determine the prompt value to be used from the command line arguments.
     pub fn from_args(prompt: Option<String>) -> Self {
         match prompt {
-            Some(prompt) if prompt == "." => Prompt::CurrentDirectoryName,
-            Some(prompt) => Prompt::Static(prompt),
-            None => Prompt::None,
+            Some(prompt) if prompt == "." => Self::CurrentDirectoryName,
+            Some(prompt) => Self::Static(prompt),
+            None => Self::None,
         }
     }
 }

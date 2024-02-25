@@ -47,33 +47,29 @@ impl RequirementsSource {
         // If the user provided a `requirements.txt` file without `-r` (as in
         // `uv pip install requirements.txt`), prompt them to correct it.
         #[allow(clippy::case_sensitive_file_extension_comparisons)]
-        if name.ends_with(".txt") || name.ends_with(".in") {
-            if Path::new(&name).is_file() {
-                let term = Term::stderr();
-                if term.is_term() {
-                    let prompt = format!(
-                        "`{name}` looks like a requirements file but was passed as a package name. Did you mean `-r {name}`?"
-                    );
-                    let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
-                    if confirmation {
-                        return Self::RequirementsTxt(name.into());
-                    }
+        if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
+            let term = Term::stderr();
+            if term.is_term() {
+                let prompt = format!(
+                    "`{name}` looks like a requirements file but was passed as a package name. Did you mean `-r {name}`?"
+                );
+                let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
+                if confirmation {
+                    return Self::RequirementsTxt(name.into());
                 }
             }
         }
 
         // If the user provided a path to a local directory without `-e` (as in
         // `uv pip install ../flask`), prompt them to correct it.
-        if name.contains('/') || name.contains('\\') {
-            if Path::new(&name).is_dir() {
-                let term = Term::stderr();
-                if term.is_term() {
-                    let prompt =
-                        format!("`{name}` looks like a local directory but was passed as a package name. Did you mean `-e {name}`?");
-                    let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
-                    if confirmation {
-                        return Self::RequirementsTxt(name.into());
-                    }
+        if (name.contains('/') || name.contains('\\')) && Path::new(&name).is_dir() {
+            let term = Term::stderr();
+            if term.is_term() {
+                let prompt =
+                    format!("`{name}` looks like a local directory but was passed as a package name. Did you mean `-e {name}`?");
+                let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
+                if confirmation {
+                    return Self::RequirementsTxt(name.into());
                 }
             }
         }
@@ -236,15 +232,15 @@ impl RequirementsSpecification {
                     })?);
                 }
 
-                if requirements.is_empty() {
-                    if pyproject_toml.build_system.is_some_and(|build_system| {
+                if requirements.is_empty()
+                    && pyproject_toml.build_system.is_some_and(|build_system| {
                         build_system
                             .requires
                             .iter()
                             .any(|v| v.name.as_dist_info_name().starts_with("poetry"))
-                    }) {
-                        warn_user!("`{}` does not contain any dependencies (hint: specify dependencies in the `project.dependencies` section; `tool.poetry.dependencies` is not currently supported)", path.normalized_display());
-                    }
+                    })
+                {
+                    warn_user!("`{}` does not contain any dependencies (hint: specify dependencies in the `project.dependencies` section; `tool.poetry.dependencies` is not currently supported)", path.normalized_display());
                 }
 
                 Self {

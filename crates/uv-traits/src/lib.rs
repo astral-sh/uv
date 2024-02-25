@@ -163,8 +163,8 @@ pub enum BuildKind {
 impl Display for BuildKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            BuildKind::Wheel => f.write_str("wheel"),
-            BuildKind::Editable => f.write_str("editable"),
+            Self::Wheel => f.write_str("wheel"),
+            Self::Editable => f.write_str("editable"),
         }
     }
 }

@@ -75,11 +75,11 @@ pub(crate) enum WheelCacheKind {
 impl WheelCacheKind {
     pub(crate) fn to_str(self) -> &'static str {
         match self {
-            WheelCacheKind::Pypi => "pypi",
-            WheelCacheKind::Index => "index",
-            WheelCacheKind::Url => "url",
-            WheelCacheKind::Path => "path",
-            WheelCacheKind::Git => "git",
+            Self::Pypi => "pypi",
+            Self::Index => "index",
+            Self::Url => "url",
+            Self::Path => "path",
+            Self::Git => "git",
         }
     }
 

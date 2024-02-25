@@ -51,7 +51,7 @@ async fn find_latest_version(
     let (_, raw_simple_metadata) = client.simple(package_name).await.ok()?;
     let simple_metadata = OwnedArchive::deserialize(&raw_simple_metadata);
     let version = simple_metadata.into_iter().next()?.version;
-    Some(version.clone())
+    Some(version)
 }
 
 pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {

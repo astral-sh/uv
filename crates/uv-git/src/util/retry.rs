@@ -94,8 +94,8 @@ const INITIAL_RETRY_SLEEP_BASE_MS: u64 = 500;
 const INITIAL_RETRY_JITTER_MS: u64 = 1000;
 
 impl Retry {
-    pub(crate) fn new() -> Retry {
-        Retry {
+    pub(crate) fn new() -> Self {
+        Self {
             retries: 0,
             max_retries: 3,
         }

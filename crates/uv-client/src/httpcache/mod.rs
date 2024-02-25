@@ -162,8 +162,8 @@ struct CacheConfig {
 }
 
 impl Default for CacheConfig {
-    fn default() -> CacheConfig {
-        CacheConfig {
+    fn default() -> Self {
+        Self {
             // The caching uv does ought to be considered
             // private.
             shared: false,
@@ -209,11 +209,11 @@ pub struct CachePolicyBuilder {
 
 impl CachePolicyBuilder {
     /// Create a new builder of a cache policy, starting with the request.
-    pub fn new(request: &reqwest::Request) -> CachePolicyBuilder {
+    pub fn new(request: &reqwest::Request) -> Self {
         let config = CacheConfig::default();
         let request_headers = request.headers().clone();
         let request = Request::from(request);
-        CachePolicyBuilder {
+        Self {
             config,
             request,
             request_headers,
@@ -276,7 +276,7 @@ impl CachePolicy {
     /// you're actually performing an HTTP request. In that case, the extra
     /// cost that is done here to convert a `CachePolicy` to its archived form
     /// should be marginal.
-    pub fn to_archived(&self) -> OwnedArchive<CachePolicy> {
+    pub fn to_archived(&self) -> OwnedArchive<Self> {
         // There's no way (other than OOM) for serializing this type to fail.
         OwnedArchive::from_unarchived(self).expect("all possible values can be archived")
     }
@@ -995,8 +995,8 @@ struct Request {
 }
 
 impl<'a> From<&'a reqwest::Request> for Request {
-    fn from(from: &'a reqwest::Request) -> Request {
-        Request {
+    fn from(from: &'a reqwest::Request) -> Self {
+        Self {
             uri: from.url().to_string(),
             method: Method::from(from.method()),
             headers: RequestHeaders::from(from.headers()),
@@ -1017,8 +1017,8 @@ struct RequestHeaders {
 }
 
 impl<'a> From<&'a http::HeaderMap> for RequestHeaders {
-    fn from(from: &'a http::HeaderMap) -> RequestHeaders {
-        RequestHeaders {
+    fn from(from: &'a http::HeaderMap) -> Self {
+        Self {
             cc: from.get_all("cache-control").iter().collect(),
             authorization: from.contains_key("authorization"),
         }
@@ -1041,13 +1041,13 @@ enum Method {
 }
 
 impl<'a> From<&'a http::Method> for Method {
-    fn from(from: &'a http::Method) -> Method {
+    fn from(from: &'a http::Method) -> Self {
         if from == http::Method::GET {
-            Method::Get
+            Self::Get
         } else if from == http::Method::HEAD {
-            Method::Head
+            Self::Head
         } else {
-            Method::Unrecognized
+            Self::Unrecognized
         }
     }
 }
@@ -1094,8 +1094,8 @@ impl ArchivedResponse {
 }
 
 impl<'a> From<&'a reqwest::Response> for Response {
-    fn from(from: &'a reqwest::Response) -> Response {
-        Response {
+    fn from(from: &'a reqwest::Response) -> Self {
+        Self {
             status: from.status().as_u16(),
             headers: ResponseHeaders::from(from.headers()),
             unix_timestamp: unix_timestamp(SystemTime::now()),
@@ -1149,8 +1149,8 @@ struct ResponseHeaders {
 }
 
 impl<'a> From<&'a http::HeaderMap> for ResponseHeaders {
-    fn from(from: &'a http::HeaderMap) -> ResponseHeaders {
-        ResponseHeaders {
+    fn from(from: &'a http::HeaderMap) -> Self {
+        Self {
             cc: from.get_all("cache-control").iter().collect(),
             age_seconds: from
                 .get("age")
@@ -1210,13 +1210,13 @@ impl ETag {
     /// where as [RFC 9110 S8.8.3] is a bit more restrictive.
     ///
     /// [RFC 9110 S8.8.3]: https://www.rfc-editor.org/rfc/rfc9110#section-8.8.3
-    fn parse(header_value: &[u8]) -> ETag {
+    fn parse(header_value: &[u8]) -> Self {
         let (value, weak) = if header_value.starts_with(b"W/") {
             (&header_value[2..], true)
         } else {
             (header_value, false)
         };
-        ETag {
+        Self {
             value: value.to_vec(),
             weak,
         }
@@ -1241,8 +1241,8 @@ struct Vary {
 
 impl Vary {
     /// Returns a `Vary` header value that will never match any request.
-    fn always_fails_to_match() -> Vary {
-        Vary {
+    fn always_fails_to_match() -> Self {
+        Self {
             fields: vec![VaryField {
                 name: "*".to_string(),
                 value: vec![],
@@ -1253,7 +1253,7 @@ impl Vary {
     fn from_request_response_headers(
         request: &http::HeaderMap,
         response: &http::HeaderMap,
-    ) -> Vary {
+    ) -> Self {
         // Parses the `Vary` header as per [RFC 9110 S12.5.5].
         //
         // [RFC 9110 S12.5.5]: https://www.rfc-editor.org/rfc/rfc9110#section-12.5.5
@@ -1266,7 +1266,7 @@ impl Vary {
                 // inevitability, regardless of anything else. So just give up
                 // and return a `Vary` that will never match.
                 if header_name == "*" {
-                    return Vary::always_fails_to_match();
+                    return Self::always_fails_to_match();
                 }
                 let value = request
                     .get(&header_name)
@@ -1278,7 +1278,7 @@ impl Vary {
                 });
             }
         }
-        Vary { fields }
+        Self { fields }
     }
 }
 

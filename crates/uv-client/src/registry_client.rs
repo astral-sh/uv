@@ -128,8 +128,8 @@ impl RegistryClientBuilder {
             index_urls: self.index_urls,
             cache: self.cache,
             connectivity: self.connectivity,
-            client_raw: client_raw.clone(),
-            client: CachedClient::new(uncached_client.clone()),
+            client_raw,
+            client: CachedClient::new(uncached_client),
         }
     }
 }
@@ -372,7 +372,7 @@ impl RegistryClient {
             .as_ref()
             .is_some_and(pypi_types::DistInfoMetadata::is_available)
         {
-            let url = Url::parse(&format!("{}.metadata", url)).map_err(ErrorKind::UrlParseError)?;
+            let url = Url::parse(&format!("{url}.metadata")).map_err(ErrorKind::UrlParseError)?;
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
@@ -711,7 +711,7 @@ impl SimpleMetadata {
                 }
             }
         }
-        SimpleMetadata(
+        Self(
             map.into_iter()
                 .map(|(version, files)| SimpleMetadatum { version, files })
                 .collect(),

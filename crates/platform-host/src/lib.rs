@@ -70,35 +70,50 @@ impl Os {
 
         let os = match target_triple.operating_system {
             target_lexicon::OperatingSystem::Linux => detect_linux_libc()?,
-            target_lexicon::OperatingSystem::Windows => Os::Windows,
+            target_lexicon::OperatingSystem::Windows => Self::Windows,
             target_lexicon::OperatingSystem::MacOSX { major, minor, .. } => {
-                Os::Macos { major, minor }
+                Self::Macos { major, minor }
             }
             target_lexicon::OperatingSystem::Darwin => {
                 let (major, minor) = get_mac_os_version()?;
-                Os::Macos { major, minor }
+                Self::Macos { major, minor }
             }
-            target_lexicon::OperatingSystem::Netbsd => Os::NetBsd {
-                release: Os::platform_info()?.release().to_string_lossy().to_string(),
+            target_lexicon::OperatingSystem::Netbsd => Self::NetBsd {
+                release: Self::platform_info()?
+                    .release()
+                    .to_string_lossy()
+                    .to_string(),
             },
-            target_lexicon::OperatingSystem::Freebsd => Os::FreeBsd {
-                release: Os::platform_info()?.release().to_string_lossy().to_string(),
+            target_lexicon::OperatingSystem::Freebsd => Self::FreeBsd {
+                release: Self::platform_info()?
+                    .release()
+                    .to_string_lossy()
+                    .to_string(),
             },
-            target_lexicon::OperatingSystem::Openbsd => Os::OpenBsd {
-                release: Os::platform_info()?.release().to_string_lossy().to_string(),
+            target_lexicon::OperatingSystem::Openbsd => Self::OpenBsd {
+                release: Self::platform_info()?
+                    .release()
+                    .to_string_lossy()
+                    .to_string(),
             },
-            target_lexicon::OperatingSystem::Dragonfly => Os::Dragonfly {
-                release: Os::platform_info()?.release().to_string_lossy().to_string(),
+            target_lexicon::OperatingSystem::Dragonfly => Self::Dragonfly {
+                release: Self::platform_info()?
+                    .release()
+                    .to_string_lossy()
+                    .to_string(),
             },
             target_lexicon::OperatingSystem::Illumos => {
-                let platform_info = Os::platform_info()?;
-                Os::Illumos {
+                let platform_info = Self::platform_info()?;
+                Self::Illumos {
                     release: platform_info.release().to_string_lossy().to_string(),
                     arch: platform_info.machine().to_string_lossy().to_string(),
                 }
             }
-            target_lexicon::OperatingSystem::Haiku => Os::Haiku {
-                release: Os::platform_info()?.release().to_string_lossy().to_string(),
+            target_lexicon::OperatingSystem::Haiku => Self::Haiku {
+                release: Self::platform_info()?
+                    .release()
+                    .to_string_lossy()
+                    .to_string(),
             },
             unsupported => {
                 return Err(PlatformError::OsVersionDetectionError(format!(
@@ -117,16 +132,16 @@ impl Os {
 impl fmt::Display for Os {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Os::Manylinux { .. } => write!(f, "Manylinux"),
-            Os::Musllinux { .. } => write!(f, "Musllinux"),
-            Os::Windows => write!(f, "Windows"),
-            Os::Macos { .. } => write!(f, "MacOS"),
-            Os::FreeBsd { .. } => write!(f, "FreeBSD"),
-            Os::NetBsd { .. } => write!(f, "NetBSD"),
-            Os::OpenBsd { .. } => write!(f, "OpenBSD"),
-            Os::Dragonfly { .. } => write!(f, "DragonFly"),
-            Os::Illumos { .. } => write!(f, "Illumos"),
-            Os::Haiku { .. } => write!(f, "Haiku"),
+            Self::Manylinux { .. } => write!(f, "Manylinux"),
+            Self::Musllinux { .. } => write!(f, "Musllinux"),
+            Self::Windows => write!(f, "Windows"),
+            Self::Macos { .. } => write!(f, "MacOS"),
+            Self::FreeBsd { .. } => write!(f, "FreeBSD"),
+            Self::NetBsd { .. } => write!(f, "NetBSD"),
+            Self::OpenBsd { .. } => write!(f, "OpenBSD"),
+            Self::Dragonfly { .. } => write!(f, "DragonFly"),
+            Self::Illumos { .. } => write!(f, "Illumos"),
+            Self::Haiku { .. } => write!(f, "Haiku"),
         }
     }
 }
@@ -146,28 +161,28 @@ pub enum Arch {
 impl fmt::Display for Arch {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Arch::Aarch64 => write!(f, "aarch64"),
-            Arch::Armv7L => write!(f, "armv7l"),
-            Arch::Powerpc64Le => write!(f, "ppc64le"),
-            Arch::Powerpc64 => write!(f, "ppc64"),
-            Arch::X86 => write!(f, "i686"),
-            Arch::X86_64 => write!(f, "x86_64"),
-            Arch::S390X => write!(f, "s390x"),
+            Self::Aarch64 => write!(f, "aarch64"),
+            Self::Armv7L => write!(f, "armv7l"),
+            Self::Powerpc64Le => write!(f, "ppc64le"),
+            Self::Powerpc64 => write!(f, "ppc64"),
+            Self::X86 => write!(f, "i686"),
+            Self::X86_64 => write!(f, "x86_64"),
+            Self::S390X => write!(f, "s390x"),
         }
     }
 }
 
 impl Arch {
-    pub fn current() -> Result<Arch, PlatformError> {
+    pub fn current() -> Result<Self, PlatformError> {
         let target_triple = target_lexicon::HOST;
         let arch = match target_triple.architecture {
-            target_lexicon::Architecture::X86_64 => Arch::X86_64,
-            target_lexicon::Architecture::X86_32(_) => Arch::X86,
-            target_lexicon::Architecture::Arm(_) => Arch::Armv7L,
-            target_lexicon::Architecture::Aarch64(_) => Arch::Aarch64,
-            target_lexicon::Architecture::Powerpc64 => Arch::Powerpc64,
-            target_lexicon::Architecture::Powerpc64le => Arch::Powerpc64Le,
-            target_lexicon::Architecture::S390x => Arch::S390X,
+            target_lexicon::Architecture::X86_64 => Self::X86_64,
+            target_lexicon::Architecture::X86_32(_) => Self::X86,
+            target_lexicon::Architecture::Arm(_) => Self::Armv7L,
+            target_lexicon::Architecture::Aarch64(_) => Self::Aarch64,
+            target_lexicon::Architecture::Powerpc64 => Self::Powerpc64,
+            target_lexicon::Architecture::Powerpc64le => Self::Powerpc64Le,
+            target_lexicon::Architecture::S390x => Self::S390X,
             unsupported => {
                 return Err(PlatformError::OsVersionDetectionError(format!(
                     "The architecture {unsupported} is not supported"
@@ -181,9 +196,9 @@ impl Arch {
     pub fn get_minimum_manylinux_minor(&self) -> u16 {
         match self {
             // manylinux 2014
-            Arch::Aarch64 | Arch::Armv7L | Arch::Powerpc64 | Arch::Powerpc64Le | Arch::S390X => 17,
+            Self::Aarch64 | Self::Armv7L | Self::Powerpc64 | Self::Powerpc64Le | Self::S390X => 17,
             // manylinux 1
-            Arch::X86 | Arch::X86_64 => 5,
+            Self::X86 | Self::X86_64 => 5,
         }
     }
 }

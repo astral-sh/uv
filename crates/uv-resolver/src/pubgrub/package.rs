@@ -82,16 +82,16 @@ pub enum PubGrubPython {
 impl std::fmt::Display for PubGrubPackage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PubGrubPackage::Root(name) => {
+            Self::Root(name) => {
                 if let Some(name) = name {
                     write!(f, "{}", name.as_ref())
                 } else {
                     write!(f, "root")
                 }
             }
-            PubGrubPackage::Python(_) => write!(f, "Python"),
-            PubGrubPackage::Package(name, None, ..) => write!(f, "{name}"),
-            PubGrubPackage::Package(name, Some(extra), ..) => {
+            Self::Python(_) => write!(f, "Python"),
+            Self::Package(name, None, ..) => write!(f, "{name}"),
+            Self::Package(name, Some(extra), ..) => {
                 write!(f, "{name}[{extra}]")
             }
         }

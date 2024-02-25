@@ -518,13 +518,13 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            CacheBucket::BuiltWheels => "built-wheels-v0",
-            CacheBucket::FlatIndex => "flat-index-v0",
-            CacheBucket::Git => "git-v0",
-            CacheBucket::Interpreter => "interpreter-v0",
-            CacheBucket::Simple => "simple-v3",
-            CacheBucket::Wheels => "wheels-v0",
-            CacheBucket::Archive => "archive-v0",
+            Self::BuiltWheels => "built-wheels-v0",
+            Self::FlatIndex => "flat-index-v0",
+            Self::Git => "git-v0",
+            Self::Interpreter => "interpreter-v0",
+            Self::Simple => "simple-v3",
+            Self::Wheels => "wheels-v0",
+            Self::Archive => "archive-v0",
         }
     }
 
@@ -534,7 +534,7 @@ impl CacheBucket {
     fn remove(self, cache: &Cache, name: &PackageName) -> Result<Removal, io::Error> {
         let mut summary = Removal::default();
         match self {
-            CacheBucket::Wheels => {
+            Self::Wheels => {
                 // For `pypi` wheels, we expect a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += rm_rf(root.join(name.to_string()))?;
@@ -553,7 +553,7 @@ impl CacheBucket {
                     summary += rm_rf(directory.join(name.to_string()))?;
                 }
             }
-            CacheBucket::BuiltWheels => {
+            Self::BuiltWheels => {
                 // For `pypi` wheels, we expect a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += rm_rf(root.join(name.to_string()))?;
@@ -588,7 +588,7 @@ impl CacheBucket {
                     }
                 }
             }
-            CacheBucket::Simple => {
+            Self::Simple => {
                 // For `pypi` wheels, we expect a rkyv file per package, indexed by name.
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += rm_rf(root.join(format!("{name}.rkyv")))?;
@@ -600,19 +600,19 @@ impl CacheBucket {
                     summary += rm_rf(directory.join(format!("{name}.rkyv")))?;
                 }
             }
-            CacheBucket::FlatIndex => {
+            Self::FlatIndex => {
                 // We can't know if the flat index includes a package, so we just remove the entire
                 // cache entry.
                 let root = cache.bucket(self);
                 summary += rm_rf(root)?;
             }
-            CacheBucket::Git => {
+            Self::Git => {
                 // Nothing to do.
             }
-            CacheBucket::Interpreter => {
+            Self::Interpreter => {
                 // Nothing to do.
             }
-            CacheBucket::Archive => {
+            Self::Archive => {
                 // Nothing to do.
             }
         }

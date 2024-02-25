@@ -37,13 +37,13 @@ impl TryFrom<CacheArgs> for Cache {
     /// Returns an absolute cache dir.
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
         if value.no_cache {
-            Cache::temp()
+            Self::temp()
         } else if let Some(cache_dir) = value.cache_dir {
-            Cache::from_path(cache_dir)
+            Self::from_path(cache_dir)
         } else if let Some(project_dirs) = ProjectDirs::from("", "", "uv") {
-            Cache::from_path(project_dirs.cache_dir())
+            Self::from_path(project_dirs.cache_dir())
         } else {
-            Cache::from_path(".uv_cache")
+            Self::from_path(".uv_cache")
         }
     }
 }
