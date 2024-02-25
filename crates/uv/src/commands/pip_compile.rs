@@ -65,6 +65,7 @@ pub(crate) async fn pip_compile(
     python_version: Option<PythonVersion>,
     exclude_newer: Option<DateTime<Utc>>,
     annotation_style: AnnotationStyle,
+    quiet: bool,
     cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -336,7 +337,7 @@ pub(crate) async fn pip_compile(
     }
 
     // Write the resolved dependencies to the output channel.
-    let mut writer = OutputWriter::new(output_file)?;
+    let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file)?;
 
     if include_header {
         writeln!(
@@ -482,14 +483,14 @@ fn cmd(include_index_url: bool, include_find_links: bool) -> String {
 
 /// A multi-casting writer that writes to both the standard output and an output file, if present.
 struct OutputWriter {
-    stdout: AutoStream<std::io::Stdout>,
+    stdout: Option<AutoStream<std::io::Stdout>>,
     output_file: Option<AutoStream<std::fs::File>>,
 }
 
 impl OutputWriter {
     /// Create a new output writer.
-    fn new(output_file: Option<&Path>) -> Result<Self> {
-        let stdout = AutoStream::<std::io::Stdout>::auto(stdout());
+    fn new(include_stdout: bool, output_file: Option<&Path>) -> Result<Self> {
+        let stdout = include_stdout.then(|| AutoStream::<std::io::Stdout>::auto(stdout()));
         let output_file = output_file
             .map(|output_file| {
                 let output_file = fs_err::File::create(output_file)?;
@@ -510,7 +511,10 @@ impl OutputWriter {
         if let Some(output_file) = &mut self.output_file {
             write!(output_file, "{args}")?;
         }
-        write!(self.stdout, "{args}")?;
+
+        if let Some(stdout) = &mut self.stdout {
+            write!(stdout, "{args}")?;
+        }
 
         Ok(())
     }
