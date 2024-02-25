@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
-//! Generated with ./scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/de0bab473eeaa4445db5a8febd732c655fad3d52/scenarios>
+//! Generated with scripts/scenarios/update.py
+//! Scenarios from <https://github.com/zanieb/packse/tree/4f39539c1b858e28268554604e75c69e25272e5a/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -48,7 +48,7 @@ fn command(context: &TestContext) -> Command {
         .arg("--index-url")
         .arg("https://test.pypi.org/simple")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/de0bab473eeaa4445db5a8febd732c655fad3d52/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/4f39539c1b858e28268554604e75c69e25272e5a/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -486,7 +486,7 @@ fn dependency_excludes_range_of_compatible_versions() {
 /// There is a non-contiguous range of compatible versions for the requested package
 /// `a`, but another dependency `c` excludes the range. This is the same as
 /// `dependency-excludes-range-of-compatible-versions` but some of the versions of
-/// `a` are incompatible for another reason e.g. dependency on non-existent package
+/// `a` are incompatible for another reason e.g. dependency on non-existant package
 /// `d`.
 ///
 /// ```text
@@ -2041,6 +2041,192 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
     assert_not_installed(&context.venv, "a_041e36bc", &context.temp_dir);
     assert_not_installed(&context.venv, "b_041e36bc", &context.temp_dir);
+}
+
+/// package-only-prereleases-boundary
+///
+/// The user requires a non-prerelease version of `a` which only has prerelease
+/// versions available. There are pre-releases on the boundary of their range.
+///
+/// ```text
+/// edcef999
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a<0.2.0
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     ├── a-0.1.0a1
+///     ├── a-0.2.0a1
+///     └── a-0.3.0a1
+/// ```
+#[test]
+fn package_only_prereleases_boundary() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-edcef999", "albatross"));
+    filters.push((r"-edcef999", ""));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("a-edcef999<0.2.0")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + albatross==0.1.0a1
+    "###);
+
+    // Since there are only prerelease versions of `a` available, a prerelease is
+    // allowed. Since the user did not explictly request a pre-release, pre-releases at
+    // the boundary should not be selected.
+    assert_installed(&context.venv, "a_edcef999", "0.1.0a1", &context.temp_dir);
+}
+
+/// package-prereleases-boundary
+///
+/// The user requires a non-prerelease version of `a` but has enabled pre-releases.
+/// There are pre-releases on the boundary of their range.
+///
+/// ```text
+/// 6d600873
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a<0.2.0
+/// │       └── satisfied by a-0.1.0
+/// └── a
+///     ├── a-0.1.0
+///     ├── a-0.2.0a1
+///     └── a-0.3.0
+/// ```
+#[test]
+fn package_prereleases_boundary() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-6d600873", "albatross"));
+    filters.push((r"-6d600873", ""));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("--prerelease=allow")
+        .arg("a-6d600873<0.2.0")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + albatross==0.1.0
+    "###);
+
+    // Since the user did not use a pre-release specifier, pre-releases at the boundary
+    // should not be selected even though pre-releases are allowed.
+    assert_installed(&context.venv, "a_6d600873", "0.1.0", &context.temp_dir);
+}
+
+/// package-prereleases-global-boundary
+///
+/// The user requires a non-prerelease version of `a` but has enabled pre-releases.
+/// There are pre-releases on the boundary of their range.
+///
+/// ```text
+/// cf1b8081
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a<0.2.0
+/// │       └── satisfied by a-0.1.0
+/// └── a
+///     ├── a-0.1.0
+///     ├── a-0.2.0a1
+///     └── a-0.3.0
+/// ```
+#[test]
+fn package_prereleases_global_boundary() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-cf1b8081", "albatross"));
+    filters.push((r"-cf1b8081", ""));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("--prerelease=allow")
+        .arg("a-cf1b8081<0.2.0")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + albatross==0.1.0
+    "###);
+
+    // Since the user did not use a pre-release specifier, pre-releases at the boundary
+    // should not be selected even though pre-releases are allowed.
+    assert_installed(&context.venv, "a_cf1b8081", "0.1.0", &context.temp_dir);
+}
+
+/// package-prereleases-specifier-boundary
+///
+/// The user requires a prerelease version of `a`. There are pre-releases on the
+/// boundary of their range.
+///
+/// ```text
+/// 357b9636
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a<0.2.0a2
+/// │       └── satisfied by a-0.1.0
+/// └── a
+///     ├── a-0.1.0
+///     ├── a-0.2.0
+///     ├── a-0.2.0a1
+///     ├── a-0.2.0a2
+///     ├── a-0.2.0a3
+///     └── a-0.3.0
+/// ```
+#[test]
+fn package_prereleases_specifier_boundary() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-357b9636", "albatross"));
+    filters.push((r"-357b9636", ""));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("a-357b9636<0.2.0a2")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + albatross==0.2.0a1
+    "###);
+
+    // Since the user used a pre-release specifier, pre-releases at the boundary should
+    // be selected.
+    assert_installed(&context.venv, "a_357b9636", "0.2.0a1", &context.temp_dir);
 }
 
 /// requires-python-version-does-not-exist
