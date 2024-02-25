@@ -147,14 +147,14 @@ pub struct RegistryClient {
     index_urls: IndexUrls,
     /// The underlying HTTP client.
     client: CachedClient,
-    /// Don't use this client, it only exists because `async_http_range_reader` needs
+    /// Don't use this client, it only exists because `async_http_range_reader` needs.
     /// [`reqwest::Client] instead of [`reqwest_middleware::Client`]
     client_raw: Client,
-    /// Used for the remote wheel METADATA cache
+    /// Used for the remote wheel METADATA cache.
     cache: Cache,
     /// The connectivity mode to use.
     connectivity: Connectivity,
-    /// Configured client timeout
+    /// Configured client timeout, in seconds.
     timeout: u64,
 }
 
@@ -169,7 +169,7 @@ impl RegistryClient {
         self.connectivity
     }
 
-    /// Return the timeout this client is configured with.
+    /// Return the timeout this client is configured with, in seconds.
     pub fn timeout(&self) -> u64 {
         self.timeout
     }
