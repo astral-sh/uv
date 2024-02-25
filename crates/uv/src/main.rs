@@ -932,6 +932,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python_version,
                 args.exclude_newer,
                 args.annotation_style,
+                cli.quiet,
                 cache,
                 printer,
             )
