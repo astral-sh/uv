@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.1.10"
+version = "0.1.11"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -97,3 +97,6 @@ pypi = []
 git = []
 # Introduces a dependency on Maturin.
 maturin = []
+
+[build-dependencies]
+fs-err = { workspace = true }

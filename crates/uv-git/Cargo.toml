@@ -32,6 +32,7 @@ sha1 = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+fs-err = { workspace = true }
 
 [features]
 vendored-libgit2 = ["git2/vendored-libgit2"]

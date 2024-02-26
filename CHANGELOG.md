@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.1.11
+
+### Enhancements
+
+- Add support for pip-compile's `--unsafe-package` flag ([#1889](https://github.com/astral-sh/uv/pull/1889))
+- Improve interpreter discovery logging ([#1909](https://github.com/astral-sh/uv/pull/1909))
+- Implement `uv pip list` ([#1662](https://github.com/astral-sh/uv/pull/1662))
+- Allow round-trip via `freeze` command ([#1936](https://github.com/astral-sh/uv/pull/1936))
+- Don't write pip compile output to stdout with `-q` ([#1962](https://github.com/astral-sh/uv/pull/1962))
+- Add long-form version output ([#1930](https://github.com/astral-sh/uv/pull/1930))
+
+### Compatibility
+
+- Accept single string for `backend-path` ([#1969](https://github.com/astral-sh/uv/pull/1969))
+- Add compatibility for deprecated `python_implementation` marker ([#1933](https://github.com/astral-sh/uv/pull/1933))
+- Generate versioned `pip` launchers ([#1918](https://github.com/astral-sh/uv/pull/1918))
+
+### Bug fixes
+
+- Avoid erroring for source distributions with symlinks in archive ([#1944](https://github.com/astral-sh/uv/pull/1944))
+- Expand scope of archive timestamping ([#1960](https://github.com/astral-sh/uv/pull/1960))
+- Gracefully handle virtual environments with conflicting packages ([#1893](https://github.com/astral-sh/uv/pull/1893))
+- Invalidate dependencies when editables are updated ([#1955](https://github.com/astral-sh/uv/pull/1955))
+- Make < exclusive for non-prerelease markers ([#1878](https://github.com/astral-sh/uv/pull/1878))
+- Properly apply constraints in venv audit ([#1956](https://github.com/astral-sh/uv/pull/1956))
+- Re-sync editables on-change ([#1959](https://github.com/astral-sh/uv/pull/1959))
+- Remove current directory from PATH in PEP 517 hooks ([#1975](https://github.com/astral-sh/uv/pull/1975))
+- Remove `--upgrade` and `--quiet` flags from generated output files ([#1873](https://github.com/astral-sh/uv/pull/1873))
+- Use full python version in `pyvenv.cfg` ([#1979](https://github.com/astral-sh/uv/pull/1979))
+
+### Performance
+- fix `uv pip install` handling of gzip'd response and PEP 691 ([#1978](https://github.com/astral-sh/uv/pull/1978))
+- Remove `spawn_blocking` from version map ([#1966](https://github.com/astral-sh/uv/pull/1966))
+
+### Documentation
+
+- Clarify `lowest` vs. `lowest-direct` resolution strategies ([#1954](https://github.com/astral-sh/uv/pull/1954))
+- Improve error message for network timeouts ([#1961](https://github.com/astral-sh/uv/pull/1961))
+
 ## 0.1.10
 
 ### Enhancements

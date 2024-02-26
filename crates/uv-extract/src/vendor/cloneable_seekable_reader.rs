@@ -117,6 +117,7 @@ impl<R: HasLength> HasLength for BufReader<R> {
     }
 }
 
+#[allow(clippy::disallowed_types)]
 impl HasLength for std::fs::File {
     fn len(&self) -> u64 {
         self.metadata().unwrap().len()

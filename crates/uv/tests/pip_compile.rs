@@ -1,4 +1,5 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
+#![cfg_attr(feature = "cargo-clippy", allow(clippy::disallowed_types))]
 
 use std::fs;
 use std::path::PathBuf;

@@ -388,7 +388,7 @@ impl<'a> GitCheckout<'a> {
             //
             // TODO(git2): remove this when git2 supports shallow clone correctly
             if database.repo.is_shallow() {
-                std::fs::copy(
+                fs_err::copy(
                     database.repo.path().join("shallow"),
                     r.path().join("shallow"),
                 )?;
