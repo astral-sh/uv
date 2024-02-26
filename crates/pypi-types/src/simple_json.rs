@@ -38,7 +38,7 @@ fn sorted_simple_json_files<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<File>
 #[serde(rename_all = "kebab-case")]
 pub struct File {
     // Non-PEP 691-compliant alias used by PyPI.
-    #[serde(alias = "data_dist_info_metadata")]
+    #[serde(alias = "data-dist-info-metadata")]
     pub dist_info_metadata: Option<DistInfoMetadata>,
     pub filename: String,
     pub hashes: Hashes,

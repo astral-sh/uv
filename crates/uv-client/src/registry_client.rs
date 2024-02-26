@@ -459,6 +459,10 @@ impl RegistryClient {
             .client
             .uncached()
             .head(url.clone())
+            .header(
+                "accept-encoding",
+                http::HeaderValue::from_static("identity"),
+            )
             .build()
             .map_err(ErrorKind::RequestError)?;
 
