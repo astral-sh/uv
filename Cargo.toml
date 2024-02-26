@@ -82,7 +82,7 @@ rustc-hash = { version = "1.1.0" }
 same-file = { version = "1.0.6" }
 seahash = { version = "4.1.0" }
 serde = { version = "1.0.197" }
-serde_json = { version = "1.0.111" }
+serde_json = { version = "1.0.114" }
 sha1 = { version = "0.10.6" }
 sha2 = { version = "0.10.8" }
 target-lexicon = { version = "0.12.14" }
