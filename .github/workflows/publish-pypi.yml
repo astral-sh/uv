@@ -21,10 +21,11 @@ jobs:
       # For PyPI's trusted publishing.
       id-token: write
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          pattern: wheels-*
           path: wheels
+          merge-multiple: true
       - name: Publish to PyPi
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
