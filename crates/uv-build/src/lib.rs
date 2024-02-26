@@ -285,6 +285,10 @@ impl Pep517Backend {
         // > backend hooks.
         formatdoc! {r#"
             import sys
+
+            if sys.path[0] == "":
+                sys.path.pop(0)
+
             sys.path = [{backend_path}] + sys.path
 
             {import}
@@ -552,7 +556,8 @@ impl SourceBuild {
             pep517_backend.backend
         );
         let script = formatdoc! {
-            r#"{}
+            r#"
+            {}
             import json
 
             prepare_metadata_for_build_wheel = getattr(backend, "prepare_metadata_for_build_wheel", None)
@@ -686,7 +691,9 @@ impl SourceBuild {
         );
         let escaped_wheel_dir = escape_path_for_python(wheel_dir);
         let script = formatdoc! {
-            r#"{}
+            r#"
+            {}
+
             print(backend.build_{}("{}", metadata_directory={}, config_settings={}))
             "#,
             pep517_backend.backend_import(),
