@@ -79,7 +79,7 @@ mimalloc = "0.1.39"
 tikv-jemallocator = "0.5.4"
 
 [dev-dependencies]
-assert_cmd = { version = "2.0.12" }
+assert_cmd = { version = "2.0.14" }
 assert_fs = { version = "1.1.0" }
 filetime = { version = "0.2.23" }
 indoc = { version = "2.0.4" }
