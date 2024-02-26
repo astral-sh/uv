@@ -24,7 +24,7 @@ use uv_traits::{
     ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, SetupPyStrategy,
 };
 
-use crate::commands::{extra_name_with_clap_error, ExitStatus, Upgrade, VersionFormat};
+use crate::commands::{extra_name_with_clap_error, ExitStatus, Format, Upgrade, VersionFormat};
 use crate::compat::CompatArgs;
 use crate::requirements::RequirementsSource;
 
@@ -706,6 +706,10 @@ struct PipListArgs {
     /// Exclude the specified package(s) from the output.
     #[clap(long)]
     r#exclude: Vec<PackageName>,
+
+    // Select the output format among: columns (default), freeze, or json.
+    #[clap(long, value_enum, default_value_t = Format::default())]
+    format: Format,
 }
 
 #[derive(Args)]
@@ -1123,6 +1127,7 @@ async fn run() -> Result<ExitStatus> {
             args.editable,
             args.exclude_editable,
             &args.exclude,
+            &args.format,
             printer,
         ),
         Commands::Cache(CacheNamespace {

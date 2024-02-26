@@ -82,3 +82,11 @@ pub(crate) enum VersionFormat {
     Text,
     Json,
 }
+
+#[derive(Debug, Default, Clone, clap::ValueEnum)]
+pub(crate) enum Format {
+    #[default]
+    Columns,
+    Freeze,
+    Json,
+}

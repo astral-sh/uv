@@ -5,10 +5,11 @@ use anstream::println;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use serde::Serialize;
 use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
-use distribution_types::Name;
+use distribution_types::{InstalledDist, Name};
 use platform_host::Platform;
 use uv_cache::Cache;
 use uv_fs::Normalized;
@@ -19,6 +20,8 @@ use uv_normalize::PackageName;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
+use super::Format;
+
 /// Enumerate the installed packages in the current environment.
 pub(crate) fn pip_list(
     cache: &Cache,
@@ -26,6 +29,7 @@ pub(crate) fn pip_list(
     editable: bool,
     exclude_editable: bool,
     exclude: &[PackageName],
+    format: &Format,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
@@ -52,45 +56,60 @@ pub(crate) fn pip_list(
         return Ok(ExitStatus::Success);
     }
 
-    // The package name and version are always present.
-    let mut columns = vec![
-        Column {
-            header: String::from("Package"),
-            rows: results.iter().map(|f| f.name().to_string()).collect_vec(),
-        },
-        Column {
-            header: String::from("Version"),
-            rows: results
-                .iter()
-                .map(|f| f.version().to_string())
-                .collect_vec(),
-        },
-    ];
+    match format {
+        Format::Columns => {
+            // The package name and version are always present.
+            let mut columns = vec![
+                Column {
+                    header: String::from("Package"),
+                    rows: results.iter().map(|f| f.name().to_string()).collect_vec(),
+                },
+                Column {
+                    header: String::from("Version"),
+                    rows: results
+                        .iter()
+                        .map(|f| f.version().to_string())
+                        .collect_vec(),
+                },
+            ];
 
-    // Editable column is only displayed if at least one editable package is found.
-    if results.iter().any(|f| f.is_editable()) {
-        columns.push(Column {
-            header: String::from("Editable project location"),
-            rows: results
-                .iter()
-                .map(|f| f.as_editable())
-                .map(|e| {
-                    if let Some(url) = e {
-                        url.to_file_path()
-                            .unwrap()
-                            .into_os_string()
-                            .into_string()
-                            .unwrap()
-                    } else {
-                        String::new()
-                    }
-                })
-                .collect_vec(),
-        });
-    }
+            // Editable column is only displayed if at least one editable package is found.
+            if results.iter().any(|f| f.is_editable()) {
+                columns.push(Column {
+                    header: String::from("Editable project location"),
+                    rows: results
+                        .iter()
+                        .map(|f| f.as_editable())
+                        .map(|e| {
+                            if let Some(url) = e {
+                                url.to_file_path()
+                                    .unwrap()
+                                    .into_os_string()
+                                    .into_string()
+                                    .unwrap()
+                            } else {
+                                String::new()
+                            }
+                        })
+                        .collect_vec(),
+                });
+            }
 
-    for elems in Multizip(columns.iter().map(Column::fmt_padded).collect_vec()) {
-        println!("{0}", elems.join(" "));
+            for elems in Multizip(columns.iter().map(Column::fmt_padded).collect_vec()) {
+                println!("{0}", elems.join(" "));
+            }
+        }
+        Format::Json => {
+            let rows = results.iter().map(Row::from).collect_vec();
+
+            let output = serde_json::to_string(&rows)?;
+            println!("{output}");
+        }
+        Format::Freeze => {
+            for dist in &results {
+                println!("{}=={}", dist.name().bold(), dist.version());
+            }
+        }
     }
 
     // Validate that the environment is consistent.
@@ -107,6 +126,30 @@ pub(crate) fn pip_list(
     }
 
     Ok(ExitStatus::Success)
+}
+
+#[derive(Debug, Serialize)]
+struct Row {
+    name: String,
+    version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    editable_project_location: Option<String>,
+}
+
+impl From<&&InstalledDist> for Row {
+    fn from(dist: &&InstalledDist) -> Self {
+        Self {
+            name: dist.name().to_string(),
+            version: dist.version().to_string(),
+            editable_project_location: dist.as_editable().map(|url| {
+                url.to_file_path()
+                    .unwrap()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap()
+            }),
+        }
+    }
 }
 
 #[derive(Debug)]
