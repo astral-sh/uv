@@ -20,6 +20,19 @@ pub struct Virtualenv {
 }
 
 impl Virtualenv {
+    /// Create a new virtual environment for a pre-provided Python interpreter.
+    pub fn from_python(
+        python: impl AsRef<Path>,
+        platform: Platform,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        let interpreter = Interpreter::query(python.as_ref(), platform, cache)?;
+        Ok(Self {
+            root: interpreter.base_prefix.clone(),
+            interpreter,
+        })
+    }
+
     /// Venv the current Python executable from the host environment.
     pub fn from_env(platform: Platform, cache: &Cache) -> Result<Self, Error> {
         let platform = PythonPlatform::from(platform);
@@ -28,7 +41,7 @@ impl Virtualenv {
         };
         let venv = fs_err::canonicalize(venv)?;
         let executable = platform.venv_python(&venv);
-        let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
+        let interpreter = Interpreter::query(&executable, platform.0, cache)?;
 
         debug_assert!(
             interpreter.base_prefix == interpreter.base_exec_prefix,
@@ -51,13 +64,14 @@ impl Virtualenv {
         }
     }
 
-    /// Returns the location of the python interpreter
-    pub fn python_executable(&self) -> PathBuf {
-        self.bin_dir().join(format!("python{EXE_SUFFIX}"))
-    }
-
+    /// Returns the location of the Python interpreter.
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Returns the location of the Python executable.
+    pub fn python_executable(&self) -> PathBuf {
+        self.bin_dir().join(format!("python{EXE_SUFFIX}"))
     }
 
     /// Return the [`Interpreter`] for this virtual environment.
@@ -72,20 +86,13 @@ impl Virtualenv {
     }
 
     /// Returns the path to the `site-packages` directory inside a virtual environment.
-    pub fn site_packages(&self) -> PathBuf {
-        self.interpreter
-            .platform
-            .venv_site_packages(&self.root, self.interpreter().python_tuple())
+    pub fn site_packages(&self) -> &Path {
+        self.interpreter.platlib()
     }
 
-    pub fn bin_dir(&self) -> PathBuf {
-        if cfg!(unix) {
-            self.root().join("bin")
-        } else if cfg!(windows) {
-            self.root().join("Scripts")
-        } else {
-            unimplemented!("Only Windows and Unix are supported")
-        }
+    /// Returns the path to the `bin` directory inside a virtual environment.
+    pub fn bin_dir(&self) -> &Path {
+        self.interpreter.scripts()
     }
 
     /// Lock the virtual environment to prevent concurrent writes.

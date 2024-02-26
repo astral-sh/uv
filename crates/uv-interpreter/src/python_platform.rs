@@ -36,22 +36,6 @@ impl PythonPlatform {
             venv.join("bin")
         }
     }
-
-    /// Returns the path to the `site-packages` directory inside a virtual environment.
-    pub(crate) fn venv_site_packages(
-        &self,
-        venv_root: impl AsRef<Path>,
-        version: (u8, u8),
-    ) -> PathBuf {
-        let venv = venv_root.as_ref();
-        if matches!(self.0.os(), Os::Windows) {
-            venv.join("Lib").join("site-packages")
-        } else {
-            venv.join("lib")
-                .join(format!("python{}.{}", version.0, version.1))
-                .join("site-packages")
-        }
-    }
 }
 
 impl From<Platform> for PythonPlatform {

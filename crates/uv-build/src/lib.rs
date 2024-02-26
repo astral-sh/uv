@@ -852,7 +852,7 @@ async fn run_python_script(
 ) -> Result<Output, Error> {
     // Prepend the venv bin dir to PATH
     let new_path = if let Some(old_path) = env::var_os("PATH") {
-        let new_path = iter::once(venv.bin_dir()).chain(env::split_paths(&old_path));
+        let new_path = iter::once(venv.bin_dir().to_path_buf()).chain(env::split_paths(&old_path));
         env::join_paths(new_path).map_err(Error::BuildScriptPath)?
     } else {
         OsString::from("")

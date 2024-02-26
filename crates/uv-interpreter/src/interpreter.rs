@@ -24,18 +24,18 @@ use crate::{find_requested_python, Error, PythonVersion};
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
 pub struct Interpreter {
-    pub(crate) platform: PythonPlatform,
+    pub(crate) platform: Platform,
     pub(crate) markers: Box<MarkerEnvironment>,
+    pub(crate) sysconfig: Sysconfig,
     pub(crate) base_exec_prefix: PathBuf,
     pub(crate) base_prefix: PathBuf,
-    pub(crate) stdlib: PathBuf,
     pub(crate) sys_executable: PathBuf,
     tags: OnceCell<Tags>,
 }
 
 impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
-    pub fn query(executable: &Path, platform: &Platform, cache: &Cache) -> Result<Self, Error> {
+    pub fn query(executable: &Path, platform: Platform, cache: &Cache) -> Result<Self, Error> {
         let info = InterpreterInfo::query_cached(executable, cache)?;
 
         debug_assert!(
@@ -45,32 +45,34 @@ impl Interpreter {
         );
 
         Ok(Self {
-            platform: PythonPlatform(platform.to_owned()),
+            platform,
             markers: Box::new(info.markers),
+            sysconfig: info.sysconfig,
             base_exec_prefix: info.base_exec_prefix,
             base_prefix: info.base_prefix,
-            stdlib: info.stdlib,
             sys_executable: info.sys_executable,
             tags: OnceCell::new(),
         })
     }
 
     // TODO(konstin): Find a better way mocking the fields
-    pub fn artificial(
-        platform: Platform,
-        markers: MarkerEnvironment,
-        base_exec_prefix: PathBuf,
-        base_prefix: PathBuf,
-        sys_executable: PathBuf,
-        stdlib: PathBuf,
-    ) -> Self {
+    pub fn artificial(platform: Platform, markers: MarkerEnvironment) -> Self {
         Self {
-            platform: PythonPlatform(platform),
+            platform,
             markers: Box::new(markers),
-            base_exec_prefix,
-            base_prefix,
-            stdlib,
-            sys_executable,
+            sysconfig: Sysconfig {
+                stdlib: PathBuf::from("/dev/null"),
+                platstdlib: PathBuf::from("/dev/null"),
+                purelib: PathBuf::from("/dev/null"),
+                platlib: PathBuf::from("/dev/null"),
+                include: PathBuf::from("/dev/null"),
+                platinclude: PathBuf::from("/dev/null"),
+                scripts: PathBuf::from("/dev/null"),
+                data: PathBuf::from("/dev/null"),
+            },
+            base_exec_prefix: PathBuf::from("/dev/null"),
+            base_prefix: PathBuf::from("/dev/null"),
+            sys_executable: PathBuf::from("/dev/null"),
             tags: OnceCell::new(),
         }
     }
@@ -168,7 +170,7 @@ impl Interpreter {
         let python_platform = PythonPlatform::from(platform.to_owned());
         if let Some(venv) = detect_virtual_env(&python_platform)? {
             let executable = python_platform.venv_python(venv);
-            let interpreter = Self::query(&executable, &python_platform.0, cache)?;
+            let interpreter = Self::query(&executable, python_platform.0, cache)?;
 
             if version_matches(&interpreter) {
                 return Ok(Some(interpreter));
@@ -283,28 +285,82 @@ impl Interpreter {
     pub fn implementation_name(&self) -> &str {
         &self.markers.implementation_name
     }
+
     pub fn base_exec_prefix(&self) -> &Path {
         &self.base_exec_prefix
     }
+
     pub fn base_prefix(&self) -> &Path {
         &self.base_prefix
     }
 
-    /// `sysconfig.get_path("stdlib")`
-    pub fn stdlib(&self) -> &Path {
-        &self.stdlib
-    }
+    /// Return the `sys.executable` path for this Python interpreter.
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
     }
+
+    /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn stdlib(&self) -> &Path {
+        &self.sysconfig.stdlib
+    }
+
+    /// Return the `platstdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn platstdlib(&self) -> &Path {
+        &self.sysconfig.platstdlib
+    }
+
+    /// Return the `purelib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn purelib(&self) -> &Path {
+        &self.sysconfig.purelib
+    }
+
+    /// Return the `platlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn platlib(&self) -> &Path {
+        &self.sysconfig.platlib
+    }
+
+    /// Return the `include` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn include(&self) -> &Path {
+        &self.sysconfig.include
+    }
+
+    /// Return the `platinclude` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn platinclude(&self) -> &Path {
+        &self.sysconfig.platinclude
+    }
+
+    /// Return the `scripts` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn scripts(&self) -> &Path {
+        &self.sysconfig.scripts
+    }
+
+    /// Return the `data` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn data(&self) -> &Path {
+        &self.sysconfig.data
+    }
+}
+
+/// The installation paths returned by `sysconfig.get_paths()`.
+///
+/// See: <https://docs.python.org/3.12/library/sysconfig.html#installation-paths>
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub(crate) struct Sysconfig {
+    pub(crate) stdlib: PathBuf,
+    pub(crate) platstdlib: PathBuf,
+    pub(crate) purelib: PathBuf,
+    pub(crate) platlib: PathBuf,
+    pub(crate) include: PathBuf,
+    pub(crate) platinclude: PathBuf,
+    pub(crate) scripts: PathBuf,
+    pub(crate) data: PathBuf,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub(crate) struct InterpreterInfo {
     pub(crate) markers: MarkerEnvironment,
+    pub(crate) sysconfig: Sysconfig,
     pub(crate) base_exec_prefix: PathBuf,
     pub(crate) base_prefix: PathBuf,
-    pub(crate) stdlib: PathBuf,
     pub(crate) sys_executable: PathBuf,
 }
 
@@ -520,7 +576,8 @@ mod tests {
             std::os::unix::fs::PermissionsExt::from_mode(0o770),
         )
         .unwrap();
-        let interpreter = Interpreter::query(&mocked_interpreter, &platform, &cache).unwrap();
+        let interpreter =
+            Interpreter::query(&mocked_interpreter, platform.clone(), &cache).unwrap();
         assert_eq!(
             interpreter.markers.python_version.version,
             Version::from_str("3.12").unwrap()
@@ -533,7 +590,8 @@ mod tests {
             "##, json.replace("3.12", "3.13")},
         )
         .unwrap();
-        let interpreter = Interpreter::query(&mocked_interpreter, &platform, &cache).unwrap();
+        let interpreter =
+            Interpreter::query(&mocked_interpreter, platform.clone(), &cache).unwrap();
         assert_eq!(
             interpreter.markers.python_version.version,
             Version::from_str("3.13").unwrap()

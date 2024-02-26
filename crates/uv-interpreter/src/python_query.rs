@@ -60,11 +60,11 @@ pub fn find_requested_python(
         let Some(executable) = Interpreter::find_executable(request)? else {
             return Ok(None);
         };
-        Interpreter::query(&executable, platform, cache).map(Some)
+        Interpreter::query(&executable, platform.clone(), cache).map(Some)
     } else {
         // `-p /home/ferris/.local/bin/python3.10`
         let executable = fs_err::canonicalize(request)?;
-        Interpreter::query(&executable, platform, cache).map(Some)
+        Interpreter::query(&executable, platform.clone(), cache).map(Some)
     }
 }
 
@@ -149,7 +149,7 @@ fn find_python(
                         continue;
                     }
 
-                    let interpreter = match Interpreter::query(&path, platform, cache) {
+                    let interpreter = match Interpreter::query(&path, platform.clone(), cache) {
                         Ok(interpreter) => interpreter,
                         Err(Error::Python2OrOlder) => {
                             if selector.major() <= Some(2) {
@@ -177,7 +177,7 @@ fn find_python(
         if cfg!(windows) {
             if let Ok(shims) = which::which_in_global("python.bat", Some(&path)) {
                 for shim in shims {
-                    let interpreter = match Interpreter::query(&shim, platform, cache) {
+                    let interpreter = match Interpreter::query(&shim, platform.clone(), cache) {
                         Ok(interpreter) => interpreter,
                         Err(error) => {
                             // Don't fail when querying the shim failed. E.g it's possible that no python version is selected
@@ -270,7 +270,7 @@ impl PythonInstallation {
         match self {
             Self::PyListPath {
                 executable_path, ..
-            } => Interpreter::query(&executable_path, platform, cache),
+            } => Interpreter::query(&executable_path, platform.clone(), cache),
             Self::Interpreter(interpreter) => Ok(interpreter),
         }
     }

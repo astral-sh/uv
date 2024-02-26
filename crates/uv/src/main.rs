@@ -439,6 +439,10 @@ struct PipSyncArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
+    /// The Python interpreter into which to install the packages.
+    #[clap(long)]
+    python: Option<PathBuf>,
+
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[clap(long)]
@@ -608,6 +612,10 @@ struct PipInstallArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
+    /// The Python interpreter into which to install the packages.
+    #[clap(long)]
+    python: Option<PathBuf>,
+
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[clap(long)]
@@ -676,6 +684,10 @@ struct PipUninstallArgs {
     /// Uninstall the editable package based on the provided local file path.
     #[clap(long, short, group = "sources")]
     editable: Vec<String>,
+
+    /// The Python interpreter into which to install the packages.
+    #[clap(long)]
+    python: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -1009,6 +1021,7 @@ async fn run() -> Result<ExitStatus> {
                 &no_build,
                 &no_binary,
                 args.strict,
+                args.python,
                 cache,
                 printer,
             )
@@ -1091,6 +1104,7 @@ async fn run() -> Result<ExitStatus> {
                 &no_binary,
                 args.strict,
                 args.exclude_newer,
+                args.python,
                 cache,
                 printer,
             )
@@ -1110,7 +1124,7 @@ async fn run() -> Result<ExitStatus> {
                         .map(RequirementsSource::from_path),
                 )
                 .collect::<Vec<_>>();
-            commands::pip_uninstall(&sources, cache, printer).await
+            commands::pip_uninstall(&sources, args.python, cache, printer).await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),
