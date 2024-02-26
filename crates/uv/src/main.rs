@@ -695,9 +695,17 @@ struct PipListArgs {
     #[clap(long)]
     strict: bool,
 
-    /// List editable projects.
+    /// Only include editable projects.
     #[clap(short, long)]
     editable: bool,
+
+    /// Exclude any editable packages from output.
+    #[clap(long)]
+    exclude_editable: bool,
+
+    /// Exclude the specified package(s) from the output.
+    #[clap(long)]
+    r#exclude: Vec<PackageName>,
 }
 
 #[derive(Args)]
@@ -1109,7 +1117,14 @@ async fn run() -> Result<ExitStatus> {
         }) => commands::pip_freeze(&cache, args.strict, printer),
         Commands::Pip(PipNamespace {
             command: PipCommand::List(args),
-        }) => commands::pip_list(&cache, args.strict, args.editable, printer),
+        }) => commands::pip_list(
+            &cache,
+            args.strict,
+            args.editable,
+            args.exclude_editable,
+            &args.exclude,
+            printer,
+        ),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })
