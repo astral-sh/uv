@@ -85,7 +85,7 @@ serde = { version = "1.0.194" }
 serde_json = { version = "1.0.111" }
 sha1 = { version = "0.10.6" }
 sha2 = { version = "0.10.8" }
-target-lexicon = { version = "0.12.13" }
+target-lexicon = { version = "0.12.14" }
 task-local-extensions = { version = "0.1.4" }
 tempfile = { version = "3.9.0" }
 textwrap = { version = "0.16.1" }
