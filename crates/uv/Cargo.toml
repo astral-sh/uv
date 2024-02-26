@@ -49,6 +49,7 @@ dunce = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+indexmap = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
@@ -67,9 +68,9 @@ tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
 tracing-subscriber = { workspace = true }
 tracing-tree = { workspace = true }
+unicode-width = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
-unicode-width = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = "0.1.39"

@@ -1,9 +1,11 @@
 //! A standard interface for working with heterogeneous sources of requirements.
 
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use console::Term;
+use indexmap::IndexMap;
 use rustc_hash::FxHashSet;
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
@@ -210,26 +212,37 @@ impl RequirementsSpecification {
                 let mut used_extras = FxHashSet::default();
                 let mut requirements = Vec::new();
                 let mut project_name = None;
+
                 if let Some(project) = pyproject_toml.project {
+                    // Parse the project name.
+                    let parsed_project_name =
+                        PackageName::new(project.name).with_context(|| {
+                            format!("Invalid `project.name` in {}", path.normalized_display())
+                        })?;
+
+                    // Include the default dependencies.
                     requirements.extend(project.dependencies.unwrap_or_default());
-                    // Include any optional dependencies specified in `extras`
+
+                    // Include any optional dependencies specified in `extras`.
                     if !matches!(extras, ExtrasSpecification::None) {
-                        for (name, optional_requirements) in
-                            project.optional_dependencies.unwrap_or_default()
-                        {
-                            // TODO(konstin): It's not ideal that pyproject-toml doesn't use
-                            // `ExtraName`
-                            let normalized_name = ExtraName::new(name)?;
-                            if extras.contains(&normalized_name) {
-                                used_extras.insert(normalized_name);
-                                requirements.extend(optional_requirements);
+                        if let Some(optional_dependencies) = project.optional_dependencies {
+                            for (extra_name, optional_requirements) in &optional_dependencies {
+                                // TODO(konstin): It's not ideal that pyproject-toml doesn't use
+                                // `ExtraName`
+                                let normalized_name = ExtraName::from_str(extra_name)?;
+                                if extras.contains(&normalized_name) {
+                                    used_extras.insert(normalized_name);
+                                    requirements.extend(flatten_extra(
+                                        &parsed_project_name,
+                                        optional_requirements,
+                                        &optional_dependencies,
+                                    )?);
+                                }
                             }
                         }
                     }
-                    // Parse the project name
-                    project_name = Some(PackageName::new(project.name).with_context(|| {
-                        format!("Invalid `project.name` in {}", path.normalized_display())
-                    })?);
+
+                    project_name = Some(parsed_project_name);
                 }
 
                 if requirements.is_empty()
@@ -344,4 +357,72 @@ impl RequirementsSpecification {
     pub(crate) fn from_simple_sources(requirements: &[RequirementsSource]) -> Result<Self> {
         Self::from_sources(requirements, &[], &[], &ExtrasSpecification::None)
     }
+}
+
+/// Given an extra in a project that may contain references to the project
+/// itself, flatten it into a list of requirements.
+///
+/// For example:
+/// ```toml
+/// [project]
+/// name = "my-project"
+/// version = "0.0.1"
+/// dependencies = [
+///     "tomli",
+/// ]
+///
+/// [project.optional-dependencies]
+/// test = [
+///     "pep517",
+/// ]
+/// dev = [
+///     "my-project[test]",
+/// ]
+/// ```
+fn flatten_extra(
+    project_name: &PackageName,
+    requirements: &[Requirement],
+    extras: &IndexMap<String, Vec<Requirement>>,
+) -> Result<Vec<Requirement>> {
+    fn inner(
+        project_name: &PackageName,
+        requirements: &[Requirement],
+        extras: &IndexMap<String, Vec<Requirement>>,
+        seen: &mut FxHashSet<ExtraName>,
+    ) -> Result<Vec<Requirement>> {
+        let mut flattened = Vec::with_capacity(requirements.len());
+        for requirement in requirements {
+            if requirement.name == *project_name {
+                for extra in &requirement.extras {
+                    // Avoid infinite recursion on mutually recursive extras.
+                    if !seen.insert(extra.clone()) {
+                        continue;
+                    }
+
+                    // Flatten the extra requirements.
+                    for (name, extra_requirements) in extras {
+                        let normalized_name = ExtraName::from_str(name)?;
+                        if normalized_name == *extra {
+                            flattened.extend(inner(
+                                project_name,
+                                extra_requirements,
+                                extras,
+                                seen,
+                            )?);
+                        }
+                    }
+                }
+            } else {
+                flattened.push(requirement.clone());
+            }
+        }
+        Ok(flattened)
+    }
+
+    inner(
+        project_name,
+        requirements,
+        extras,
+        &mut FxHashSet::default(),
+    )
 }
