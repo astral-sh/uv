@@ -1,7 +1,7 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use fs_err as fs;
 use std::env::consts::EXE_SUFFIX;
-use std::fs;
 use std::path::Path;
 use std::process::Command;
 
