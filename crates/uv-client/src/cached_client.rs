@@ -336,12 +336,9 @@ impl CachedClient {
         .await
     }
 
+    #[instrument(name="read_and_parse_cache", skip_all, fields(file = %cache_entry.path().display()))]
     async fn read_cache(cache_entry: &CacheEntry) -> Option<DataWithCachePolicy> {
-        let span = info_span!("read_and_parse_cache", file = %cache_entry.path().display());
-        match span
-            .in_scope(|| DataWithCachePolicy::from_path_async(cache_entry.path()))
-            .await
-        {
+        match DataWithCachePolicy::from_path_async(cache_entry.path()).await {
             Ok(data) => Some(data),
             Err(err) => {
                 // When we know the cache entry doesn't exist, then things are
@@ -577,6 +574,7 @@ impl DataWithCachePolicy {
     ///
     /// If the given byte buffer is not in a valid format or if reading the
     /// file given fails, then this returns an error.
+    #[instrument]
     fn from_path_sync(path: &Path) -> Result<Self, Error> {
         let file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
         // Note that we don't wrap our file in a buffer because it will just
