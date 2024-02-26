@@ -4151,6 +4151,7 @@ dependencies = [
  "fs-err",
  "futures",
  "gourgeist",
+ "indexmap 2.2.3",
  "indicatif",
  "indoc",
  "insta",
