@@ -808,8 +808,15 @@ fn install_no_index_version() {
 fn install_git_public_https() {
     let context = TestContext::new("3.8");
 
-    uv_snapshot!(command(&context)
-        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
+    let mut command = command(&context);
+    command.arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage");
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(command
         , @r###"
     success: true
     exit_code: 0
@@ -838,8 +845,7 @@ fn install_git_public_https_missing_branch_or_tag() {
 
     uv_snapshot!(filters, command(&context)
         // 2.0.0 does not exist
-        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0")
-        , @r###"
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -897,8 +903,15 @@ fn install_git_private_https_pat() {
     let mut filters = INSTA_FILTERS.to_vec();
     filters.insert(0, (&token, "***"));
 
-    uv_snapshot!(filters, command(&context)
-        .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
+    let mut command = command(&context);
+    command.arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"));
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(filters, command
         , @r###"
     success: true
     exit_code: 0
@@ -933,8 +946,15 @@ fn install_git_private_https_pat_at_ref() {
         ""
     };
 
-    uv_snapshot!(filters, command(&context)
-        .arg(format!("uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"))
+    let mut command = command(&context);
+    command.arg(format!("uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"));
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(filters, command,
         , @r###"
     success: true
     exit_code: 0
@@ -1476,7 +1496,14 @@ fn direct_url_zip_file_bunk_permissions() -> Result<()> {
         "opensafely-pipeline @ https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip",
     )?;
 
-    uv_snapshot!(command(&context)
+    let mut command = command(&context);
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(command
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
