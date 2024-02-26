@@ -246,7 +246,7 @@ pub fn create_bare_venv(
         ),
         (
             "version_info".to_string(),
-            interpreter.markers().python_version.string.clone(),
+            interpreter.markers().python_full_version.string.clone(),
         ),
         (
             "include-system-site-packages".to_string(),
