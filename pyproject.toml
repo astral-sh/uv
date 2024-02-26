@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.1.10"
+version = "0.1.11"
 description = "An extremely fast Python package installer and resolver, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
