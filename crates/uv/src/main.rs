@@ -695,15 +695,15 @@ struct PipListArgs {
     #[clap(long)]
     strict: bool,
 
-    /// List editable projects.
+    /// Only include editable projects.
     #[clap(short, long)]
     editable: bool,
 
-    // Exclude editable package from output.
+    /// Exclude any editable packages from output.
     #[clap(long)]
     exclude_editable: bool,
 
-    // Exclude specified package from the output.
+    /// Exclude the specified package(s) from the output.
     #[clap(long)]
     r#exclude: Vec<PackageName>,
 }
