@@ -904,7 +904,9 @@ fn install_git_private_https_pat() {
     filters.insert(0, (&token, "***"));
 
     let mut command = command(&context);
-    command.arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"));
+    command.arg(format!(
+        "uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"
+    ));
     if cfg!(all(windows, debug_assertions)) {
         // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
         // default windows stack of 1MB
@@ -954,8 +956,7 @@ fn install_git_private_https_pat_at_ref() {
         command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
     }
 
-    uv_snapshot!(filters, command,
-        , @r###"
+    uv_snapshot!(filters, command, @r###"
     success: true
     exit_code: 0
     ----- stdout -----
