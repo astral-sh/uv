@@ -27,9 +27,9 @@ pub static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir [^\s]+", "--cache-dir [CACHE_DIR]"),
     // Operation times
-    (r"(\d+m )?(\d+\.)?\d+(ms|s)", "[TIME]"),
+    (r"(\s|\()(\d+m )?(\d+\.)?\d+(ms|s)", "$1[TIME]"),
     // File sizes
-    (r"(\d+\.)?\d+([KM]i)?B", "[SIZE]"),
+    (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d])", "/$1"),
     (r"uv.exe", "uv"),
