@@ -14,6 +14,7 @@ use uv_cache::Cache;
 use uv_fs::Normalized;
 use uv_installer::SitePackages;
 use uv_interpreter::Virtualenv;
+use uv_normalize::PackageName;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -23,6 +24,8 @@ pub(crate) fn pip_list(
     cache: &Cache,
     strict: bool,
     editable: bool,
+    exclude_editable: bool,
+    exclude: &[PackageName],
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
@@ -41,7 +44,8 @@ pub(crate) fn pip_list(
     // Filter if `--editable` is specified; always sort by name.
     let results = site_packages
         .iter()
-        .filter(|f| !editable || f.is_editable())
+        .filter(|f| (!f.is_editable() && !editable) || (f.is_editable() && !exclude_editable))
+        .filter(|f| !exclude.contains(f.name()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .collect_vec();
     if results.is_empty() {
@@ -64,10 +68,7 @@ pub(crate) fn pip_list(
     ];
 
     // Editable column is only displayed if at least one editable package is found.
-    if site_packages
-        .iter()
-        .any(distribution_types::InstalledDist::is_editable)
-    {
+    if results.iter().any(|f| f.is_editable()) {
         columns.push(Column {
             header: String::from("Editable project location"),
             rows: results
