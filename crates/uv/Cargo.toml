@@ -98,4 +98,4 @@ git = []
 maturin = []
 
 [build-dependencies]
-fs-err.workspace = true
+fs-err = { workspace = true }
