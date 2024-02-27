@@ -1572,9 +1572,8 @@ fn launcher_with_symlink() -> Result<()> {
         // where `Uncategorized` is unstable.
         if error.raw_os_error() == Some(1314) {
             return Ok(());
-        } else {
-            return Err(error);
         }
+        return Err(error.into());
     }
 
     #[cfg(unix)]
