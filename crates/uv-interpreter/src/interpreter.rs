@@ -35,7 +35,11 @@ pub struct Interpreter {
 
 impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
-    pub fn query(executable: &Path, platform: &Platform, cache: &Cache) -> Result<Self, Error> {
+    pub(crate) fn query(
+        executable: &Path,
+        platform: &Platform,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
         let info = InterpreterInfo::query_cached(executable, cache)?;
 
         debug_assert!(
