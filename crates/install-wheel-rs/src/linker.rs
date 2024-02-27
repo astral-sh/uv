@@ -10,17 +10,18 @@ use reflink_copy as reflink;
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
 
+use crate::Error;
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use pypi_types::DirectUrl;
 use uv_normalize::PackageName;
 
 use crate::install_location::InstallLocation;
-use crate::script::scripts_from_ini;
+use crate::script::{scripts_from_ini, Script};
 use crate::wheel::{
-    extra_dist_info, install_data, parse_metadata, parse_wheel_version, write_script_entrypoints,
+    extra_dist_info, install_data, parse_metadata, parse_wheel_version, read_record_file,
+    write_script_entrypoints,
 };
-use crate::{read_record_file, Error, Script};
 
 /// Install the given wheel to the given venv
 ///

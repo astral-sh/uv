@@ -8,26 +8,11 @@ use crate::{wheel, Error};
 
 /// A script defining the name of the runnable entrypoint and the module and function that should be
 /// run.
-#[cfg(feature = "python_bindings")]
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[pyo3::pyclass(dict)]
-pub struct Script {
-    #[pyo3(get)]
-    pub script_name: String,
-    #[pyo3(get)]
-    pub module: String,
-    #[pyo3(get)]
-    pub function: String,
-}
-
-/// A script defining the name of the runnable entrypoint and the module and function that should be
-/// run.
-#[cfg(not(feature = "python_bindings"))]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct Script {
-    pub script_name: String,
-    pub module: String,
-    pub function: String,
+pub(crate) struct Script {
+    pub(crate) name: String,
+    pub(crate) module: String,
+    pub(crate) function: String,
 }
 
 impl Script {
@@ -36,7 +21,7 @@ impl Script {
     /// <https://packaging.python.org/en/latest/specifications/entry-points/>
     ///
     /// Extras are supposed to be ignored, which happens if you pass None for extras
-    pub fn from_value(
+    pub(crate) fn from_value(
         script_name: &str,
         value: &str,
         extras: Option<&[String]>,
@@ -66,13 +51,13 @@ impl Script {
         }
 
         Ok(Some(Self {
-            script_name: script_name.to_string(),
+            name: script_name.to_string(),
             module: captures.name("module").unwrap().as_str().to_string(),
             function: captures.name("function").unwrap().as_str().to_string(),
         }))
     }
 
-    pub fn import_name(&self) -> &str {
+    pub(crate) fn import_name(&self) -> &str {
         self.function
             .split_once('.')
             .map_or(&self.function, |(import_name, _)| import_name)
@@ -104,13 +89,13 @@ pub(crate) fn scripts_from_ini(
     // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/operations/install/wheel.py#L283
     // https://github.com/astral-sh/uv/issues/1593
     for script in &mut console_scripts {
-        let Some((left, right)) = script.script_name.split_once('.') else {
+        let Some((left, right)) = script.name.split_once('.') else {
             continue;
         };
         if left != "pip3" || right.parse::<u8>().is_err() {
             continue;
         }
-        script.script_name = format!("pip3.{python_minor}");
+        script.name = format!("pip3.{python_minor}");
     }
 
     Ok((console_scripts, gui_scripts))
@@ -118,7 +103,7 @@ pub(crate) fn scripts_from_ini(
 
 #[cfg(test)]
 mod test {
-    use crate::Script;
+    use crate::script::Script;
 
     #[test]
     fn test_valid_script_names() {

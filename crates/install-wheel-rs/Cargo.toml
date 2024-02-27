@@ -27,26 +27,21 @@ uv-normalize = { path = "../uv-normalize" }
 uv-fs = { path = "../uv-fs" }
 pypi-types = { path = "../pypi-types" }
 
-clap = { workspace = true, optional = true, features = ["derive", "env"] }
+clap = { workspace = true, optional = true, features = ["derive"] }
 configparser = { workspace = true }
 csv = { workspace = true }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
-fs2 = { workspace = true }
-goblin = { workspace = true }
 mailparse = { workspace = true }
 once_cell = { workspace = true }
 platform-info = { workspace = true }
 plist = { workspace = true }
-pyo3 = { workspace = true, features = ["extension-module", "abi3-py37"], optional = true }
-rayon = { workspace = true, optional = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-target-lexicon = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -54,12 +49,6 @@ tracing-subscriber = { workspace = true, optional = true }
 url = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
-
-[features]
-default = ["cli", "parallel"]
-python_bindings = ["pyo3", "tracing-subscriber"]
-cli = ["clap"]
-parallel = ["rayon"]
 
 [dev-dependencies]
 indoc = {version = "2.0.4"}

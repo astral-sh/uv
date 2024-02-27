@@ -11,22 +11,15 @@ use zip::result::ZipError;
 use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
-pub use install_location::{normalize_name, InstallLocation, LockedDir};
+pub use install_location::InstallLocation;
 use pep440_rs::Version;
 use platform_host::{Arch, Os};
-pub use record::RecordEntry;
-pub use script::Script;
 pub use uninstall::{uninstall_wheel, Uninstall};
 use uv_fs::Normalized;
 use uv_normalize::PackageName;
-pub use wheel::{
-    install_wheel, parse_key_value_file, read_record_file, relative_to, SHEBANG_PYTHON,
-};
 
 mod install_location;
 pub mod linker;
-#[cfg(feature = "python_bindings")]
-mod python_bindings;
 mod record;
 mod script;
 mod uninstall;
