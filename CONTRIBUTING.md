@@ -1,6 +1,6 @@
 # Contributing
 
-We have issues labeled as [Good First Issue](Uhttps://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) and [Help Wanted](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22) which are good opportunities for new contributors.
+We have issues labeled as [Good First Issue](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) and [Help Wanted](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22) which are good opportunities for new contributors.
 
 ## Setup
 
