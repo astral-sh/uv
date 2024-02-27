@@ -18,6 +18,7 @@ use itertools::Itertools;
 use once_cell::sync::Lazy;
 use pyproject_toml::Project;
 use regex::Regex;
+use rustc_hash::FxHashMap;
 use serde::de::{value, SeqAccess, Visitor};
 use serde::{de, Deserialize, Deserializer, Serialize};
 use tempfile::{tempdir_in, TempDir};
@@ -331,6 +332,8 @@ pub struct SourceBuild {
     package_id: String,
     /// Whether we do a regular PEP 517 build or an PEP 660 editable build
     build_kind: BuildKind,
+    /// Environment variables to be passed in during metadata or wheel building
+    environment_variables: FxHashMap<String, String>,
 }
 
 impl SourceBuild {
@@ -349,6 +352,7 @@ impl SourceBuild {
         setup_py: SetupPyStrategy,
         config_settings: ConfigSettings,
         build_kind: BuildKind,
+        environment_variables: FxHashMap<String, String>,
     ) -> Result<Self, Error> {
         let temp_dir = tempdir_in(build_context.cache().root())?;
 
@@ -422,6 +426,7 @@ impl SourceBuild {
                 &package_id,
                 build_kind,
                 &config_settings,
+                &environment_variables,
             )
             .await?;
         }
@@ -435,6 +440,7 @@ impl SourceBuild {
             config_settings,
             metadata_directory: None,
             package_id,
+            environment_variables: FxHashMap::default(),
         })
     }
 
@@ -575,9 +581,14 @@ impl SourceBuild {
             script="prepare_metadata_for_build_wheel",
             python_version = %self.venv.interpreter().python_version()
         );
-        let output = run_python_script(&self.venv, &script, &self.source_tree)
-            .instrument(span)
-            .await?;
+        let output = run_python_script(
+            &self.venv,
+            &script,
+            &self.source_tree,
+            &self.environment_variables,
+        )
+        .instrument(span)
+        .await?;
         if !output.status.success() {
             return Err(Error::from_command_output(
                 "Build backend failed to determine metadata through `prepare_metadata_for_build_wheel`".to_string(),
@@ -707,9 +718,14 @@ impl SourceBuild {
             script=format!("build_{}", self.build_kind),
             python_version = %self.venv.interpreter().python_version()
         );
-        let output = run_python_script(&self.venv, &script, &self.source_tree)
-            .instrument(span)
-            .await?;
+        let output = run_python_script(
+            &self.venv,
+            &script,
+            &self.source_tree,
+            &self.environment_variables,
+        )
+        .instrument(span)
+        .await?;
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
@@ -763,6 +779,7 @@ async fn create_pep517_build_environment(
     package_id: &str,
     build_kind: BuildKind,
     config_settings: &ConfigSettings,
+    environment_variables: &FxHashMap<String, String>,
 ) -> Result<(), Error> {
     debug!(
         "Calling `{}.get_requires_for_build_{}()`",
@@ -786,7 +803,7 @@ async fn create_pep517_build_environment(
         script=format!("get_requires_for_build_{}", build_kind),
         python_version = %venv.interpreter().python_version()
     );
-    let output = run_python_script(venv, &script, source_tree)
+    let output = run_python_script(venv, &script, source_tree, &environment_variables)
         .instrument(span)
         .await?;
     if !output.status.success() {
@@ -849,6 +866,7 @@ async fn run_python_script(
     venv: &Virtualenv,
     script: &str,
     source_tree: &Path,
+    environment_variables: &FxHashMap<String, String>,
 ) -> Result<Output, Error> {
     // Prepend the venv bin dir to PATH
     let new_path = if let Some(old_path) = env::var_os("PATH") {
@@ -863,6 +881,7 @@ async fn run_python_script(
         // Activate the venv
         .env("VIRTUAL_ENV", venv.root())
         .env("PATH", new_path)
+        .envs(environment_variables)
         .output()
         .await
         .map_err(|err| Error::CommandFailed(venv.python_executable(), err))

@@ -2,12 +2,14 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
+
 use std::future::Future;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
+use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
 use distribution_types::{IndexLocations, Name, Resolution, SourceDist};
@@ -36,6 +38,7 @@ pub struct BuildDispatch<'a> {
     config_settings: &'a ConfigSettings,
     source_build_context: SourceBuildContext,
     options: Options,
+    sdist_build_env_variables: FxHashMap<String, String>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -67,12 +70,23 @@ impl<'a> BuildDispatch<'a> {
             no_binary,
             source_build_context: SourceBuildContext::default(),
             options: Options::default(),
+            sdist_build_env_variables: FxHashMap::default(),
         }
     }
 
     #[must_use]
     pub fn with_options(mut self, options: Options) -> Self {
         self.options = options;
+        self
+    }
+
+    /// Set the environment variables to be used when building a source distribution.
+    #[must_use]
+    pub fn with_sdist_build_env_variables(
+        mut self,
+        sdist_build_env_variables: FxHashMap<String, String>,
+    ) -> Self {
+        self.sdist_build_env_variables = sdist_build_env_variables;
         self
     }
 }
@@ -277,6 +291,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.setup_py,
             self.config_settings.clone(),
             build_kind,
+            self.sdist_build_env_variables.clone(),
         )
         .boxed()
         .await?;
