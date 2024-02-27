@@ -79,6 +79,9 @@ fn command(context: &TestContext) -> Command {
 /// {{.}}
 {{/tree}}
 /// ```
+{{#skip}}
+#[ignore]
+{{/skip}}
 #[test]
 fn {{module_name}}() {
     let context = TestContext::new("{{environment.python}}");

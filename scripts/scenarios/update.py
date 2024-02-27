@@ -20,11 +20,10 @@ Usage:
 
         $ packse index up --bg
         $ packse build scenarios/*
-        $ packse publish dist/* --index-url http://localhost:3141/packages/local --anonymous
 
         Override the default PyPI index for uv and update the scenarios
 
-        $ UV_INDEX_URL="http://localhost:3141/packages/all/+simple" ./scripts/scenarios/update.py
+        $ UV_INDEX_URL="http://localhost:3141" ./scripts/scenarios/update.py
 
 Requirements:
 
