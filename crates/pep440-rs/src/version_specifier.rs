@@ -417,10 +417,7 @@ impl VersionSpecifier {
             (self.version.clone(), version.clone())
         } else {
             // self is already without local
-            (
-                self.version.clone().without_local(),
-                version.clone().without_local(),
-            )
+            (self.version.clone(), version.clone().without_local())
         };
 
         match self.operator {
