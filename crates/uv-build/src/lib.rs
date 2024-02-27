@@ -875,6 +875,7 @@ async fn run_python_script(
     } else {
         OsString::from("")
     };
+
     Command::new(venv.python_executable())
         .args(["-c", script])
         .current_dir(source_tree.normalized())

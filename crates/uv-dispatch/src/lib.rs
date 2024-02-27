@@ -37,7 +37,7 @@ pub struct BuildDispatch<'a> {
     config_settings: &'a ConfigSettings,
     source_build_context: SourceBuildContext,
     options: Options,
-    sdist_build_env_variables: FxHashMap<String, String>,
+    sdist_build_env_vars: FxHashMap<String, String>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -69,7 +69,7 @@ impl<'a> BuildDispatch<'a> {
             no_binary,
             source_build_context: SourceBuildContext::default(),
             options: Options::default(),
-            sdist_build_env_variables: FxHashMap::default(),
+            sdist_build_env_vars: FxHashMap::default(),
         }
     }
 
@@ -81,11 +81,11 @@ impl<'a> BuildDispatch<'a> {
 
     /// Set the environment variables to be used when building a source distribution.
     #[must_use]
-    pub fn with_sdist_build_env_variables<'s>(
+    pub fn with_sdist_build_env_vars<'s>(
         mut self,
         sdist_build_env_variables: impl Iterator<Item = (&'s String, &'s String)>,
     ) -> Self {
-        self.sdist_build_env_variables = sdist_build_env_variables
+        self.sdist_build_env_vars = sdist_build_env_variables
             .map(|(key, value)| (key.to_owned(), value.to_owned()))
             .collect();
         self
@@ -292,7 +292,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.setup_py,
             self.config_settings.clone(),
             build_kind,
-            self.sdist_build_env_variables.clone(),
+            self.sdist_build_env_vars.clone(),
         )
         .boxed()
         .await?;
