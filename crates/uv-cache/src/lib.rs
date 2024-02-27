@@ -21,6 +21,7 @@ pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
 mod by_timestamp;
+#[cfg(feature = "clap")]
 mod cli;
 mod removal;
 mod timestamp;
