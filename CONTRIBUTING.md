@@ -82,7 +82,7 @@ We recommend using this container if you don't trust the dependency tree of the 
 
 Please refer to Ruff's [Profiling Guide](https://github.com/astral-sh/ruff/blob/main/CONTRIBUTING.md#profiling-projects), it applies to uv, too.
 
-We provide as set diverse requirements for testing and benchmarking the resolver in `scripts/requirements` and for the installer in `scripts/requirements/compiled`.
+We provide diverse sets of requirements for testing and benchmarking the resolver in `scripts/requirements` and for the installer in `scripts/requirements/compiled`.
 
 You can use `scripts/bench` to benchmark predefined workloads between uv versions and with other tools, e.g.
 
