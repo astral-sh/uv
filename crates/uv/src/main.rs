@@ -439,7 +439,7 @@ struct PipSyncArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
-    /// The Python interpreter into which to install the packages.
+    /// The Python interpreter into which packages should be installed.
     #[clap(long)]
     python: Option<PathBuf>,
 
@@ -612,7 +612,7 @@ struct PipInstallArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
-    /// The Python interpreter into which to install the packages.
+    /// The Python interpreter into which packages should be installed.
     #[clap(long)]
     python: Option<PathBuf>,
 
@@ -685,7 +685,7 @@ struct PipUninstallArgs {
     #[clap(long, short, group = "sources")]
     editable: Vec<String>,
 
-    /// The Python interpreter into which to install the packages.
+    /// The Python interpreter from which packages should be uninstalled.
     #[clap(long)]
     python: Option<PathBuf>,
 }

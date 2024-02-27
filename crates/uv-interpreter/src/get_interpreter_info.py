@@ -87,7 +87,8 @@ interpreter_info = {
     "markers": markers,
     "base_prefix": sys.base_prefix,
     "base_exec_prefix": sys.base_exec_prefix,
+    "prefix": sys.prefix,
     "sys_executable": sys.executable,
-    "sysconfig": sysconfig.get_paths(),
+    "sysconfig_paths": sysconfig.get_paths(),
 }
 print(json.dumps(interpreter_info))

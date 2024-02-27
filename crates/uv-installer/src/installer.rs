@@ -39,15 +39,11 @@ impl<'a> Installer<'a> {
     /// Install a set of wheels into a Python virtual environment.
     #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
     pub fn install(self, wheels: &[CachedDist]) -> Result<()> {
+        let layout = self.venv.interpreter().layout();
         tokio::task::block_in_place(|| {
             wheels.par_iter().try_for_each(|wheel| {
-                let location = install_wheel_rs::InstallLocation::new(
-                    self.venv.root(),
-                    self.venv.interpreter().python_tuple(),
-                );
-
                 install_wheel_rs::linker::install_wheel(
-                    &location,
+                    &layout,
                     wheel.path(),
                     wheel.filename(),
                     wheel

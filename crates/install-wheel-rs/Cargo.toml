@@ -34,6 +34,7 @@ data-encoding = { workspace = true }
 fs-err = { workspace = true }
 mailparse = { workspace = true }
 once_cell = { workspace = true }
+pathdiff = { workspace = true }
 platform-info = { workspace = true }
 plist = { workspace = true }
 reflink-copy = { workspace = true }
@@ -51,4 +52,4 @@ walkdir = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]
-indoc = {version = "2.0.4"}
+indoc = { version = "2.0.4" }

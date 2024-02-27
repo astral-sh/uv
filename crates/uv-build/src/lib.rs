@@ -640,13 +640,13 @@ impl SourceBuild {
                 script="setup.py bdist_wheel",
                 python_version = %self.venv.interpreter().python_version()
             );
-            let output = Command::new(&python_interpreter)
+            let output = Command::new(python_interpreter)
                 .args(["setup.py", "bdist_wheel"])
                 .current_dir(self.source_tree.normalized())
                 .output()
                 .instrument(span)
                 .await
-                .map_err(|err| Error::CommandFailed(python_interpreter, err))?;
+                .map_err(|err| Error::CommandFailed(python_interpreter.to_path_buf(), err))?;
             if !output.status.success() {
                 return Err(Error::from_command_output(
                     "Failed building wheel through setup.py".to_string(),
@@ -852,7 +852,7 @@ async fn run_python_script(
 ) -> Result<Output, Error> {
     // Prepend the venv bin dir to PATH
     let new_path = if let Some(old_path) = env::var_os("PATH") {
-        let new_path = iter::once(venv.bin_dir().to_path_buf()).chain(env::split_paths(&old_path));
+        let new_path = iter::once(venv.scripts().to_path_buf()).chain(env::split_paths(&old_path));
         env::join_paths(new_path).map_err(Error::BuildScriptPath)?
     } else {
         OsString::from("")
@@ -865,7 +865,7 @@ async fn run_python_script(
         .env("PATH", new_path)
         .output()
         .await
-        .map_err(|err| Error::CommandFailed(venv.python_executable(), err))
+        .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))
 }
 
 #[cfg(test)]

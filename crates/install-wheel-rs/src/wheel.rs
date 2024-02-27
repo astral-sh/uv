@@ -9,7 +9,6 @@ use fs_err::{DirEntry, File};
 use mailparse::MailHeaderMap;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
-
 use tracing::{instrument, warn};
 use walkdir::WalkDir;
 use zip::write::FileOptions;
@@ -18,10 +17,9 @@ use zip::ZipWriter;
 use pypi_types::DirectUrl;
 use uv_fs::Normalized;
 
-use crate::install_location::InstallLocation;
 use crate::record::RecordEntry;
 use crate::script::Script;
-use crate::Error;
+use crate::{Error, Layout};
 
 const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 
@@ -116,8 +114,8 @@ fn copy_and_hash(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<
     ))
 }
 
-fn get_shebang(location: &InstallLocation<impl AsRef<Path>>) -> String {
-    format!("#!{}", location.python().normalized().display())
+fn get_shebang(python_executable: impl AsRef<Path>) -> String {
+    format!("#!{}", python_executable.as_ref().normalized().display())
 }
 
 /// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
@@ -129,7 +127,7 @@ fn get_shebang(location: &InstallLocation<impl AsRef<Path>>) -> String {
 pub(crate) fn windows_script_launcher(
     launcher_python_script: &str,
     is_gui: bool,
-    installation: &InstallLocation<impl AsRef<Path>>,
+    python_executable: impl AsRef<Path>,
 ) -> Result<Vec<u8>, Error> {
     // This method should only be called on Windows, but we avoid `#[cfg(windows)]` to retain
     // compilation on all platforms.
@@ -177,7 +175,7 @@ pub(crate) fn windows_script_launcher(
         archive.finish().expect(error_msg);
     }
 
-    let python = installation.python();
+    let python = python_executable.as_ref();
     let python_path = python.normalized().to_string_lossy();
 
     let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len() + payload.len());
@@ -194,20 +192,16 @@ pub(crate) fn windows_script_launcher(
     Ok(launcher)
 }
 
-/// Create the wrapper scripts in the bin folder of the venv for launching console scripts
-///
-/// We also pass `venv_base` so we can write the same path as pip does
-///
-/// TODO: Test for this launcher directly in install-wheel-rs
+/// Create the wrapper scripts in the bin folder of the venv for launching console scripts.
 pub(crate) fn write_script_entrypoints(
+    layout: &Layout,
     site_packages: &Path,
-    location: &InstallLocation<impl AsRef<Path>>,
     entrypoints: &[Script],
     record: &mut Vec<RecordEntry>,
     is_gui: bool,
 ) -> Result<(), Error> {
     for entrypoint in entrypoints {
-        let entrypoint_relative = if cfg!(windows) {
+        let entrypoint_absolute = if cfg!(windows) {
             // On windows we actually build an .exe wrapper
             let script_name = entrypoint
                 .name
@@ -216,20 +210,33 @@ pub(crate) fn write_script_entrypoints(
                 .unwrap_or(&entrypoint.name)
                 .to_string()
                 + ".exe";
-            bin_rel().join(script_name)
+
+            layout.scripts.join(script_name)
         } else {
-            bin_rel().join(&entrypoint.name)
+            layout.scripts.join(&entrypoint.name)
         };
 
+        let entrypoint_relative = pathdiff::diff_paths(&entrypoint_absolute, site_packages)
+            .ok_or_else(|| {
+                Error::Io(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!(
+                        "Could not find relative path for: {}",
+                        entrypoint_absolute.normalized_display()
+                    ),
+                ))
+            })?;
+
         // Generate the launcher script.
-        let launcher_python_script = get_script_launcher(entrypoint, &get_shebang(location));
+        let launcher_python_script =
+            get_script_launcher(entrypoint, &get_shebang(&layout.sys_executable));
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
         if cfg!(windows) {
             write_file_recorded(
                 site_packages,
                 &entrypoint_relative,
-                &windows_script_launcher(&launcher_python_script, is_gui, location)?,
+                &windows_script_launcher(&launcher_python_script, is_gui, &layout.sys_executable)?,
                 record,
             )?;
         } else {
@@ -254,23 +261,34 @@ pub(crate) fn write_script_entrypoints(
     Ok(())
 }
 
-fn bin_rel() -> PathBuf {
-    if cfg!(windows) {
-        // windows doesn't have the python part, only Lib/site-packages
-        Path::new("..").join("..").join("Scripts")
-    } else {
-        // linux/mac has lib/python/site-packages
-        Path::new("..").join("..").join("..").join("bin")
-    }
+/// Whether the wheel should be installed into the `purelib` or `platlib` directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LibKind {
+    /// Install into the `purelib` directory.
+    Pure,
+    /// Install into the `platlib` directory.
+    Plat,
 }
 
-/// Parse WHEEL file
+/// Parse WHEEL file.
 ///
 /// > {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same
 /// > basic key: value format:
-pub(crate) fn parse_wheel_version(wheel_text: &str) -> Result<(), Error> {
+pub(crate) fn parse_wheel_file(wheel_text: &str) -> Result<LibKind, Error> {
     // {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same basic key: value format:
     let data = parse_key_value_file(&mut wheel_text.as_bytes(), "WHEEL")?;
+
+    // Determine whether Root-Is-Purelib == ‘true’.
+    // If it is, the wheel is pure, and should be installed into purelib.
+    let root_is_purelib = data
+        .get("Root-Is-Purelib")
+        .and_then(|root_is_purelib| root_is_purelib.first())
+        .is_some_and(|root_is_purelib| root_is_purelib == "true");
+    let lib_kind = if root_is_purelib {
+        LibKind::Pure
+    } else {
+        LibKind::Plat
+    };
 
     // mkl_fft-1.3.6-58-cp310-cp310-manylinux2014_x86_64.whl has multiple Wheel-Version entries, we have to ignore that
     // like pip
@@ -288,7 +306,7 @@ pub(crate) fn parse_wheel_version(wheel_text: &str) -> Result<(), Error> {
     // and technically we only need to check that the version is not higher
     if wheel_version == ("0", "1") {
         warn!("Ancient wheel version 0.1 (expected is 1.0)");
-        return Ok(());
+        return Ok(lib_kind);
     }
     // Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
     // Wheel-Version: 1.0
@@ -304,7 +322,7 @@ pub(crate) fn parse_wheel_version(wheel_text: &str) -> Result<(), Error> {
             0, wheel_version.1
         );
     }
-    Ok(())
+    Ok(lib_kind)
 }
 
 /// Give the path relative to the base directory
@@ -383,10 +401,10 @@ pub(crate) fn move_folder_recorded(
 ///
 /// Has to deal with both binaries files (just move) and scripts (rewrite the shebang if applicable)
 fn install_script(
+    layout: &Layout,
     site_packages: &Path,
     record: &mut [RecordEntry],
     file: &DirEntry,
-    location: &InstallLocation<impl AsRef<Path>>,
 ) -> Result<(), Error> {
     if !file.file_type()?.is_file() {
         return Err(Error::InvalidWheel(format!(
@@ -395,7 +413,7 @@ fn install_script(
         )));
     }
 
-    let target_path = bin_rel().join(file.file_name());
+    let target_path = layout.scripts.join(file.file_name());
 
     let path = file.path();
     let mut script = File::open(&path)?;
@@ -413,15 +431,15 @@ fn install_script(
     let mut start = vec![0; placeholder_python.len()];
     script.read_exact(&mut start)?;
     let size_and_encoded_hash = if start == placeholder_python {
-        let start = get_shebang(location).as_bytes().to_vec();
-        let mut target = File::create(site_packages.join(&target_path))?;
+        let start = get_shebang(&layout.sys_executable).as_bytes().to_vec();
+        let mut target = File::create(&target_path)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
         fs::remove_file(&path)?;
         Some(size_and_encoded_hash)
     } else {
         // reading and writing is slow especially for large binaries, so we move them instead
         drop(script);
-        fs::rename(&path, site_packages.join(&target_path))?;
+        fs::rename(&path, &target_path)?;
         None
     };
     #[cfg(unix)]
@@ -429,10 +447,7 @@ fn install_script(
         use std::fs::Permissions;
         use std::os::unix::fs::PermissionsExt;
 
-        fs::set_permissions(
-            site_packages.join(&target_path),
-            Permissions::from_mode(0o755),
-        )?;
+        fs::set_permissions(&target_path, Permissions::from_mode(0o755))?;
     }
 
     let relative_to_site_packages = path
@@ -461,11 +476,10 @@ fn install_script(
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 pub(crate) fn install_data(
-    venv_root: &Path,
+    layout: &Layout,
     site_packages: &Path,
     data_dir: &Path,
     dist_name: &str,
-    location: &InstallLocation<impl AsRef<Path>>,
     console_scripts: &[Script],
     gui_scripts: &[Script],
     record: &mut [RecordEntry],
@@ -477,7 +491,7 @@ pub(crate) fn install_data(
         match path.file_name().and_then(|name| name.to_str()) {
             Some("data") => {
                 // Move the content of the folder to the root of the venv
-                move_folder_recorded(&path, venv_root, site_packages, record)?;
+                move_folder_recorded(&path, &layout.data, site_packages, record)?;
             }
             Some("scripts") => {
                 for file in fs::read_dir(path)? {
@@ -499,25 +513,18 @@ pub(crate) fn install_data(
                         continue;
                     }
 
-                    install_script(site_packages, record, &file, location)?;
+                    install_script(layout, site_packages, record, &file)?;
                 }
             }
             Some("headers") => {
-                let target_path = venv_root
-                    .join("include")
-                    .join("site")
-                    .join(format!(
-                        "python{}.{}",
-                        location.python_version().0,
-                        location.python_version().1
-                    ))
-                    .join(dist_name);
+                let target_path = layout.include.join(dist_name);
                 move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
-            Some("purelib" | "platlib") => {
-                // purelib and platlib locations are not relevant when using venvs
-                // https://stackoverflow.com/a/27882460/3549270
-                move_folder_recorded(&path, site_packages, site_packages, record)?;
+            Some("purelib") => {
+                move_folder_recorded(&path, &layout.purelib, site_packages, record)?;
+            }
+            Some("platlib") => {
+                move_folder_recorded(&path, &layout.platlib, site_packages, record)?;
             }
             _ => {
                 return Err(Error::InvalidWheel(format!(
@@ -682,7 +689,7 @@ mod test {
 
     use indoc::{formatdoc, indoc};
 
-    use super::{parse_key_value_file, parse_wheel_version, read_record_file, relative_to, Script};
+    use super::{parse_key_value_file, parse_wheel_file, read_record_file, relative_to, Script};
 
     #[test]
     fn test_parse_key_value_file() {
@@ -710,8 +717,8 @@ mod test {
                 version
             }
         }
-        parse_wheel_version(&wheel_with_version("1.0")).unwrap();
-        parse_wheel_version(&wheel_with_version("2.0")).unwrap_err();
+        parse_wheel_file(&wheel_with_version("1.0")).unwrap();
+        parse_wheel_file(&wheel_with_version("2.0")).unwrap_err();
     }
 
     #[test]

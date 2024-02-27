@@ -1,5 +1,4 @@
 use std::env;
-use std::env::consts::EXE_SUFFIX;
 use std::path::{Path, PathBuf};
 
 use tracing::debug;
@@ -28,7 +27,7 @@ impl Virtualenv {
     ) -> Result<Self, Error> {
         let interpreter = Interpreter::query(python.as_ref(), platform, cache)?;
         Ok(Self {
-            root: interpreter.base_prefix.clone(),
+            root: interpreter.base_prefix().to_path_buf(),
             interpreter,
         })
     }
@@ -44,10 +43,10 @@ impl Virtualenv {
         let interpreter = Interpreter::query(&executable, platform.0, cache)?;
 
         debug_assert!(
-            interpreter.base_prefix == interpreter.base_exec_prefix,
+            interpreter.base_prefix() == interpreter.base_exec_prefix(),
             "Not a virtualenv (Python: {}, prefix: {})",
             executable.display(),
-            interpreter.base_prefix.display()
+            interpreter.base_prefix().display()
         );
 
         Ok(Self {
@@ -59,7 +58,7 @@ impl Virtualenv {
     /// Creating a new venv from a Python interpreter changes this.
     pub fn from_interpreter(interpreter: Interpreter, venv: &Path) -> Self {
         Self {
-            interpreter: interpreter.with_base_prefix(venv.to_path_buf()),
+            interpreter: interpreter.with_venv_root(venv.to_path_buf()),
             root: venv.to_path_buf(),
         }
     }
@@ -67,11 +66,6 @@ impl Virtualenv {
     /// Returns the location of the Python interpreter.
     pub fn root(&self) -> &Path {
         &self.root
-    }
-
-    /// Returns the location of the Python executable.
-    pub fn python_executable(&self) -> PathBuf {
-        self.bin_dir().join(format!("python{EXE_SUFFIX}"))
     }
 
     /// Return the [`Interpreter`] for this virtual environment.
@@ -85,13 +79,18 @@ impl Virtualenv {
         Ok(PyVenvConfiguration::parse(self.root.join("pyvenv.cfg"))?)
     }
 
+    /// Returns the location of the Python executable.
+    pub fn python_executable(&self) -> &Path {
+        self.interpreter.sys_executable()
+    }
+
     /// Returns the path to the `site-packages` directory inside a virtual environment.
     pub fn site_packages(&self) -> &Path {
-        self.interpreter.platlib()
+        self.interpreter.purelib()
     }
 
     /// Returns the path to the `bin` directory inside a virtual environment.
-    pub fn bin_dir(&self) -> &Path {
+    pub fn scripts(&self) -> &Path {
         self.interpreter.scripts()
     }
 
