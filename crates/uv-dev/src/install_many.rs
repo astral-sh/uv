@@ -79,7 +79,6 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
         &flat_index,
         &index,
         &in_flight,
-        venv.python_executable(),
         setup_py,
         &config_settings,
         &no_build,

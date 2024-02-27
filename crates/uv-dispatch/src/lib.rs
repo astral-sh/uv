@@ -3,14 +3,14 @@
 //! implementing [`BuildContext`].
 
 use std::future::Future;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{bail, Context, Result};
+use futures::FutureExt;
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
 use distribution_types::{IndexLocations, Name, Resolution, SourceDist};
-use futures::FutureExt;
 use pep508_rs::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
@@ -30,7 +30,6 @@ pub struct BuildDispatch<'a> {
     flat_index: &'a FlatIndex,
     index: &'a InMemoryIndex,
     in_flight: &'a InFlight,
-    base_python: PathBuf,
     setup_py: SetupPyStrategy,
     no_build: &'a NoBuild,
     no_binary: &'a NoBinary,
@@ -49,7 +48,6 @@ impl<'a> BuildDispatch<'a> {
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
         in_flight: &'a InFlight,
-        base_python: PathBuf,
         setup_py: SetupPyStrategy,
         config_settings: &'a ConfigSettings,
         no_build: &'a NoBuild,
@@ -63,7 +61,6 @@ impl<'a> BuildDispatch<'a> {
             flat_index,
             index,
             in_flight,
-            base_python,
             setup_py,
             config_settings,
             no_build,
@@ -91,10 +88,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.interpreter
     }
 
-    fn base_python(&self) -> &Path {
-        &self.base_python
-    }
-
     fn no_build(&self) -> &NoBuild {
         self.no_build
     }
@@ -103,12 +96,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.no_binary
     }
 
-    fn setup_py_strategy(&self) -> SetupPyStrategy {
-        self.setup_py
-    }
-
     fn index_locations(&self) -> &IndexLocations {
         self.index_locations
+    }
+
+    fn setup_py_strategy(&self) -> SetupPyStrategy {
+        self.setup_py
     }
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {

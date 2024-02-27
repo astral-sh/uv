@@ -87,7 +87,6 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         &flat_index,
         &index,
         &in_flight,
-        venv.python_executable(),
         SetupPyStrategy::default(),
         &config_settings,
         &no_build,

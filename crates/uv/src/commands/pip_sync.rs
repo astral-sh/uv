@@ -113,7 +113,6 @@ pub(crate) async fn pip_sync(
         &flat_index,
         &index,
         &in_flight,
-        venv.python_executable(),
         setup_py,
         config_settings,
         no_build,

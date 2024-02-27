@@ -107,7 +107,6 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                     &flat_index,
                     &index,
                     &in_flight,
-                    venv.python_executable(),
                     setup_py,
                     &config_settings,
                     &no_build,

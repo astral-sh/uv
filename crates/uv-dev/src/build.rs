@@ -71,7 +71,6 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &flat_index,
         &index,
         &in_flight,
-        venv.python_executable(),
         setup_py,
         &config_settings,
         &NoBuild::None,
