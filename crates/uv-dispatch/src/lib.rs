@@ -2,7 +2,6 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
-
 use std::future::Future;
 use std::path::Path;
 
@@ -84,9 +83,9 @@ impl<'a> BuildDispatch<'a> {
     #[must_use]
     pub fn with_sdist_build_env_variables(
         mut self,
-        sdist_build_env_variables: FxHashMap<String, String>,
+        sdist_build_env_variables: impl Iterator<Item = (String, String)>,
     ) -> Self {
-        self.sdist_build_env_variables = sdist_build_env_variables;
+        self.sdist_build_env_variables = sdist_build_env_variables.collect();
         self
     }
 }
