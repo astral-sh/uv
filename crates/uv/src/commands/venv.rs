@@ -166,7 +166,6 @@ async fn venv_impl(
             &flat_index,
             &index,
             &in_flight,
-            venv.python_executable(),
             SetupPyStrategy::default(),
             &config_settings,
             &NoBuild::All,

@@ -57,10 +57,6 @@ impl BuildContext for DummyContext {
         &self.interpreter
     }
 
-    fn base_python(&self) -> &Path {
-        panic!("The test should not need to build source distributions")
-    }
-
     fn no_build(&self) -> &NoBuild {
         &NoBuild::None
     }

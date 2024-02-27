@@ -220,7 +220,6 @@ pub(crate) async fn pip_compile(
         &flat_index,
         &source_index,
         &in_flight,
-        interpreter.sys_executable().to_path_buf(),
         setup_py,
         &config_settings,
         no_build,
