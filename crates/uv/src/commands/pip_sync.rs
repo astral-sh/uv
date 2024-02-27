@@ -85,6 +85,15 @@ pub(crate) async fn pip_sync(
         venv.python_executable().normalized_display().cyan()
     );
 
+    // If the environment is externally managed, abort.
+    // TODO(charlie): Surface the error from the `EXTERNALLY-MANAGED` file.
+    if venv.interpreter().externally_managed() {
+        return Err(anyhow::anyhow!(
+            "The environment at {} is externally managed",
+            venv.root().normalized_display()
+        ));
+    }
+
     let _lock = venv.lock()?;
 
     // Determine the current environment markers.

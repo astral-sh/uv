@@ -31,7 +31,7 @@ pub struct Layout {
     pub purelib: PathBuf,
     /// The `platlib` directory, as returned by `sysconfig.get_paths()`.
     pub platlib: PathBuf,
-    /// The `scripts` directory, as returned by `sysconfig.get_paths()`.
+    /// The `include` directory, as returned by `sysconfig.get_paths()`.
     pub include: PathBuf,
     /// The `scripts` directory, as returned by `sysconfig.get_paths()`.
     pub scripts: PathBuf,

@@ -547,6 +547,12 @@ pub(crate) fn write_file_recorded(
     content: impl AsRef<[u8]>,
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
+    debug_assert!(
+        !relative_path.is_absolute(),
+        "Path must be relative: {}",
+        relative_path.display()
+    );
+
     File::create(site_packages.join(relative_path))?.write_all(content.as_ref())?;
     let hash = Sha256::new().chain_update(content.as_ref()).finalize();
     let encoded_hash = format!("sha256={}", BASE64URL_NOPAD.encode(&hash));

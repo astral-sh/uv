@@ -260,6 +260,29 @@ impl Interpreter {
         })
     }
 
+    /// Returns `true` if the environment is a PEP 405-compliant virtual environment.
+    ///
+    /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/utils/virtualenv.py#L14>
+    pub fn is_virtualenv(&self) -> bool {
+        self.prefix != self.base_prefix
+    }
+
+    /// Returns `true` if the environment is externally managed.
+    ///
+    /// See: <https://packaging.python.org/en/latest/specifications/externally-managed-environments/>
+    pub fn externally_managed(&self) -> bool {
+        // Per the spec, a virtual environment is never externally managed.
+        if self.is_virtualenv() {
+            return false;
+        }
+
+        // Per the spec, the existence of the file is the only requirement.
+        self.sysconfig_paths
+            .stdlib
+            .join("EXTERNALLY-MANAGED")
+            .is_file()
+    }
+
     /// Returns the Python version.
     #[inline]
     pub const fn python_version(&self) -> &Version {
@@ -365,9 +388,7 @@ impl Interpreter {
             platlib: self.platlib().to_path_buf(),
             scripts: self.scripts().to_path_buf(),
             data: self.data().to_path_buf(),
-            // Detect if this is a PEP 405-compliant virtual environment.
-            // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/utils/virtualenv.py#L14.
-            include: if self.prefix == self.base_prefix {
+            include: if self.is_virtualenv() {
                 // If the interpreter is a venv, then the `include` directory has a different structure.
                 // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/locations/_sysconfig.py#L172
                 self.prefix.join("include").join("site").join(format!(
@@ -600,13 +621,15 @@ mod tests {
                 "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "prefix": "/home/ferris/projects/uv/.venv",
                 "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
-                "sysconfig": {
+                "sysconfig_paths": {
                     "data": "/home/ferris/.pyenv/versions/3.12.0",
                     "include": "/home/ferris/.pyenv/versions/3.12.0/include",
+                    "platinclude": "/home/ferris/.pyenv/versions/3.12.0/include",
                     "platlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages",
                     "purelib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages",
                     "scripts": "/home/ferris/.pyenv/versions/3.12.0/bin",
-                    "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12"
+                    "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
+                    "platstdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12"
                 }
             }
         "##};
