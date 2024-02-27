@@ -81,11 +81,13 @@ impl<'a> BuildDispatch<'a> {
 
     /// Set the environment variables to be used when building a source distribution.
     #[must_use]
-    pub fn with_sdist_build_env_variables(
+    pub fn with_sdist_build_env_variables<'s>(
         mut self,
-        sdist_build_env_variables: impl Iterator<Item = (String, String)>,
+        sdist_build_env_variables: impl Iterator<Item = (&'s String, &'s String)>,
     ) -> Self {
-        self.sdist_build_env_variables = sdist_build_env_variables.collect();
+        self.sdist_build_env_variables = sdist_build_env_variables
+            .map(|(key, value)| (key.to_owned(), value.to_owned()))
+            .collect();
         self
     }
 }
