@@ -6,7 +6,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::str::FromStr;
 
-use anstream::{eprint, AutoStream};
+use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
@@ -484,7 +484,7 @@ fn cmd(include_index_url: bool, include_find_links: bool) -> String {
 #[allow(clippy::disallowed_types)]
 struct OutputWriter {
     stdout: Option<AutoStream<std::io::Stdout>>,
-    output_file: Option<AutoStream<std::fs::File>>,
+    output_file: Option<StripStream<std::fs::File>>,
 }
 
 #[allow(clippy::disallowed_types)]
@@ -493,10 +493,9 @@ impl OutputWriter {
     fn new(include_stdout: bool, output_file: Option<&Path>) -> Result<Self> {
         let stdout = include_stdout.then(|| AutoStream::<std::io::Stdout>::auto(stdout()));
         let output_file = output_file
-            .map(|output_file| {
+            .map(|output_file| -> Result<_, std::io::Error> {
                 let output_file = fs_err::File::create(output_file)?;
-                let output_file = AutoStream::auto(output_file.into());
-                Ok::<AutoStream<std::fs::File>, std::io::Error>(output_file)
+                Ok(StripStream::new(output_file.into()))
             })
             .transpose()?;
         Ok(Self {
