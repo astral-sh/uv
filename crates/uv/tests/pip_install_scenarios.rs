@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
-//! Generated with scripts/scenarios/update.py
-//! Scenarios from <https://github.com/zanieb/packse/tree/4f39539c1b858e28268554604e75c69e25272e5a/scenarios>
+//! Generated with ./scripts/scenarios/update.py
+//! Scenarios from <https://github.com/zanieb/packse/tree/da7e83b5a6f44fb8851a8bfdb6822b07d75635a0/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -48,7 +48,7 @@ fn command(context: &TestContext) -> Command {
         .arg("--index-url")
         .arg("https://test.pypi.org/simple")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/4f39539c1b858e28268554604e75c69e25272e5a/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/da7e83b5a6f44fb8851a8bfdb6822b07d75635a0/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -1183,6 +1183,234 @@ fn transitive_incompatible_with_transitive() {
     assert_not_installed(&context.venv, "b_ec82e315", &context.temp_dir);
 }
 
+/// local-simple
+///
+/// A simple version constraint should not exclude published versions with local
+/// segments.
+///
+/// ```text
+/// f9205f5d
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a==1.2.3
+/// │       └── satisfied by a-1.2.3+foo
+/// └── a
+///     └── a-1.2.3+foo
+/// ```
+#[ignore]
+#[test]
+fn local_simple() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-f9205f5d", "albatross"));
+    filters.push((r"-f9205f5d", ""));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("a-f9205f5d==1.2.3")
+        , @r###"<snapshot>
+    "###);
+
+    // The verison '1.2.3+foo' satisfies the constraint '==1.2.3'.
+    assert_installed(&context.venv, "a_f9205f5d", "1.2.3+foo", &context.temp_dir);
+}
+
+/// local-not-used-with-sdist
+///
+/// If there is a 1.2.3 version with an sdist published and no compatible wheels,
+/// then the sdist will be used.
+///
+/// ```text
+/// 8bbb04bd
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a==1.2.3
+/// │       ├── satisfied by a-1.2.3
+/// │       └── satisfied by a-1.2.3+foo
+/// └── a
+///     ├── a-1.2.3
+///     └── a-1.2.3+foo
+/// ```
+#[ignore]
+#[test]
+fn local_not_used_with_sdist() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-8bbb04bd", "albatross"));
+    filters.push((r"-8bbb04bd", ""));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("a-8bbb04bd==1.2.3")
+        , @r###"<snapshot>
+    "###);
+
+    // The verison '1.2.3' with an sdist satisfies the constraint '==1.2.3'.
+    assert_installed(&context.venv, "a_8bbb04bd", "1.2.3", &context.temp_dir);
+}
+
+/// local-used-without-sdist
+///
+/// Even if there is a 1.2.3 version published, if it is unavailable for some reason
+/// (no sdist and no compatible wheels in this case), a 1.2.3 version with a local
+/// segment should be usable instead.
+///
+/// ```text
+/// d0971377
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a==1.2.3
+/// │       ├── satisfied by a-1.2.3
+/// │       └── satisfied by a-1.2.3+foo
+/// └── a
+///     ├── a-1.2.3
+///     └── a-1.2.3+foo
+/// ```
+#[ignore]
+#[test]
+fn local_used_without_sdist() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-d0971377", "albatross"));
+    filters.push((r"-d0971377", ""));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("a-d0971377==1.2.3")
+        , @r###"<snapshot>
+    "###);
+
+    // The verison '1.2.3+foo' satisfies the constraint '==1.2.3'.
+    assert_installed(&context.venv, "a_d0971377", "1.2.3+foo", &context.temp_dir);
+}
+
+/// local-not-latest
+///
+/// Tests that we can select an older version with a local segment when newer
+/// versions are incompatible.
+///
+/// ```text
+/// 1d7d57ea
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>=1
+/// │       ├── satisfied by a-1.2.3
+/// │       ├── satisfied by a-1.2.2+foo
+/// │       └── satisfied by a-1.2.1+foo
+/// └── a
+///     ├── a-1.2.3
+///     ├── a-1.2.2+foo
+///     └── a-1.2.1+foo
+/// ```
+#[ignore]
+#[test]
+fn local_not_latest() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-1d7d57ea", "albatross"));
+    filters.push((r"-1d7d57ea", ""));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("a-1d7d57ea>=1")
+        , @r###"<snapshot>
+    "###);
+
+    assert_installed(&context.venv, "a_1d7d57ea", "1.2.1+foo", &context.temp_dir);
+}
+
+/// local-transitive
+///
+/// A simple version constraint should not exclude published versions with local
+/// segments.
+///
+/// ```text
+/// f3a05ff2
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b==2.0.0
+/// │           └── satisfied by b-2.0.0+foo
+/// └── b
+///     └── b-2.0.0+foo
+/// ```
+#[ignore]
+#[test]
+fn local_transitive() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-f3a05ff2", "albatross"));
+    filters.push((r"b-f3a05ff2", "bluebird"));
+    filters.push((r"-f3a05ff2", ""));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("a-f3a05ff2")
+                .arg("b-f3a05ff2==2.0.0+foo")
+        , @r###"<snapshot>
+    "###);
+
+    // The verison '2.0.0+foo' satisfies both ==2.0.0 and ==2.0.0+foo.
+    assert_installed(&context.venv, "a_f3a05ff2", "1.0.0", &context.temp_dir);
+    assert_installed(&context.venv, "b_f3a05ff2", "2.0.0+foo", &context.temp_dir);
+}
+
+/// local-transitive-confounding
+///
+/// A transitive dependency has both a non-local and local version published, but
+/// the non-local version is unuable.
+///
+/// ```text
+/// 1c6ea6d1
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b==2.0.0
+/// │           ├── satisfied by b-2.0.0
+/// │           └── satisfied by b-2.0.0+foo
+/// └── b
+///     ├── b-2.0.0
+///     └── b-2.0.0+foo
+/// ```
+#[ignore]
+#[test]
+fn local_transitive_confounding() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for more realistic messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"a-1c6ea6d1", "albatross"));
+    filters.push((r"b-1c6ea6d1", "bluebird"));
+    filters.push((r"-1c6ea6d1", ""));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("a-1c6ea6d1")
+        , @r###"<snapshot>
+    "###);
+
+    // The verison '1.2.3+foo' satisfies the constraint '==1.2.3'.
+    assert_installed(&context.venv, "a_1c6ea6d1", "2.0.0+foo", &context.temp_dir);
+}
+
 /// package-only-prereleases
 ///
 /// The user requires any version of package `a` which only has prerelease versions
@@ -2234,7 +2462,7 @@ fn package_prereleases_specifier_boundary() {
 /// The user requires a package which requires a Python version that does not exist
 ///
 /// ```text
-/// 4486c0e5
+/// 1601081f
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2242,7 +2470,7 @@ fn package_prereleases_specifier_boundary() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=4.0 (incompatible with environment)
+///         └── requires python>=3.30 (incompatible with environment)
 /// ```
 #[test]
 fn requires_python_version_does_not_exist() {
@@ -2250,11 +2478,11 @@ fn requires_python_version_does_not_exist() {
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"a-4486c0e5", "albatross"));
-    filters.push((r"-4486c0e5", ""));
+    filters.push((r"a-1601081f", "albatross"));
+    filters.push((r"-1601081f", ""));
 
     uv_snapshot!(filters, command(&context)
-        .arg("a-4486c0e5==1.0.0")
+        .arg("a-1601081f==1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -2262,11 +2490,11 @@ fn requires_python_version_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.8.18) does not satisfy Python>=4.0 and albatross==1.0.0 depends on Python>=4.0, we can conclude that albatross==1.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.8.18) does not satisfy Python>=3.30 and albatross==1.0.0 depends on Python>=3.30, we can conclude that albatross==1.0.0 cannot be used.
           And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_not_installed(&context.venv, "a_4486c0e5", &context.temp_dir);
+    assert_not_installed(&context.venv, "a_1601081f", &context.temp_dir);
 }
 
 /// requires-python-version-less-than-current
