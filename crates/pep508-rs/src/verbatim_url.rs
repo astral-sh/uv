@@ -39,9 +39,16 @@ impl VerbatimUrl {
         Self { url, given: None }
     }
 
+    /// Create a [`VerbatimUrl`] from a file path.
+    pub fn from_path(path: impl AsRef<Path>) -> Self {
+        let path = normalize_path(path.as_ref());
+        let url = Url::from_file_path(path).expect("path is absolute");
+        Self { url, given: None }
+    }
+
     /// Parse a URL from an absolute or relative path.
     #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
-    pub fn from_path(path: impl AsRef<str>, working_dir: impl AsRef<Path>) -> Self {
+    pub fn parse_path(path: impl AsRef<str>, working_dir: impl AsRef<Path>) -> Self {
         // Expand any environment variables.
         let path = PathBuf::from(expand_env_vars(path.as_ref(), false).as_ref());
 
@@ -62,7 +69,7 @@ impl VerbatimUrl {
     }
 
     /// Parse a URL from an absolute path.
-    pub fn from_absolute_path(path: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
+    pub fn parse_absolute_path(path: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
         // Expand any environment variables.
         let path = PathBuf::from(expand_env_vars(path.as_ref(), false).as_ref());
 

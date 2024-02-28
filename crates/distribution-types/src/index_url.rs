@@ -16,17 +16,20 @@ use crate::Verbatim;
 
 static PYPI_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://pypi.org/simple").unwrap());
 
+static DEFAULT_INDEX_URL: Lazy<IndexUrl> =
+    Lazy::new(|| IndexUrl::Pypi(VerbatimUrl::from_url(PYPI_URL.clone())));
+
 /// The url of an index, newtype'd to avoid mixing it with file urls.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IndexUrl {
-    Pypi,
+    Pypi(VerbatimUrl),
     Url(VerbatimUrl),
 }
 
 impl Display for IndexUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Pypi => Display::fmt(&*PYPI_URL, f),
+            Self::Pypi(url) => Display::fmt(url, f),
             Self::Url(url) => Display::fmt(url, f),
         }
     }
@@ -35,7 +38,7 @@ impl Display for IndexUrl {
 impl Verbatim for IndexUrl {
     fn verbatim(&self) -> Cow<'_, str> {
         match self {
-            Self::Pypi => Cow::Borrowed("https://pypi.org/simple"),
+            Self::Pypi(url) => url.verbatim(),
             Self::Url(url) => url.verbatim(),
         }
     }
@@ -46,12 +49,11 @@ impl FromStr for IndexUrl {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let url = Url::parse(s)?;
-        if url == *PYPI_URL {
-            Ok(Self::Pypi)
+        let url = VerbatimUrl::from_url(url).with_given(s.to_owned());
+        if *url.raw() == *PYPI_URL {
+            Ok(Self::Pypi(url))
         } else {
-            Ok(Self::Url(
-                VerbatimUrl::from_url(url).with_given(s.to_owned()),
-            ))
+            Ok(Self::Url(url))
         }
     }
 }
@@ -59,7 +61,7 @@ impl FromStr for IndexUrl {
 impl From<VerbatimUrl> for IndexUrl {
     fn from(url: VerbatimUrl) -> Self {
         if *url.raw() == *PYPI_URL {
-            Self::Pypi
+            Self::Pypi(url)
         } else {
             Self::Url(url)
         }
@@ -69,7 +71,7 @@ impl From<VerbatimUrl> for IndexUrl {
 impl From<IndexUrl> for Url {
     fn from(index: IndexUrl) -> Self {
         match index {
-            IndexUrl::Pypi => PYPI_URL.clone(),
+            IndexUrl::Pypi(url) => url.to_url(),
             IndexUrl::Url(url) => url.to_url(),
         }
     }
@@ -80,7 +82,7 @@ impl Deref for IndexUrl {
 
     fn deref(&self) -> &Self::Target {
         match &self {
-            Self::Pypi => &PYPI_URL,
+            Self::Pypi(url) => url,
             Self::Url(url) => url,
         }
     }
@@ -171,7 +173,7 @@ impl Default for IndexLocations {
     /// By default, use the `PyPI` index.
     fn default() -> Self {
         Self {
-            index: Some(IndexUrl::Pypi),
+            index: Some(DEFAULT_INDEX_URL.clone()),
             extra_index: Vec::new(),
             flat_index: Vec::new(),
             no_index: false,
@@ -230,7 +232,7 @@ impl<'a> IndexLocations {
         } else {
             match self.index.as_ref() {
                 Some(index) => Some(index),
-                None => Some(&IndexUrl::Pypi),
+                None => Some(&DEFAULT_INDEX_URL),
             }
         }
     }
@@ -278,7 +280,7 @@ impl Default for IndexUrls {
     /// By default, use the `PyPI` index.
     fn default() -> Self {
         Self {
-            index: Some(IndexUrl::Pypi),
+            index: Some(DEFAULT_INDEX_URL.clone()),
             extra_index: Vec::new(),
             no_index: false,
         }
@@ -297,7 +299,7 @@ impl<'a> IndexUrls {
         } else {
             match self.index.as_ref() {
                 Some(index) => Some(index),
-                None => Some(&IndexUrl::Pypi),
+                None => Some(&DEFAULT_INDEX_URL),
             }
         }
     }

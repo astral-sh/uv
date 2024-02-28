@@ -755,11 +755,11 @@ fn preprocess_url(
                 #[cfg(feature = "non-pep508-extensions")]
                 if let Some(working_dir) = working_dir {
                     return Ok(
-                        VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
+                        VerbatimUrl::parse_path(path, working_dir).with_given(url.to_string())
                     );
                 }
 
-                Ok(VerbatimUrl::from_absolute_path(path)
+                Ok(VerbatimUrl::parse_absolute_path(path)
                     .map_err(|err| Pep508Error {
                         message: Pep508ErrorSource::UrlError(err),
                         start,
@@ -783,10 +783,12 @@ fn preprocess_url(
             _ => {
                 #[cfg(feature = "non-pep508-extensions")]
                 if let Some(working_dir) = working_dir {
-                    return Ok(VerbatimUrl::from_path(url, working_dir).with_given(url.to_string()));
+                    return Ok(
+                        VerbatimUrl::parse_path(url, working_dir).with_given(url.to_string())
+                    );
                 }
 
-                Ok(VerbatimUrl::from_absolute_path(url)
+                Ok(VerbatimUrl::parse_absolute_path(url)
                     .map_err(|err| Pep508Error {
                         message: Pep508ErrorSource::UrlError(err),
                         start,
@@ -800,10 +802,10 @@ fn preprocess_url(
         // Ex) `../editable/`
         #[cfg(feature = "non-pep508-extensions")]
         if let Some(working_dir) = working_dir {
-            return Ok(VerbatimUrl::from_path(url, working_dir).with_given(url.to_string()));
+            return Ok(VerbatimUrl::parse_path(url, working_dir).with_given(url.to_string()));
         }
 
-        Ok(VerbatimUrl::from_absolute_path(url)
+        Ok(VerbatimUrl::parse_absolute_path(url)
             .map_err(|err| Pep508Error {
                 message: Pep508ErrorSource::UrlError(err),
                 start,

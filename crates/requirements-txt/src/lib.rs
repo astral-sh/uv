@@ -215,7 +215,7 @@ impl EditableRequirement {
                     // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
                     let path = normalize_url_path(path);
 
-                    VerbatimUrl::from_path(path, working_dir.as_ref())
+                    VerbatimUrl::parse_path(path, working_dir.as_ref())
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
@@ -226,11 +226,11 @@ impl EditableRequirement {
                 }
 
                 // Ex) `C:/Users/ferris/wheel-0.42.0.tar.gz`
-                _ => VerbatimUrl::from_path(requirement, working_dir.as_ref()),
+                _ => VerbatimUrl::parse_path(requirement, working_dir.as_ref()),
             }
         } else {
             // Ex) `../editable/`
-            VerbatimUrl::from_path(requirement, working_dir.as_ref())
+            VerbatimUrl::parse_path(requirement, working_dir.as_ref())
         };
 
         // Create a `PathBuf`.

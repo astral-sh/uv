@@ -43,8 +43,8 @@ pub(crate) struct ResolveCliArgs {
     cache_args: CacheArgs,
     #[arg(long)]
     exclude_newer: Option<DateTime<Utc>>,
-    #[clap(long, short, default_value = IndexUrl::Pypi.as_str(), env = "UV_INDEX_URL")]
-    index_url: IndexUrl,
+    #[clap(long, short, env = "UV_INDEX_URL")]
+    index_url: Option<IndexUrl>,
     #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
     #[clap(long)]
@@ -56,12 +56,8 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
 
     let platform = Platform::current()?;
     let venv = PythonEnvironment::from_virtualenv(platform, &cache)?;
-    let index_locations = IndexLocations::new(
-        Some(args.index_url),
-        args.extra_index_url,
-        args.find_links,
-        false,
-    );
+    let index_locations =
+        IndexLocations::new(args.index_url, args.extra_index_url, args.find_links, false);
     let client = RegistryClientBuilder::new(cache.clone())
         .index_urls(index_locations.index_urls())
         .build();
