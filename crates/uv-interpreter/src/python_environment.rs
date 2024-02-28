@@ -107,7 +107,16 @@ impl PythonEnvironment {
 
     /// Lock the virtual environment to prevent concurrent writes.
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
-        LockedFile::acquire(self.root.join(".lock"), self.root.normalized_display())
+        if self.interpreter.is_virtualenv() {
+            // If the environment a virtualenv, use a virtualenv-specific lock file.
+            LockedFile::acquire(self.root.join(".lock"), self.root.normalized_display())
+        } else {
+            // Otherwise, use a global lock file.
+            LockedFile::acquire(
+                env::temp_dir().join(format!("uv-{}.lock", cache_key::digest(&self.root))),
+                self.root.normalized_display(),
+            )
+        }
     }
 }
 
