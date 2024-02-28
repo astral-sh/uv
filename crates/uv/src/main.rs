@@ -448,7 +448,7 @@ struct PipSyncArgs {
     ///
     /// Supported formats:
     /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS. (Specifying a patch version is not supported.)
+    ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[clap(long, short, verbatim_doc_comment)]
@@ -632,7 +632,7 @@ struct PipInstallArgs {
     ///
     /// Supported formats:
     /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS. (Specifying a patch version is not supported.)
+    ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[clap(long, short, verbatim_doc_comment)]
@@ -716,7 +716,7 @@ struct PipUninstallArgs {
     ///
     /// Supported formats:
     /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS. (Specifying a patch version is not supported.)
+    ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[clap(long, short, verbatim_doc_comment)]
@@ -739,7 +739,7 @@ struct PipFreezeArgs {
     ///
     /// Supported formats:
     /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS. (Specifying a patch version is not supported.)
+    ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[clap(long, short, verbatim_doc_comment)]
@@ -774,7 +774,7 @@ struct PipListArgs {
     ///
     /// Supported formats:
     /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS. (Specifying a patch version is not supported.)
+    ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     #[clap(long, short, verbatim_doc_comment)]
@@ -788,7 +788,7 @@ struct VenvArgs {
     ///
     /// Supported formats:
     /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
-    ///   `python3.10` on Linux and macOS. (Specifying a patch version is not supported.)
+    ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     ///
