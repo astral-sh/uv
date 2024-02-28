@@ -23,8 +23,8 @@ if __name__ == "__main__":
     code = subprocess.run(
         [python, "-m", "pip", "show", "black"],
         cwd=temp_dir,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        # stdout=subprocess.DEVNULL,
+        # stderr=subprocess.DEVNULL,
     )
     if code.returncode == 0:
         raise Exception("The package `black` is installed.")
@@ -34,8 +34,8 @@ if __name__ == "__main__":
     subprocess.run(
         [uv, "pip", "install", "black", "--python", python],
         cwd=temp_dir,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+#         stdout=subprocess.DEVNULL,
+#         stderr=subprocess.DEVNULL,
         check=True,
     )
 
@@ -44,8 +44,8 @@ if __name__ == "__main__":
     code = subprocess.run(
         [python, "-m", "pip", "show", "black"],
         cwd=temp_dir,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+#         stdout=subprocess.DEVNULL,
+#         stderr=subprocess.DEVNULL,
     )
     if code.returncode != 0:
         raise Exception("The package `black` isn't installed.")
@@ -55,8 +55,8 @@ if __name__ == "__main__":
     code = subprocess.run(
         ["black", "--version"],
         cwd=temp_dir,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+#         stdout=subprocess.DEVNULL,
+#         stderr=subprocess.DEVNULL,
     )
     if code.returncode != 0:
         raise Exception("The package `black` isn't in the path.")
@@ -66,8 +66,8 @@ if __name__ == "__main__":
     subprocess.run(
         [uv, "pip", "uninstall", "black", "--python", python],
         cwd=temp_dir,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+#         stdout=subprocess.DEVNULL,
+#         stderr=subprocess.DEVNULL,
         check=True,
     )
 
@@ -76,8 +76,8 @@ if __name__ == "__main__":
     code = subprocess.run(
         [python, "-m", "pip", "show", "black"],
         cwd=temp_dir,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+#         stdout=subprocess.DEVNULL,
+#         stderr=subprocess.DEVNULL,
     )
     if code.returncode == 0:
         raise Exception("The package `black` is installed.")
