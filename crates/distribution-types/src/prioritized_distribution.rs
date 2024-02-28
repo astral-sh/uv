@@ -11,8 +11,8 @@ pub struct PrioritizedDist(Box<PrioritizedDistInner>);
 /// [`PrioritizedDist`] is boxed because [`Dist`] is large.
 #[derive(Debug, Default, Clone)]
 struct PrioritizedDistInner {
-    /// An arbitrary source distribution for the package version.
-    source: Option<DistMetadata>,
+    /// The most-compatible source distribution for the package version.
+    source: Option<(DistMetadata, SourceCompatibility)>,
     /// The most-compatible wheel distribution for the package version.
     wheel: Option<(DistMetadata, WheelCompatibility)>,
     /// The hashes for each distribution.
@@ -36,17 +36,34 @@ pub enum CompatibleDist<'a> {
     },
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
+pub enum SourceCompatibility {
+    Incompatible(IncompatibleSource),
+    Compatible,
+}
+
+#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
+pub enum IncompatibleSource {
+    NoBuild,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
     Compatible(TagPriority),
 }
 
-#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
 pub enum IncompatibleWheel {
     Tag(IncompatibleTag),
     RequiresPython,
     NoBinary,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Incompatible {
+    Source(IncompatibleSource),
+    Wheel(IncompatibleWheel),
 }
 
 /// A [`Dist`] and metadata about it required for downstream filtering.
@@ -90,13 +107,17 @@ impl PrioritizedDist {
         requires_python: Option<VersionSpecifiers>,
         yanked: Yanked,
         hash: Option<Hashes>,
+        compatibility: SourceCompatibility,
     ) -> Self {
         Self(Box::new(PrioritizedDistInner {
-            source: Some(DistMetadata {
-                dist,
-                requires_python,
-                yanked,
-            }),
+            source: Some((
+                DistMetadata {
+                    dist,
+                    requires_python,
+                    yanked,
+                },
+                compatibility,
+            )),
             wheel: None,
             hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
             exclude_newer: false,
@@ -147,13 +168,29 @@ impl PrioritizedDist {
         requires_python: Option<VersionSpecifiers>,
         yanked: Yanked,
         hash: Option<Hashes>,
+        compatibility: SourceCompatibility,
     ) {
-        if self.0.source.is_none() {
-            self.0.source = Some(DistMetadata {
-                dist,
-                requires_python,
-                yanked,
-            });
+        // Track the highest-priority source distribution.
+        if let Some((.., existing_compatibility)) = &self.0.source {
+            if compatibility > *existing_compatibility {
+                self.0.source = Some((
+                    DistMetadata {
+                        dist,
+                        requires_python,
+                        yanked,
+                    },
+                    compatibility,
+                ));
+            }
+        } else {
+            self.0.source = Some((
+                DistMetadata {
+                    dist,
+                    requires_python,
+                    yanked,
+                },
+                compatibility,
+            ));
         }
 
         if let Some(hash) = hash {
@@ -172,18 +209,29 @@ impl PrioritizedDist {
             // wheel. We assume that all distributions have the same metadata for a given package
             // version. If a compatible source distribution exists, we assume we can build it, but
             // using the wheel is faster.
-            (Some((wheel, _)), Some(source_dist)) => {
-                Some(CompatibleDist::IncompatibleWheel { source_dist, wheel })
+            (
+                Some((wheel, WheelCompatibility::Incompatible(_))),
+                Some((source_dist, SourceCompatibility::Compatible)),
+            ) => Some(CompatibleDist::IncompatibleWheel { source_dist, wheel }),
+            // If we have a compatible source distribution and no wheel, return the source
+            // distribution.
+            (None, Some((source_dist, SourceCompatibility::Compatible))) => {
+                Some(CompatibleDist::SourceDist(source_dist))
             }
-            // Otherwise, if we have a source distribution, return it.
-            (_, Some(source_dist)) => Some(CompatibleDist::SourceDist(source_dist)),
+            // If we have an incompatible source distribution and no wheel, return `None`.
             _ => None,
         }
     }
 
-    /// Return the source distribution, if any.
-    pub fn source(&self) -> Option<&DistMetadata> {
-        self.0.source.as_ref()
+    /// Return the compatible source distribution, if any.
+    pub fn compatible_source(&self) -> Option<&DistMetadata> {
+        self.0
+            .source
+            .as_ref()
+            .and_then(|(dist, compatibility)| match compatibility {
+                SourceCompatibility::Compatible => Some(dist),
+                SourceCompatibility::Incompatible(_) => None,
+            })
     }
 
     /// Return the compatible built distribution, if any.
@@ -197,14 +245,35 @@ impl PrioritizedDist {
             })
     }
 
+    /// Return the incompatible source distribution, if any.
+    fn incompatible_source(&self) -> Option<(&DistMetadata, &IncompatibleSource)> {
+        self.0
+            .source
+            .as_ref()
+            .and_then(|(dist, compatibility)| match compatibility {
+                SourceCompatibility::Compatible => None,
+                SourceCompatibility::Incompatible(incompatibility) => Some((dist, incompatibility)),
+            })
+    }
+
     /// Return the incompatible built distribution, if any.
-    pub fn incompatible_wheel(&self) -> Option<(&DistMetadata, &IncompatibleWheel)> {
+    fn incompatible_wheel(&self) -> Option<(&DistMetadata, &IncompatibleWheel)> {
         self.0
             .wheel
             .as_ref()
             .and_then(|(dist, compatibility)| match compatibility {
                 WheelCompatibility::Compatible(_) => None,
                 WheelCompatibility::Incompatible(incompatibility) => Some((dist, incompatibility)),
+            })
+    }
+
+    /// Return the incompatible source or wheel distribution, if any.
+    pub fn incompatible(&self) -> Option<Incompatible> {
+        self.incompatible_source()
+            .map(|(_, incompatibility)| Incompatible::Source(*incompatibility))
+            .or_else(|| {
+                self.incompatible_wheel()
+                    .map(|(_, incompatibility)| Incompatible::Wheel(*incompatibility))
             })
     }
 

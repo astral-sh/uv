@@ -10,7 +10,7 @@ use pypi_types::Metadata21;
 use uv_client::{FlatIndex, RegistryClient};
 use uv_distribution::DistributionDatabase;
 use uv_normalize::PackageName;
-use uv_traits::{BuildContext, NoBinary};
+use uv_traits::{BuildContext, NoBinary, NoBuild};
 
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
@@ -68,6 +68,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     python_requirement: PythonRequirement,
     exclude_newer: Option<DateTime<Utc>>,
     no_binary: NoBinary,
+    no_build: NoBuild,
 }
 
 impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Context> {
@@ -81,6 +82,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
         python_requirement: PythonRequirement,
         exclude_newer: Option<DateTime<Utc>>,
         no_binary: &'a NoBinary,
+        no_build: &'a NoBuild,
     ) -> Self {
         Self {
             fetcher,
@@ -90,6 +92,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
             python_requirement,
             exclude_newer,
             no_binary: no_binary.clone(),
+            no_build: no_build.clone(),
         }
     }
 }
@@ -116,6 +119,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                 self.exclude_newer.as_ref(),
                 self.flat_index.get(package_name).cloned(),
                 &self.no_binary,
+                &self.no_build,
             ))),
             Err(err) => match err.into_kind() {
                 uv_client::ErrorKind::PackageNotFound(_) => {

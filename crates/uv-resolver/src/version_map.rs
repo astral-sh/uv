@@ -5,14 +5,17 @@ use chrono::{DateTime, Utc};
 use tracing::{instrument, warn};
 
 use distribution_filename::DistFilename;
-use distribution_types::{Dist, IncompatibleWheel, IndexUrl, PrioritizedDist, WheelCompatibility};
+use distribution_types::{
+    Dist, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist, SourceCompatibility,
+    WheelCompatibility,
+};
 use pep440_rs::Version;
 use platform_tags::Tags;
 use pypi_types::Hashes;
 use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use uv_client::{FlatDistributions, OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_normalize::PackageName;
-use uv_traits::NoBinary;
+use uv_traits::{NoBinary, NoBuild};
 use uv_warnings::warn_user_once;
 
 use crate::python_requirement::PythonRequirement;
@@ -36,6 +39,7 @@ impl VersionMap {
         exclude_newer: Option<&DateTime<Utc>>,
         flat_index: Option<FlatDistributions>,
         no_binary: &NoBinary,
+        no_build: &NoBuild,
     ) -> Self {
         let mut map = BTreeMap::new();
         // Create stubs for each entry in simple metadata. The full conversion
@@ -85,11 +89,18 @@ impl VersionMap {
             NoBinary::All => true,
             NoBinary::Packages(packages) => packages.contains(package_name),
         };
+        // Check if source distributions are allowed for this package.
+        let no_build = match no_build {
+            NoBuild::None => false,
+            NoBuild::All => true,
+            NoBuild::Packages(packages) => packages.contains(package_name),
+        };
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
                 simple_metadata,
                 no_binary,
+                no_build,
                 index: index.clone(),
                 tags: tags.clone(),
                 python_requirement: python_requirement.clone(),
@@ -110,10 +121,10 @@ impl VersionMap {
     /// stored in this map. For example, the versions `1.2.0` and `1.2` are
     /// semantically equivalent, but when converted to strings, they are
     /// distinct.
-    pub(crate) fn get_with_version<'a>(
-        &'a self,
+    pub(crate) fn get_with_version(
+        &self,
         version: &Version,
-    ) -> Option<(&'a Version, &'a PrioritizedDist)> {
+    ) -> Option<(&Version, &PrioritizedDist)> {
         match self.inner {
             VersionMapInner::Eager(ref map) => map.get_key_value(version),
             VersionMapInner::Lazy(ref lazy) => lazy.get_with_version(version),
@@ -256,6 +267,8 @@ struct VersionMapLazy {
     simple_metadata: OwnedArchive<SimpleMetadata>,
     /// When true, wheels aren't allowed.
     no_binary: bool,
+    /// When true, source distributions aren't allowed.
+    no_build: bool,
     /// The URL of the index where this package came from.
     index: IndexUrl,
     /// The set of compatibility tags that determines whether a wheel is usable
@@ -376,12 +389,24 @@ impl VersionMapLazy {
                         );
                     }
                     DistFilename::SourceDistFilename(filename) => {
+                        let compatibility = if self.no_build {
+                            SourceCompatibility::Incompatible(IncompatibleSource::NoBuild)
+                        } else {
+                            SourceCompatibility::Compatible
+                        };
+
                         let dist = Dist::from_registry(
                             DistFilename::SourceDistFilename(filename),
                             file,
                             self.index.clone(),
                         );
-                        priority_dist.insert_source(dist, requires_python, yanked, Some(hash));
+                        priority_dist.insert_source(
+                            dist,
+                            requires_python,
+                            yanked,
+                            Some(hash),
+                            compatibility,
+                        );
                     }
                 }
             }
@@ -402,7 +427,7 @@ enum LazyPrioritizedDist {
     /// Represents a eagerly constructed distribution from a
     /// `FlatDistributions`.
     OnlyFlat(PrioritizedDist),
-    /// Represents a lazyily constructed distribution from an index into a
+    /// Represents a lazily constructed distribution from an index into a
     /// `VersionFiles` from `SimpleMetadata`.
     OnlySimple(SimplePrioritizedDist),
     /// Combines the above. This occurs when we have data from both a flat

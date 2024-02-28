@@ -11,7 +11,7 @@ use url::Url;
 use distribution_filename::DistFilename;
 use distribution_types::{
     BuiltDist, Dist, File, FileLocation, FlatIndexLocation, IndexUrl, PrioritizedDist,
-    RegistryBuiltDist, RegistrySourceDist, SourceDist,
+    RegistryBuiltDist, RegistrySourceDist, SourceCompatibility, SourceDist,
 };
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
@@ -334,9 +334,13 @@ impl FlatIndex {
                 }));
                 match distributions.0.entry(filename.version) {
                     Entry::Occupied(mut entry) => {
-                        entry
-                            .get_mut()
-                            .insert_source(dist, None, Yanked::default(), None);
+                        entry.get_mut().insert_source(
+                            dist,
+                            None,
+                            Yanked::default(),
+                            None,
+                            SourceCompatibility::Compatible,
+                        );
                     }
                     Entry::Vacant(entry) => {
                         entry.insert(PrioritizedDist::from_source(
@@ -344,6 +348,7 @@ impl FlatIndex {
                             None,
                             Yanked::default(),
                             None,
+                            SourceCompatibility::Compatible,
                         ));
                     }
                 }

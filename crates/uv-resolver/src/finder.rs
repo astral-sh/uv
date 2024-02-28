@@ -5,7 +5,7 @@
 use anyhow::Result;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
 use rustc_hash::FxHashMap;
-use uv_traits::NoBinary;
+use uv_traits::{NoBinary, NoBuild};
 
 use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, Resolution};
@@ -26,6 +26,7 @@ pub struct DistFinder<'a> {
     interpreter: &'a Interpreter,
     flat_index: &'a FlatIndex,
     no_binary: &'a NoBinary,
+    no_build: &'a NoBuild,
 }
 
 impl<'a> DistFinder<'a> {
@@ -36,6 +37,7 @@ impl<'a> DistFinder<'a> {
         interpreter: &'a Interpreter,
         flat_index: &'a FlatIndex,
         no_binary: &'a NoBinary,
+        no_build: &'a NoBuild,
     ) -> Self {
         Self {
             tags,
@@ -44,6 +46,7 @@ impl<'a> DistFinder<'a> {
             interpreter,
             flat_index,
             no_binary,
+            no_build,
         }
     }
 
@@ -135,6 +138,11 @@ impl<'a> DistFinder<'a> {
             NoBinary::All => true,
             NoBinary::Packages(packages) => packages.contains(&requirement.name),
         };
+        let no_build = match self.no_build {
+            NoBuild::None => false,
+            NoBuild::All => true,
+            NoBuild::Packages(packages) => packages.contains(&requirement.name),
+        };
 
         // Prioritize the flat index by initializing the "best" matches with its entries.
         let matching_override = if let Some(flat_index) = flat_index {
@@ -155,7 +163,9 @@ impl<'a> DistFinder<'a> {
                     resolvable_dist
                         .compatible_wheel()
                         .map(|(dist, tag_priority)| (dist.dist.clone(), tag_priority)),
-                    resolvable_dist.source().map(|dist| dist.dist.clone()),
+                    resolvable_dist
+                        .compatible_source()
+                        .map(|dist| dist.dist.clone()),
                 )
             } else {
                 (None, None, None)
@@ -213,7 +223,7 @@ impl<'a> DistFinder<'a> {
             }
 
             // Find the most-compatible sdist, if no wheel was found.
-            if best_wheel.is_none() {
+            if !no_build && best_wheel.is_none() {
                 for version_sdist in files.source_dists {
                     // Only add dists compatible with the python version.
                     // This is relevant for source dists which give no other indication of their

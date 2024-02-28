@@ -1,15 +1,13 @@
 use pubgrub::range::Range;
-
 use rustc_hash::FxHashMap;
 
-use distribution_types::CompatibleDist;
-use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
+use distribution_types::{CompatibleDist, Incompatible};
+use distribution_types::{DistributionMetadata, Name, PrioritizedDist};
 use pep440_rs::Version;
 use pep508_rs::{Requirement, VersionOrUrl};
 use uv_normalize::PackageName;
 
 use crate::prerelease_mode::PreReleaseStrategy;
-
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Manifest, Options};
@@ -248,7 +246,7 @@ impl CandidateSelector {
             };
 
             // Skip empty candidates due to exclude newer
-            if dist.exclude_newer() && dist.incompatible_wheel().is_none() && dist.get().is_none() {
+            if dist.exclude_newer() && dist.incompatible().is_none() && dist.get().is_none() {
                 continue;
             }
 
@@ -274,7 +272,7 @@ impl CandidateSelector {
 #[derive(Debug, Clone)]
 pub(crate) enum CandidateDist<'a> {
     Compatible(CompatibleDist<'a>),
-    Incompatible(Option<&'a IncompatibleWheel>),
+    Incompatible(Option<Incompatible>),
     ExcludeNewer,
 }
 
@@ -282,15 +280,18 @@ impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
     fn from(value: &'a PrioritizedDist) -> Self {
         if let Some(dist) = value.get() {
             CandidateDist::Compatible(dist)
-        } else if value.exclude_newer() && value.incompatible_wheel().is_none() {
-            // If empty because of exclude-newer, mark as a special case
-            CandidateDist::ExcludeNewer
         } else {
-            CandidateDist::Incompatible(
-                value
-                    .incompatible_wheel()
-                    .map(|(_, incompatibility)| incompatibility),
-            )
+            match value.incompatible() {
+                Some(incompatible) => CandidateDist::Incompatible(Some(incompatible)),
+                None => {
+                    // If empty because of exclude-newer, mark as a special case.
+                    if value.exclude_newer() {
+                        CandidateDist::ExcludeNewer
+                    } else {
+                        CandidateDist::Incompatible(None)
+                    }
+                }
+            }
         }
     }
 }

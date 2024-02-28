@@ -18,7 +18,7 @@ pub enum TagsError {
     InvalidPriority(usize, #[source] std::num::TryFromIntError),
 }
 
-#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
 pub enum IncompatibleTag {
     Invalid,
     Python,

@@ -2870,12 +2870,13 @@ fn no_wheels_no_build() {
         .arg("a-662cbd94")
         , @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: albatross==1.0.0
-      Caused by: Building source distributions is disabled
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because building from source is disabled, we can conclude that all versions of albatross cannot be used.
+          And because you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(&context.venv, "a_662cbd94", &context.temp_dir);

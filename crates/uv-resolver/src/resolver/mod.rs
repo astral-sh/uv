@@ -19,8 +19,8 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IncompatibleWheel, Name, RemoteSource, SourceDist,
-    VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, Incompatible, IncompatibleSource, IncompatibleWheel,
+    Name, RemoteSource, SourceDist, VersionOrUrl,
 };
 use pep440_rs::{Version, VersionSpecifiers, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, Requirement};
@@ -70,7 +70,7 @@ pub(crate) enum UnavailableVersion {
     /// Version is incompatible because it is yanked
     Yanked(Yanked),
     /// Version is incompatible because it has no usable distributions
-    NoDistributions(Option<IncompatibleWheel>),
+    NoDistributions(Option<Incompatible>),
 }
 
 /// The package is unavailable and cannot be used
@@ -136,6 +136,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
             PythonRequirement::new(interpreter, markers),
             options.exclude_newer,
             build_context.no_binary(),
+            build_context.no_build(),
         );
         Self::new_custom_io(
             manifest,
@@ -382,9 +383,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         UnavailableVersion::NoDistributions(best_incompatible) => {
                             if let Some(best_incompatible) = best_incompatible {
                                 match best_incompatible {
-                                    IncompatibleWheel::NoBinary => "no source distribution is available and using wheels is disabled".to_string(),
-                                    IncompatibleWheel::RequiresPython => "no wheels are available that meet your required Python version".to_string(),
-                                    IncompatibleWheel::Tag(tag) => {
+                                    Incompatible::Wheel(IncompatibleWheel::NoBinary) => "no source distribution is available and using wheels is disabled".to_string(),
+                                    Incompatible::Wheel(IncompatibleWheel::RequiresPython) => "no wheels are available that meet your required Python version".to_string(),
+                                    Incompatible::Wheel(IncompatibleWheel::Tag(tag))=> {
                                         match tag {
                                             IncompatibleTag::Invalid => "no wheels are available with valid tags".to_string(),
                                             IncompatibleTag::Python => "no wheels are available with a matching Python implementation".to_string(),
@@ -392,6 +393,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                                             IncompatibleTag::Platform => "no wheels are available with a matching platform".to_string(),
                                         }
                                     }
+                                    Incompatible::Source(IncompatibleSource::NoBuild) => "building from source is disabled".to_string(),
                                 }
                             } else {
                                 // TODO(zanieb): It's unclear why we would encounter this case still
@@ -661,7 +663,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         // If the version is incompatible because no distributions match, exit early.
                         return Ok(Some(ResolverVersion::Unavailable(
                             candidate.version().clone(),
-                            UnavailableVersion::NoDistributions(incompatibility.cloned()),
+                            UnavailableVersion::NoDistributions(*incompatibility),
                         )));
                     }
                 };
