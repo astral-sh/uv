@@ -876,7 +876,7 @@ async fn run_python_script(
             // Prepend the user supplied PATH to the existing PATH
             Some(env_path) => {
                 let user_path = PathBuf::from(user_path);
-                let new_path = iter::once(user_path).chain(env::split_paths(&env_path));
+                let new_path = env::split_paths(&user_path).chain(env::split_paths(&env_path));
                 env::join_paths(new_path).map_err(Error::BuildScriptPath)?
             }
             // Use the user supplied PATH
