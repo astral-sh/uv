@@ -585,7 +585,7 @@ impl SourceBuild {
             &self.venv,
             &script,
             &self.source_tree,
-            &self.environment_variables,
+            self.environment_variables.clone(),
         )
         .instrument(span)
         .await?;
@@ -722,7 +722,7 @@ impl SourceBuild {
             &self.venv,
             &script,
             &self.source_tree,
-            &self.environment_variables,
+            self.environment_variables.clone(),
         )
         .instrument(span)
         .await?;
@@ -803,7 +803,7 @@ async fn create_pep517_build_environment(
         script=format!("get_requires_for_build_{}", build_kind),
         python_version = %venv.interpreter().python_version()
     );
-    let output = run_python_script(venv, &script, source_tree, &environment_variables)
+    let output = run_python_script(venv, &script, source_tree, environment_variables.clone())
         .instrument(span)
         .await?;
     if !output.status.success() {
@@ -866,14 +866,23 @@ async fn run_python_script(
     venv: &Virtualenv,
     script: &str,
     source_tree: &Path,
-    environment_variables: &FxHashMap<String, String>,
+    mut environment_variables: FxHashMap<String, String>,
 ) -> Result<Output, Error> {
+    // First check user supplied environment variables
+    let path = environment_variables.remove("PATH");
+    let new_path = if let Some(old_path) = path {
+        let new_path = iter::once(venv.bin_dir()).chain(env::split_paths(&old_path));
+        env::join_paths(new_path).map_err(Error::BuildScriptPath)?
+    } else {
+        OsString::from("")
+    };
+
     // Prepend the venv bin dir to PATH
     let new_path = if let Some(old_path) = env::var_os("PATH") {
         let new_path = iter::once(venv.bin_dir()).chain(env::split_paths(&old_path));
         env::join_paths(new_path).map_err(Error::BuildScriptPath)?
     } else {
-        OsString::from("")
+        new_path
     };
 
     Command::new(venv.python_executable())
@@ -882,6 +891,7 @@ async fn run_python_script(
         // Activate the venv
         .env("VIRTUAL_ENV", venv.root())
         .env("PATH", new_path)
+        // Pass in remaining environment variables
         .envs(environment_variables)
         .output()
         .await
