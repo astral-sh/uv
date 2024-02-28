@@ -11,7 +11,7 @@ use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Nam
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, VerbatimUrl};
 use requirements_txt::EditableRequirement;
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 
 use crate::{is_dynamic, not_modified};
@@ -21,7 +21,7 @@ use crate::{is_dynamic, not_modified};
 /// Packages are indexed by both name and (for editable installs) URL.
 #[derive(Debug)]
 pub struct SitePackages<'a> {
-    venv: &'a Virtualenv,
+    venv: &'a PythonEnvironment,
     /// The vector of all installed distributions. The `by_name` and `by_url` indices index into
     /// this vector. The vector may contain `None` values, which represent distributions that were
     /// removed from the virtual environment.
@@ -36,7 +36,7 @@ pub struct SitePackages<'a> {
 
 impl<'a> SitePackages<'a> {
     /// Build an index of installed packages from the given Python executable.
-    pub fn from_executable(venv: &'a Virtualenv) -> Result<SitePackages<'a>> {
+    pub fn from_executable(venv: &'a PythonEnvironment) -> Result<SitePackages<'a>> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name = FxHashMap::default();
         let mut by_url = FxHashMap::default();

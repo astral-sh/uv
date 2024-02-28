@@ -6,16 +6,16 @@ use thiserror::Error;
 
 pub use crate::cfg::PyVenvConfiguration;
 pub use crate::interpreter::Interpreter;
+pub use crate::python_environment::PythonEnvironment;
 pub use crate::python_query::{find_default_python, find_requested_python};
 pub use crate::python_version::PythonVersion;
-pub use crate::virtual_env::Virtualenv;
 
 mod cfg;
 mod interpreter;
-mod python_platform;
+mod python_environment;
 mod python_query;
 mod python_version;
-mod virtual_env;
+mod virtualenv_layout;
 
 #[derive(Debug, Error)]
 pub enum Error {

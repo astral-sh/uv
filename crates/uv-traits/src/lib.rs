@@ -14,7 +14,7 @@ use distribution_types::{CachedDist, DistributionId, IndexLocations, Resolution,
 use once_map::OnceMap;
 use pep508_rs::Requirement;
 use uv_cache::Cache;
-use uv_interpreter::{Interpreter, Virtualenv};
+use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 
 /// Avoid cyclic crate dependencies between resolver, installer and builder.
@@ -90,7 +90,7 @@ pub trait BuildContext: Sync {
     fn install<'a>(
         &'a self,
         resolution: &'a Resolution,
-        venv: &'a Virtualenv,
+        venv: &'a PythonEnvironment,
     ) -> impl Future<Output = Result<()>> + Send + 'a;
 
     /// Setup a source distribution build by installing the required dependencies. A wrapper for

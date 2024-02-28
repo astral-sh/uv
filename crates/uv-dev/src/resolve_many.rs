@@ -18,7 +18,7 @@ use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, OwnedArchive, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
 use uv_installer::NoBinary;
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_resolver::InMemoryIndex;
 use uv_traits::{BuildContext, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
@@ -73,7 +73,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     let total = requirements.len();
 
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, &cache)?;
+    let venv = PythonEnvironment::from_virtualenv(platform, &cache)?;
     let in_flight = InFlight::default();
     let client = RegistryClientBuilder::new(cache.clone()).build();
 

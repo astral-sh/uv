@@ -8,7 +8,7 @@ use distribution_types::{InstalledMetadata, Name};
 use platform_host::Platform;
 use uv_cache::Cache;
 use uv_fs::Normalized;
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -40,9 +40,9 @@ pub(crate) async fn pip_uninstall(
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let venv = if let Some(python) = python.as_ref() {
-        Virtualenv::from_requested_python(python, &platform, &cache)?
+        PythonEnvironment::from_requested_python(python, &platform, &cache)?
     } else {
-        Virtualenv::from_env(platform, &cache)?
+        PythonEnvironment::from_virtualenv(platform, &cache)?
     };
     debug!(
         "Using Python {} environment at {}",

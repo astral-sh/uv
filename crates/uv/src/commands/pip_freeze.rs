@@ -11,7 +11,7 @@ use platform_host::Platform;
 use uv_cache::Cache;
 use uv_fs::Normalized;
 use uv_installer::SitePackages;
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -26,12 +26,12 @@ pub(crate) fn pip_freeze(
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let venv = if let Some(python) = python {
-        Virtualenv::from_requested_python(python, &platform, cache)?
+        PythonEnvironment::from_requested_python(python, &platform, cache)?
     } else {
-        match Virtualenv::from_env(platform.clone(), cache) {
+        match PythonEnvironment::from_virtualenv(platform.clone(), cache) {
             Ok(venv) => venv,
             Err(uv_interpreter::Error::VenvNotFound) => {
-                Virtualenv::from_default_python(&platform, cache)?
+                PythonEnvironment::from_default_python(&platform, cache)?
             }
             Err(err) => return Err(err.into()),
         }

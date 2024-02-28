@@ -19,7 +19,7 @@ use uv_installer::{
     is_dynamic, not_modified, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable,
     SitePackages,
 };
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 use uv_resolver::InMemoryIndex;
 use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
@@ -74,9 +74,9 @@ pub(crate) async fn pip_sync(
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let venv = if let Some(python) = python.as_ref() {
-        Virtualenv::from_requested_python(python, &platform, &cache)?
+        PythonEnvironment::from_requested_python(python, &platform, &cache)?
     } else {
-        Virtualenv::from_env(platform, &cache)?
+        PythonEnvironment::from_virtualenv(platform, &cache)?
     };
     debug!(
         "Using Python {} environment at {}",
@@ -406,7 +406,7 @@ async fn resolve_editables(
     editables: Vec<EditableRequirement>,
     site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
-    venv: &Virtualenv,
+    venv: &PythonEnvironment,
     tags: &Tags,
     cache: &Cache,
     client: &RegistryClient,

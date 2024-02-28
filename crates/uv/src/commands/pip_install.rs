@@ -26,7 +26,7 @@ use uv_fs::Normalized;
 use uv_installer::{
     BuiltEditable, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
-use uv_interpreter::{Interpreter, Virtualenv};
+use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_resolver::{
     DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
@@ -106,9 +106,9 @@ pub(crate) async fn pip_install(
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let venv = if let Some(python) = python.as_ref() {
-        Virtualenv::from_requested_python(python, &platform, &cache)?
+        PythonEnvironment::from_requested_python(python, &platform, &cache)?
     } else {
-        Virtualenv::from_env(platform, &cache)?
+        PythonEnvironment::from_virtualenv(platform, &cache)?
     };
     debug!(
         "Using Python {} environment at {}",
@@ -509,7 +509,7 @@ async fn install(
     in_flight: &InFlight,
     build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
-    venv: &Virtualenv,
+    venv: &PythonEnvironment,
     mut printer: Printer,
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
@@ -707,7 +707,11 @@ async fn install(
 }
 
 /// Validate the installed packages in the virtual environment.
-fn validate(resolution: &Resolution, venv: &Virtualenv, mut printer: Printer) -> Result<(), Error> {
+fn validate(
+    resolution: &Resolution,
+    venv: &PythonEnvironment,
+    mut printer: Printer,
+) -> Result<(), Error> {
     let site_packages = SitePackages::from_executable(venv)?;
     let diagnostics = site_packages.diagnostics()?;
     for diagnostic in diagnostics {
