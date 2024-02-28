@@ -248,8 +248,11 @@ struct PipCompileArgs {
     #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
     resolution: ResolutionMode,
 
-    #[clap(long, value_enum, default_value_t = PreReleaseMode::default())]
+    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre")]
     prerelease: PreReleaseMode,
+
+    #[clap(long, hide = true, conflicts_with = "prerelease")]
+    pre: bool,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(long, short)]
@@ -594,8 +597,11 @@ struct PipInstallArgs {
     #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
     resolution: ResolutionMode,
 
-    #[clap(long, value_enum, default_value_t = PreReleaseMode::default())]
+    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre")]
     prerelease: PreReleaseMode,
+
+    #[clap(long, hide = true, conflicts_with = "prerelease")]
+    pre: bool,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(long, short)]
@@ -999,6 +1005,11 @@ async fn run() -> Result<ExitStatus> {
             } else {
                 DependencyMode::Transitive
             };
+            let prerelease = if args.pre {
+                PreReleaseMode::Allow
+            } else {
+                args.prerelease
+            };
             let setup_py = if args.legacy_setup_py {
                 SetupPyStrategy::Setuptools
             } else {
@@ -1012,7 +1023,7 @@ async fn run() -> Result<ExitStatus> {
                 extras,
                 args.output_file.as_deref(),
                 args.resolution,
-                args.prerelease,
+                prerelease,
                 dependency_mode,
                 upgrade,
                 args.generate_hashes,
@@ -1134,6 +1145,11 @@ async fn run() -> Result<ExitStatus> {
             } else {
                 DependencyMode::Transitive
             };
+            let prerelease = if args.pre {
+                PreReleaseMode::Allow
+            } else {
+                args.prerelease
+            };
             let setup_py = if args.legacy_setup_py {
                 SetupPyStrategy::Setuptools
             } else {
@@ -1147,7 +1163,7 @@ async fn run() -> Result<ExitStatus> {
                 &overrides,
                 &extras,
                 args.resolution,
-                args.prerelease,
+                prerelease,
                 dependency_mode,
                 upgrade,
                 index_urls,
