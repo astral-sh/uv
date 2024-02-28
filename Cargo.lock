@@ -4524,6 +4524,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cache-key",
+ "configparser",
  "fs-err",
  "indoc",
  "insta",
