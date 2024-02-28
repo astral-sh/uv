@@ -439,6 +439,15 @@ struct PipSyncArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
+    /// The Python interpreter into which packages should be installed.
+    ///
+    /// By default, `uv` installs into the virtual environment in the current working directory or
+    /// any parent directory. The `--python` option allows you to specify a different interpreter,
+    /// which is intended for use in continuous integration (CI) environments or other automated
+    /// workflows.
+    #[clap(long)]
+    python: Option<PathBuf>,
+
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[clap(long)]
@@ -608,6 +617,15 @@ struct PipInstallArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
+    /// The Python interpreter into which packages should be installed.
+    ///
+    /// By default, `uv` installs into the virtual environment in the current working directory or
+    /// any parent directory. The `--python` option allows you to specify a different interpreter,
+    /// which is intended for use in continuous integration (CI) environments or other automated
+    /// workflows.
+    #[clap(long)]
+    python: Option<PathBuf>,
+
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[clap(long)]
@@ -676,6 +694,15 @@ struct PipUninstallArgs {
     /// Uninstall the editable package based on the provided local file path.
     #[clap(long, short, group = "sources")]
     editable: Vec<String>,
+
+    /// The Python interpreter from which packages should be uninstalled.
+    ///
+    /// By default, `uv` uninstalls from the virtual environment in the current working directory or
+    /// any parent directory. The `--python` option allows you to specify a different interpreter,
+    /// which is intended for use in continuous integration (CI) environments or other automated
+    /// workflows.
+    #[clap(long)]
+    python: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -1009,6 +1036,7 @@ async fn run() -> Result<ExitStatus> {
                 &no_build,
                 &no_binary,
                 args.strict,
+                args.python,
                 cache,
                 printer,
             )
@@ -1091,6 +1119,7 @@ async fn run() -> Result<ExitStatus> {
                 &no_binary,
                 args.strict,
                 args.exclude_newer,
+                args.python,
                 cache,
                 printer,
             )
@@ -1110,7 +1139,7 @@ async fn run() -> Result<ExitStatus> {
                         .map(RequirementsSource::from_path),
                 )
                 .collect::<Vec<_>>();
-            commands::pip_uninstall(&sources, cache, printer).await
+            commands::pip_uninstall(&sources, args.python, cache, printer).await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),

@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
@@ -41,6 +42,7 @@ pub(crate) async fn pip_sync(
     no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
+    python: Option<PathBuf>,
     cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -72,12 +74,25 @@ pub(crate) async fn pip_sync(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, &cache)?;
+    let venv = if let Some(python) = python {
+        Virtualenv::from_python(python, platform, &cache)?
+    } else {
+        Virtualenv::from_env(platform, &cache)?
+    };
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
         venv.python_executable().normalized_display().cyan()
     );
+
+    // If the environment is externally managed, abort.
+    // TODO(charlie): Surface the error from the `EXTERNALLY-MANAGED` file.
+    if venv.interpreter().externally_managed() {
+        return Err(anyhow::anyhow!(
+            "The environment at {} is externally managed",
+            venv.root().normalized_display()
+        ));
+    }
 
     let _lock = venv.lock()?;
 
