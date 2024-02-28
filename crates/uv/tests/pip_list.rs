@@ -521,18 +521,19 @@ fn format_json() -> Result<()> {
     let replace_whitespace = " ".repeat(57);
 
     let search_workspace = workspace_dir.as_str().strip_prefix(prefix).unwrap();
+    let search_workspace_escaped = search_workspace.replace('/', "\\\\");
     let replace_workspace = "[WORKSPACE_DIR]/";
 
-    let filters = INSTA_FILTERS
-        .iter()
-        .copied()
-        .chain(vec![
-            (search_workspace, replace_workspace),
-            (find_divider.as_str(), replace_divider.as_str()),
-            (find_header.as_str(), replace_header.as_str()),
-            (find_whitespace.as_str(), replace_whitespace.as_str()),
-        ])
-        .collect::<Vec<_>>();
+    let filters: Vec<_> = [
+        (search_workspace, replace_workspace),
+        (search_workspace_escaped.as_str(), replace_workspace),
+        (find_divider.as_str(), replace_divider.as_str()),
+        (find_header.as_str(), replace_header.as_str()),
+        (find_whitespace.as_str(), replace_whitespace.as_str()),
+    ]
+    .into_iter()
+    .chain(INSTA_FILTERS.to_vec())
+    .collect();
 
     uv_snapshot!(filters, Command::new(get_bin())
     .arg("pip")
