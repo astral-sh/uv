@@ -463,8 +463,8 @@ struct PipSyncArgs {
     /// any parent directory. The `--system` option instructs `uv` to instead use the first Python
     /// found in the system `PATH`.
     ///
-    /// `--system` is intended for use in continuous integration (CI) environments and should be
-    /// used with caution, as it can modify the system Python installation.
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
     #[clap(long, conflicts_with = "python")]
     system: bool,
 
@@ -661,8 +661,8 @@ struct PipInstallArgs {
     /// any parent directory. The `--system` option instructs `uv` to instead use the first Python
     /// found in the system `PATH`.
     ///
-    /// `--system` is intended for use in continuous integration (CI) environments and should be
-    /// used with caution, as it can modify the system Python installation.
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
     #[clap(long, conflicts_with = "python")]
     system: bool,
 
@@ -756,8 +756,8 @@ struct PipUninstallArgs {
     /// any parent directory. The `--system` option instructs `uv` to instead use the first Python
     /// found in the system `PATH`.
     ///
-    /// `--system` is intended for use in continuous integration (CI) environments and should be
-    /// used with caution, as it can modify the system Python installation.
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
     #[clap(long, conflicts_with = "python")]
     system: bool,
 }
@@ -791,8 +791,8 @@ struct PipFreezeArgs {
     /// falling back to the system Python if no virtual environment is found. The `--system` option
     /// instructs `uv` to use the first Python found in the system `PATH`.
     ///
-    /// `--system` is intended for use in continuous integration (CI) environments and should be
-    /// used with caution.
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution.
     #[clap(long, conflicts_with = "python")]
     system: bool,
 }
@@ -838,8 +838,8 @@ struct PipListArgs {
     /// falling back to the system Python if no virtual environment is found. The `--system` option
     /// instructs `uv` to use the first Python found in the system `PATH`.
     ///
-    /// `--system` is intended for use in continuous integration (CI) environments and should be
-    /// used with caution.
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution.
     #[clap(long, conflicts_with = "python")]
     system: bool,
 }
@@ -866,8 +866,8 @@ struct VenvArgs {
     /// any parent directory. The `--system` option instructs `uv` to use the first Python found in
     /// the system `PATH`.
     ///
-    /// `--system` is intended for use in continuous integration (CI) environments and should be
-    /// used with caution, as it can modify the system Python installation.
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
     #[clap(long, conflicts_with = "python")]
     system: bool,
 
