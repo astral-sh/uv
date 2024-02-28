@@ -173,6 +173,12 @@ Since uv has no dependency on Python, it can even install into virtual environme
 its own. For example, setting `VIRTUAL_ENV=/path/to/venv` will cause uv to install into
 `/path/to/venv`, no matter where uv is installed.
 
+Finally, uv can also install into non-virtual environments by providing a `--python` argument to
+`pip sync` or `pip install`. For example, `uv pip install --python=/path/to/python` will install
+into the environment linked to the `/path/to/python` interpreter. Though we generally recommend the
+use of virtual environments for dependency management, this feature can be useful for installing
+into system Python installations in continuous integration or containerized environments.
+
 ### Git authentication
 
 uv allows packages to be installed from Git and supports the following schemes for authenticating with private

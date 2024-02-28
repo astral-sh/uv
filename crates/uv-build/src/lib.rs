@@ -651,13 +651,13 @@ impl SourceBuild {
                 script="setup.py bdist_wheel",
                 python_version = %self.venv.interpreter().python_version()
             );
-            let output = Command::new(&python_interpreter)
+            let output = Command::new(python_interpreter)
                 .args(["setup.py", "bdist_wheel"])
                 .current_dir(self.source_tree.normalized())
                 .output()
                 .instrument(span)
                 .await
-                .map_err(|err| Error::CommandFailed(python_interpreter, err))?;
+                .map_err(|err| Error::CommandFailed(python_interpreter.to_path_buf(), err))?;
             if !output.status.success() {
                 return Err(Error::from_command_output(
                     "Failed building wheel through setup.py".to_string(),
@@ -870,19 +870,34 @@ async fn run_python_script(
 ) -> Result<Output, Error> {
     // First check user supplied environment variables
     let path = environment_variables.remove("PATH");
-    let new_path = if let Some(old_path) = path {
-        let new_path = iter::once(venv.bin_dir()).chain(env::split_paths(&old_path));
-        env::join_paths(new_path).map_err(Error::BuildScriptPath)?
+    let os_path = env::var_os("PATH");
+    let modified_path = if let Some(user_path) = path {
+        match os_path {
+            // Prepend the user supplied PATH to the existing PATH
+            Some(env_path) => {
+                let user_path = PathBuf::from(user_path);
+                let new_path = iter::once(user_path).chain(env::split_paths(&env_path));
+                env::join_paths(new_path).map_err(Error::BuildScriptPath)?
+            }
+            // Use the user supplied PATH
+            None => OsString::from(user_path),
+        }
+        // No user supplied PATH was given
     } else {
-        OsString::from("")
+        // Check if we need to use the environment's PATH
+        match os_path {
+            Some(env_path) => env_path,
+            None => OsString::new(),
+        }
     };
 
     // Prepend the venv bin dir to PATH
-    let new_path = if let Some(old_path) = env::var_os("PATH") {
-        let new_path = iter::once(venv.bin_dir()).chain(env::split_paths(&old_path));
-        env::join_paths(new_path).map_err(Error::BuildScriptPath)?
+    let modified_path = if modified_path.len() > 0 {
+        let venv_path =
+            iter::once(venv.scripts().to_path_buf()).chain(env::split_paths(&modified_path));
+        env::join_paths(venv_path).map_err(Error::BuildScriptPath)?
     } else {
-        new_path
+        modified_path
     };
 
     Command::new(venv.python_executable())
@@ -890,12 +905,12 @@ async fn run_python_script(
         .current_dir(source_tree.normalized())
         // Activate the venv
         .env("VIRTUAL_ENV", venv.root())
-        .env("PATH", new_path)
+        .env("PATH", modified_path)
         // Pass in remaining environment variables
         .envs(environment_variables)
         .output()
         .await
-        .map_err(|err| Error::CommandFailed(venv.python_executable(), err))
+        .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))
 }
 
 #[cfg(test)]

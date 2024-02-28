@@ -1,5 +1,4 @@
 use std::env;
-use std::env::consts::EXE_SUFFIX;
 use std::path::{Path, PathBuf};
 
 use tracing::debug;
@@ -20,6 +19,19 @@ pub struct Virtualenv {
 }
 
 impl Virtualenv {
+    /// Create a new virtual environment for a pre-provided Python interpreter.
+    pub fn from_python(
+        python: impl AsRef<Path>,
+        platform: Platform,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        let interpreter = Interpreter::query(python.as_ref(), platform, cache)?;
+        Ok(Self {
+            root: interpreter.base_prefix().to_path_buf(),
+            interpreter,
+        })
+    }
+
     /// Venv the current Python executable from the host environment.
     pub fn from_env(platform: Platform, cache: &Cache) -> Result<Self, Error> {
         let platform = PythonPlatform::from(platform);
@@ -28,13 +40,13 @@ impl Virtualenv {
         };
         let venv = fs_err::canonicalize(venv)?;
         let executable = platform.venv_python(&venv);
-        let interpreter = Interpreter::query(&executable, &platform.0, cache)?;
+        let interpreter = Interpreter::query(&executable, platform.0, cache)?;
 
         debug_assert!(
-            interpreter.base_prefix == interpreter.base_exec_prefix,
+            interpreter.base_prefix() == interpreter.base_exec_prefix(),
             "Not a virtualenv (Python: {}, prefix: {})",
             executable.display(),
-            interpreter.base_prefix.display()
+            interpreter.base_prefix().display()
         );
 
         Ok(Self {
@@ -46,16 +58,12 @@ impl Virtualenv {
     /// Creating a new venv from a Python interpreter changes this.
     pub fn from_interpreter(interpreter: Interpreter, venv: &Path) -> Self {
         Self {
-            interpreter: interpreter.with_base_prefix(venv.to_path_buf()),
+            interpreter: interpreter.with_venv_root(venv.to_path_buf()),
             root: venv.to_path_buf(),
         }
     }
 
-    /// Returns the location of the python interpreter
-    pub fn python_executable(&self) -> PathBuf {
-        self.bin_dir().join(format!("python{EXE_SUFFIX}"))
-    }
-
+    /// Returns the location of the Python interpreter.
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -71,21 +79,19 @@ impl Virtualenv {
         Ok(PyVenvConfiguration::parse(self.root.join("pyvenv.cfg"))?)
     }
 
-    /// Returns the path to the `site-packages` directory inside a virtual environment.
-    pub fn site_packages(&self) -> PathBuf {
-        self.interpreter
-            .platform
-            .venv_site_packages(&self.root, self.interpreter().python_tuple())
+    /// Returns the location of the Python executable.
+    pub fn python_executable(&self) -> &Path {
+        self.interpreter.sys_executable()
     }
 
-    pub fn bin_dir(&self) -> PathBuf {
-        if cfg!(unix) {
-            self.root().join("bin")
-        } else if cfg!(windows) {
-            self.root().join("Scripts")
-        } else {
-            unimplemented!("Only Windows and Unix are supported")
-        }
+    /// Returns the path to the `site-packages` directory inside a virtual environment.
+    pub fn site_packages(&self) -> &Path {
+        self.interpreter.purelib()
+    }
+
+    /// Returns the path to the `bin` directory inside a virtual environment.
+    pub fn scripts(&self) -> &Path {
+        self.interpreter.scripts()
     }
 
     /// Lock the virtual environment to prevent concurrent writes.

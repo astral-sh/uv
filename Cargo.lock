@@ -1590,6 +1590,7 @@ dependencies = [
  "indoc",
  "mailparse",
  "once_cell",
+ "pathdiff",
  "pep440_rs",
  "platform-host",
  "platform-info",
@@ -2187,6 +2188,12 @@ name = "paste"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+
+[[package]]
+name = "pathdiff"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
 
 [[package]]
 name = "pep440_rs"
@@ -4491,12 +4498,15 @@ dependencies = [
  "pep508_rs",
  "platform-tags",
  "pypi-types",
+ "pyproject-toml",
  "rayon",
  "requirements-txt",
  "rustc-hash",
+ "serde",
  "tempfile",
  "thiserror",
  "tokio",
+ "toml",
  "tracing",
  "url",
  "uv-cache",
@@ -4516,9 +4526,11 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cache-key",
+ "configparser",
  "fs-err",
  "indoc",
  "insta",
+ "install-wheel-rs",
  "itertools 0.12.1",
  "once_cell",
  "pep440_rs",

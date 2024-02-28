@@ -12,12 +12,12 @@ pub(crate) struct PythonPlatform(pub(crate) Platform);
 impl PythonPlatform {
     /// Returns the path to the `python` executable inside a virtual environment.
     pub(crate) fn venv_python(&self, venv_root: impl AsRef<Path>) -> PathBuf {
-        self.venv_bin_dir(venv_root)
+        self.venv_scripts_dir(venv_root)
             .join(format!("python{EXE_SUFFIX}"))
     }
 
     /// Returns the directory in which the binaries are stored inside a virtual environment.
-    pub(crate) fn venv_bin_dir(&self, venv_root: impl AsRef<Path>) -> PathBuf {
+    pub(crate) fn venv_scripts_dir(&self, venv_root: impl AsRef<Path>) -> PathBuf {
         let venv = venv_root.as_ref();
         if matches!(self.0.os(), Os::Windows) {
             let bin_dir = venv.join("Scripts");
@@ -46,6 +46,29 @@ impl PythonPlatform {
         let venv = venv_root.as_ref();
         if matches!(self.0.os(), Os::Windows) {
             venv.join("Lib").join("site-packages")
+        } else {
+            venv.join("lib")
+                .join(format!("python{}.{}", version.0, version.1))
+                .join("site-packages")
+        }
+    }
+
+    /// Returns the path to the `data` directory inside a virtual environment.
+    #[allow(clippy::unused_self)]
+    pub(crate) fn venv_data_dir(&self, venv_root: impl AsRef<Path>) -> PathBuf {
+        venv_root.as_ref().to_path_buf()
+    }
+
+    /// Returns the path to the `platstdlib` directory inside a virtual environment.
+    #[allow(clippy::unused_self)]
+    pub(crate) fn venv_platstdlib_dir(
+        &self,
+        venv_root: impl AsRef<Path>,
+        version: (u8, u8),
+    ) -> PathBuf {
+        let venv = venv_root.as_ref();
+        if matches!(self.0.os(), Os::Windows) {
+            venv.join("Lib")
         } else {
             venv.join("lib")
                 .join(format!("python{}.{}", version.0, version.1))
