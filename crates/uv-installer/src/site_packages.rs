@@ -11,9 +11,10 @@ use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Nam
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, VerbatimUrl};
 use requirements_txt::EditableRequirement;
-use uv_cache::ArchiveTimestamp;
 use uv_interpreter::Virtualenv;
 use uv_normalize::PackageName;
+
+use crate::{is_dynamic, not_modified};
 
 /// An index over the packages installed in an environment.
 ///
@@ -275,16 +276,12 @@ impl<'a> SitePackages<'a> {
                 }
                 [distribution] => {
                     // Is the editable out-of-date?
-                    let Ok(Some(installed_at)) =
-                        ArchiveTimestamp::from_path(distribution.path().join("METADATA"))
-                    else {
+                    if !not_modified(requirement, distribution) {
                         return Ok(false);
-                    };
-                    let Ok(Some(modified_at)) = ArchiveTimestamp::from_path(&requirement.path)
-                    else {
-                        return Ok(false);
-                    };
-                    if modified_at > installed_at {
+                    }
+
+                    // Does the editable have dynamic metadata?
+                    if is_dynamic(requirement) {
                         return Ok(false);
                     }
 
