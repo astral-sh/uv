@@ -4,6 +4,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use futures::{FutureExt, TryStreamExt};
+use rustc_hash::FxHashMap;
+use tokio::sync::Mutex;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{info_span, instrument, Instrument};
 use url::Url;
@@ -17,12 +19,19 @@ use uv_cache::{Cache, CacheBucket, Timestamp, WheelCache};
 use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
 use uv_fs::metadata_if_exists;
 use uv_git::GitSource;
+use uv_normalize::PackageName;
 use uv_traits::{BuildContext, NoBinary, NoBuild};
+use uv_warnings::warn_user;
 
 use crate::download::{BuiltWheel, UnzippedWheel};
 use crate::locks::Locks;
 use crate::reporter::Facade;
 use crate::{DiskWheel, Error, LocalWheel, Reporter, SourceDistCachedBuilder};
+
+/// Warn when more than this many versions were requested for a single package.
+const METADATA_REQUEST_WARN_THRESHOLD: usize = 50;
+/// Warn when more than this many source dist build were requested for a single package.
+const BUILD_REQUEST_WARN_THRESHOLD: usize = 5;
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -41,6 +50,8 @@ pub struct DistributionDatabase<'a, Context: BuildContext + Send + Sync> {
     reporter: Option<Arc<dyn Reporter>>,
     locks: Arc<Locks>,
     client: &'a RegistryClient,
+    metadata_request_counts: Mutex<FxHashMap<PackageName, usize>>,
+    build_request_counts: Mutex<FxHashMap<PackageName, usize>>,
     build_context: &'a Context,
     builder: SourceDistCachedBuilder<'a, Context>,
 }
@@ -57,6 +68,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             reporter: None,
             locks: Arc::new(Locks::default()),
             client,
+            metadata_request_counts: Mutex::new(FxHashMap::default()),
+            build_request_counts: Mutex::new(FxHashMap::default()),
             build_context,
             builder: SourceDistCachedBuilder::new(build_context, client, tags),
         }
@@ -358,6 +371,20 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     ) -> Result<(Metadata21, Option<Url>), Error> {
         match dist {
             Dist::Built(built_dist) => {
+                let count: usize = *self
+                    .metadata_request_counts
+                    .lock()
+                    .await
+                    .entry(built_dist.name().clone())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+                if count == METADATA_REQUEST_WARN_THRESHOLD {
+                    warn_user!(
+                        "Downloading metadata for more than {METADATA_REQUEST_WARN_THRESHOLD} different versions of {}. \
+                        Consider adding a stricter version constraint for this package to speed up resolution.",
+                        built_dist.name()
+                    );
+                }
                 Ok((self.client.wheel_metadata(built_dist).boxed().await?, None))
             }
             Dist::Source(source_dist) => {
@@ -369,6 +396,21 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 // Optimization: Skip source dist download when we must not build them anyway.
                 if no_build {
                     return Err(Error::NoBuild);
+                }
+
+                let count: usize = *self
+                    .build_request_counts
+                    .lock()
+                    .await
+                    .entry(source_dist.name().clone())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+                if count == BUILD_REQUEST_WARN_THRESHOLD {
+                    warn_user!(
+                        "Building more than {METADATA_REQUEST_WARN_THRESHOLD} source distribution versions of {}. \
+                        Consider adding a stricter version constraint for this package to speed up resolution.",
+                        source_dist.name()
+                    );
                 }
 
                 let lock = self.locks.acquire(dist).await;

@@ -18,7 +18,7 @@ distribution-filename = { path = "../distribution-filename", features = ["serde"
 distribution-types = { path = "../distribution-types" }
 install-wheel-rs = { path = "../install-wheel-rs" }
 pep440_rs = { path = "../pep440-rs" }
-pep508_rs = { path =     "../pep508-rs" }
+pep508_rs = { path = "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
 uv-cache = { path = "../uv-cache" }
 uv-client = { path = "../uv-client" }
@@ -27,6 +27,7 @@ uv-fs = { path = "../uv-fs", features = ["tokio"] }
 uv-git = { path = "../uv-git", features = ["vendored-openssl"] }
 uv-normalize = { path = "../uv-normalize" }
 uv-traits = { path = "../uv-traits" }
+uv-warnings = { path = "../uv-warnings" }
 pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
@@ -36,7 +37,7 @@ nanoid = { workspace = true }
 reqwest = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
-serde = { workspace = true , features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
