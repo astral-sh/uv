@@ -121,9 +121,7 @@ fn find_python(
             }
             Err(Error::PyList(error)) => {
                 if error.kind() == std::io::ErrorKind::NotFound {
-                    tracing::debug!(
-                        "`py` is not installed. Falling back to searching Python on the path"
-                    );
+                    debug!("`py` is not installed. Falling back to searching Python on the path");
                     // Continue searching for python installations on the path.
                 }
             }
@@ -156,7 +154,7 @@ fn find_python(
                                 return Err(Error::Python2OrOlder);
                             }
                             // Skip over Python 2 or older installation when querying for a recent python installation.
-                            tracing::debug!("Found a Python 2 installation that isn't supported by uv, skipping.");
+                            debug!("Found a Python 2 installation that isn't supported by uv, skipping.");
                             continue;
                         }
                         Err(error) => return Err(error),

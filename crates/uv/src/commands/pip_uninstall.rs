@@ -52,12 +52,19 @@ pub(crate) async fn pip_uninstall(
     );
 
     // If the environment is externally managed, abort.
-    // TODO(charlie): Surface the error from the `EXTERNALLY-MANAGED` file.
-    if venv.interpreter().externally_managed() {
-        return Err(anyhow::anyhow!(
-            "The environment at {} is externally managed",
-            venv.root().normalized_display()
-        ));
+    if let Some(externally_managed) = venv.interpreter().is_externally_managed() {
+        return if let Some(error) = externally_managed.into_error() {
+            Err(anyhow::anyhow!(
+                "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
+                venv.root().normalized_display().cyan(),
+                textwrap::indent(&error, "  ").green(),
+            ))
+        } else {
+            Err(anyhow::anyhow!(
+                "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
+                venv.root().normalized_display().cyan()
+            ))
+        };
     }
 
     let _lock = venv.lock()?;

@@ -22,6 +22,7 @@ uv-cache = { path = "../uv-cache" }
 uv-fs = { path = "../uv-fs" }
 install-wheel-rs = { path = "../install-wheel-rs" }
 
+configparser = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 once_cell = { workspace = true }
 regex = { workspace = true }

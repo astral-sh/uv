@@ -3,6 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use configparser::ini::Ini;
 use fs_err as fs;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
@@ -267,20 +268,41 @@ impl Interpreter {
         self.prefix != self.base_prefix
     }
 
-    /// Returns `true` if the environment is externally managed.
+    /// Returns `Some` if the environment is externally managed, optionally including an error
+    /// message from the `EXTERNALLY-MANAGED` file.
     ///
     /// See: <https://packaging.python.org/en/latest/specifications/externally-managed-environments/>
-    pub fn externally_managed(&self) -> bool {
+    pub fn is_externally_managed(&self) -> Option<ExternallyManaged> {
         // Per the spec, a virtual environment is never externally managed.
         if self.is_virtualenv() {
-            return false;
+            return None;
         }
 
-        // Per the spec, the existence of the file is the only requirement.
-        self.sysconfig_paths
-            .stdlib
-            .join("EXTERNALLY-MANAGED")
-            .is_file()
+        let Ok(contents) =
+            fs::read_to_string(self.sysconfig_paths.stdlib.join("EXTERNALLY-MANAGED"))
+        else {
+            return None;
+        };
+
+        let Ok(mut ini) = Ini::new_cs().read(contents) else {
+            // If a file exists but is not a valid INI file, we assume the environment is
+            // externally managed.
+            return Some(ExternallyManaged::default());
+        };
+
+        let Some(section) = ini.get_mut("externally-managed") else {
+            // If the file exists but does not contain an "externally-managed" section, we assume
+            // the environment is externally managed.
+            return Some(ExternallyManaged::default());
+        };
+
+        let Some(error) = section.remove("Error") else {
+            // If the file exists but does not contain an "Error" key, we assume the environment is
+            // externally managed.
+            return Some(ExternallyManaged::default());
+        };
+
+        Some(ExternallyManaged { error })
     }
 
     /// Returns the Python version.
@@ -400,6 +422,21 @@ impl Interpreter {
                 self.include().to_path_buf()
             },
         }
+    }
+}
+
+/// The `EXTERNALLY-MANAGED` file in a Python installation.
+///
+/// See: <https://packaging.python.org/en/latest/specifications/externally-managed-environments/>
+#[derive(Debug, Default, Clone)]
+pub struct ExternallyManaged {
+    error: Option<String>,
+}
+
+impl ExternallyManaged {
+    /// Return the `EXTERNALLY-MANAGED` error message, if any.
+    pub fn into_error(self) -> Option<String> {
+        self.error
     }
 }
 
