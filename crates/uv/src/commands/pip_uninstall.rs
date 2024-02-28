@@ -18,6 +18,7 @@ use crate::requirements::{RequirementsSource, RequirementsSpecification};
 pub(crate) async fn pip_uninstall(
     sources: &[RequirementsSource],
     python: Option<String>,
+    system: bool,
     cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -41,6 +42,8 @@ pub(crate) async fn pip_uninstall(
     let platform = Platform::current()?;
     let venv = if let Some(python) = python.as_ref() {
         PythonEnvironment::from_requested_python(python, &platform, &cache)?
+    } else if system {
+        PythonEnvironment::from_default_python(&platform, &cache)?
     } else {
         PythonEnvironment::from_virtualenv(platform, &cache)?
     };

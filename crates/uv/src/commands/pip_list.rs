@@ -20,12 +20,14 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_list(
     strict: bool,
     editable: bool,
     exclude_editable: bool,
     exclude: &[PackageName],
     python: Option<&str>,
+    system: bool,
     cache: &Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -33,6 +35,8 @@ pub(crate) fn pip_list(
     let platform = Platform::current()?;
     let venv = if let Some(python) = python {
         PythonEnvironment::from_requested_python(python, &platform, cache)?
+    } else if system {
+        PythonEnvironment::from_default_python(&platform, cache)?
     } else {
         match PythonEnvironment::from_virtualenv(platform.clone(), cache) {
             Ok(venv) => venv,
