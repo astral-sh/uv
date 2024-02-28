@@ -174,10 +174,13 @@ its own. For example, setting `VIRTUAL_ENV=/path/to/venv` will cause uv to insta
 `/path/to/venv`, no matter where uv is installed.
 
 Finally, uv can also install into non-virtual environments by providing a `--python` argument to
-`pip sync` or `pip install`. For example, `uv pip install --python=/path/to/python` will install
-into the environment linked to the `/path/to/python` interpreter. Though we generally recommend the
-use of virtual environments for dependency management, this feature can be useful for installing
-into system Python installations in continuous integration or containerized environments.
+`uv pip sync` or `uv pip install`. For example, `uv pip install --python=/path/to/python` will
+install into the environment linked to the `/path/to/python` interpreter.
+
+For convenience, `uv pip install --system` will install into the system Python environment, as an
+approximate shorthand for, e.g., `uv pip install --python=$(which python3)`. Though we generally
+recommend the use of virtual environments for dependency management, `--system` is intended to
+enable the use of `uv` in continuous integration and containerized environments.
 
 ### Git authentication
 
