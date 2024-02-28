@@ -771,6 +771,7 @@ fn escape_path_for_python(path: &Path) -> String {
 }
 
 /// Not a method because we call it before the builder is completely initialized
+#[allow(clippy::too_many_arguments)]
 async fn create_pep517_build_environment(
     source_tree: &Path,
     venv: &Virtualenv,
