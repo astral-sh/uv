@@ -440,7 +440,7 @@ impl SourceBuild {
             config_settings,
             metadata_directory: None,
             package_id,
-            environment_variables: FxHashMap::default(),
+            environment_variables,
         })
     }
 
