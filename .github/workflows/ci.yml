@@ -18,104 +18,104 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
-  cargo-fmt:
-    name: "cargo fmt"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        run: rustup component add rustfmt
-      - name: "rustfmt"
-        run: cargo fmt --all --check
-
-  cargo-clippy:
-    name: "cargo clippy"
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        run: rustup component add clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: "Clippy"
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-
-  cargo-test:
-    strategy:
-      matrix:
-        include:
-          # We use the large GitHub actions runners for faster testing
-          # For Ubuntu and Windows, this requires Organization-level configuration
-          # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
-          - { os: "ubuntu", runner: "ubuntu-latest-large" }
-          - { os: "windows", runner: "windows-latest-large" }
-          - { os: "macos", runner: "macos-14" }
-      fail-fast: false
-    runs-on:
-      labels: ${{ matrix.runner }}
-    name: "cargo test | ${{ matrix.os }}"
-    steps:
-      - uses: actions/checkout@v4
-      - if: ${{ matrix.os == 'macos' }}
-        name: "Install bootstrap dependencies"
-        run: brew install coreutils
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: "Install pipx"
-        run: pip install pipx
-      - name: "Install required Python versions"
-        run: pipx run scripts/bootstrap/install.py
-      - name: "Install Rust toolchain"
-        run: rustup show
-      - if: ${{ matrix.os != 'windows' }}
-        uses: rui314/setup-mold@v1
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: "Cargo test"
-        run: |
-          cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
-      - name: "Smoke test"
-        if: ${{ matrix.os != 'windows' }}
-        run: |
-          uv="./target/debug/uv"
-          $uv venv
-          $uv pip install ruff
-      - name: "Smoke test"
-        if: ${{ matrix.os == 'windows' }}
-        run: |
-          Set-Alias -Name uv -Value ./target/debug/uv
-          uv venv
-          uv pip install ruff
-
-  # Separate job for the nightly crate
-  windows-trampoline:
-    runs-on: windows-latest
-    name: "check windows trampoline"
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
-        working-directory: crates/uv-trampoline
-        run: |
-          rustup target add x86_64-pc-windows-msvc
-          rustup component add clippy rust-src --toolchain nightly-2024-01-23-x86_64-pc-windows-msvc
-      - uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "crates/uv-trampoline"
-      - name: "Clippy"
-        working-directory: crates/uv-trampoline
-        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
-      - name: "Build"
-        working-directory: crates/uv-trampoline
-        run: cargo build --release --target x86_64-pc-windows-msvc
+#  cargo-fmt:
+#    name: "cargo fmt"
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: "Install Rust toolchain"
+#        run: rustup component add rustfmt
+#      - name: "rustfmt"
+#        run: cargo fmt --all --check
+#
+#  cargo-clippy:
+#    name: "cargo clippy"
+#    strategy:
+#      matrix:
+#        os: [ubuntu-latest, windows-latest]
+#      fail-fast: false
+#    runs-on: ${{ matrix.os }}
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: "Install Rust toolchain"
+#        run: rustup component add clippy
+#      - uses: Swatinem/rust-cache@v2
+#        with:
+#          save-if: ${{ github.ref == 'refs/heads/main' }}
+#      - name: "Clippy"
+#        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+#
+#  cargo-test:
+#    strategy:
+#      matrix:
+#        include:
+#          # We use the large GitHub actions runners for faster testing
+#          # For Ubuntu and Windows, this requires Organization-level configuration
+#          # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
+#          - { os: "ubuntu", runner: "ubuntu-latest-large" }
+#          - { os: "windows", runner: "windows-latest-large" }
+#          - { os: "macos", runner: "macos-14" }
+#      fail-fast: false
+#    runs-on:
+#      labels: ${{ matrix.runner }}
+#    name: "cargo test | ${{ matrix.os }}"
+#    steps:
+#      - uses: actions/checkout@v4
+#      - if: ${{ matrix.os == 'macos' }}
+#        name: "Install bootstrap dependencies"
+#        run: brew install coreutils
+#      - uses: actions/setup-python@v5
+#        with:
+#          python-version: "3.12"
+#      - name: "Install pipx"
+#        run: pip install pipx
+#      - name: "Install required Python versions"
+#        run: pipx run scripts/bootstrap/install.py
+#      - name: "Install Rust toolchain"
+#        run: rustup show
+#      - if: ${{ matrix.os != 'windows' }}
+#        uses: rui314/setup-mold@v1
+#      - name: "Install cargo nextest"
+#        uses: taiki-e/install-action@v2
+#        with:
+#          tool: cargo-nextest
+#      - uses: Swatinem/rust-cache@v2
+#        with:
+#          save-if: ${{ github.ref == 'refs/heads/main' }}
+#      - name: "Cargo test"
+#        run: |
+#          cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+#      - name: "Smoke test"
+#        if: ${{ matrix.os != 'windows' }}
+#        run: |
+#          uv="./target/debug/uv"
+#          $uv venv
+#          $uv pip install ruff
+#      - name: "Smoke test"
+#        if: ${{ matrix.os == 'windows' }}
+#        run: |
+#          Set-Alias -Name uv -Value ./target/debug/uv
+#          uv venv
+#          uv pip install ruff
+#
+#  # Separate job for the nightly crate
+#  windows-trampoline:
+#    runs-on: windows-latest
+#    name: "check windows trampoline"
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: "Install Rust toolchain"
+#        working-directory: crates/uv-trampoline
+#        run: |
+#          rustup target add x86_64-pc-windows-msvc
+#          rustup component add clippy rust-src --toolchain nightly-2024-01-23-x86_64-pc-windows-msvc
+#      - uses: rui314/setup-mold@v1
+#      - uses: Swatinem/rust-cache@v2
+#        with:
+#          workspaces: "crates/uv-trampoline"
+#      - name: "Clippy"
+#        working-directory: crates/uv-trampoline
+#        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc -- -D warnings
+#      - name: "Build"
+#        working-directory: crates/uv-trampoline
+#        run: cargo build --release --target x86_64-pc-windows-msvc

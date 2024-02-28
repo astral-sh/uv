@@ -67,6 +67,7 @@ impl PythonEnvironment {
 
     /// Create a [`PythonEnvironment`] for the default Python interpreter.
     pub fn from_default_python(platform: &Platform, cache: &Cache) -> Result<Self, Error> {
+        println!("PythonEnvironment::from_default_python");
         let interpreter = find_default_python(platform, cache)?;
         Ok(Self {
             root: interpreter.base_prefix().to_path_buf(),

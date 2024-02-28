@@ -41,6 +41,8 @@ impl Interpreter {
     pub fn query(executable: &Path, platform: Platform, cache: &Cache) -> Result<Self, Error> {
         let info = InterpreterInfo::query_cached(executable, cache)?;
 
+        println!("info: {:?}", info);
+
         debug_assert!(
             info.sys_executable.is_absolute(),
             "`sys.executable` is not an absolute Python; Python installation is broken: {}",
