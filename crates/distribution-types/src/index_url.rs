@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -8,8 +9,10 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use pep508_rs::{split_scheme, Scheme};
+use pep508_rs::{split_scheme, Scheme, VerbatimUrl};
 use uv_fs::normalize_url_path;
+
+use crate::Verbatim;
 
 static PYPI_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://pypi.org/simple").unwrap());
 
@@ -17,7 +20,7 @@ static PYPI_URL: Lazy<Url> = Lazy::new(|| Url::parse("https://pypi.org/simple").
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IndexUrl {
     Pypi,
-    Url(Url),
+    Url(VerbatimUrl),
 }
 
 impl Display for IndexUrl {
@@ -29,17 +32,33 @@ impl Display for IndexUrl {
     }
 }
 
-impl FromStr for IndexUrl {
-    type Err = url::ParseError;
-
-    fn from_str(url: &str) -> Result<Self, Self::Err> {
-        Ok(Self::from(Url::parse(url)?))
+impl Verbatim for IndexUrl {
+    fn verbatim(&self) -> Cow<'_, str> {
+        match self {
+            Self::Pypi => Cow::Borrowed("https://pypi.org/simple"),
+            Self::Url(url) => url.verbatim(),
+        }
     }
 }
 
-impl From<Url> for IndexUrl {
-    fn from(url: Url) -> Self {
+impl FromStr for IndexUrl {
+    type Err = url::ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let url = Url::parse(s)?;
         if url == *PYPI_URL {
+            Ok(Self::Pypi)
+        } else {
+            Ok(Self::Url(
+                VerbatimUrl::from_url(url).with_given(s.to_owned()),
+            ))
+        }
+    }
+}
+
+impl From<VerbatimUrl> for IndexUrl {
+    fn from(url: VerbatimUrl) -> Self {
+        if *url.raw() == *PYPI_URL {
             Self::Pypi
         } else {
             Self::Url(url)
@@ -51,7 +70,7 @@ impl From<IndexUrl> for Url {
     fn from(index: IndexUrl) -> Self {
         match index {
             IndexUrl::Pypi => PYPI_URL.clone(),
-            IndexUrl::Url(url) => url,
+            IndexUrl::Url(url) => url.to_url(),
         }
     }
 }

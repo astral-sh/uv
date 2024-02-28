@@ -14,6 +14,7 @@ use distribution_types::{
     RegistryBuiltDist, RegistrySourceDist, SourceDist,
 };
 use pep440_rs::Version;
+use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use pypi_types::{Hashes, Yanked};
 use uv_auth::safe_copy_url_auth;
@@ -197,7 +198,7 @@ impl<'a> FlatIndexClient<'a> {
                         Some((
                             DistFilename::try_from_normalized_filename(&file.filename)?,
                             file,
-                            IndexUrl::Url(url.clone()),
+                            IndexUrl::Url(VerbatimUrl::unknown(url.clone())),
                         ))
                     })
                     .collect();
