@@ -76,15 +76,16 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
     fn handle_response_errors(&self, err: reqwest::Error) -> io::Error {
         if err.is_timeout() {
-            io::Error::new(
-                io::ErrorKind::TimedOut,
-                format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",  self.client.timeout()
-                ),
-            )
-        } else {
-            io::Error::new(io::ErrorKind::Other, err)
+            if let Some(timeout) = self.client.timeout() {
+                return io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!(
+                        "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", timeout.as_secs()
+                    ),
+                );
+            }
         }
+        io::Error::new(io::ErrorKind::Other, err)
     }
 
     /// Either fetch the wheel or fetch and build the source distribution

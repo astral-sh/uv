@@ -3,10 +3,12 @@
 //! Integration tests for the resolver. These tests rely on a live network connection, and hit
 //! `PyPI` directly.
 
+use std::env;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 
@@ -111,7 +113,34 @@ async fn resolve(
     markers: &'static MarkerEnvironment,
     tags: &Tags,
 ) -> Result<ResolutionGraph> {
-    let client = RegistryClientBuilder::new(Cache::temp()?).build();
+    let mut registry_builder = RegistryClientBuilder::new(Cache::temp()?);
+
+    // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
+    // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
+    let timeout_env_vars = ["UV_HTTP_TIMEOUT", "UV_REQUEST_TIMEOUT", "HTTP_TIMEOUT"];
+    let timeout_or_error = timeout_env_vars.iter().find_map(|env_key| {
+        if let Ok(env_value) = env::var(env_key) {
+            let timeout = env_value.parse::<u64>().with_context(|| {
+                format!(
+                    "Invalid value for {env_key}. \
+                        Expected integer number of seconds, got \"{env_value}\"."
+                )
+            });
+            Some(timeout)
+        } else {
+            None
+        }
+    });
+
+    match timeout_or_error {
+        Some(Ok(timeout)) => {
+            registry_builder = registry_builder.timeout(Duration::from_secs(timeout));
+        }
+        Some(Err(err)) => return Err(err),
+        None => {}
+    }
+
+    let client = registry_builder.build();
     let flat_index = FlatIndex::default();
     let index = InMemoryIndex::default();
     let interpreter = Interpreter::artificial(Platform::current()?, markers.clone());

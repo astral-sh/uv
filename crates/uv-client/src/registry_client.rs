@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
-use std::env;
 use std::fmt::Debug;
 use std::path::Path;
 use std::str::FromStr;
+use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
@@ -25,7 +25,6 @@ use pypi_types::{Metadata21, SimpleJson};
 use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
-use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
@@ -41,6 +40,7 @@ pub struct RegistryClientBuilder {
     retries: u32,
     connectivity: Connectivity,
     cache: Cache,
+    timeout: Option<Duration>,
     client: Option<Client>,
 }
 
@@ -51,6 +51,7 @@ impl RegistryClientBuilder {
             cache,
             connectivity: Connectivity::Online,
             retries: 3,
+            timeout: None,
             client: None,
         }
     }
@@ -87,30 +88,22 @@ impl RegistryClientBuilder {
         self
     }
 
-    pub fn build(self) -> RegistryClient {
-        // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
-        // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-        let default_timeout = 5 * 60;
-        let timeout = env::var("UV_HTTP_TIMEOUT")
-            .or_else(|_| env::var("UV_REQUEST_TIMEOUT"))
-            .or_else(|_| env::var("HTTP_TIMEOUT"))
-            .and_then(|value| {
-                value.parse::<u64>()
-                    .or_else(|_| {
-                        // On parse error, warn and use the default timeout
-                        warn_user_once!("Ignoring invalid value from environment for UV_HTTP_TIMEOUT. Expected integer number of seconds, got \"{value}\".");
-                        Ok(default_timeout)
-                    })
-            })
-            .unwrap_or(default_timeout);
-        debug!("Using registry request timeout of {}s", timeout);
+    #[must_use]
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
 
+    pub fn build(self) -> RegistryClient {
         let client_raw = self.client.unwrap_or_else(|| {
             // Disallow any connections.
-            let client_core = ClientBuilder::new()
+            let mut client_core = ClientBuilder::new()
                 .user_agent("uv")
-                .pool_max_idle_per_host(20)
-                .timeout(std::time::Duration::from_secs(timeout));
+                .pool_max_idle_per_host(20);
+            if let Some(timeout) = self.timeout {
+                debug!("Using registry request timeout of {}s", timeout.as_secs());
+                client_core = client_core.timeout(timeout);
+            }
 
             client_core.build().expect("Failed to build HTTP client.")
         });
@@ -135,7 +128,7 @@ impl RegistryClientBuilder {
             connectivity: self.connectivity,
             client_raw,
             client: CachedClient::new(uncached_client),
-            timeout,
+            timeout: self.timeout,
         }
     }
 }
@@ -155,7 +148,7 @@ pub struct RegistryClient {
     /// The connectivity mode to use.
     connectivity: Connectivity,
     /// Configured client timeout, in seconds.
-    timeout: u64,
+    timeout: Option<Duration>,
 }
 
 impl RegistryClient {
@@ -170,7 +163,7 @@ impl RegistryClient {
     }
 
     /// Return the timeout this client is configured with, in seconds.
-    pub fn timeout(&self) -> u64 {
+    pub fn timeout(&self) -> Option<Duration> {
         self.timeout
     }
 
