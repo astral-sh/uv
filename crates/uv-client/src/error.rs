@@ -187,10 +187,10 @@ impl ErrorKind {
                 }
             }
 
-            // The server doesn't support range requests, but we only discovered this while
-            // unzipping due to erroneous server behavior.
             Self::Zip(_, ZipError::UpstreamReadError(err)) => {
                 if let Some(inner) = err.get_ref() {
+                    // The server doesn't support range requests, but we only discovered this while
+                    // unzipping due to erroneous server behavior.
                     if let Some(inner) = inner.downcast_ref::<AsyncHttpRangeReaderError>() {
                         if matches!(
                             inner,
@@ -198,6 +198,15 @@ impl ErrorKind {
                         ) {
                             return true;
                         }
+                    }
+
+                    // There was an I/O error (typically, a `BufError`) while reading from the
+                    // server, which could be due to the server not supporting range requests.
+                    if inner
+                        .downcast_ref::<std::io::Error>()
+                        .is_some_and(|error| error.kind() == std::io::ErrorKind::Other)
+                    {
+                        return true;
                     }
                 }
             }
