@@ -1,23 +1,26 @@
 use std::env::consts::EXE_SUFFIX;
-use std::ops::Deref;
 use std::path::Path;
 use std::path::PathBuf;
 
 use platform_host::{Os, Platform};
 
-/// A Python-aware wrapper around [`Platform`].
+/// Construct paths to various locations inside a virtual environment based on the platform.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct PythonPlatform(pub(crate) Platform);
+pub(crate) struct VirtualenvLayout<'a>(&'a Platform);
 
-impl PythonPlatform {
+impl<'a> VirtualenvLayout<'a> {
+    /// Create a new [`VirtualenvLayout`] for the given platform.
+    pub(crate) fn from_platform(platform: &'a Platform) -> Self {
+        Self(platform)
+    }
+
     /// Returns the path to the `python` executable inside a virtual environment.
-    pub(crate) fn venv_python(&self, venv_root: impl AsRef<Path>) -> PathBuf {
-        self.venv_scripts_dir(venv_root)
-            .join(format!("python{EXE_SUFFIX}"))
+    pub(crate) fn python_executable(&self, venv_root: impl AsRef<Path>) -> PathBuf {
+        self.scripts(venv_root).join(format!("python{EXE_SUFFIX}"))
     }
 
     /// Returns the directory in which the binaries are stored inside a virtual environment.
-    pub(crate) fn venv_scripts_dir(&self, venv_root: impl AsRef<Path>) -> PathBuf {
+    pub(crate) fn scripts(&self, venv_root: impl AsRef<Path>) -> PathBuf {
         let venv = venv_root.as_ref();
         if matches!(self.0.os(), Os::Windows) {
             let bin_dir = venv.join("Scripts");
@@ -38,11 +41,7 @@ impl PythonPlatform {
     }
 
     /// Returns the path to the `site-packages` directory inside a virtual environment.
-    pub(crate) fn venv_site_packages(
-        &self,
-        venv_root: impl AsRef<Path>,
-        version: (u8, u8),
-    ) -> PathBuf {
+    pub(crate) fn site_packages(&self, venv_root: impl AsRef<Path>, version: (u8, u8)) -> PathBuf {
         let venv = venv_root.as_ref();
         if matches!(self.0.os(), Os::Windows) {
             venv.join("Lib").join("site-packages")
@@ -55,17 +54,13 @@ impl PythonPlatform {
 
     /// Returns the path to the `data` directory inside a virtual environment.
     #[allow(clippy::unused_self)]
-    pub(crate) fn venv_data_dir(&self, venv_root: impl AsRef<Path>) -> PathBuf {
+    pub(crate) fn data(&self, venv_root: impl AsRef<Path>) -> PathBuf {
         venv_root.as_ref().to_path_buf()
     }
 
     /// Returns the path to the `platstdlib` directory inside a virtual environment.
     #[allow(clippy::unused_self)]
-    pub(crate) fn venv_platstdlib_dir(
-        &self,
-        venv_root: impl AsRef<Path>,
-        version: (u8, u8),
-    ) -> PathBuf {
+    pub(crate) fn platstdlib(&self, venv_root: impl AsRef<Path>, version: (u8, u8)) -> PathBuf {
         let venv = venv_root.as_ref();
         if matches!(self.0.os(), Os::Windows) {
             venv.join("Lib")
@@ -74,19 +69,5 @@ impl PythonPlatform {
                 .join(format!("python{}.{}", version.0, version.1))
                 .join("site-packages")
         }
-    }
-}
-
-impl From<Platform> for PythonPlatform {
-    fn from(platform: Platform) -> Self {
-        Self(platform)
-    }
-}
-
-impl Deref for PythonPlatform {
-    type Target = Platform;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }

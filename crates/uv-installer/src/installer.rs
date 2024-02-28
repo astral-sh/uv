@@ -3,17 +3,17 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tracing::instrument;
 
 use distribution_types::CachedDist;
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 
 pub struct Installer<'a> {
-    venv: &'a Virtualenv,
+    venv: &'a PythonEnvironment,
     link_mode: install_wheel_rs::linker::LinkMode,
     reporter: Option<Box<dyn Reporter>>,
 }
 
 impl<'a> Installer<'a> {
     /// Initialize a new installer.
-    pub fn new(venv: &'a Virtualenv) -> Self {
+    pub fn new(venv: &'a PythonEnvironment) -> Self {
         Self {
             venv,
             link_mode: install_wheel_rs::linker::LinkMode::default(),

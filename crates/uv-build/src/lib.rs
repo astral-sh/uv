@@ -29,7 +29,7 @@ use tracing::{debug, info_span, instrument, Instrument};
 use distribution_types::Resolution;
 use pep508_rs::Requirement;
 use uv_fs::Normalized;
-use uv_interpreter::{Interpreter, Virtualenv};
+use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_traits::{BuildContext, BuildKind, ConfigSettings, SetupPyStrategy, SourceBuildTrait};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
@@ -316,7 +316,7 @@ pub struct SourceBuild {
     /// If performing a PEP 517 build, the backend to use.
     pep517_backend: Option<Pep517Backend>,
     /// The virtual environment in which to build the source distribution.
-    venv: Virtualenv,
+    venv: PythonEnvironment,
     /// Populated if `prepare_metadata_for_build_wheel` was called.
     ///
     /// > If the build frontend has previously called prepare_metadata_for_build_wheel and depends
@@ -757,7 +757,7 @@ fn escape_path_for_python(path: &Path) -> String {
 /// Not a method because we call it before the builder is completely initialized
 async fn create_pep517_build_environment(
     source_tree: &Path,
-    venv: &Virtualenv,
+    venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
     package_id: &str,
@@ -846,7 +846,7 @@ async fn create_pep517_build_environment(
 
 /// It is the caller's responsibility to create an informative span.
 async fn run_python_script(
-    venv: &Virtualenv,
+    venv: &PythonEnvironment,
     script: &str,
     source_tree: &Path,
 ) -> Result<Output, Error> {

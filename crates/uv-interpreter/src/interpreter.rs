@@ -18,15 +18,15 @@ use platform_tags::{Tags, TagsError};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::write_atomic_sync;
 
-use crate::python_platform::PythonPlatform;
+use crate::python_environment::detect_virtual_env;
 use crate::python_query::try_find_default_python;
-use crate::virtual_env::detect_virtual_env;
+use crate::virtualenv_layout::VirtualenvLayout;
 use crate::{find_requested_python, Error, PythonVersion};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
 pub struct Interpreter {
-    platform: PythonPlatform,
+    platform: Platform,
     markers: Box<MarkerEnvironment>,
     sysconfig_paths: SysconfigPaths,
     prefix: PathBuf,
@@ -48,7 +48,7 @@ impl Interpreter {
         );
 
         Ok(Self {
-            platform: PythonPlatform(platform),
+            platform,
             markers: Box::new(info.markers),
             sysconfig_paths: info.sysconfig_paths,
             prefix: info.prefix,
@@ -62,7 +62,7 @@ impl Interpreter {
     // TODO(konstin): Find a better way mocking the fields
     pub fn artificial(platform: Platform, markers: MarkerEnvironment) -> Self {
         Self {
-            platform: PythonPlatform(platform),
+            platform,
             markers: Box::new(markers),
             sysconfig_paths: SysconfigPaths {
                 stdlib: PathBuf::from("/dev/null"),
@@ -85,6 +85,7 @@ impl Interpreter {
     /// Return a new [`Interpreter`] with the given virtual environment root.
     #[must_use]
     pub(crate) fn with_venv_root(self, venv_root: PathBuf) -> Self {
+        let layout = VirtualenvLayout::from_platform(&self.platform);
         Self {
             // Given that we know `venv_root` is a virtualenv, and not an arbitrary Python
             // interpreter, we can safely assume that the platform is the same as the host
@@ -92,20 +93,14 @@ impl Interpreter {
             // structure, which allows us to avoid querying the interpreter for the `sysconfig`
             // paths.
             sysconfig_paths: SysconfigPaths {
-                purelib: self
-                    .platform
-                    .venv_site_packages(&venv_root, self.python_tuple()),
-                platlib: self
-                    .platform
-                    .venv_site_packages(&venv_root, self.python_tuple()),
-                platstdlib: self
-                    .platform
-                    .venv_platstdlib_dir(&venv_root, self.python_tuple()),
-                scripts: self.platform.venv_scripts_dir(&venv_root),
-                data: self.platform.venv_data_dir(&venv_root),
+                purelib: layout.site_packages(&venv_root, self.python_tuple()),
+                platlib: layout.site_packages(&venv_root, self.python_tuple()),
+                platstdlib: layout.platstdlib(&venv_root, self.python_tuple()),
+                scripts: layout.scripts(&venv_root),
+                data: layout.data(&venv_root),
                 ..self.sysconfig_paths
             },
-            sys_executable: self.platform.venv_python(&venv_root),
+            sys_executable: layout.python_executable(&venv_root),
             prefix: venv_root,
             ..self
         }
@@ -192,10 +187,10 @@ impl Interpreter {
         };
 
         // Check if the venv Python matches.
-        let python_platform = PythonPlatform::from(platform.to_owned());
+        let python_platform = VirtualenvLayout::from_platform(platform);
         if let Some(venv) = detect_virtual_env(&python_platform)? {
-            let executable = python_platform.venv_python(venv);
-            let interpreter = Self::query(&executable, python_platform.0, cache)?;
+            let executable = python_platform.python_executable(venv);
+            let interpreter = Self::query(&executable, platform.clone(), cache)?;
 
             if version_matches(&interpreter) {
                 return Ok(Some(interpreter));

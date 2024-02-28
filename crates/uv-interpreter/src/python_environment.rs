@@ -8,26 +8,26 @@ use uv_cache::Cache;
 use uv_fs::{LockedFile, Normalized};
 
 use crate::cfg::PyVenvConfiguration;
-use crate::python_platform::PythonPlatform;
+use crate::virtualenv_layout::VirtualenvLayout;
 use crate::{find_default_python, find_requested_python, Error, Interpreter};
 
-/// A Python executable and its associated platform markers.
+/// A Python environment, consisting of a Python [`Interpreter`] and a root directory.
 #[derive(Debug, Clone)]
-pub struct Virtualenv {
+pub struct PythonEnvironment {
     root: PathBuf,
     interpreter: Interpreter,
 }
 
-impl Virtualenv {
-    /// Create a [`Virtualenv`] for an existing virtual environment.
-    pub fn from_env(platform: Platform, cache: &Cache) -> Result<Self, Error> {
-        let platform = PythonPlatform::from(platform);
-        let Some(venv) = detect_virtual_env(&platform)? else {
+impl PythonEnvironment {
+    /// Create a [`PythonEnvironment`] for an existing virtual environment.
+    pub fn from_virtualenv(platform: Platform, cache: &Cache) -> Result<Self, Error> {
+        let layout = VirtualenvLayout::from_platform(&platform);
+        let Some(venv) = detect_virtual_env(&layout)? else {
             return Err(Error::VenvNotFound);
         };
         let venv = fs_err::canonicalize(venv)?;
-        let executable = platform.venv_python(&venv);
-        let interpreter = Interpreter::query(&executable, platform.0, cache)?;
+        let executable = layout.python_executable(&venv);
+        let interpreter = Interpreter::query(&executable, platform, cache)?;
 
         debug_assert!(
             interpreter.base_prefix() == interpreter.base_exec_prefix(),
@@ -42,7 +42,7 @@ impl Virtualenv {
         })
     }
 
-    /// Create a [`Virtualenv`] for a new virtual environment, created with the given interpreter.
+    /// Create a [`PythonEnvironment`] for a new virtual environment, created with the given interpreter.
     pub fn from_interpreter(interpreter: Interpreter, venv: &Path) -> Self {
         Self {
             interpreter: interpreter.with_venv_root(venv.to_path_buf()),
@@ -50,7 +50,7 @@ impl Virtualenv {
         }
     }
 
-    /// Create a [`Virtualenv`] for a Python interpreter specifier (e.g., a path or a binary name).
+    /// Create a [`PythonEnvironment`] for a Python interpreter specifier (e.g., a path or a binary name).
     pub fn from_requested_python(
         python: &str,
         platform: &Platform,
@@ -65,7 +65,7 @@ impl Virtualenv {
         })
     }
 
-    /// Create a [`Virtualenv`] for the default Python interpreter.
+    /// Create a [`PythonEnvironment`] for the default Python interpreter.
     pub fn from_default_python(platform: &Platform, cache: &Cache) -> Result<Self, Error> {
         let interpreter = find_default_python(platform, cache)?;
         Ok(Self {
@@ -112,7 +112,7 @@ impl Virtualenv {
 }
 
 /// Locate the current virtual environment.
-pub(crate) fn detect_virtual_env(target: &PythonPlatform) -> Result<Option<PathBuf>, Error> {
+pub(crate) fn detect_virtual_env(layout: &VirtualenvLayout) -> Result<Option<PathBuf>, Error> {
     match (
         env::var_os("VIRTUAL_ENV").filter(|value| !value.is_empty()),
         env::var_os("CONDA_PREFIX").filter(|value| !value.is_empty()),
@@ -148,7 +148,7 @@ pub(crate) fn detect_virtual_env(target: &PythonPlatform) -> Result<Option<PathB
             if !dot_venv.join("pyvenv.cfg").is_file() {
                 return Err(Error::MissingPyVenvCfg(dot_venv));
             }
-            let python = target.venv_python(&dot_venv);
+            let python = layout.python_executable(&dot_venv);
             if !python.is_file() {
                 return Err(Error::BrokenVenv(dot_venv, python));
             }

@@ -16,7 +16,7 @@ use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Timestamp, WheelCache};
 use uv_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use uv_fs::Normalized;
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_traits::NoBinary;
 
@@ -63,7 +63,7 @@ impl<'a> Planner<'a> {
         no_binary: &NoBinary,
         index_locations: &IndexLocations,
         cache: &Cache,
-        venv: &Virtualenv,
+        venv: &PythonEnvironment,
         tags: &Tags,
     ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
