@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::Write;
-
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
@@ -63,7 +62,7 @@ pub(crate) async fn pip_install(
     no_binary: &NoBinary,
     strict: bool,
     exclude_newer: Option<DateTime<Utc>>,
-    python: Option<PathBuf>,
+    python: Option<String>,
     cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -106,8 +105,8 @@ pub(crate) async fn pip_install(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = if let Some(python) = python {
-        Virtualenv::from_python(python, platform, &cache)?
+    let venv = if let Some(python) = python.as_ref() {
+        Virtualenv::from_requested_python(python, &platform, &cache)?
     } else {
         Virtualenv::from_env(platform, &cache)?
     };

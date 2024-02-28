@@ -1,5 +1,4 @@
 use std::fmt::Write;
-use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
@@ -42,7 +41,7 @@ pub(crate) async fn pip_sync(
     no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
-    python: Option<PathBuf>,
+    python: Option<String>,
     cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -74,8 +73,8 @@ pub(crate) async fn pip_sync(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = if let Some(python) = python {
-        Virtualenv::from_python(python, platform, &cache)?
+    let venv = if let Some(python) = python.as_ref() {
+        Virtualenv::from_requested_python(python, &platform, &cache)?
     } else {
         Virtualenv::from_env(platform, &cache)?
     };
