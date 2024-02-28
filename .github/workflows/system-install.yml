@@ -1,7 +1,6 @@
 name: System Install
 
 on:
-  pull_request:
   workflow_dispatch:
 
 concurrency:
