@@ -5,7 +5,7 @@ use std::path::{Component, Path, PathBuf};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use url::Url;
+use url::{ParseError, Url};
 
 /// A wrapper around [`Url`] that preserves the original string.
 #[derive(Debug, Clone, Eq, derivative::Derivative)]
@@ -29,15 +29,26 @@ pub struct VerbatimUrl {
 
 impl VerbatimUrl {
     /// Parse a URL from a string, expanding any environment variables.
-    pub fn parse(given: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
-        let url = Url::parse(&expand_env_vars(given.as_ref(), true))
-            .map_err(|err| VerbatimUrlError::Url(given.as_ref().to_owned(), err))?;
+    pub fn parse(given: impl AsRef<str>) -> Result<Self, ParseError> {
+        let url = Url::parse(&expand_env_vars(given.as_ref(), true))?;
         Ok(Self { url, given: None })
+    }
+
+    /// Create a [`VerbatimUrl`] from a [`Url`].
+    pub fn from_url(url: Url) -> Self {
+        Self { url, given: None }
+    }
+
+    /// Create a [`VerbatimUrl`] from a file path.
+    pub fn from_path(path: impl AsRef<Path>) -> Self {
+        let path = normalize_path(path.as_ref());
+        let url = Url::from_file_path(path).expect("path is absolute");
+        Self { url, given: None }
     }
 
     /// Parse a URL from an absolute or relative path.
     #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
-    pub fn from_path(path: impl AsRef<str>, working_dir: impl AsRef<Path>) -> Self {
+    pub fn parse_path(path: impl AsRef<str>, working_dir: impl AsRef<Path>) -> Self {
         // Expand any environment variables.
         let path = PathBuf::from(expand_env_vars(path.as_ref(), false).as_ref());
 
@@ -58,7 +69,7 @@ impl VerbatimUrl {
     }
 
     /// Parse a URL from an absolute path.
-    pub fn from_absolute_path(path: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
+    pub fn parse_absolute_path(path: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
         // Expand any environment variables.
         let path = PathBuf::from(expand_env_vars(path.as_ref(), false).as_ref());
 
@@ -115,7 +126,9 @@ impl std::str::FromStr for VerbatimUrl {
     type Err = VerbatimUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s).map(|url| url.with_given(s.to_owned()))
+        Self::parse(s)
+            .map(|url| url.with_given(s.to_owned()))
+            .map_err(|e| VerbatimUrlError::Url(s.to_owned(), e))
     }
 }
 
@@ -138,7 +151,7 @@ impl Deref for VerbatimUrl {
 pub enum VerbatimUrlError {
     /// Failed to parse a URL.
     #[error("{0}")]
-    Url(String, #[source] url::ParseError),
+    Url(String, #[source] ParseError),
 
     /// Received a relative path, but no working directory was provided.
     #[error("relative path without a working directory: {0}")]

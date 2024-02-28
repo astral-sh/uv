@@ -2412,7 +2412,14 @@ fn recursive_extras_direct_url() -> Result<()> {
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    uv_snapshot!(filters, Command::new(get_bin())
+    let mut command = Command::new(get_bin());
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(filters, command
             .arg("pip")
             .arg("compile")
             .arg(requirements_in.path())

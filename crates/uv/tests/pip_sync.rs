@@ -42,6 +42,13 @@ fn command(context: &TestContext) -> Command {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
+    }
+
     command
 }
 
@@ -55,6 +62,13 @@ fn uninstall_command(context: &TestContext) -> Command {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
+    }
+
     command
 }
 

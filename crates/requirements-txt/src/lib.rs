@@ -70,9 +70,9 @@ enum RequirementsTxtStatement {
     /// `-e`
     EditableRequirement(EditableRequirement),
     /// `--index-url`
-    IndexUrl(Url),
+    IndexUrl(VerbatimUrl),
     /// `--extra-index-url`
-    ExtraIndexUrl(Url),
+    ExtraIndexUrl(VerbatimUrl),
     /// `--find-links`
     FindLinks(FindLink),
     /// `--no-index`
@@ -215,7 +215,7 @@ impl EditableRequirement {
                     // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
                     let path = normalize_url_path(path);
 
-                    VerbatimUrl::from_path(path, working_dir.as_ref())
+                    VerbatimUrl::parse_path(path, working_dir.as_ref())
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
@@ -226,11 +226,11 @@ impl EditableRequirement {
                 }
 
                 // Ex) `C:/Users/ferris/wheel-0.42.0.tar.gz`
-                _ => VerbatimUrl::from_path(requirement, working_dir.as_ref()),
+                _ => VerbatimUrl::parse_path(requirement, working_dir.as_ref()),
             }
         } else {
             // Ex) `../editable/`
-            VerbatimUrl::from_path(requirement, working_dir.as_ref())
+            VerbatimUrl::parse_path(requirement, working_dir.as_ref())
         };
 
         // Create a `PathBuf`.
@@ -308,9 +308,9 @@ pub struct RequirementsTxt {
     /// Editables with `-e`.
     pub editables: Vec<EditableRequirement>,
     /// The index URL, specified with `--index-url`.
-    pub index_url: Option<Url>,
+    pub index_url: Option<VerbatimUrl>,
     /// The extra index URLs, specified with `--extra-index-url`.
-    pub extra_index_urls: Vec<Url>,
+    pub extra_index_urls: Vec<VerbatimUrl>,
     /// The find links locations, specified with `--find-links`.
     pub find_links: Vec<FindLink>,
     /// Whether to ignore the index, specified with `--no-index`.
@@ -482,22 +482,26 @@ fn parse_entry(
             .map_err(|err| err.with_offset(start))?;
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
-        let url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
-        let url = Url::parse(url).map_err(|err| RequirementsTxtParserError::Url {
-            source: err,
-            url: url.to_string(),
-            start,
-            end: s.cursor(),
-        })?;
+        let given = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
+        let url = VerbatimUrl::parse(given)
+            .map(|url| url.with_given(given.to_owned()))
+            .map_err(|err| RequirementsTxtParserError::Url {
+                source: err,
+                url: given.to_string(),
+                start,
+                end: s.cursor(),
+            })?;
         RequirementsTxtStatement::IndexUrl(url)
     } else if s.eat_if("--extra-index-url") {
-        let url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
-        let url = Url::parse(url).map_err(|err| RequirementsTxtParserError::Url {
-            source: err,
-            url: url.to_string(),
-            start,
-            end: s.cursor(),
-        })?;
+        let given = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
+        let url = VerbatimUrl::parse(given)
+            .map(|url| url.with_given(given.to_owned()))
+            .map_err(|err| RequirementsTxtParserError::Url {
+                source: err,
+                url: given.to_string(),
+                start,
+                end: s.cursor(),
+            })?;
         RequirementsTxtStatement::ExtraIndexUrl(url)
     } else if s.eat_if("--no-index") {
         RequirementsTxtStatement::NoIndex

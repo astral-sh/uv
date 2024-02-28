@@ -15,7 +15,7 @@ use rustc_hash::FxHashSet;
 use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, LocalEditable};
+use distribution_types::{IndexLocations, LocalEditable, Verbatim};
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
@@ -357,11 +357,11 @@ pub(crate) async fn pip_compile(
     // If necessary, include the `--index-url` and `--extra-index-url` locations.
     if include_index_url {
         if let Some(index) = index_locations.index() {
-            writeln!(writer, "--index-url {index}")?;
+            writeln!(writer, "--index-url {}", index.verbatim())?;
             wrote_index = true;
         }
         for extra_index in index_locations.extra_index() {
-            writeln!(writer, "--extra-index-url {extra_index}")?;
+            writeln!(writer, "--extra-index-url {}", extra_index.verbatim())?;
             wrote_index = true;
         }
     }

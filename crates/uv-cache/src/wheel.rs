@@ -30,7 +30,7 @@ pub enum WheelCache<'a> {
 impl<'a> WheelCache<'a> {
     fn bucket(&self) -> PathBuf {
         match self {
-            WheelCache::Index(IndexUrl::Pypi) => WheelCacheKind::Pypi.root(),
+            WheelCache::Index(IndexUrl::Pypi(_)) => WheelCacheKind::Pypi.root(),
             WheelCache::Index(url) => WheelCacheKind::Index
                 .root()
                 .join(digest(&CanonicalUrl::new(url))),
