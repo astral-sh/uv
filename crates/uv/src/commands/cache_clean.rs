@@ -12,8 +12,8 @@ use crate::printer::Printer;
 
 /// Clear the cache.
 pub(crate) fn cache_clean(
-    cache: &Cache,
     packages: &[PackageName],
+    cache: &Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     if !cache.root().exists() {

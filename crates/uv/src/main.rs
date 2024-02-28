@@ -730,6 +730,20 @@ struct PipFreezeArgs {
     /// issues.
     #[clap(long)]
     strict: bool,
+
+    /// The Python interpreter for which packages should be listed.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS. (Specifying a patch version is not supported.)
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment)]
+    python: Option<String>,
 }
 
 #[derive(Args)]
@@ -751,6 +765,20 @@ struct PipListArgs {
     /// Exclude the specified package(s) from the output.
     #[clap(long)]
     r#exclude: Vec<PackageName>,
+
+    /// The Python interpreter for which packages should be listed.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS. (Specifying a patch version is not supported.)
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment)]
+    python: Option<String>,
 }
 
 #[derive(Args)]
@@ -1160,21 +1188,22 @@ async fn run() -> Result<ExitStatus> {
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),
-        }) => commands::pip_freeze(&cache, args.strict, printer),
+        }) => commands::pip_freeze(args.strict, args.python.as_deref(), &cache, printer),
         Commands::Pip(PipNamespace {
             command: PipCommand::List(args),
         }) => commands::pip_list(
-            &cache,
             args.strict,
             args.editable,
             args.exclude_editable,
             &args.exclude,
+            args.python.as_deref(),
+            &cache,
             printer,
         ),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })
-        | Commands::Clean(args) => commands::cache_clean(&cache, &args.package, printer),
+        | Commands::Clean(args) => commands::cache_clean(&args.package, &cache, printer),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
         }) => {

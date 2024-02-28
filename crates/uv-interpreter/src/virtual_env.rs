@@ -9,7 +9,7 @@ use uv_fs::{LockedFile, Normalized};
 
 use crate::cfg::PyVenvConfiguration;
 use crate::python_platform::PythonPlatform;
-use crate::{find_requested_python, Error, Interpreter};
+use crate::{find_default_python, find_requested_python, Error, Interpreter};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -59,6 +59,15 @@ impl Virtualenv {
         let Some(interpreter) = find_requested_python(python, platform, cache)? else {
             return Err(Error::RequestedPythonNotFound(python.to_string()));
         };
+        Ok(Self {
+            root: interpreter.base_prefix().to_path_buf(),
+            interpreter,
+        })
+    }
+
+    /// Create a [`Virtualenv`] for the default Python interpreter.
+    pub fn from_default_python(platform: &Platform, cache: &Cache) -> Result<Self, Error> {
+        let interpreter = find_default_python(platform, cache)?;
         Ok(Self {
             root: interpreter.base_prefix().to_path_buf(),
             interpreter,
