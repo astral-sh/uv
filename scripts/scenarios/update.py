@@ -67,6 +67,18 @@ CUTE_NAMES = {
     "h": "heron",
 }
 
+# Scenarios to skip testing. That is, these scenarios are marked with
+# `#[ignore]`. This is useful for keeping track of scenarios that `uv`
+# doesn't pass, but perhaps one day will.
+SKIP = {
+    'local-simple',
+    'local-not-used-with-sdist',
+    'local-used-without-sdist',
+    'local-not-latest',
+    'local-transitive',
+    'local-transitive-confounding',
+}
+
 try:
     import packse
 except ImportError:
@@ -164,6 +176,15 @@ data["scenarios"] = [
     # Drop the example scenario
     if scenario["name"] != "example"
 ]
+
+
+# Mark selected scenarios as skipped.
+for scenario in data["scenarios"]:
+    # Assert that we aren't trampling on anything from packse.
+    # i.e., In case a new 'skip' field is added to packse's schema.
+    assert "skip" not in scenario, "expect 'skip' key to be available"
+    scenario["skip"] = scenario["name"] in SKIP
+
 
 # Wrap the description onto multiple lines
 for scenario in data["scenarios"]:
