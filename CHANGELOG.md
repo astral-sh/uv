@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.12
+
+### CLI
+
+- Add a `--python` flag to allow installation into arbitrary Python interpreters ([#2000](https://github.com/astral-sh/uv/pull/2000))
+- Add a `--system` flag for opt-in non-virtualenv installs ([#2046](https://github.com/astral-sh/uv/pull/2046))
+
+### Enhancements
+
+- Add a `--pre` alias for `--prerelease=allow` ([#2049](https://github.com/astral-sh/uv/pull/2049))
+- Enable `freeze` and `list` to introspect non-virtualenv Pythons ([#2033](https://github.com/astral-sh/uv/pull/2033))
+- Support environment variables in index URLs in requirements files ([#2036](https://github.com/astral-sh/uv/pull/2036))
+- Add `--exclude-editable` and `--exclude` args to `uv pip list` ([#1985](https://github.com/astral-sh/uv/pull/1985))
+- Always remove color codes from output file ([#2018](https://github.com/astral-sh/uv/pull/2018))
+- Support recursive extras in direct `pyproject.toml` files ([#1990](https://github.com/astral-sh/uv/pull/1990))
+- Un-cache editable requirements with dynamic metadata ([#2029](https://github.com/astral-sh/uv/pull/2029))
+- Use a non-local lock file for locking system interpreters ([#2045](https://github.com/astral-sh/uv/pull/2045))
+- Surface the `EXTERNALLY-MANAGED` message to users ([#2032](https://github.com/astral-sh/uv/pull/2032))
+
 ## 0.1.11
 
 ### Enhancements
