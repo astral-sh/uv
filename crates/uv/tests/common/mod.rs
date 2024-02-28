@@ -96,6 +96,13 @@ impl TestContext {
             .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .current_dir(self.temp_dir.path());
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            cmd.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
+        }
+
         cmd
     }
 

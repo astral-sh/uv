@@ -192,7 +192,7 @@ impl<'a> FlatIndexClient<'a> {
             .await;
         match response {
             Ok(files) => {
-                let index_url = IndexUrl::Url(VerbatimUrl::unknown(url.clone()));
+                let index_url = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
                 let files = files
                     .into_iter()
                     .filter_map(|file| {
