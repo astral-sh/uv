@@ -68,7 +68,7 @@ pub fn find_requested_python(
     }
 }
 
-/// Pick a sensible default for the python a user wants when they didn't specify a version.
+/// Pick a sensible default for the Python a user wants when they didn't specify a version.
 ///
 /// We prefer the test overwrite `UV_TEST_PYTHON_PATH` if it is set, otherwise `python3`/`python` or
 /// `python.exe` respectively.
