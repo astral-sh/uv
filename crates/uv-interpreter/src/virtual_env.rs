@@ -9,7 +9,7 @@ use uv_fs::{LockedFile, Normalized};
 
 use crate::cfg::PyVenvConfiguration;
 use crate::python_platform::PythonPlatform;
-use crate::{Error, Interpreter};
+use crate::{find_requested_python, Error, Interpreter};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -19,24 +19,11 @@ pub struct Virtualenv {
 }
 
 impl Virtualenv {
-    /// Create a new virtual environment for a pre-provided Python interpreter.
-    pub fn from_python(
-        python: impl AsRef<Path>,
-        platform: Platform,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
-        let interpreter = Interpreter::query(python.as_ref(), platform, cache)?;
-        Ok(Self {
-            root: interpreter.base_prefix().to_path_buf(),
-            interpreter,
-        })
-    }
-
-    /// Venv the current Python executable from the host environment.
+    /// Create a [`Virtualenv`] for an existing virtual environment.
     pub fn from_env(platform: Platform, cache: &Cache) -> Result<Self, Error> {
         let platform = PythonPlatform::from(platform);
         let Some(venv) = detect_virtual_env(&platform)? else {
-            return Err(Error::NotFound);
+            return Err(Error::VenvNotFound);
         };
         let venv = fs_err::canonicalize(venv)?;
         let executable = platform.venv_python(&venv);
@@ -55,12 +42,27 @@ impl Virtualenv {
         })
     }
 
-    /// Creating a new venv from a Python interpreter changes this.
+    /// Create a [`Virtualenv`] for a new virtual environment, created with the given interpreter.
     pub fn from_interpreter(interpreter: Interpreter, venv: &Path) -> Self {
         Self {
             interpreter: interpreter.with_venv_root(venv.to_path_buf()),
             root: venv.to_path_buf(),
         }
+    }
+
+    /// Create a [`Virtualenv`] for a Python interpreter specifier (e.g., a path or a binary name).
+    pub fn from_requested_python(
+        python: &str,
+        platform: &Platform,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        let Some(interpreter) = find_requested_python(python, platform, cache)? else {
+            return Err(Error::RequestedPythonNotFound(python.to_string()));
+        };
+        Ok(Self {
+            root: interpreter.base_prefix().to_path_buf(),
+            interpreter,
+        })
     }
 
     /// Returns the location of the Python interpreter.

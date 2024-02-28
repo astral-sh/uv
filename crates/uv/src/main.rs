@@ -445,8 +445,14 @@ struct PipSyncArgs {
     /// any parent directory. The `--python` option allows you to specify a different interpreter,
     /// which is intended for use in continuous integration (CI) environments or other automated
     /// workflows.
-    #[clap(long)]
-    python: Option<PathBuf>,
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS. (Specifying a patch version is not supported.)
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment)]
+    python: Option<String>,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
@@ -623,8 +629,14 @@ struct PipInstallArgs {
     /// any parent directory. The `--python` option allows you to specify a different interpreter,
     /// which is intended for use in continuous integration (CI) environments or other automated
     /// workflows.
-    #[clap(long)]
-    python: Option<PathBuf>,
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS. (Specifying a patch version is not supported.)
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment)]
+    python: Option<String>,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
@@ -701,8 +713,14 @@ struct PipUninstallArgs {
     /// any parent directory. The `--python` option allows you to specify a different interpreter,
     /// which is intended for use in continuous integration (CI) environments or other automated
     /// workflows.
-    #[clap(long)]
-    python: Option<PathBuf>,
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS. (Specifying a patch version is not supported.)
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment)]
+    python: Option<String>,
 }
 
 #[derive(Args)]
@@ -741,14 +759,13 @@ struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     ///
     /// Supported formats:
-    /// - `3.10` searches for an installed Python 3.10 (`py --list-paths` on Windows, `python3.10` on Linux/Mac).
-    ///   Specifying a patch version is not supported.
-    /// - `python3.10` or `python.exe` looks for a binary in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses this exact Python.
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS. (Specifying a patch version is not supported.)
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     ///
     /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
     /// doesn't look for a Python interpreter on disk.
-    // Short `-p` to match `virtualenv`
     #[clap(long, short, verbatim_doc_comment)]
     python: Option<String>,
 

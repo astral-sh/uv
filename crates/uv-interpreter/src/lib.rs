@@ -28,7 +28,9 @@ pub enum Error {
     #[error("No versions of Python could be found. Is Python installed?")]
     PythonNotFound,
     #[error("Failed to locate a virtualenv or Conda environment (checked: `VIRTUAL_ENV`, `CONDA_PREFIX`, and `.venv`). Run `uv venv` to create a virtualenv.")]
-    NotFound,
+    VenvNotFound,
+    #[error("Failed to locate Python interpreter at: `{0}`")]
+    RequestedPythonNotFound(String),
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error("Failed to query python interpreter `{interpreter}`")]
