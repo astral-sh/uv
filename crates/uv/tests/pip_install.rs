@@ -1937,3 +1937,93 @@ requires-python = ">=3.8"
 
     Ok(())
 }
+
+#[test]
+fn invalidate_dynamic() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with dynamic metadata
+    let editable_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "example"
+version = "0.1.0"
+dynamic = ["dependencies"]
+requires-python = ">=3.11,<3.13"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+"#,
+    )?;
+
+    let requirements_txt = editable_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==4.0.0")?;
+
+    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, command(&context)
+        .arg("--editable")
+        .arg(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 4 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.1.0 (from [WORKSPACE_DIR])
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    // Re-installing should re-install.
+    uv_snapshot!(filters, command(&context)
+        .arg("--editable")
+        .arg(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 4 packages in [TIME]
+    Installed 1 package in [TIME]
+     - example==0.1.0 (from [WORKSPACE_DIR])
+     + example==0.1.0 (from [WORKSPACE_DIR])
+    "###
+    );
+
+    // Modify the requirements.
+    requirements_txt.write_str("anyio==3.7.1")?;
+
+    // Re-installing should update the package.
+    uv_snapshot!(filters, command(&context)
+        .arg("--editable")
+        .arg(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 4 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==4.0.0
+     + anyio==3.7.1
+     - example==0.1.0 (from [WORKSPACE_DIR])
+     + example==0.1.0 (from [WORKSPACE_DIR])
+    "###
+    );
+
+    Ok(())
+}

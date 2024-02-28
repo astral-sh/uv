@@ -5,20 +5,19 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{
-    IndexLocations, InstalledDist, InstalledMetadata, LocalDist, LocalEditable, Name,
-};
+use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name};
 use install_wheel_rs::linker::LinkMode;
 use platform_host::Platform;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
-use uv_cache::{ArchiveTimestamp, Cache};
+use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Normalized;
 use uv_installer::{
-    Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
+    is_dynamic, not_modified, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable,
+    SitePackages,
 };
 use uv_interpreter::Virtualenv;
 use uv_resolver::InMemoryIndex;
@@ -393,18 +392,6 @@ async fn resolve_editables(
     build_dispatch: &BuildDispatch<'_>,
     mut printer: Printer,
 ) -> Result<ResolvedEditables> {
-    /// Returns `true` if the installed distribution is up-to-date.
-    fn not_modified(editable: &EditableRequirement, installed: &InstalledDist) -> bool {
-        let Ok(Some(installed_at)) = ArchiveTimestamp::from_path(installed.path().join("METADATA"))
-        else {
-            return false;
-        };
-        let Ok(Some(modified_at)) = ArchiveTimestamp::from_path(&editable.path) else {
-            return false;
-        };
-        installed_at > modified_at
-    }
-
     // Partition the editables into those that are already installed, and those that must be built.
     let mut installed = Vec::with_capacity(editables.len());
     let mut uninstalled = Vec::with_capacity(editables.len());
@@ -415,7 +402,7 @@ async fn resolve_editables(
                 match existing.as_slice() {
                     [] => uninstalled.push(editable),
                     [dist] => {
-                        if not_modified(&editable, dist) {
+                        if not_modified(&editable, dist) && !is_dynamic(&editable) {
                             installed.push((*dist).clone());
                         } else {
                             uninstalled.push(editable);
@@ -433,10 +420,10 @@ async fn resolve_editables(
                 let existing = site_packages.get_editables(editable.raw());
                 match existing.as_slice() {
                     [] => uninstalled.push(editable),
-                    [dist] if not_modified(&editable, dist) => {
+                    [dist] => {
                         if packages.contains(dist.name()) {
                             uninstalled.push(editable);
-                        } else if not_modified(&editable, dist) {
+                        } else if not_modified(&editable, dist) && !is_dynamic(&editable) {
                             installed.push((*dist).clone());
                         } else {
                             uninstalled.push(editable);
