@@ -125,11 +125,7 @@ pub fn install_wheel(
     let mut record_writer = csv::WriterBuilder::new()
         .has_headers(false)
         .escape(b'"')
-        .from_path(
-            layout
-                .platlib
-                .join(format!("{dist_info_prefix}.dist-info/RECORD")),
-        )?;
+        .from_path(site_packages.join(format!("{dist_info_prefix}.dist-info/RECORD")))?;
     record.sort();
     for entry in record {
         record_writer.serialize(entry)?;
