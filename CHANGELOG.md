@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.13
+
+### Bug fixes
+
+- Prioritize `PATH` over `py --list-paths` in Windows selection ([#2057](https://github.com/astral-sh/uv/pull/2057)).
+  This fixes an issue in which the `--system` flag would not work correctly on Windows in GitHub
+  Actions.
+- Avoid canonicalizing user-provided interpreters ([#2072](https://github.com/astral-sh/uv/pull/2072))
+  This fixes an issue in which the `--python` flag would not work correctly with pyenv and other
+  interpreters.
+- Allow pre-releases for requirements in constraints files ([#2069](https://github.com/astral-sh/uv/pull/2069))
+- Avoid truncating EXTERNALLY-MANAGED error message ([#2073](https://github.com/astral-sh/uv/pull/2073))
+- Extend activation highlighting to entire `venv` command ([#2070](https://github.com/astral-sh/uv/pull/2070))
+- Reverse the order of `--index-url` and `--extra-index-url` priority ([#2083](https://github.com/astral-sh/uv/pull/2083))
+- Avoid assuming `RECORD` file is in `platlib` ([#2091](https://github.com/astral-sh/uv/pull/2091))
+
 ## 0.1.12
 
 ### CLI
