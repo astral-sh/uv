@@ -36,14 +36,24 @@ fn decode_token(content: &[&str]) -> String {
 
 /// Create a `pip install` command with options shared across scenarios.
 fn command(context: &TestContext) -> Command {
+    let mut command = command_without_exclude_newer(context);
+    command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
+    command
+}
+
+/// Create a `pip install` command with no `--exclude-newer` option.
+///
+/// One should avoid using this in tests to the extent possible because
+/// it can result in tests failing when the index state changes. Therefore,
+/// if you use this, there should be some other kind of mitigation in place.
+/// For example, pinning package versions.
+fn command_without_exclude_newer(context: &TestContext) -> Command {
     let mut command = Command::new(get_bin());
     command
         .arg("pip")
         .arg("install")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .current_dir(&context.temp_dir);
     command
@@ -796,6 +806,56 @@ fn install_no_index_version() {
           hint: Packages were unavailable because index lookups were disabled
           and no additional package locations were provided (try: `--find-links
           <uri>`)
+    "###
+    );
+
+    context.assert_command("import flask").failure();
+}
+
+/// Install a package via --extra-index-url.
+///
+/// This is a regression test where previously `uv` would consult test.pypi.org
+/// first, and if the package was found there, `uv` would not look at any other
+/// indexes. We fixed this by flipping the priority order of indexes so that
+/// test.pypi.org becomes the fallback (in this example) and the extra indexes
+/// (regular PyPI) are checked first.
+///
+/// (Neither approach matches `pip`'s behavior, which considers versions of
+/// each package from all indexes. `uv` stops at the first index it finds a
+/// package in.)
+///
+/// Ref: <https://github.com/astral-sh/uv/issues/1600>
+#[test]
+fn install_extra_index_url_has_priority() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command_without_exclude_newer(&context)
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--extra-index-url")
+        .arg("https://pypi.org/simple")
+        // This tests what we want because BOTH of the following
+        // are true: `black` is on pypi.org and test.pypi.org, AND
+        // `black==24.2.0` is on pypi.org and NOT test.pypi.org. So
+        // this would previously check for `black` on test.pypi.org,
+        // find it, but then not find a compatible version. After
+        // the fix, `uv` will check pypi.org first since it is given
+        // priority via --extra-index-url.
+        .arg("black==24.2.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Downloaded 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.2.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==23.2
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
     "###
     );
 

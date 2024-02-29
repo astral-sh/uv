@@ -288,7 +288,7 @@ impl Default for IndexUrls {
 }
 
 impl<'a> IndexUrls {
-    /// Return the primary [`IndexUrl`] entry.
+    /// Return the fallback [`IndexUrl`] entry.
     ///
     /// If `--no-index` is set, return `None`.
     ///
@@ -318,7 +318,7 @@ impl<'a> IndexUrls {
     /// If `no_index` was enabled, then this always returns an empty
     /// iterator.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
-        self.index().into_iter().chain(self.extra_index())
+        self.extra_index().chain(self.index())
     }
 }
 
