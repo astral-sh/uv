@@ -284,10 +284,25 @@ struct PipCompileArgs {
     refresh_package: Vec<PackageName>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
+    ///
+    /// The index given by this flag is given lower priority than all other
+    /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    ///
+    /// All indexes given via this flag take priority over the index
+    /// in `--index-url` (which defaults to PyPI). And when multiple
+    /// `--extra-index-url` flags are given, earlier values take priority.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
     #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
 
@@ -421,10 +436,25 @@ struct PipSyncArgs {
     link_mode: install_wheel_rs::linker::LinkMode,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
+    ///
+    /// The index given by this flag is given lower priority than all other
+    /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    ///
+    /// All indexes given via this flag take priority over the index
+    /// in `--index-url` (which defaults to PyPI). And when multiple
+    /// `--extra-index-url` flags are given, earlier values take priority.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
     #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
 
@@ -619,10 +649,25 @@ struct PipInstallArgs {
     output_file: Option<PathBuf>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
+    ///
+    /// The index given by this flag is given lower priority than all other
+    /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    ///
+    /// All indexes given via this flag take priority over the index
+    /// in `--index-url` (which defaults to PyPI). And when multiple
+    /// `--extra-index-url` flags are given, earlier values take priority.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
     #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
 
@@ -892,10 +937,25 @@ struct VenvArgs {
     prompt: Option<String>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
+    ///
+    /// The index given by this flag is given lower priority than all other
+    /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
     #[clap(long, short, env = "UV_INDEX_URL")]
     index_url: Option<IndexUrl>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
+    ///
+    /// All indexes given via this flag take priority over the index
+    /// in `--index-url` (which defaults to PyPI). And when multiple
+    /// `--extra-index-url` flags are given, earlier values take priority.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
     #[clap(long, env = "UV_EXTRA_INDEX_URL")]
     extra_index_url: Vec<IndexUrl>,
 

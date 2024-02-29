@@ -184,11 +184,12 @@ impl RegistryClient {
         &self,
         package_name: &PackageName,
     ) -> Result<(IndexUrl, OwnedArchive<SimpleMetadata>), Error> {
-        if self.index_urls.no_index() {
+        let mut it = self.index_urls.indexes().peekable();
+        if it.peek().is_none() {
             return Err(ErrorKind::NoIndex(package_name.as_ref().to_string()).into());
         }
 
-        for index in self.index_urls.indexes() {
+        for index in it {
             let result = self.simple_single_index(package_name, index).await?;
 
             return match result {
