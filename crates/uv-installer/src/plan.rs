@@ -15,7 +15,7 @@ use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Timestamp, WheelCache};
 use uv_distribution::{BuiltWheelIndex, RegistryWheelIndex};
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_traits::NoBinary;
@@ -299,7 +299,7 @@ impl<'a> Planner<'a> {
                             if !wheel.filename.is_compatible(tags) {
                                 bail!(
                                     "A path dependency is incompatible with the current platform: {}",
-                                    wheel.path.normalized_display()
+                                    wheel.path.simplified_display()
                                 );
                             }
 

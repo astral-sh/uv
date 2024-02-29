@@ -9,7 +9,7 @@ use tracing::debug;
 use distribution_types::{InstalledDist, Name};
 use platform_host::Platform;
 use uv_cache::Cache;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
 
@@ -43,7 +43,7 @@ pub(crate) fn pip_freeze(
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
-        venv.python_executable().normalized_display().cyan()
+        venv.python_executable().simplified_display().cyan()
     );
 
     // Build the installed index.

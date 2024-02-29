@@ -18,7 +18,7 @@ use platform_host::Platform;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_installer::NoBinary;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{InMemoryIndex, OptionsBuilder};
@@ -108,14 +108,14 @@ async fn venv_impl(
         printer,
         "Using Python {} interpreter at: {}",
         interpreter.python_version(),
-        interpreter.sys_executable().normalized_display().cyan()
+        interpreter.sys_executable().simplified_display().cyan()
     )
     .into_diagnostic()?;
 
     writeln!(
         printer,
         "Creating virtualenv at: {}",
-        path.normalized_display().cyan()
+        path.simplified_display().cyan()
     )
     .into_diagnostic()?;
 
@@ -214,7 +214,7 @@ async fn venv_impl(
             "Activate with: {}",
             path.join("Scripts")
                 .join("activate")
-                .normalized_display()
+                .simplified_display()
                 .green()
         )
         .into_diagnostic()?;
@@ -224,7 +224,7 @@ async fn venv_impl(
             "Activate with: {}",
             format!(
                 "source {}",
-                path.join("bin").join("activate").normalized_display()
+                path.join("bin").join("activate").simplified_display()
             )
             .green()
         )

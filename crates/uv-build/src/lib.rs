@@ -28,7 +28,7 @@ use tracing::{debug, info_span, instrument, Instrument};
 
 use distribution_types::Resolution;
 use pep508_rs::Requirement;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_traits::{BuildContext, BuildKind, ConfigSettings, SetupPyStrategy, SourceBuildTrait};
 
@@ -642,7 +642,7 @@ impl SourceBuild {
             );
             let output = Command::new(python_interpreter)
                 .args(["setup.py", "bdist_wheel"])
-                .current_dir(self.source_tree.normalized())
+                .current_dir(self.source_tree.simplified())
                 .output()
                 .instrument(span)
                 .await
@@ -859,7 +859,7 @@ async fn run_python_script(
     };
     Command::new(venv.python_executable())
         .args(["-c", script])
-        .current_dir(source_tree.normalized())
+        .current_dir(source_tree.simplified())
         // Activate the venv
         .env("VIRTUAL_ENV", venv.root())
         .env("PATH", new_path)

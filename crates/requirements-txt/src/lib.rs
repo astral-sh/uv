@@ -48,7 +48,7 @@ use uv_warnings::warn_user;
 use pep508_rs::{
     split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, Scheme, VerbatimUrl,
 };
-use uv_fs::{normalize_url_path, Normalized};
+use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
 
 /// We emit one of those for each requirements.txt entry
@@ -872,63 +872,63 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Invalid URL in `{}` at position {start}: `{url}`",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::InvalidEditablePath(given) => {
                 write!(
                     f,
                     "Invalid editable path in `{}`: {given}",
-                    self.file.normalized_display()
+                    self.file.simplified_display()
                 )
             }
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 write!(
                     f,
                     "Unsupported URL (expected a `file://` scheme) in `{}`: `{url}`",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::MissingRequirementPrefix(given) => {
                 write!(
                     f,
                     "Requirement `{given}` in `{}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::MissingEditablePrefix(given) => {
                 write!(
                     f,
                     "Requirement `{given}` in `{}` looks like a directory but was passed as a package name. Did you mean `-e {given}`?",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::Parser { message, location } => {
                 write!(
                     f,
                     "{message} in `{}` at position {location}",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::UnsupportedRequirement { start, .. } => {
                 write!(
                     f,
                     "Unsupported requirement in {} at position {start}",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::Pep508 { start, .. } => {
                 write!(
                     f,
                     "Couldn't parse requirement in `{}` at position {start}",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::Subfile { start, .. } => {
                 write!(
                     f,
                     "Error parsing included file in `{}` at position {start}",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
         }
@@ -958,7 +958,7 @@ mod test {
     use itertools::Itertools;
     use tempfile::tempdir;
     use test_case::test_case;
-    use uv_fs::Normalized;
+    use uv_fs::Simplified;
 
     use crate::{EditableRequirement, RequirementsTxt};
 
@@ -1044,8 +1044,8 @@ mod test {
             .join("\n");
 
         let requirement_txt =
-            regex::escape(&requirements_txt.path().normalized_display().to_string());
-        let missing_txt = regex::escape(&missing_txt.path().normalized_display().to_string());
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let missing_txt = regex::escape(&missing_txt.path().simplified_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (missing_txt.as_str(), "<MISSING_TXT>"),
@@ -1075,7 +1075,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
-            regex::escape(&requirements_txt.path().normalized_display().to_string());
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1106,7 +1106,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
-            regex::escape(&requirements_txt.path().normalized_display().to_string());
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1132,7 +1132,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
-            regex::escape(&requirements_txt.path().normalized_display().to_string());
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
         let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
@@ -1160,7 +1160,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
-            regex::escape(&requirements_txt.path().normalized_display().to_string());
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1194,7 +1194,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
-            regex::escape(&requirements_txt.path().normalized_display().to_string());
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),

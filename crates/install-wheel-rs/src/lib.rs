@@ -14,7 +14,7 @@ use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use platform_host::{Arch, Os};
 pub use uninstall::{uninstall_wheel, Uninstall};
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
 pub mod linker;
@@ -47,7 +47,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     /// Custom error type to add a path to error reading a file from a zip
-    #[error("Failed to reflink {} to {}", from.normalized_display(), to.normalized_display())]
+    #[error("Failed to reflink {} to {}", from.simplified_display(), to.simplified_display())]
     Reflink {
         from: PathBuf,
         to: PathBuf,
@@ -88,7 +88,7 @@ pub enum Error {
     DirectUrlJson(#[from] serde_json::Error),
     #[error("No .dist-info directory found")]
     MissingDistInfo,
-    #[error("Cannot uninstall package; RECORD file not found at: {}", _0.normalized_display())]
+    #[error("Cannot uninstall package; RECORD file not found at: {}", _0.simplified_display())]
     MissingRecord(PathBuf),
     #[error("Multiple .dist-info directories found: {0}")]
     MultipleDistInfo(String),

@@ -14,7 +14,7 @@ use url::Url;
 use common::{
     create_bin_with_executables, create_venv, uv_snapshot, venv_to_interpreter, INSTA_FILTERS,
 };
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 
 use crate::common::{get_bin, TestContext};
 
@@ -2193,10 +2193,10 @@ fn sync_editable() -> Result<()> {
             # via poetry-editable
         -e file://{current_dir}/../../scripts/editable-installs/poetry_editable
         ",
-        current_dir = current_dir.normalized_display(),
+        current_dir = current_dir.simplified_display(),
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2334,7 +2334,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2377,7 +2377,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2416,7 +2416,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2450,7 +2450,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2508,7 +2508,7 @@ fn incompatible_wheel() -> Result<()> {
         &wheel_dir
             .path()
             .canonicalize()?
-            .normalized_display()
+            .simplified_display()
             .to_string(),
     );
     let filters: Vec<_> = [(wheel_dir.as_str(), "[TEMP_DIR]")]
@@ -2597,7 +2597,7 @@ fn find_links() -> Result<()> {
     "})?;
 
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
-    let project_root_string = regex::escape(&project_root.normalized_display().to_string());
+    let project_root_string = regex::escape(&project_root.simplified_display().to_string());
     let filters: Vec<_> = [(project_root_string.as_str(), "[PROJECT_ROOT]")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())

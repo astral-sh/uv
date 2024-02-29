@@ -7,7 +7,7 @@ use tracing::debug;
 use distribution_types::{InstalledMetadata, Name};
 use platform_host::Platform;
 use uv_cache::Cache;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
 
 use crate::commands::{elapsed, ExitStatus};
@@ -50,7 +50,7 @@ pub(crate) async fn pip_uninstall(
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
-        venv.python_executable().normalized_display().cyan(),
+        venv.python_executable().simplified_display().cyan(),
     );
 
     // If the environment is externally managed, abort.
@@ -58,13 +58,13 @@ pub(crate) async fn pip_uninstall(
         return if let Some(error) = externally_managed.into_error() {
             Err(anyhow::anyhow!(
                 "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
-                venv.root().normalized_display().cyan(),
+                venv.root().simplified_display().cyan(),
                 textwrap::indent(&error, "  ").green(),
             ))
         } else {
             Err(anyhow::anyhow!(
                 "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
-                venv.root().normalized_display().cyan()
+                venv.root().simplified_display().cyan()
             ))
         };
     }
