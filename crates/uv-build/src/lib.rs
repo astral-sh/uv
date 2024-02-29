@@ -446,7 +446,7 @@ impl SourceBuild {
             let venv_path = iter::once(venv.scripts().to_path_buf()).chain(env::split_paths(&path));
             env::join_paths(venv_path).map_err(Error::BuildScriptPath)?
         } else {
-            OsString::from("")
+            OsString::from(venv.scripts())
         };
 
         if let Some(pep517_backend) = &pep517_backend {
