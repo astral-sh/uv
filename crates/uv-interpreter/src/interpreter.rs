@@ -421,21 +421,6 @@ impl Interpreter {
         } else {
             "python"
         }
-
-        // This implementation sniffs out what the directory name
-        // might be from sysconfig, but at the time of writing, this
-        // seems a little more risky than the simpler but less robust
-        // implementation above.
-        /*
-        const FALLBACK: &str = "python";
-        let Some(base) = self.include().file_name().and_then(|name| name.to_str()) else {
-            return FALLBACK;
-        };
-        base.char_indices()
-            .take_while(|(_, ch)| ch.is_ascii_alphabetic())
-            .last()
-            .map_or(FALLBACK, |(end, ch)| &base[..end + ch.len_utf8()])
-        */
     }
 
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
