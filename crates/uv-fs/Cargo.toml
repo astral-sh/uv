@@ -22,6 +22,7 @@ junction = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
 urlencoding = { workspace = true }
+reqwest = { workspace = true }
 
 [features]
 default = []

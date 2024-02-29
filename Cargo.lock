@@ -191,6 +191,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-recursion"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fd55a5ba1179988837d24ab4c7cc8ed6efdeff578ede0416b4225a5fca35bd0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.48",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.77"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2774,6 +2785,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "assert_fs",
+ "async-recursion",
  "fs-err",
  "indoc",
  "insta",
@@ -2787,6 +2799,7 @@ dependencies = [
  "tempfile",
  "test-case",
  "thiserror",
+ "tokio",
  "tracing",
  "unscanny",
  "url",
@@ -4452,6 +4465,7 @@ dependencies = [
  "fs-err",
  "fs2",
  "junction",
+ "reqwest",
  "tempfile",
  "tracing",
  "urlencoding",

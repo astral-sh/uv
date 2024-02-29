@@ -115,7 +115,7 @@ fn missing_requirements_in() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to open file `requirements.in`
+    error: failed to read from file `requirements.in`
       Caused by: No such file or directory (os error 2)
     "###
     );
@@ -142,7 +142,7 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to open file `requirements.in`
+    error: failed to read from file `requirements.in`
       Caused by: No such file or directory (os error 2)
     "###
     );

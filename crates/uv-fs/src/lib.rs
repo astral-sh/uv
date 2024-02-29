@@ -1,3 +1,4 @@
+use fs::tokio;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
@@ -15,7 +16,7 @@ mod path;
 /// Reads the contents of the file path given into memory.
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
-pub fn read(path: impl AsRef<Path>) -> std::io::Result<Vec<u8>> {
+pub async fn read(path: impl AsRef<Path>) -> std::io::Result<Vec<u8>> {
     use std::io::Read;
 
     let path = path.as_ref();
@@ -24,14 +25,31 @@ pub fn read(path: impl AsRef<Path>) -> std::io::Result<Vec<u8>> {
         std::io::stdin().read_to_end(&mut buf)?;
         Ok(buf)
     } else {
-        fs::read(path)
+        let path_utf8 = path.to_str().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Path '{:?}' is not valid unicode.", &path),
+            )
+        })?;
+        if path_utf8.starts_with("http://") | path_utf8.starts_with("https://") {
+            Ok(reqwest::get(path_utf8)
+                .await
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?
+                .bytes()
+                .await
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?
+                .into_iter()
+                .collect())
+        } else {
+            Ok(tokio::read(path).await?)
+        }
     }
 }
 
 /// Reads the contents of the file path given into memory as a `String`.
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
-pub fn read_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
+pub async fn read_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
     use std::io::Read;
 
     let path = path.as_ref();
@@ -40,7 +58,22 @@ pub fn read_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
         std::io::stdin().read_to_string(&mut buf)?;
         Ok(buf)
     } else {
-        fs::read_to_string(path)
+        let path_utf8 = path.to_str().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Path '{:?}' is not valid unicode.", &path),
+            )
+        })?;
+        if path_utf8.starts_with("http://") | path_utf8.starts_with("https://") {
+            Ok(reqwest::get(path_utf8)
+                .await
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?
+                .text()
+                .await
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?)
+        } else {
+            Ok(tokio::read_to_string(path).await?)
+        }
     }
 }
 

@@ -36,7 +36,7 @@ pub(crate) async fn pip_uninstall(
         no_index: _no_index,
         find_links: _find_links,
         extras: _extras,
-    } = RequirementsSpecification::from_simple_sources(sources)?;
+    } = RequirementsSpecification::from_simple_sources(sources).await?;
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;

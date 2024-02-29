@@ -60,7 +60,7 @@ pub(crate) async fn pip_sync(
         no_index,
         find_links,
         extras: _extras,
-    } = RequirementsSpecification::from_simple_sources(sources)?;
+    } = RequirementsSpecification::from_simple_sources(sources).await?;
 
     let num_requirements = requirements.len() + editables.len();
     if num_requirements == 0 {

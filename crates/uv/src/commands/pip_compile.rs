@@ -9,6 +9,7 @@ use std::str::FromStr;
 use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
+use futures::future::OptionFuture;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
@@ -94,7 +95,8 @@ pub(crate) async fn pip_compile(
         no_index,
         find_links,
         extras: used_extras,
-    } = RequirementsSpecification::from_sources(requirements, constraints, overrides, &extras)?;
+    } = RequirementsSpecification::from_sources(requirements, constraints, overrides, &extras)
+        .await?;
 
     // Incorporate any index locations from the provided sources.
     let index_locations =
@@ -117,14 +119,20 @@ pub(crate) async fn pip_compile(
         }
     }
 
-    let preferences: Vec<Requirement> = output_file
-        // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
-        .filter(|_| !upgrade.is_all())
-        .filter(|output_file| output_file.exists())
-        .map(Path::to_path_buf)
-        .map(RequirementsSource::from_path)
-        .as_ref()
-        .map(|source| RequirementsSpecification::from_source(source, &extras))
+    let preferences: Vec<Requirement> =
+        OptionFuture::from(
+            output_file
+                // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
+                .filter(|_| !upgrade.is_all())
+                .filter(|output_file| output_file.exists())
+                .map(Path::to_path_buf)
+                .map(RequirementsSource::from_path)
+                .as_ref()
+                .map(|source| async move {
+                    RequirementsSpecification::from_source(source, &extras).await
+                }),
+        )
+        .await
         .transpose()?
         .map(|spec| spec.requirements)
         .map(|requirements| match upgrade {

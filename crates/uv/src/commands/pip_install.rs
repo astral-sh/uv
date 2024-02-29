@@ -81,7 +81,7 @@ pub(crate) async fn pip_install(
         no_index,
         find_links,
         extras: used_extras,
-    } = specification(requirements, constraints, overrides, extras)?;
+    } = specification(requirements, constraints, overrides, extras).await?;
 
     // Incorporate any index locations from the provided sources.
     let index_locations =
@@ -313,7 +313,7 @@ pub(crate) async fn pip_install(
 }
 
 /// Consolidate the requirements for an installation.
-fn specification(
+async fn specification(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
@@ -330,7 +330,8 @@ fn specification(
 
     // Read all requirements from the provided sources.
     let spec =
-        RequirementsSpecification::from_sources(requirements, constraints, overrides, extras)?;
+        RequirementsSpecification::from_sources(requirements, constraints, overrides, extras)
+            .await?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {

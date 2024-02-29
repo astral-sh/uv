@@ -76,7 +76,7 @@ fn missing_requirements_txt() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to open file `requirements.txt`
+    error: failed to read from file `requirements.txt`
       Caused by: No such file or directory (os error 2)
     "###
     );

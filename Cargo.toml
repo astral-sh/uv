@@ -3,7 +3,7 @@ members = ["crates/*"]
 exclude = [
   "scripts",
   # Needs nightly
-  "crates/uv-trampoline"
+  "crates/uv-trampoline",
 ]
 resolver = "2"
 
@@ -21,6 +21,7 @@ anstream = { version = "0.6.12" }
 anyhow = { version = "1.0.80" }
 async-compression = { version = "0.4.6" }
 async-trait = { version = "0.1.77" }
+async-recursion = { version = "1.0.5" }
 async_http_range_reader = { version = "0.7.0" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "d76801da0943de985254fc6255c0e476b57c5836", features = ["deflate"] }
 base64 = { version = "0.21.7" }

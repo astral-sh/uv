@@ -27,6 +27,8 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }
 url = { workspace = true }
+async-recursion = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 anyhow = { version = "1.0.80" }
