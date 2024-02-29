@@ -20,6 +20,7 @@ license = "MIT OR Apache-2.0"
 anstream = { version = "0.6.12" }
 anyhow = { version = "1.0.80" }
 async-compression = { version = "0.4.6" }
+async-channel = { version = "2.2.0" }
 async-trait = { version = "0.1.77" }
 async_http_range_reader = { version = "0.7.0" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "d76801da0943de985254fc6255c0e476b57c5836", features = ["deflate"] }

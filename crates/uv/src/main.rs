@@ -534,6 +534,18 @@ struct PipSyncArgs {
     #[clap(long, conflicts_with = "no_build")]
     only_binary: Vec<PackageNameSpecifier>,
 
+    /// Compile Python files to bytecode.
+    ///
+    /// By default, does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`), instead
+    /// Python lazily does the compilation the first time a module is imported. In cases where the
+    /// first start time matters, such as CLI applications and docker containers, this option can
+    /// trade longer install time for faster startup.
+    ///
+    /// The compile option will process the entire site-packages directory for consistency and
+    /// (like pip) ignore all errors.
+    #[clap(long)]
+    compile: bool,
+
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[clap(long, short = 'C', alias = "config-settings")]
     config_setting: Vec<ConfigSettingEntry>,
@@ -746,6 +758,18 @@ struct PipInstallArgs {
     /// Clear previously specified packages with `:none:`.
     #[clap(long, conflicts_with = "no_build")]
     only_binary: Vec<PackageNameSpecifier>,
+
+    /// Compile Python files to bytecode.
+    ///
+    /// By default, does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`), instead
+    /// Python lazily does the compilation the first time a module is imported. In cases where the
+    /// first start time matters, such as CLI applications and docker containers, this option can
+    /// trade longer install time for faster startup.
+    ///
+    /// The compile option will process the entire site-packages directory for consistency and
+    /// (like pip) ignore all errors.
+    #[clap(long)]
+    compile: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[clap(long, short = 'C', alias = "config-settings")]
@@ -1219,6 +1243,7 @@ async fn run() -> Result<ExitStatus> {
                 &sources,
                 &reinstall,
                 args.link_mode,
+                args.compile,
                 index_urls,
                 setup_py,
                 if args.offline {
@@ -1308,6 +1333,7 @@ async fn run() -> Result<ExitStatus> {
                 index_urls,
                 &reinstall,
                 args.link_mode,
+                args.compile,
                 setup_py,
                 if args.offline {
                     Connectivity::Offline

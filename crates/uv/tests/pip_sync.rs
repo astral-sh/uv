@@ -2,7 +2,7 @@
 
 use fs_err as fs;
 use std::env::consts::EXE_SUFFIX;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::Result;
@@ -71,6 +71,21 @@ fn uninstall_command(context: &TestContext) -> Command {
     }
 
     command
+}
+
+/// Returns the site-packages folder inside the venv.
+fn site_packages(context: &TestContext) -> PathBuf {
+    if cfg!(unix) {
+        context
+            .venv
+            .join("lib")
+            .join(format!("python{}", context.python_version))
+            .join("site-packages")
+    } else if cfg!(windows) {
+        context.venv.join("Lib").join("site-packages")
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    }
 }
 
 #[test]
@@ -165,6 +180,13 @@ fn install() -> Result<()> {
      + markupsafe==2.1.3
     "###
     );
+
+    // Counterpart for the `compile()` test.
+    assert!(!site_packages(&context)
+        .join("markupsafe")
+        .join("__pycache__")
+        .join("__init__.cpython-312.pyc")
+        .exists());
 
     context.assert_command("import markupsafe").success();
 
@@ -2890,6 +2912,43 @@ requires-python = ">=3.8"
      + example==0.0.0 (from [WORKSPACE_DIR])
     "###
     );
+
+    Ok(())
+}
+
+/// Install with bytecode compilation.
+#[test]
+fn compile() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    Bytecode compiled 3 files in [TIME]
+    "###
+    );
+
+    assert!(site_packages(&context)
+        .join("markupsafe")
+        .join("__pycache__")
+        .join("__init__.cpython-312.pyc")
+        .exists());
+
+    context.assert_command("import markupsafe").success();
 
     Ok(())
 }

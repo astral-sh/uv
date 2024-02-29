@@ -24,7 +24,8 @@ use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, Regist
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{
-    BuiltEditable, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
+    compile_tree, BuiltEditable, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable,
+    SitePackages,
 };
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
@@ -55,6 +56,7 @@ pub(crate) async fn pip_install(
     index_locations: IndexLocations,
     reinstall: &Reinstall,
     link_mode: LinkMode,
+    compile: bool,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -293,6 +295,7 @@ pub(crate) async fn pip_install(
         reinstall,
         no_binary,
         link_mode,
+        compile,
         &index_locations,
         tags,
         &client,
@@ -506,6 +509,7 @@ async fn install(
     reinstall: &Reinstall,
     no_binary: &NoBinary,
     link_mode: LinkMode,
+    compile: bool,
     index_urls: &IndexLocations,
     tags: &Tags,
     client: &RegistryClient,
@@ -677,6 +681,29 @@ async fn install(
                 )?;
             }
         }
+    }
+
+    if compile {
+        let start = std::time::Instant::now();
+        let files = compile_tree(venv.site_packages(), venv.python_executable())
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to bytecode compile {}",
+                    venv.site_packages().display()
+                )
+            })?;
+        let s = if files == 1 { "" } else { "s" };
+        writeln!(
+            printer,
+            "{}",
+            format!(
+                "Bytecode compiled {} in {}",
+                format!("{files} file{s}").bold(),
+                elapsed(start.elapsed())
+            )
+            .dimmed()
+        )?;
     }
 
     // TODO(konstin): Also check the cache whether any cached or installed dist is already known to

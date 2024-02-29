@@ -14,11 +14,9 @@ import warnings
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore")
-    # in rust, we give one line per file to compile
-    # we also have to read it before printing to stdout or we risk pipes running full
-    paths = sys.stdin.readlines()
-    for path in paths:
-        # just to be sure
+    # In rust, we give one line per file to compile
+    for path in sys.stdin:
+        # Remove trailing newline
         path = path.strip()
         if not path:
             continue
@@ -26,6 +24,5 @@ with warnings.catch_warnings():
         # I'd like to show those errors, but given that pip thinks that's totally fine
         # we can't really change that
         success = compileall.compile_file(path, force=True, quiet=2)
-        if success:
-            # return successfully compiled files so we can update RECORD accordingly
-            print(path)
+        # We're ready for the next file
+        print(path)
