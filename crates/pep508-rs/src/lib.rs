@@ -43,9 +43,8 @@ pub use marker::{
 };
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_fs::normalize_url_path;
-#[cfg(feature = "pyo3")]
-use uv_normalize::InvalidNameError;
-use uv_normalize::{ExtraName, PackageName};
+// Parity with the crates.io version of pep508_rs
+pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 pub use verbatim_url::{split_scheme, Scheme, VerbatimUrl};
 
 mod marker;
