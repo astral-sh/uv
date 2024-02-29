@@ -332,7 +332,7 @@ pub struct SourceBuild {
     package_id: String,
     /// Whether we do a regular PEP 517 build or an PEP 660 editable build
     build_kind: BuildKind,
-    /// Modified PATH that contains the [`venv_bin`, `user_path`, `system_path`] variables in that order
+    /// Modified PATH that contains the `venv_bin`, `user_path` and `system_path` variables in that order
     modified_path: OsString,
     /// Environment variables to be passed in during metadata or wheel building
     environment_variables: FxHashMap<OsString, OsString>,
