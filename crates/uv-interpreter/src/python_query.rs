@@ -114,8 +114,8 @@ fn find_python(
     #[allow(non_snake_case)]
     let UV_TEST_PYTHON_PATH = env::var_os("UV_TEST_PYTHON_PATH");
 
-    let possible_names = selector.possible_names();
     let override_path = UV_TEST_PYTHON_PATH.is_some();
+    let possible_names = selector.possible_names();
 
     #[allow(non_snake_case)]
     let PATH = UV_TEST_PYTHON_PATH
@@ -185,13 +185,10 @@ fn find_python(
         // Use `py` to find the python installation on the system.
         match windows::py_list_paths(selector, platform, cache) {
             Ok(Some(interpreter)) => return Ok(Some(interpreter)),
-            Ok(None) => {
-                // No matching Python version found, continue searching PATH
-            }
+            Ok(None) => {}
             Err(Error::PyList(error)) => {
                 if error.kind() == std::io::ErrorKind::NotFound {
-                    debug!("`py` is not installed. Falling back to searching Python on the path");
-                    // Continue searching for python installations on the path.
+                    debug!("`py` is not installed");
                 }
             }
             Err(error) => return Err(error),

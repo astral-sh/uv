@@ -164,10 +164,10 @@ search for a Python interpreter matching that version in the following order:
 - An activated virtual environment based on the `VIRTUAL_ENV` environment variable.
 - An activated Conda environment based on the `CONDA_PREFIX` environment variable.
 - A virtual environment at `.venv` in the current directory, or in the nearest parent directory.
-- The Python interpreter available as, e.g., `python3.7` on macOS and Linux. On Windows, uv
-  will use the same mechanism as `py --list-paths` to discover all available Python interpreters,
-  and will select the first interpreter matching the requested version.
+- The Python interpreter available as, e.g., `python3.7` on macOS and Linux.
 - The Python interpreter available as `python3` on macOS and Linux, or `python.exe` on Windows.
+- On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
+  version.
 
 Since uv has no dependency on Python, it can even install into virtual environments other than
 its own. For example, setting `VIRTUAL_ENV=/path/to/venv` will cause uv to install into
