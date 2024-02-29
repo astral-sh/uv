@@ -6,7 +6,6 @@ use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::BufRead;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
@@ -436,7 +435,7 @@ impl SourceBuild {
                     Some(env::join_paths(new_path).map_err(Error::BuildScriptPath)?)
                 }
                 // Use the user supplied PATH
-                None => Some(OsString::from(user_path)),
+                None => Some(user_path),
             }
         } else {
             os_path
