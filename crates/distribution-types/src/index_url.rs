@@ -293,7 +293,7 @@ impl<'a> IndexUrls {
     /// If `--no-index` is set, return `None`.
     ///
     /// If no index is provided, use the `PyPI` index.
-    pub fn index(&'a self) -> Option<&'a IndexUrl> {
+    fn index(&'a self) -> Option<&'a IndexUrl> {
         if self.no_index {
             None
         } else {
@@ -305,7 +305,7 @@ impl<'a> IndexUrls {
     }
 
     /// Return an iterator over the extra [`IndexUrl`] entries.
-    pub fn extra_index(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
+    fn extra_index(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
         if self.no_index {
             Either::Left(std::iter::empty())
         } else {
@@ -314,13 +314,11 @@ impl<'a> IndexUrls {
     }
 
     /// Return an iterator over all [`IndexUrl`] entries.
+    ///
+    /// If `no_index` was enabled, then this always returns an empty
+    /// iterator.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a IndexUrl> + 'a {
         self.index().into_iter().chain(self.extra_index())
-    }
-
-    /// Return `true` if no index is configured.
-    pub fn no_index(&self) -> bool {
-        self.no_index
     }
 }
 
