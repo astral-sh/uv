@@ -6,6 +6,7 @@ use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::BufRead;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
@@ -332,8 +333,10 @@ pub struct SourceBuild {
     package_id: String,
     /// Whether we do a regular PEP 517 build or an PEP 660 editable build
     build_kind: BuildKind,
+    /// Modified PATH that contains the [`venv_bin`, `user_path`, `system_path`] variables in that order
+    modified_path: OsString,
     /// Environment variables to be passed in during metadata or wheel building
-    environment_variables: FxHashMap<String, String>,
+    environment_variables: FxHashMap<OsString, OsString>,
 }
 
 impl SourceBuild {
@@ -352,7 +355,7 @@ impl SourceBuild {
         setup_py: SetupPyStrategy,
         config_settings: ConfigSettings,
         build_kind: BuildKind,
-        environment_variables: FxHashMap<String, String>,
+        mut environment_variables: FxHashMap<OsString, OsString>,
     ) -> Result<Self, Error> {
         let temp_dir = tempdir_in(build_context.cache().root())?;
 
@@ -417,6 +420,36 @@ impl SourceBuild {
             .await
             .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
 
+        // Figure out what the modified path should be
+        // Remove the PATH variable from the environment variables if it's there
+        let user_path = environment_variables.remove(&OsString::from("PATH"));
+        // See if there is an OS PATH variable
+        let os_path = env::var_os("PATH");
+
+        // Prepend the user supplied PATH to the existing OS PATH
+        let modified_path = if let Some(user_path) = user_path {
+            match os_path {
+                // Prepend the user supplied PATH to the existing PATH
+                Some(env_path) => {
+                    let user_path = PathBuf::from(user_path);
+                    let new_path = env::split_paths(&user_path).chain(env::split_paths(&env_path));
+                    Some(env::join_paths(new_path).map_err(Error::BuildScriptPath)?)
+                }
+                // Use the user supplied PATH
+                None => Some(OsString::from(user_path)),
+            }
+        } else {
+            os_path
+        };
+
+        // Prepend the venv bin directory to the modified path
+        let modified_path = if let Some(path) = modified_path {
+            let venv_path = iter::once(venv.scripts().to_path_buf()).chain(env::split_paths(&path));
+            env::join_paths(venv_path).map_err(Error::BuildScriptPath)?
+        } else {
+            OsString::from("")
+        };
+
         if let Some(pep517_backend) = &pep517_backend {
             create_pep517_build_environment(
                 &source_tree,
@@ -427,6 +460,7 @@ impl SourceBuild {
                 build_kind,
                 &config_settings,
                 &environment_variables,
+                &modified_path,
             )
             .await?;
         }
@@ -441,6 +475,7 @@ impl SourceBuild {
             metadata_directory: None,
             package_id,
             environment_variables,
+            modified_path,
         })
     }
 
@@ -459,9 +494,7 @@ impl SourceBuild {
                     let resolved_requirements = build_context
                         .resolve(&default_backend.requirements)
                         .await
-                        .map_err(|err| {
-                            Error::RequirementsInstall("setup.py build (resolve)", err)
-                        })?;
+                        .map_err(|err| Error::RequirementsInstall("", err))?;
                     *resolution = Some(resolved_requirements.clone());
                     resolved_requirements
                 }
@@ -585,7 +618,8 @@ impl SourceBuild {
             &self.venv,
             &script,
             &self.source_tree,
-            self.environment_variables.clone(),
+            &self.environment_variables,
+            &self.modified_path,
         )
         .instrument(span)
         .await?;
@@ -722,7 +756,8 @@ impl SourceBuild {
             &self.venv,
             &script,
             &self.source_tree,
-            self.environment_variables.clone(),
+            &self.environment_variables,
+            &self.modified_path,
         )
         .instrument(span)
         .await?;
@@ -780,7 +815,8 @@ async fn create_pep517_build_environment(
     package_id: &str,
     build_kind: BuildKind,
     config_settings: &ConfigSettings,
-    environment_variables: &FxHashMap<String, String>,
+    environment_variables: &FxHashMap<OsString, OsString>,
+    modified_path: &OsString,
 ) -> Result<(), Error> {
     debug!(
         "Calling `{}.get_requires_for_build_{}()`",
@@ -804,9 +840,15 @@ async fn create_pep517_build_environment(
         script=format!("get_requires_for_build_{}", build_kind),
         python_version = %venv.interpreter().python_version()
     );
-    let output = run_python_script(venv, &script, source_tree, environment_variables.clone())
-        .instrument(span)
-        .await?;
+    let output = run_python_script(
+        venv,
+        &script,
+        source_tree,
+        environment_variables,
+        modified_path,
+    )
+    .instrument(span)
+    .await?;
     if !output.status.success() {
         return Err(Error::from_command_output(
             format!("Build backend failed to determine extra requires with `build_{build_kind}()`"),
@@ -867,48 +909,18 @@ async fn run_python_script(
     venv: &Virtualenv,
     script: &str,
     source_tree: &Path,
-    mut environment_variables: FxHashMap<String, String>,
+    environment_variables: &FxHashMap<OsString, OsString>,
+    modified_path: &OsString,
 ) -> Result<Output, Error> {
-    // First check user supplied environment variables
-    let path = environment_variables.remove("PATH");
-    let os_path = env::var_os("PATH");
-    let modified_path = if let Some(user_path) = path {
-        match os_path {
-            // Prepend the user supplied PATH to the existing PATH
-            Some(env_path) => {
-                let user_path = PathBuf::from(user_path);
-                let new_path = env::split_paths(&user_path).chain(env::split_paths(&env_path));
-                env::join_paths(new_path).map_err(Error::BuildScriptPath)?
-            }
-            // Use the user supplied PATH
-            None => OsString::from(user_path),
-        }
-        // No user supplied PATH was given
-    } else {
-        // Check if we need to use the environment's PATH
-        match os_path {
-            Some(env_path) => env_path,
-            None => OsString::new(),
-        }
-    };
-
-    // Prepend the venv bin dir to PATH
-    let modified_path = if modified_path.len() > 0 {
-        let venv_path =
-            iter::once(venv.scripts().to_path_buf()).chain(env::split_paths(&modified_path));
-        env::join_paths(venv_path).map_err(Error::BuildScriptPath)?
-    } else {
-        modified_path
-    };
-
     Command::new(venv.python_executable())
         .args(["-c", script])
         .current_dir(source_tree.normalized())
-        // Activate the venv
-        .env("VIRTUAL_ENV", venv.root())
-        .env("PATH", modified_path)
         // Pass in remaining environment variables
         .envs(environment_variables)
+        // Set the modified PATH
+        .env("PATH", modified_path)
+        // Activate the venv
+        .env("VIRTUAL_ENV", venv.root())
         .output()
         .await
         .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))
