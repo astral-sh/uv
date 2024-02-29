@@ -973,8 +973,12 @@ fn install_git_private_https_pat_at_ref() {
 
 /// Install a package from a private GitHub repository using a PAT and username
 /// An arbitrary username is supported when using a PAT.
+///
+/// TODO(charlie): This test modifies the user's keyring.
+/// See: <https://github.com/astral-sh/uv/issues/1980>.
 #[test]
 #[cfg(feature = "git")]
+#[ignore]
 fn install_git_private_https_pat_and_username() {
     let context = TestContext::new("3.8");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
