@@ -43,6 +43,7 @@ pub use marker::{
 };
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_fs::normalize_url_path;
+// Parity with the crates.io version of pep508_rs
 pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 pub use verbatim_url::{split_scheme, Scheme, VerbatimUrl};
 
