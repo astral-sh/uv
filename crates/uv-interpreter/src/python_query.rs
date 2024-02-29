@@ -29,7 +29,7 @@ pub fn find_requested_python(
     platform: &Platform,
     cache: &Cache,
 ) -> Result<Option<Interpreter>, Error> {
-    debug!("Starting interpreter discovery for Python {}", request);
+    debug!("Starting interpreter discovery for Python @ `{request}`");
     let versions = request
         .splitn(3, '.')
         .map(str::parse::<u8>)

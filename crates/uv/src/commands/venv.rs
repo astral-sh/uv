@@ -106,7 +106,7 @@ async fn venv_impl(
 
     writeln!(
         printer,
-        "Using Python {} interpreter at {}",
+        "Using Python {} interpreter at: {}",
         interpreter.python_version(),
         interpreter.sys_executable().normalized_display().cyan()
     )
@@ -211,15 +211,22 @@ async fn venv_impl(
         writeln!(
             printer,
             // This should work whether the user is on CMD or PowerShell:
-            "Activate with: {}\\Scripts\\activate",
-            path.normalized_display().cyan()
+            "Activate with: {}",
+            path.join("Scripts")
+                .join("activate")
+                .normalized_display()
+                .green()
         )
         .into_diagnostic()?;
     } else {
         writeln!(
             printer,
-            "Activate with: source {}/bin/activate",
-            path.normalized_display().cyan()
+            "Activate with: {}",
+            format!(
+                "source {}",
+                path.join("bin").join("activate").normalized_display()
+            )
+            .green()
         )
         .into_diagnostic()?;
     };

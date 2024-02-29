@@ -25,8 +25,8 @@ fn create_venv() -> Result<()> {
     let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
-            r"Using Python 3\.\d+\.\d+ interpreter at .+",
-            "Using Python [VERSION] interpreter at [PATH]",
+            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+            "Using Python [VERSION] interpreter at: [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
@@ -50,7 +50,7 @@ fn create_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at [PATH]
+    Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
     Activate with: source /home/ferris/project/.venv/bin/activate
     "###
@@ -63,8 +63,8 @@ fn create_venv() -> Result<()> {
     let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
-            r"Using Python 3\.\d+\.\d+ interpreter at .+",
-            "Using Python [VERSION] interpreter at [PATH]",
+            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+            "Using Python [VERSION] interpreter at: [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
@@ -89,7 +89,7 @@ fn create_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at [PATH]
+    Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
     Activate with: source /home/ferris/project/.venv/bin/activate
     "###
@@ -111,8 +111,8 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
     let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
-            r"Using Python 3\.\d+\.\d+ interpreter at .+",
-            "Using Python [VERSION] interpreter at [PATH]",
+            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+            "Using Python [VERSION] interpreter at: [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (filter_prompt, "Activate with: source .venv/bin/activate"),
@@ -133,7 +133,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at [PATH]
+    Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -155,8 +155,8 @@ fn seed() -> Result<()> {
     let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
-            r"Using Python 3\.\d+\.\d+ interpreter at .+",
-            "Using Python [VERSION] interpreter at [PATH]",
+            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+            "Using Python [VERSION] interpreter at: [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
@@ -182,7 +182,7 @@ fn seed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at [PATH]
+    Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
      + pip==23.3.1
     Activate with: source /home/ferris/project/.venv/bin/activate
@@ -205,8 +205,8 @@ fn seed_older_python_version() -> Result<()> {
     let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
-            r"Using Python 3\.\d+\.\d+ interpreter at .+",
-            "Using Python [VERSION] interpreter at [PATH]",
+            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+            "Using Python [VERSION] interpreter at: [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
@@ -232,7 +232,7 @@ fn seed_older_python_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at [PATH]
+    Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
      + pip==23.3.1
      + setuptools==68.2.2
@@ -303,8 +303,8 @@ fn create_venv_unknown_python_patch() -> Result<()> {
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
     let filters = &[
         (
-            r"Using Python 3\.\d+\.\d+ interpreter at .+",
-            "Using Python [VERSION] interpreter at [PATH]",
+            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+            "Using Python [VERSION] interpreter at: [PATH]",
         ),
         (
             r"No Python 3\.8\.0 found through `py --list-paths` or in `PATH`\. Is Python 3\.8\.0 installed\?",
@@ -349,7 +349,7 @@ fn create_venv_python_patch() -> Result<()> {
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
     let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
-        (r"interpreter at .+", "interpreter at [PATH]"),
+        (r"interpreter at: .+", "interpreter at: [PATH]"),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
             filter_prompt,
@@ -373,7 +373,7 @@ fn create_venv_python_patch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.1 interpreter at [PATH]
+    Using Python 3.12.1 interpreter at: [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
     Activate with: source /home/ferris/project/.venv/bin/activate
     "###
@@ -397,8 +397,8 @@ fn file_exists() -> Result<()> {
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
     let filters = &[
         (
-            r"Using Python 3\.\d+\.\d+ interpreter at .+",
-            "Using Python [VERSION] interpreter at [PATH]",
+            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+            "Using Python [VERSION] interpreter at: [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
@@ -419,7 +419,7 @@ fn file_exists() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at [PATH]
+    Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
     uv::venv::creation
 
@@ -445,8 +445,8 @@ fn empty_dir_exists() -> Result<()> {
     let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
-            r"Using Python 3\.\d+\.\d+ interpreter at .+",
-            "Using Python [VERSION] interpreter at [PATH]",
+            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+            "Using Python [VERSION] interpreter at: [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
@@ -471,7 +471,7 @@ fn empty_dir_exists() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at [PATH]
+    Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
     Activate with: source /home/ferris/project/.venv/bin/activate
     "###
@@ -496,8 +496,8 @@ fn non_empty_dir_exists() -> Result<()> {
     let filter_venv = regex::escape(&venv.normalized_display().to_string());
     let filters = &[
         (
-            r"Using Python 3\.\d+\.\d+ interpreter at .+",
-            "Using Python [VERSION] interpreter at [PATH]",
+            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+            "Using Python [VERSION] interpreter at: [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
@@ -518,7 +518,7 @@ fn non_empty_dir_exists() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at [PATH]
+    Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
     uv::venv::creation
 
@@ -561,8 +561,8 @@ fn windows_shims() -> Result<()> {
     let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
-            r"Using Python 3\.8.\d+ interpreter at .+",
-            "Using Python 3.8.x interpreter at [PATH]",
+            r"Using Python 3\.8.\d+ interpreter at: .+",
+            "Using Python 3.8.x interpreter at: [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
@@ -586,7 +586,7 @@ fn windows_shims() -> Result<()> {
 
     ----- stderr -----
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
-    Using Python 3.8.x interpreter at [PATH]
+    Using Python 3.8.x interpreter at: [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
     Activate with: source /home/ferris/project/.venv/bin/activate
     "###
@@ -609,8 +609,8 @@ fn virtualenv_compatibility() -> Result<()> {
     let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
-            r"Using Python 3\.\d+\.\d+ interpreter at .+",
-            "Using Python [VERSION] interpreter at [PATH]",
+            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+            "Using Python [VERSION] interpreter at: [PATH]",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
         (
@@ -636,7 +636,7 @@ fn virtualenv_compatibility() -> Result<()> {
 
     ----- stderr -----
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
-    Using Python [VERSION] interpreter at [PATH]
+    Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
     Activate with: source /home/ferris/project/.venv/bin/activate
     "###
