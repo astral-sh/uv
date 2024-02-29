@@ -2,12 +2,14 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
-use std::future::Future;
+use std::ffi::OsStr;
 use std::path::Path;
+use std::{ffi::OsString, future::Future};
 
 use anyhow::{bail, Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
+use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
 use distribution_types::{IndexLocations, Name, Resolution, SourceDist};
@@ -36,6 +38,7 @@ pub struct BuildDispatch<'a> {
     config_settings: &'a ConfigSettings,
     source_build_context: SourceBuildContext,
     options: Options,
+    build_extra_env_vars: FxHashMap<OsString, OsString>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -67,12 +70,28 @@ impl<'a> BuildDispatch<'a> {
             no_binary,
             source_build_context: SourceBuildContext::default(),
             options: Options::default(),
+            build_extra_env_vars: FxHashMap::default(),
         }
     }
 
     #[must_use]
     pub fn with_options(mut self, options: Options) -> Self {
         self.options = options;
+        self
+    }
+
+    /// Set the environment variables to be used when building a source distribution.
+    #[must_use]
+    pub fn with_build_extra_env_vars<I, K, V>(mut self, sdist_build_env_variables: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        self.build_extra_env_vars = sdist_build_env_variables
+            .into_iter()
+            .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
+            .collect();
         self
     }
 }
@@ -277,6 +296,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.setup_py,
             self.config_settings.clone(),
             build_kind,
+            self.build_extra_env_vars.clone(),
         )
         .boxed()
         .await?;

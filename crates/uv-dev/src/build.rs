@@ -7,6 +7,7 @@ use fs_err as fs;
 
 use distribution_types::IndexLocations;
 use platform_host::Platform;
+use rustc_hash::FxHashMap;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, RegistryClientBuilder};
@@ -87,6 +88,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         setup_py,
         config_settings.clone(),
         build_kind,
+        FxHashMap::default(),
     )
     .await?;
     Ok(wheel_dir.join(builder.build(&wheel_dir).await?))

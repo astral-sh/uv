@@ -38,6 +38,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync", "process"] }
 toml = { workspace = true }
 tracing = { workspace = true }
+rustc-hash = { workspace = true }
 
 [dev-dependencies]
 insta = { version = "1.35.1" }

@@ -28,6 +28,7 @@ uv-interpreter = { path = "../uv-interpreter" }
 uv-resolver = { path = "../uv-resolver" }
 uv-traits = { path = "../uv-traits" }
 pypi-types = { path = "../pypi-types" }
+rustc-hash = { workspace = true }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
