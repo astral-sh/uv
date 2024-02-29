@@ -24,6 +24,7 @@ mod uninstall;
 mod wheel;
 
 /// The layout of the target environment into which a wheel can be installed.
+#[derive(Debug, Clone)]
 pub struct Layout {
     /// The Python interpreter, as returned by `sys.executable`.
     pub sys_executable: PathBuf,
@@ -39,6 +40,8 @@ pub struct Layout {
     pub data: PathBuf,
     /// The Python version, as returned by `sys.version_info`.
     pub python_version: (u8, u8),
+    /// The `os.name` value for the current platform.
+    pub os_name: String,
 }
 
 /// Note: The caller is responsible for adding the path of the wheel we're installing.

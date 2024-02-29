@@ -444,6 +444,7 @@ impl Interpreter {
             } else {
                 self.include().to_path_buf()
             },
+            os_name: self.markers.os_name.clone(),
         }
     }
 }
