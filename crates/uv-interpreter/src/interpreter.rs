@@ -279,13 +279,16 @@ impl Interpreter {
             return None;
         };
 
-        let Ok(mut ini) = Ini::new_cs().read(contents) else {
+        let mut ini = Ini::new_cs();
+        ini.set_multiline(true);
+
+        let Ok(mut sections) = ini.read(contents) else {
             // If a file exists but is not a valid INI file, we assume the environment is
             // externally managed.
             return Some(ExternallyManaged::default());
         };
 
-        let Some(section) = ini.get_mut("externally-managed") else {
+        let Some(section) = sections.get_mut("externally-managed") else {
             // If the file exists but does not contain an "externally-managed" section, we assume
             // the environment is externally managed.
             return Some(ExternallyManaged::default());
