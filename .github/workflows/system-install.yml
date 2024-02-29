@@ -67,8 +67,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-#      - name: "Install Python"
-#        run: choco install python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -82,7 +83,7 @@ jobs:
         run: echo $(which python)
 
       - name: "Validate global Python install"
-        run: py -3.12 ./scripts/check_system_python.py --uv ./target/debug/uv
+        run: py -3.10 ./scripts/check_system_python.py --uv ./target/debug/uv
 
   install-pyenv:
     name: "Install Python using pyenv"

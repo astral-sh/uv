@@ -96,7 +96,6 @@ pub(crate) fn try_find_default_python(
 
 /// Finds a python version matching `selector`.
 /// It searches for an existing installation in the following order:
-/// * (windows): Discover installations using `py --list-paths` (PEP514). Continue if `py` is not installed.
 /// * Search for the python binary in `PATH` (or `UV_TEST_PYTHON_PATH` if set). Visits each path and for each path resolves the
 ///   files in the following order:
 ///   * Major.Minor.Patch: `pythonx.y.z`, `pythonx.y`, `python.x`, `python`
@@ -104,6 +103,7 @@ pub(crate) fn try_find_default_python(
 ///   * Major: `pythonx`, `python`
 ///   * Default: `python3`, `python`
 ///   * (windows): For each of the above, test for the existence of `python.bat` shim (pyenv-windows) last.
+/// * (windows): Discover installations using `py --list-paths` (PEP514). Continue if `py` is not installed.
 ///
 /// (Windows): Filter out the windows store shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).
 fn find_python(
@@ -114,23 +114,7 @@ fn find_python(
     #[allow(non_snake_case)]
     let UV_TEST_PYTHON_PATH = env::var_os("UV_TEST_PYTHON_PATH");
 
-    if cfg!(windows) && UV_TEST_PYTHON_PATH.is_none() {
-        // Use `py` to find the python installation on the system.
-        match windows::py_list_paths(selector, platform, cache) {
-            Ok(Some(interpreter)) => return Ok(Some(interpreter)),
-            Ok(None) => {
-                // No matching Python version found, continue searching PATH
-            }
-            Err(Error::PyList(error)) => {
-                if error.kind() == std::io::ErrorKind::NotFound {
-                    debug!("`py` is not installed. Falling back to searching Python on the path");
-                    // Continue searching for python installations on the path.
-                }
-            }
-            Err(error) => return Err(error),
-        }
-    }
-
+    let override_path = UV_TEST_PYTHON_PATH.is_some();
     let possible_names = selector.possible_names();
 
     #[allow(non_snake_case)]
@@ -194,6 +178,20 @@ fn find_python(
                     }
                 }
             }
+        }
+    }
+
+    if cfg!(windows) && !override_path {
+        // Use `py` to find the python installation on the system.
+        match windows::py_list_paths(selector, platform, cache) {
+            Ok(Some(interpreter)) => return Ok(Some(interpreter)),
+            Ok(None) => {}
+            Err(Error::PyList(error)) => {
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    debug!("`py` is not installed");
+                }
+            }
+            Err(error) => return Err(error),
         }
     }
 
