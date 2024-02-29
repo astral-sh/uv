@@ -493,7 +493,9 @@ impl SourceBuild {
                     let resolved_requirements = build_context
                         .resolve(&default_backend.requirements)
                         .await
-                        .map_err(|err| Error::RequirementsInstall("", err))?;
+                        .map_err(|err| {
+                            Error::RequirementsInstall("setup.py build (resolve)", err)
+                        })?;
                     *resolution = Some(resolved_requirements.clone());
                     resolved_requirements
                 }
