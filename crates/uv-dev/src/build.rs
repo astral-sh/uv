@@ -13,7 +13,7 @@ use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
 use uv_installer::NoBinary;
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 use uv_resolver::InMemoryIndex;
 use uv_traits::{BuildContext, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
@@ -55,7 +55,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let cache = Cache::try_from(args.cache_args)?;
 
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, &cache)?;
+    let venv = PythonEnvironment::from_virtualenv(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_urls = IndexLocations::default();
     let flat_index = FlatIndex::default();

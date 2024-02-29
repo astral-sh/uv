@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::Write;
-
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
@@ -23,11 +22,11 @@ use requirements_txt::EditableRequirement;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_installer::{
     BuiltEditable, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
-use uv_interpreter::{Interpreter, Virtualenv};
+use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_resolver::{
     DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
@@ -63,7 +62,8 @@ pub(crate) async fn pip_install(
     no_binary: &NoBinary,
     strict: bool,
     exclude_newer: Option<DateTime<Utc>>,
-    python: Option<PathBuf>,
+    python: Option<String>,
+    system: bool,
     cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -106,15 +106,17 @@ pub(crate) async fn pip_install(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = if let Some(python) = python {
-        Virtualenv::from_python(python, platform, &cache)?
+    let venv = if let Some(python) = python.as_ref() {
+        PythonEnvironment::from_requested_python(python, &platform, &cache)?
+    } else if system {
+        PythonEnvironment::from_default_python(&platform, &cache)?
     } else {
-        Virtualenv::from_env(platform, &cache)?
+        PythonEnvironment::from_virtualenv(platform, &cache)?
     };
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
-        venv.python_executable().normalized_display().cyan()
+        venv.python_executable().simplified_display().cyan()
     );
 
     // If the environment is externally managed, abort.
@@ -122,13 +124,13 @@ pub(crate) async fn pip_install(
         return if let Some(error) = externally_managed.into_error() {
             Err(anyhow::anyhow!(
                 "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
-                venv.root().normalized_display().cyan(),
+                venv.root().simplified_display().cyan(),
                 textwrap::indent(&error, "  ").green(),
             ))
         } else {
             Err(anyhow::anyhow!(
                 "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
-                venv.root().normalized_display().cyan()
+                venv.root().simplified_display().cyan()
             ))
         };
     }
@@ -510,7 +512,7 @@ async fn install(
     in_flight: &InFlight,
     build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
-    venv: &Virtualenv,
+    venv: &PythonEnvironment,
     mut printer: Printer,
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
@@ -708,7 +710,11 @@ async fn install(
 }
 
 /// Validate the installed packages in the virtual environment.
-fn validate(resolution: &Resolution, venv: &Virtualenv, mut printer: Printer) -> Result<(), Error> {
+fn validate(
+    resolution: &Resolution,
+    venv: &PythonEnvironment,
+    mut printer: Printer,
+) -> Result<(), Error> {
     let site_packages = SitePackages::from_executable(venv)?;
     let diagnostics = site_packages.diagnostics()?;
     for diagnostic in diagnostics {

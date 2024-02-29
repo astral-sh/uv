@@ -48,14 +48,21 @@ pub(crate) enum PreReleaseStrategy {
 }
 
 impl PreReleaseStrategy {
-    pub(crate) fn from_mode(mode: PreReleaseMode, direct_dependencies: &[Requirement]) -> Self {
+    pub(crate) fn from_mode(
+        mode: PreReleaseMode,
+        requirements: &[Requirement],
+        constraints: &[Requirement],
+        overrides: &[Requirement],
+    ) -> Self {
         match mode {
             PreReleaseMode::Disallow => Self::Disallow,
             PreReleaseMode::Allow => Self::Allow,
             PreReleaseMode::IfNecessary => Self::IfNecessary,
             PreReleaseMode::Explicit => Self::Explicit(
-                direct_dependencies
+                requirements
                     .iter()
+                    .chain(constraints.iter())
+                    .chain(overrides.iter())
                     .filter(|requirement| {
                         let Some(version_or_url) = &requirement.version_or_url else {
                             return false;
@@ -74,8 +81,10 @@ impl PreReleaseStrategy {
                     .collect(),
             ),
             PreReleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(
-                direct_dependencies
+                requirements
                     .iter()
+                    .chain(constraints.iter())
+                    .chain(overrides.iter())
                     .filter(|requirement| {
                         let Some(version_or_url) = &requirement.version_or_url else {
                             return false;

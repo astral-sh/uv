@@ -248,8 +248,11 @@ struct PipCompileArgs {
     #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
     resolution: ResolutionMode,
 
-    #[clap(long, value_enum, default_value_t = PreReleaseMode::default())]
+    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre")]
     prerelease: PreReleaseMode,
+
+    #[clap(long, hide = true, conflicts_with = "prerelease")]
+    pre: bool,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(long, short)]
@@ -445,8 +448,25 @@ struct PipSyncArgs {
     /// any parent directory. The `--python` option allows you to specify a different interpreter,
     /// which is intended for use in continuous integration (CI) environments or other automated
     /// workflows.
-    #[clap(long)]
-    python: Option<PathBuf>,
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    python: Option<String>,
+
+    /// Install packages into the system Python.
+    ///
+    /// By default, `uv` installs into the virtual environment in the current working directory or
+    /// any parent directory. The `--system` option instructs `uv` to instead use the first Python
+    /// found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
@@ -588,8 +608,11 @@ struct PipInstallArgs {
     #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
     resolution: ResolutionMode,
 
-    #[clap(long, value_enum, default_value_t = PreReleaseMode::default())]
+    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre")]
     prerelease: PreReleaseMode,
+
+    #[clap(long, hide = true, conflicts_with = "prerelease")]
+    pre: bool,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(long, short)]
@@ -623,8 +646,25 @@ struct PipInstallArgs {
     /// any parent directory. The `--python` option allows you to specify a different interpreter,
     /// which is intended for use in continuous integration (CI) environments or other automated
     /// workflows.
-    #[clap(long)]
-    python: Option<PathBuf>,
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    python: Option<String>,
+
+    /// Install packages into the system Python.
+    ///
+    /// By default, `uv` installs into the virtual environment in the current working directory or
+    /// any parent directory. The `--system` option instructs `uv` to instead use the first Python
+    /// found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
@@ -701,8 +741,25 @@ struct PipUninstallArgs {
     /// any parent directory. The `--python` option allows you to specify a different interpreter,
     /// which is intended for use in continuous integration (CI) environments or other automated
     /// workflows.
-    #[clap(long)]
-    python: Option<PathBuf>,
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    python: Option<String>,
+
+    /// Use the system Python to uninstall packages.
+    ///
+    /// By default, `uv` uninstalls from the virtual environment in the current working directory or
+    /// any parent directory. The `--system` option instructs `uv` to instead use the first Python
+    /// found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
 }
 
 #[derive(Args)]
@@ -712,6 +769,32 @@ struct PipFreezeArgs {
     /// issues.
     #[clap(long)]
     strict: bool,
+
+    /// The Python interpreter for which packages should be listed.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    python: Option<String>,
+
+    /// List packages for the system Python.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found. The `--system` option
+    /// instructs `uv` to use the first Python found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
 }
 
 #[derive(Args)]
@@ -733,6 +816,32 @@ struct PipListArgs {
     /// Exclude the specified package(s) from the output.
     #[clap(long)]
     r#exclude: Vec<PackageName>,
+
+    /// The Python interpreter for which packages should be listed.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    python: Option<String>,
+
+    /// List packages for the system Python.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found. The `--system` option
+    /// instructs `uv` to use the first Python found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
 }
 
 #[derive(Args)]
@@ -741,16 +850,26 @@ struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     ///
     /// Supported formats:
-    /// - `3.10` searches for an installed Python 3.10 (`py --list-paths` on Windows, `python3.10` on Linux/Mac).
-    ///   Specifying a patch version is not supported.
-    /// - `python3.10` or `python.exe` looks for a binary in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses this exact Python.
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     ///
     /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
     /// doesn't look for a Python interpreter on disk.
-    // Short `-p` to match `virtualenv`
-    #[clap(long, short, verbatim_doc_comment)]
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
     python: Option<String>,
+
+    /// Use the system Python to uninstall packages.
+    ///
+    /// By default, `uv` uninstalls from the virtual environment in the current working directory or
+    /// any parent directory. The `--system` option instructs `uv` to use the first Python found in
+    /// the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
     #[clap(long)]
@@ -954,6 +1073,11 @@ async fn run() -> Result<ExitStatus> {
             } else {
                 DependencyMode::Transitive
             };
+            let prerelease = if args.pre {
+                PreReleaseMode::Allow
+            } else {
+                args.prerelease
+            };
             let setup_py = if args.legacy_setup_py {
                 SetupPyStrategy::Setuptools
             } else {
@@ -967,7 +1091,7 @@ async fn run() -> Result<ExitStatus> {
                 extras,
                 args.output_file.as_deref(),
                 args.resolution,
-                args.prerelease,
+                prerelease,
                 dependency_mode,
                 upgrade,
                 args.generate_hashes,
@@ -1037,6 +1161,7 @@ async fn run() -> Result<ExitStatus> {
                 &no_binary,
                 args.strict,
                 args.python,
+                args.system,
                 cache,
                 printer,
             )
@@ -1089,6 +1214,11 @@ async fn run() -> Result<ExitStatus> {
             } else {
                 DependencyMode::Transitive
             };
+            let prerelease = if args.pre {
+                PreReleaseMode::Allow
+            } else {
+                args.prerelease
+            };
             let setup_py = if args.legacy_setup_py {
                 SetupPyStrategy::Setuptools
             } else {
@@ -1102,7 +1232,7 @@ async fn run() -> Result<ExitStatus> {
                 &overrides,
                 &extras,
                 args.resolution,
-                args.prerelease,
+                prerelease,
                 dependency_mode,
                 upgrade,
                 index_urls,
@@ -1120,6 +1250,7 @@ async fn run() -> Result<ExitStatus> {
                 args.strict,
                 args.exclude_newer,
                 args.python,
+                args.system,
                 cache,
                 printer,
             )
@@ -1139,25 +1270,33 @@ async fn run() -> Result<ExitStatus> {
                         .map(RequirementsSource::from_path),
                 )
                 .collect::<Vec<_>>();
-            commands::pip_uninstall(&sources, args.python, cache, printer).await
+            commands::pip_uninstall(&sources, args.python, args.system, cache, printer).await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),
-        }) => commands::pip_freeze(&cache, args.strict, printer),
+        }) => commands::pip_freeze(
+            args.strict,
+            args.python.as_deref(),
+            args.system,
+            &cache,
+            printer,
+        ),
         Commands::Pip(PipNamespace {
             command: PipCommand::List(args),
         }) => commands::pip_list(
-            &cache,
             args.strict,
             args.editable,
             args.exclude_editable,
             &args.exclude,
+            args.python.as_deref(),
+            args.system,
+            &cache,
             printer,
         ),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })
-        | Commands::Clean(args) => commands::cache_clean(&cache, &args.package, printer),
+        | Commands::Clean(args) => commands::cache_clean(&args.package, &cache, printer),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
         }) => {

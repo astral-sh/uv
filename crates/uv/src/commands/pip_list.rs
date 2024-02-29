@@ -11,31 +11,46 @@ use unicode_width::UnicodeWidthStr;
 use distribution_types::Name;
 use platform_host::Platform;
 use uv_cache::Cache;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_installer::SitePackages;
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_list(
-    cache: &Cache,
     strict: bool,
     editable: bool,
     exclude_editable: bool,
     exclude: &[PackageName],
+    python: Option<&str>,
+    system: bool,
+    cache: &Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, cache)?;
+    let venv = if let Some(python) = python {
+        PythonEnvironment::from_requested_python(python, &platform, cache)?
+    } else if system {
+        PythonEnvironment::from_default_python(&platform, cache)?
+    } else {
+        match PythonEnvironment::from_virtualenv(platform.clone(), cache) {
+            Ok(venv) => venv,
+            Err(uv_interpreter::Error::VenvNotFound) => {
+                PythonEnvironment::from_default_python(&platform, cache)?
+            }
+            Err(err) => return Err(err.into()),
+        }
+    };
 
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
-        venv.python_executable().normalized_display().cyan()
+        venv.python_executable().simplified_display().cyan()
     );
 
     // Build the installed index.

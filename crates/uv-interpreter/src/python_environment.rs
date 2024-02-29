@@ -5,42 +5,29 @@ use tracing::debug;
 
 use platform_host::Platform;
 use uv_cache::Cache;
-use uv_fs::{LockedFile, Normalized};
+use uv_fs::{LockedFile, Simplified};
 
 use crate::cfg::PyVenvConfiguration;
-use crate::python_platform::PythonPlatform;
-use crate::{Error, Interpreter};
+use crate::virtualenv_layout::VirtualenvLayout;
+use crate::{find_default_python, find_requested_python, Error, Interpreter};
 
-/// A Python executable and its associated platform markers.
+/// A Python environment, consisting of a Python [`Interpreter`] and a root directory.
 #[derive(Debug, Clone)]
-pub struct Virtualenv {
+pub struct PythonEnvironment {
     root: PathBuf,
     interpreter: Interpreter,
 }
 
-impl Virtualenv {
-    /// Create a new virtual environment for a pre-provided Python interpreter.
-    pub fn from_python(
-        python: impl AsRef<Path>,
-        platform: Platform,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
-        let interpreter = Interpreter::query(python.as_ref(), platform, cache)?;
-        Ok(Self {
-            root: interpreter.base_prefix().to_path_buf(),
-            interpreter,
-        })
-    }
-
-    /// Venv the current Python executable from the host environment.
-    pub fn from_env(platform: Platform, cache: &Cache) -> Result<Self, Error> {
-        let platform = PythonPlatform::from(platform);
-        let Some(venv) = detect_virtual_env(&platform)? else {
-            return Err(Error::NotFound);
+impl PythonEnvironment {
+    /// Create a [`PythonEnvironment`] for an existing virtual environment.
+    pub fn from_virtualenv(platform: Platform, cache: &Cache) -> Result<Self, Error> {
+        let layout = VirtualenvLayout::from_platform(&platform);
+        let Some(venv) = detect_virtual_env(&layout)? else {
+            return Err(Error::VenvNotFound);
         };
         let venv = fs_err::canonicalize(venv)?;
-        let executable = platform.venv_python(&venv);
-        let interpreter = Interpreter::query(&executable, platform.0, cache)?;
+        let executable = layout.python_executable(&venv);
+        let interpreter = Interpreter::query(&executable, platform, cache)?;
 
         debug_assert!(
             interpreter.base_prefix() == interpreter.base_exec_prefix(),
@@ -55,12 +42,36 @@ impl Virtualenv {
         })
     }
 
-    /// Creating a new venv from a Python interpreter changes this.
+    /// Create a [`PythonEnvironment`] for a new virtual environment, created with the given interpreter.
     pub fn from_interpreter(interpreter: Interpreter, venv: &Path) -> Self {
         Self {
             interpreter: interpreter.with_venv_root(venv.to_path_buf()),
             root: venv.to_path_buf(),
         }
+    }
+
+    /// Create a [`PythonEnvironment`] for a Python interpreter specifier (e.g., a path or a binary name).
+    pub fn from_requested_python(
+        python: &str,
+        platform: &Platform,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        let Some(interpreter) = find_requested_python(python, platform, cache)? else {
+            return Err(Error::RequestedPythonNotFound(python.to_string()));
+        };
+        Ok(Self {
+            root: interpreter.base_prefix().to_path_buf(),
+            interpreter,
+        })
+    }
+
+    /// Create a [`PythonEnvironment`] for the default Python interpreter.
+    pub fn from_default_python(platform: &Platform, cache: &Cache) -> Result<Self, Error> {
+        let interpreter = find_default_python(platform, cache)?;
+        Ok(Self {
+            root: interpreter.base_prefix().to_path_buf(),
+            interpreter,
+        })
     }
 
     /// Returns the location of the Python interpreter.
@@ -96,12 +107,21 @@ impl Virtualenv {
 
     /// Lock the virtual environment to prevent concurrent writes.
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
-        LockedFile::acquire(self.root.join(".lock"), self.root.normalized_display())
+        if self.interpreter.is_virtualenv() {
+            // If the environment a virtualenv, use a virtualenv-specific lock file.
+            LockedFile::acquire(self.root.join(".lock"), self.root.simplified_display())
+        } else {
+            // Otherwise, use a global lock file.
+            LockedFile::acquire(
+                env::temp_dir().join(format!("uv-{}.lock", cache_key::digest(&self.root))),
+                self.root.simplified_display(),
+            )
+        }
     }
 }
 
 /// Locate the current virtual environment.
-pub(crate) fn detect_virtual_env(target: &PythonPlatform) -> Result<Option<PathBuf>, Error> {
+pub(crate) fn detect_virtual_env(layout: &VirtualenvLayout) -> Result<Option<PathBuf>, Error> {
     match (
         env::var_os("VIRTUAL_ENV").filter(|value| !value.is_empty()),
         env::var_os("CONDA_PREFIX").filter(|value| !value.is_empty()),
@@ -137,7 +157,7 @@ pub(crate) fn detect_virtual_env(target: &PythonPlatform) -> Result<Option<PathB
             if !dot_venv.join("pyvenv.cfg").is_file() {
                 return Err(Error::MissingPyVenvCfg(dot_venv));
             }
-            let python = target.venv_python(&dot_venv);
+            let python = layout.python_executable(&dot_venv);
             if !python.is_file() {
                 return Err(Error::BrokenVenv(dot_venv, python));
             }

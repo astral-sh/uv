@@ -18,7 +18,7 @@ use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::{FlatIndex, RegistryClient};
 use uv_installer::{Downloader, Installer, NoBinary, Plan, Planner, Reinstall, SitePackages};
-use uv_interpreter::{Interpreter, Virtualenv};
+use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
 use uv_traits::{BuildContext, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
@@ -157,7 +157,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     fn install<'data>(
         &'data self,
         resolution: &'data Resolution,
-        venv: &'data Virtualenv,
+        venv: &'data PythonEnvironment,
     ) -> impl Future<Output = Result<()>> + Send + 'data {
         async move {
             debug!(

@@ -5,7 +5,7 @@ use camino::{FromPathError, Utf8Path};
 use thiserror::Error;
 
 use platform_host::PlatformError;
-use uv_interpreter::{Interpreter, Virtualenv};
+use uv_interpreter::{Interpreter, PythonEnvironment};
 
 pub use crate::bare::create_bare_venv;
 
@@ -52,12 +52,12 @@ pub fn create_venv(
     interpreter: Interpreter,
     prompt: Prompt,
     extra_cfg: Vec<(String, String)>,
-) -> Result<Virtualenv, Error> {
+) -> Result<PythonEnvironment, Error> {
     let location: &Utf8Path = location
         .try_into()
         .map_err(|err: FromPathError| err.into_io_error())?;
     let paths = create_bare_venv(location, &interpreter, prompt, extra_cfg)?;
-    Ok(Virtualenv::from_interpreter(
+    Ok(PythonEnvironment::from_interpreter(
         interpreter,
         paths.root.as_std_path(),
     ))

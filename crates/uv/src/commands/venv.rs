@@ -18,7 +18,7 @@ use platform_host::Platform;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_installer::NoBinary;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{InMemoryIndex, OptionsBuilder};
@@ -106,16 +106,16 @@ async fn venv_impl(
 
     writeln!(
         printer,
-        "Using Python {} interpreter at {}",
+        "Using Python {} interpreter at: {}",
         interpreter.python_version(),
-        interpreter.sys_executable().normalized_display().cyan()
+        interpreter.sys_executable().simplified_display().cyan()
     )
     .into_diagnostic()?;
 
     writeln!(
         printer,
         "Creating virtualenv at: {}",
-        path.normalized_display().cyan()
+        path.simplified_display().cyan()
     )
     .into_diagnostic()?;
 
@@ -211,15 +211,22 @@ async fn venv_impl(
         writeln!(
             printer,
             // This should work whether the user is on CMD or PowerShell:
-            "Activate with: {}\\Scripts\\activate",
-            path.normalized_display().cyan()
+            "Activate with: {}",
+            path.join("Scripts")
+                .join("activate")
+                .simplified_display()
+                .green()
         )
         .into_diagnostic()?;
     } else {
         writeln!(
             printer,
-            "Activate with: source {}/bin/activate",
-            path.normalized_display().cyan()
+            "Activate with: {}",
+            format!(
+                "source {}",
+                path.join("bin").join("activate").simplified_display()
+            )
+            .green()
         )
         .into_diagnostic()?;
     };

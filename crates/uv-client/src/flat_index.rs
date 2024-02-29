@@ -14,6 +14,7 @@ use distribution_types::{
     RegistryBuiltDist, RegistrySourceDist, SourceDist,
 };
 use pep440_rs::Version;
+use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use pypi_types::{Hashes, Yanked};
 use uv_auth::safe_copy_url_auth;
@@ -191,13 +192,14 @@ impl<'a> FlatIndexClient<'a> {
             .await;
         match response {
             Ok(files) => {
+                let index_url = IndexUrl::Url(VerbatimUrl::from_url(url.clone()));
                 let files = files
                     .into_iter()
                     .filter_map(|file| {
                         Some((
                             DistFilename::try_from_normalized_filename(&file.filename)?,
                             file,
-                            IndexUrl::Url(url.clone()),
+                            index_url.clone(),
                         ))
                     })
                     .collect();
@@ -214,6 +216,7 @@ impl<'a> FlatIndexClient<'a> {
     fn read_from_directory(path: &PathBuf) -> Result<FlatIndexEntries, std::io::Error> {
         // Absolute paths are required for the URL conversion.
         let path = fs_err::canonicalize(path)?;
+        let index_url = IndexUrl::Url(VerbatimUrl::from_path(&path));
 
         let mut dists = Vec::new();
         for entry in fs_err::read_dir(path)? {
@@ -249,7 +252,7 @@ impl<'a> FlatIndexClient<'a> {
                 );
                 continue;
             };
-            dists.push((filename, file, IndexUrl::Pypi));
+            dists.push((filename, file, index_url.clone()));
         }
         Ok(FlatIndexEntries::from_entries(dists))
     }

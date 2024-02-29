@@ -973,8 +973,12 @@ fn install_git_private_https_pat_at_ref() {
 
 /// Install a package from a private GitHub repository using a PAT and username
 /// An arbitrary username is supported when using a PAT.
+///
+/// TODO(charlie): This test modifies the user's keyring.
+/// See: <https://github.com/astral-sh/uv/issues/1980>.
 #[test]
 #[cfg(feature = "git")]
+#[ignore]
 fn install_git_private_https_pat_and_username() {
     let context = TestContext::new("3.8");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -1035,7 +1039,7 @@ fn install_git_private_https_pat_not_authorized() {
       Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
     --- stderr
     remote: Support for password authentication was removed on August 13, 2021.
-    remote: Please see https://docs.github.com/en/get-started/getting-started-with-git/about-remote-repositories#cloning-with-https-urls for information on currently recommended modes of authentication.
+    remote: Please see https://docs.github.com/get-started/getting-started-with-git/about-remote-repositories#cloning-with-https-urls for information on currently recommended modes of authentication.
     fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
 
     "###);

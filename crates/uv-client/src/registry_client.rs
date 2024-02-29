@@ -237,7 +237,7 @@ impl RegistryClient {
         let cache_entry = self.cache.entry(
             CacheBucket::Simple,
             Path::new(&match index {
-                IndexUrl::Pypi => "pypi".to_string(),
+                IndexUrl::Pypi(_) => "pypi".to_string(),
                 IndexUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
             }),
             format!("{package_name}.rkyv"),

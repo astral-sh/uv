@@ -32,6 +32,8 @@ impl CandidateSelector {
             prerelease_strategy: PreReleaseStrategy::from_mode(
                 options.prerelease_mode,
                 manifest.requirements.as_slice(),
+                manifest.constraints.as_slice(),
+                manifest.overrides.as_slice(),
             ),
             preferences: Preferences::from(manifest.preferences.as_slice()),
         }
