@@ -93,9 +93,21 @@ impl Interpreter {
             // structure, which allows us to avoid querying the interpreter for the `sysconfig`
             // paths.
             sysconfig_paths: SysconfigPaths {
-                purelib: layout.site_packages(&venv_root, self.python_tuple()),
-                platlib: layout.site_packages(&venv_root, self.python_tuple()),
-                platstdlib: layout.platstdlib(&venv_root, self.python_tuple()),
+                purelib: layout.site_packages(
+                    &venv_root,
+                    self.site_packages_python(),
+                    self.python_tuple(),
+                ),
+                platlib: layout.site_packages(
+                    &venv_root,
+                    self.site_packages_python(),
+                    self.python_tuple(),
+                ),
+                platstdlib: layout.platstdlib(
+                    &venv_root,
+                    self.site_packages_python(),
+                    self.python_tuple(),
+                ),
                 scripts: layout.scripts(&venv_root),
                 data: layout.data(&venv_root),
                 ..self.sysconfig_paths
@@ -399,6 +411,33 @@ impl Interpreter {
         &self.sysconfig_paths.stdlib
     }
 
+    /// Return the name of the Python directory used to build the path to the
+    /// `site-packages` directory.
+    ///
+    /// If one could not be determined, then `python` is returned.
+    pub fn site_packages_python(&self) -> &str {
+        if self.implementation_name() == "pypy" {
+            "pypy"
+        } else {
+            "python"
+        }
+
+        // This implementation sniffs out what the directory name
+        // might be from sysconfig, but at the time of writing, this
+        // seems a little more risky than the simpler but less robust
+        // implementation above.
+        /*
+        const FALLBACK: &str = "python";
+        let Some(base) = self.include().file_name().and_then(|name| name.to_str()) else {
+            return FALLBACK;
+        };
+        base.char_indices()
+            .take_while(|(_, ch)| ch.is_ascii_alphabetic())
+            .last()
+            .map_or(FALLBACK, |(end, ch)| &base[..end + ch.len_utf8()])
+        */
+    }
+
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
     pub fn layout(&self) -> Layout {
         Layout {
@@ -412,7 +451,8 @@ impl Interpreter {
                 // If the interpreter is a venv, then the `include` directory has a different structure.
                 // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/locations/_sysconfig.py#L172
                 self.prefix.join("include").join("site").join(format!(
-                    "python{}.{}",
+                    "{}{}.{}",
+                    self.site_packages_python(),
                     self.python_major(),
                     self.python_minor()
                 ))

@@ -191,7 +191,8 @@ pub fn create_bare_venv(
             .replace(
                 "{{ RELATIVE_SITE_PACKAGES }}",
                 &format!(
-                    "../lib/python{}.{}/site-packages",
+                    "../lib/{}{}.{}/site-packages",
+                    interpreter.site_packages_python(),
                     interpreter.python_major(),
                     interpreter.python_minor(),
                 ),
@@ -278,7 +279,8 @@ pub fn create_bare_venv(
         location
             .join("lib")
             .join(format!(
-                "python{}.{}",
+                "{}{}.{}",
+                interpreter.site_packages_python(),
                 interpreter.python_major(),
                 interpreter.python_minor(),
             ))
