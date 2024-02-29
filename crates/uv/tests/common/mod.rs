@@ -15,7 +15,7 @@ use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Output;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -139,7 +139,7 @@ impl TestContext {
                         .canonicalize()
                         .expect("Failed to create canonical path")
                         // Normalize the path to match display and remove UNC prefixes on Windows
-                        .normalized()
+                        .simplified()
                         .display()
                         .to_string(),
                 )
@@ -150,7 +150,7 @@ impl TestContext {
             // Include a non-canonicalized version
             format!(
                 r"{}\\?/?",
-                regex::escape(&path.as_ref().normalized().display().to_string())
+                regex::escape(&path.as_ref().simplified().display().to_string())
                     .replace(r"\\", r"(\\|\/)")
             ),
         ]

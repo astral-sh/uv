@@ -5,7 +5,7 @@ use tracing::debug;
 
 use platform_host::Platform;
 use uv_cache::Cache;
-use uv_fs::{LockedFile, Normalized};
+use uv_fs::{LockedFile, Simplified};
 
 use crate::cfg::PyVenvConfiguration;
 use crate::virtualenv_layout::VirtualenvLayout;
@@ -109,12 +109,12 @@ impl PythonEnvironment {
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
         if self.interpreter.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lock file.
-            LockedFile::acquire(self.root.join(".lock"), self.root.normalized_display())
+            LockedFile::acquire(self.root.join(".lock"), self.root.simplified_display())
         } else {
             // Otherwise, use a global lock file.
             LockedFile::acquire(
                 env::temp_dir().join(format!("uv-{}.lock", cache_key::digest(&self.root))),
-                self.root.normalized_display(),
+                self.root.simplified_display(),
             )
         }
     }

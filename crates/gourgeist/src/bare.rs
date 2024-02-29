@@ -9,7 +9,7 @@ use camino::{FromPathBufError, Utf8Path, Utf8PathBuf};
 use fs_err as fs;
 use fs_err::File;
 use tracing::info;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 
 use uv_interpreter::Interpreter;
 
@@ -181,7 +181,7 @@ pub fn create_bare_venv(
             .replace(
                 "{{ VIRTUAL_ENV_DIR }}",
                 // SAFETY: `unwrap` is guaranteed to succeed because `location` is an `Utf8PathBuf`.
-                location.normalized().to_str().unwrap(),
+                location.simplified().to_str().unwrap(),
             )
             .replace("{{ BIN_NAME }}", bin_name)
             .replace(

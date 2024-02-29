@@ -7,7 +7,7 @@ use tracing::warn;
 use url::Url;
 
 use pep440_rs::Version;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
 use crate::{InstalledMetadata, InstalledVersion, Name};
@@ -117,7 +117,7 @@ impl InstalledDist {
         pypi_types::Metadata21::parse(&contents).with_context(|| {
             format!(
                 "Failed to parse METADATA file at: {}",
-                path.normalized_display()
+                path.simplified_display()
             )
         })
     }

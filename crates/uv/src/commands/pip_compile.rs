@@ -23,7 +23,7 @@ use requirements_txt::EditableRequirement;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_installer::{Downloader, NoBinary};
 use uv_interpreter::{Interpreter, PythonVersion};
 use uv_normalize::{ExtraName, PackageName};
@@ -146,7 +146,7 @@ pub(crate) async fn pip_compile(
     debug!(
         "Using Python {} interpreter at {} for builds",
         interpreter.python_version(),
-        interpreter.sys_executable().normalized_display().cyan()
+        interpreter.sys_executable().simplified_display().cyan()
     );
     if let Some(python_version) = python_version.as_ref() {
         // If the requested version does not match the version we're using warn the user
@@ -416,7 +416,7 @@ pub(crate) async fn pip_compile(
 fn cmd(include_index_url: bool, include_find_links: bool) -> String {
     let args = env::args_os()
         .skip(1)
-        .map(|arg| arg.normalized_display().to_string())
+        .map(|arg| arg.simplified_display().to_string())
         .scan(None, move |skip_next, arg| {
             if matches!(skip_next, Some(true)) {
                 // Reset state; skip this iteration.

@@ -15,7 +15,7 @@ use zip::write::FileOptions;
 use zip::ZipWriter;
 
 use pypi_types::DirectUrl;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 
 use crate::record::RecordEntry;
 use crate::script::Script;
@@ -115,7 +115,7 @@ fn copy_and_hash(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<
 }
 
 fn get_shebang(python_executable: impl AsRef<Path>) -> String {
-    format!("#!{}", python_executable.as_ref().normalized().display())
+    format!("#!{}", python_executable.as_ref().simplified().display())
 }
 
 /// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
@@ -176,7 +176,7 @@ pub(crate) fn windows_script_launcher(
     }
 
     let python = python_executable.as_ref();
-    let python_path = python.normalized().to_string_lossy();
+    let python_path = python.simplified().to_string_lossy();
 
     let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len() + payload.len());
     launcher.extend_from_slice(launcher_bin);
@@ -222,7 +222,7 @@ pub(crate) fn write_script_entrypoints(
                     io::ErrorKind::Other,
                     format!(
                         "Could not find relative path for: {}",
-                        entrypoint_absolute.normalized_display()
+                        entrypoint_absolute.simplified_display()
                     ),
                 ))
             })?;
@@ -344,8 +344,8 @@ pub(crate) fn relative_to(path: &Path, base: &Path) -> Result<PathBuf, Error> {
                 io::ErrorKind::Other,
                 format!(
                     "Trivial strip failed: {} vs. {}",
-                    path.normalized_display(),
-                    base.normalized_display()
+                    path.simplified_display(),
+                    base.simplified_display()
                 ),
             ))
         })?;
@@ -387,8 +387,8 @@ pub(crate) fn move_folder_recorded(
                 .ok_or_else(|| {
                     Error::RecordFile(format!(
                         "Could not find entry for {} ({})",
-                        relative_to_site_packages.normalized_display(),
-                        src.normalized_display()
+                        relative_to_site_packages.simplified_display(),
+                        src.simplified_display()
                     ))
                 })?;
             entry.path = relative_to(&target, site_packages)?.display().to_string();
@@ -460,8 +460,8 @@ fn install_script(
             // This should be possible to occur at this point, but filesystems and such
             Error::RecordFile(format!(
                 "Could not find entry for {} ({})",
-                relative_to_site_packages.normalized_display(),
-                path.normalized_display()
+                relative_to_site_packages.simplified_display(),
+                path.simplified_display()
             ))
         })?;
     entry.path = target_path.display().to_string();
