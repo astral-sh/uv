@@ -126,13 +126,9 @@ fn find_python(
     // binary is executable and exists. It also has some extra logic that handles inconsistent casing on Windows
     // and expands `~`.
     for path in env::split_paths(&PATH) {
-        println!("Looking in: {:?}", path);
         for name in possible_names.iter().flatten() {
-            println!("Looking for: {:?}", name);
             if let Ok(paths) = which::which_in_global(&**name, Some(&path)) {
                 for path in paths {
-                    println!("Examining: {:?}", path);
-
                     if cfg!(windows) && windows::is_windows_store_shim(&path) {
                         continue;
                     }
@@ -201,7 +197,6 @@ fn find_python(
             Err(error) => return Err(error),
         }
     }
-
 
     Ok(None)
 }
@@ -385,7 +380,6 @@ mod windows {
             });
         }
 
-
         // Find the first python of the version we want in the list
         let stdout =
             String::from_utf8(output.stdout).map_err(|err| Error::PythonSubcommandOutput {
@@ -393,7 +387,6 @@ mod windows {
                 stdout: String::from_utf8_lossy(err.as_bytes()).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             })?;
-        println!("stdout: {}", stdout);
 
         for captures in PY_LIST_PATHS.captures_iter(&stdout) {
             let (_, [major, minor, path]) = captures.extract();
