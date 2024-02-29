@@ -8,6 +8,7 @@ use tracing::{debug, instrument};
 
 use platform_host::Platform;
 use uv_cache::Cache;
+use uv_fs::normalize_path;
 
 use crate::{Error, Interpreter};
 
@@ -63,7 +64,8 @@ pub fn find_requested_python(
         Interpreter::query(&executable, platform.clone(), cache).map(Some)
     } else {
         // `-p /home/ferris/.local/bin/python3.10`
-        let executable = fs_err::canonicalize(request)?;
+        let executable = normalize_path(request);
+
         Interpreter::query(&executable, platform.clone(), cache).map(Some)
     }
 }
