@@ -114,8 +114,33 @@ fn copy_and_hash(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<
     ))
 }
 
-fn get_shebang(python_executable: impl AsRef<Path>) -> String {
-    format!("#!{}", python_executable.as_ref().simplified().display())
+/// Format the shebang for a given Python executable.
+///
+/// Like pip, if a shebang is non-simple (too long or contains spaces), we use `/bin/sh` as the
+/// executable.
+///
+/// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_vendor/distlib/scripts.py#L136-L165>
+fn format_shebang(executable: impl AsRef<Path>, os_name: &str) -> String {
+    // Convert the executable to a simplified path.
+    let executable = executable.as_ref().simplified_display().to_string();
+
+    // Validate the shebang.
+    if os_name == "posix" {
+        // The length of the full line: the shebang, plus the leading `#` and `!`, and a trailing
+        // newline.
+        let shebang_length = 2 + executable.len() + 1;
+
+        // If the shebang is too long, or contains spaces, wrap it in `/bin/sh`.
+        if shebang_length > 127 || executable.contains(' ') {
+            // Like Python's `shlex.quote`:
+            // > Use single quotes, and put single quotes into double quotes
+            // > The string $'b is then quoted as '$'"'"'b'
+            let executable = format!("'{}'", executable.replace('\'', r#"'"'"'"#));
+            return format!("#!/bin/sh\n'''exec' {executable} \"$0\" \"$@\"\n' '''");
+        }
+    }
+
+    format!("#!{executable}")
 }
 
 /// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
@@ -228,8 +253,10 @@ pub(crate) fn write_script_entrypoints(
             })?;
 
         // Generate the launcher script.
-        let launcher_python_script =
-            get_script_launcher(entrypoint, &get_shebang(&layout.sys_executable));
+        let launcher_python_script = get_script_launcher(
+            entrypoint,
+            &format_shebang(&layout.sys_executable, &layout.os_name),
+        );
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
         if cfg!(windows) {
@@ -431,7 +458,9 @@ fn install_script(
     let mut start = vec![0; placeholder_python.len()];
     script.read_exact(&mut start)?;
     let size_and_encoded_hash = if start == placeholder_python {
-        let start = get_shebang(&layout.sys_executable).as_bytes().to_vec();
+        let start = format_shebang(&layout.sys_executable, &layout.os_name)
+            .as_bytes()
+            .to_vec();
         let mut target = File::create(&target_path)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
         fs::remove_file(&path)?;
@@ -695,6 +724,8 @@ mod test {
 
     use indoc::{formatdoc, indoc};
 
+    use crate::wheel::format_shebang;
+
     use super::{parse_key_value_file, parse_wheel_file, read_record_file, relative_to, Script};
 
     #[test]
@@ -820,6 +851,40 @@ mod test {
                 function: "main_bar".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn test_shebang() {
+        // By default, use a simple shebang.
+        let executable = Path::new("/usr/bin/python3");
+        let os_name = "posix";
+        assert_eq!(format_shebang(executable, os_name), "#!/usr/bin/python3");
+
+        // If the path contains spaces, we should use the `exec` trick.
+        let executable = Path::new("/usr/bin/path to python3");
+        let os_name = "posix";
+        assert_eq!(
+            format_shebang(executable, os_name),
+            "#!/bin/sh\n'''exec' '/usr/bin/path to python3' \"$0\" \"$@\"\n' '''"
+        );
+
+        // Except on Windows...
+        let executable = Path::new("/usr/bin/path to python3");
+        let os_name = "nt";
+        assert_eq!(
+            format_shebang(executable, os_name),
+            "#!/usr/bin/path to python3"
+        );
+
+        // Quotes, however, are ok.
+        let executable = Path::new("/usr/bin/'python3'");
+        let os_name = "posix";
+        assert_eq!(format_shebang(executable, os_name), "#!/usr/bin/'python3'");
+
+        // If the path is too long, we should not use the `exec` trick.
+        let executable = Path::new("/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3");
+        let os_name = "posix";
+        assert_eq!(format_shebang(executable, os_name), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
     }
 
     #[test]
