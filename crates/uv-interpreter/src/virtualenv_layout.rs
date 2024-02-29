@@ -41,13 +41,18 @@ impl<'a> VirtualenvLayout<'a> {
     }
 
     /// Returns the path to the `site-packages` directory inside a virtual environment.
-    pub(crate) fn site_packages(&self, venv_root: impl AsRef<Path>, version: (u8, u8)) -> PathBuf {
+    pub(crate) fn site_packages(
+        &self,
+        venv_root: impl AsRef<Path>,
+        site_packages_python: &str,
+        version: (u8, u8),
+    ) -> PathBuf {
         let venv = venv_root.as_ref();
         if matches!(self.0.os(), Os::Windows) {
             venv.join("Lib").join("site-packages")
         } else {
             venv.join("lib")
-                .join(format!("python{}.{}", version.0, version.1))
+                .join(format!("{site_packages_python}{}.{}", version.0, version.1))
                 .join("site-packages")
         }
     }
@@ -60,13 +65,18 @@ impl<'a> VirtualenvLayout<'a> {
 
     /// Returns the path to the `platstdlib` directory inside a virtual environment.
     #[allow(clippy::unused_self)]
-    pub(crate) fn platstdlib(&self, venv_root: impl AsRef<Path>, version: (u8, u8)) -> PathBuf {
+    pub(crate) fn platstdlib(
+        &self,
+        venv_root: impl AsRef<Path>,
+        site_packages_python: &str,
+        version: (u8, u8),
+    ) -> PathBuf {
         let venv = venv_root.as_ref();
         if matches!(self.0.os(), Os::Windows) {
             venv.join("Lib")
         } else {
             venv.join("lib")
-                .join(format!("python{}.{}", version.0, version.1))
+                .join(format!("{site_packages_python}{}.{}", version.0, version.1))
                 .join("site-packages")
         }
     }
