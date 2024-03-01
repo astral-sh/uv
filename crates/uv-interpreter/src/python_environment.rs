@@ -8,7 +8,6 @@ use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
 use crate::cfg::PyVenvConfiguration;
-use crate::virtualenv_layout::VirtualenvLayout;
 use crate::{find_default_python, find_requested_python, Error, Interpreter};
 
 /// A Python environment, consisting of a Python [`Interpreter`] and a root directory.
@@ -21,12 +20,11 @@ pub struct PythonEnvironment {
 impl PythonEnvironment {
     /// Create a [`PythonEnvironment`] for an existing virtual environment.
     pub fn from_virtualenv(platform: Platform, cache: &Cache) -> Result<Self, Error> {
-        let layout = VirtualenvLayout::from_platform(&platform);
-        let Some(venv) = detect_virtual_env(&layout)? else {
+        let Some(venv) = detect_virtual_env()? else {
             return Err(Error::VenvNotFound);
         };
         let venv = fs_err::canonicalize(venv)?;
-        let executable = layout.python_executable(&venv);
+        let executable = detect_python_executable(&venv);
         let interpreter = Interpreter::query(&executable, platform, cache)?;
 
         debug_assert!(
@@ -40,14 +38,6 @@ impl PythonEnvironment {
             root: venv,
             interpreter,
         })
-    }
-
-    /// Create a [`PythonEnvironment`] for a new virtual environment, created with the given interpreter.
-    pub fn from_interpreter(interpreter: Interpreter, venv: &Path) -> Self {
-        Self {
-            interpreter: interpreter.with_venv_root(venv.to_path_buf()),
-            root: venv.to_path_buf(),
-        }
     }
 
     /// Create a [`PythonEnvironment`] for a Python interpreter specifier (e.g., a path or a binary name).
@@ -72,6 +62,11 @@ impl PythonEnvironment {
             root: interpreter.base_prefix().to_path_buf(),
             interpreter,
         })
+    }
+
+    /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and root directory.
+    pub fn from_interpreter(interpreter: Interpreter, root: PathBuf) -> Self {
+        Self { root, interpreter }
     }
 
     /// Returns the location of the Python interpreter.
@@ -121,7 +116,7 @@ impl PythonEnvironment {
 }
 
 /// Locate the current virtual environment.
-pub(crate) fn detect_virtual_env(layout: &VirtualenvLayout) -> Result<Option<PathBuf>, Error> {
+pub(crate) fn detect_virtual_env() -> Result<Option<PathBuf>, Error> {
     match (
         env::var_os("VIRTUAL_ENV").filter(|value| !value.is_empty()),
         env::var_os("CONDA_PREFIX").filter(|value| !value.is_empty()),
@@ -157,14 +152,35 @@ pub(crate) fn detect_virtual_env(layout: &VirtualenvLayout) -> Result<Option<Pat
             if !dot_venv.join("pyvenv.cfg").is_file() {
                 return Err(Error::MissingPyVenvCfg(dot_venv));
             }
-            let python = layout.python_executable(&dot_venv);
-            if !python.is_file() {
-                return Err(Error::BrokenVenv(dot_venv, python));
-            }
             debug!("Found a virtualenv named .venv at: {}", dot_venv.display());
             return Ok(Some(dot_venv));
         }
     }
 
     Ok(None)
+}
+
+/// Returns the path to the `python` executable inside a virtual environment.
+pub(crate) fn detect_python_executable(venv: impl AsRef<Path>) -> PathBuf {
+    let venv = venv.as_ref();
+    if cfg!(windows) {
+        // Search for `python.exe` in the `Scripts` directory.
+        let executable = venv.join("Scripts").join("python.exe");
+        if executable.exists() {
+            return executable;
+        }
+
+        // Apparently, Python installed via msys2 on Windows _might_ produce a POSIX-like layout.
+        // See: https://github.com/PyO3/maturin/issues/1108
+        let executable = venv.join("bin").join("python.exe");
+        if executable.exists() {
+            return executable;
+        }
+
+        // Fallback for Conda environments.
+        venv.to_path_buf()
+    } else {
+        // Search for `python` in the `bin` directory.
+        venv.join("bin").join("python")
+    }
 }
