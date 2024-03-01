@@ -1380,9 +1380,9 @@ mod test {
     #[test_case("numpy>=1,<2\n  \r\n-borken\ntqdm", "3:1"; "ASCII Character LF then CRLF")]
     #[test_case("numpy>=1,<2\n  🚀-borken\ntqdm", "2:4"; "Emoji (Wide) Character")]
     #[test_case("numpy>=1,<2\n  中-borken\ntqdm", "2:4"; "Fullwidth character")]
-    #[test_case("numpy>=1,<2\n  é-borken\ntqdm", "2:5"; "Two codepoints")]
-    #[test_case("numpy>=1,<2\n  à̖-borken\ntqdm", "2:6"; "Three codepoints")]
-    fn test_calculate_line_column_pair(input: &str, expected: &str) -> Result<()> {
+    #[test_case("numpy>=1,<2\n  e\u{0301}-borken\ntqdm", "2:5"; "Two codepoints")]
+    #[test_case("numpy>=1,<2\n  a\u{0300}\u{0316}-borken\ntqdm", "2:6"; "Three codepoints")]
+    fn test_calculate_line_column_pair(input: &str, expected: &str) {
         let mut s = Scanner::new(input);
         // Place cursor right after the character we want to test
         s.eat_until('-');
@@ -1392,8 +1392,6 @@ mod test {
         let line_column = format!("{line}:{column}");
 
         // Assert line and columns are expected
-        assert_eq!(line_column, expected, "Issues with input: {}", input);
-
-        Ok(())
+        assert_eq!(line_column, expected, "Issues with input: {input}");
     }
 }
