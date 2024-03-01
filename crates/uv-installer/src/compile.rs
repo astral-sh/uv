@@ -28,7 +28,7 @@ pub enum CompileError {
     PythonSubcommand(#[source] io::Error),
     #[error("Failed to create temporary script file")]
     TempFile(#[source] io::Error),
-    #[error("Bytecode compilation failed, expected `{0}`, got: `{1}`")]
+    #[error("Bytecode compilation failed, expected {0:?}, got: {1:?}")]
     WrongPath(String, String),
     #[error("Failed to write to Python stdin")]
     ChildStdin(#[source] io::Error),
@@ -65,6 +65,7 @@ pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize,
 
     // Start the producer, sending all `.py` files to workers.
     let mut source_files = 0;
+    let mut send_error = None;
     for entry in WalkDir::new(dir) {
         let entry = entry?;
         // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
@@ -74,8 +75,10 @@ pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize,
                 // The workers are stuck.
                 Err(_) => return Err(CompileError::Timeout(MAIN_TIMEOUT)),
                 // The workers exited.
-                // TODO(konstin): Should we check for worker errors here?
-                Ok(Err(err)) => return Err(CompileError::WorkerDisappeared(err)),
+                // If e.g. something with the Python interpreter is wrong, the workers have exited
+                // with an error. We try to report this informative error and only if that fails,
+                // report the send error.
+                Ok(Err(err)) => send_error = Some(err),
                 Ok(Ok(())) => {}
             }
         }
@@ -108,6 +111,12 @@ pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize,
         }
     }
 
+    if let Some(send_error) = send_error {
+        // This is suspicious: Why did the channel stop working, but all workers exited
+        // successfully?
+        return Err(CompileError::WorkerDisappeared(send_error));
+    }
+
     Ok(source_files)
 }
 
@@ -135,6 +144,7 @@ async fn worker(
         .map_err(CompileError::PythonSubcommand)?;
 
     // https://stackoverflow.com/questions/49218599/write-to-child-process-stdin-in-rust/49597789#comment120223107_49597789
+    // Unbuffered, we need to write immediately or the python process will get stuck waiting
     let child_stdin = bytecode_compiler
         .stdin
         .take()
@@ -147,8 +157,8 @@ async fn worker(
     );
 
     let result = worker_main_loop(receiver, child_stdin, &mut child_stdout).await;
-    // Avoid `/.venv/bin/python: can't open file` because the tempdir was dropped before the
-    // python even started.
+    // Avoid `/.venv/bin/python: can't open file` on stderr after success because the tempdir was
+    // dropped before the Python process even started.
     let _ = bytecode_compiler.kill().await;
     result
 }
@@ -163,7 +173,7 @@ async fn worker_main_loop(
 ) -> Result<(), CompileError> {
     let mut out_line = String::new();
     while let Ok(source_file) = receiver.recv().await {
-        // TODO(konstin): Does LF alone work on windows too?
+        // Luckily, LF alone works on windows too
         let bytes = format!("{}\n", source_file.display()).into_bytes();
         // Ensure we don't get stuck here because some pipe ran full. The Python process isn't doing
         // anything at this point except waiting for stdin, so this should be immediate.
@@ -174,6 +184,7 @@ async fn worker_main_loop(
                 receiver.close();
                 return Err(CompileError::Timeout(timeout));
             }
+            // Write error
             Ok(Err(err)) => return Err(CompileError::ChildStdin(err)),
             Ok(Ok(())) => {}
         }
@@ -186,7 +197,7 @@ async fn worker_main_loop(
 
         // This is a sanity check, if we don't get the path back something has gone wrong, e.g.
         // we're not actually running a python interpreter.
-        let actual = out_line.strip_suffix(['\n', '\r']).unwrap_or(&out_line);
+        let actual = out_line.trim_end_matches(['\n', '\r']);
         let expected = source_file.display().to_string();
         if expected != actual {
             return Err(CompileError::WrongPath(expected, actual.to_string()));
