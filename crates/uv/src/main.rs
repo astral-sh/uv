@@ -990,6 +990,16 @@ struct VenvArgs {
     #[clap(long, verbatim_doc_comment)]
     prompt: Option<String>,
 
+    /// Give the virtual environment access to the system site packages directory.
+    ///
+    /// Unlike `pip`, when a virtual environment is created with `--system-site-packages`, `uv` will
+    /// _not_ take system site packages into account when running commands like `uv pip list` or
+    /// `uv pip install`. The `--system-site-packages` flag will provide the virtual environment
+    /// with access to the system site packages directory at runtime, but it will not affect the
+    /// behavior of `uv` commands.
+    #[clap(long)]
+    system_site_packages: bool,
+
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
     /// The index given by this flag is given lower priority than all other
@@ -1471,6 +1481,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python.as_deref(),
                 &index_locations,
                 gourgeist::Prompt::from_args(prompt),
+                args.system_site_packages,
                 if args.offline {
                     Connectivity::Offline
                 } else {

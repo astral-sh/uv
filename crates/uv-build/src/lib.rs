@@ -402,6 +402,7 @@ impl SourceBuild {
             &temp_dir.path().join(".venv"),
             interpreter.clone(),
             gourgeist::Prompt::None,
+            false,
             Vec::new(),
         )?;
 

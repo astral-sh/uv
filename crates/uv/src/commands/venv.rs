@@ -34,6 +34,7 @@ pub(crate) async fn venv(
     python_request: Option<&str>,
     index_locations: &IndexLocations,
     prompt: Prompt,
+    system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -45,6 +46,7 @@ pub(crate) async fn venv(
         python_request,
         index_locations,
         prompt,
+        system_site_packages,
         connectivity,
         seed,
         exclude_newer,
@@ -87,6 +89,7 @@ async fn venv_impl(
     python_request: Option<&str>,
     index_locations: &IndexLocations,
     prompt: Prompt,
+    system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -123,7 +126,7 @@ async fn venv_impl(
     let extra_cfg = vec![("uv".to_string(), env!("CARGO_PKG_VERSION").to_string())];
 
     // Create the virtual environment.
-    let venv = gourgeist::create_venv(path, interpreter, prompt, extra_cfg)
+    let venv = gourgeist::create_venv(path, interpreter, prompt, system_site_packages, extra_cfg)
         .map_err(VenvError::Creation)?;
 
     // Install seed packages.
