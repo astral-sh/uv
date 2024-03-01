@@ -16,15 +16,15 @@ use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, Regist
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{
-    compile_tree, is_dynamic, not_modified, Downloader, NoBinary, Plan, Planner, Reinstall,
-    ResolvedEditable, SitePackages,
+    is_dynamic, not_modified, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable,
+    SitePackages,
 };
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::InMemoryIndex;
 use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
-use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
+use crate::commands::{compile_and_report, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
@@ -351,26 +351,7 @@ pub(crate) async fn pip_sync(
     }
 
     if compile {
-        let start = std::time::Instant::now();
-        let files = compile_tree(venv.site_packages(), venv.python_executable())
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to bytecode compile {}",
-                    venv.site_packages().display()
-                )
-            })?;
-        let s = if files == 1 { "" } else { "s" };
-        writeln!(
-            printer,
-            "{}",
-            format!(
-                "Bytecode compiled {} in {}",
-                format!("{files} file{s}").bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
+        compile_and_report(&mut printer, &venv).await?;
     }
 
     // Validate that the environment is consistent.

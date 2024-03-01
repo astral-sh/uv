@@ -79,7 +79,11 @@ fn site_packages(context: &TestContext) -> PathBuf {
         context
             .venv
             .join("lib")
-            .join(format!("python{}", context.python_version))
+            .join(format!(
+                "{}{}",
+                context.python_kind(),
+                context.python_version
+            ))
             .join("site-packages")
     } else if cfg!(windows) {
         context.venv.join("Lib").join("site-packages")

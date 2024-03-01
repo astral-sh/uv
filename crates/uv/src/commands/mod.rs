@@ -1,5 +1,9 @@
+use std::fmt::Write;
 use std::process::ExitCode;
 use std::time::Duration;
+
+use anyhow::Context;
+use owo_colors::OwoColorize;
 
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
@@ -10,8 +14,12 @@ pub(crate) use pip_install::pip_install;
 pub(crate) use pip_list::pip_list;
 pub(crate) use pip_sync::pip_sync;
 pub(crate) use pip_uninstall::pip_uninstall;
+use uv_installer::compile_tree;
+use uv_interpreter::PythonEnvironment;
 pub(crate) use venv::venv;
 pub(crate) use version::version;
+
+use crate::printer::Printer;
 
 mod cache_clean;
 mod cache_dir;
@@ -81,4 +89,31 @@ pub(super) struct ChangeEvent<T: InstalledMetadata> {
 pub(crate) enum VersionFormat {
     Text,
     Json,
+}
+
+pub(super) async fn compile_and_report(
+    printer: &mut Printer,
+    venv: &PythonEnvironment,
+) -> anyhow::Result<()> {
+    let start = std::time::Instant::now();
+    let files = compile_tree(venv.site_packages(), venv.python_executable())
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to bytecode compile {}",
+                venv.site_packages().display()
+            )
+        })?;
+    let s = if files == 1 { "" } else { "s" };
+    writeln!(
+        printer,
+        "{}",
+        format!(
+            "Bytecode compiled {} in {}",
+            format!("{files} file{s}").bold(),
+            elapsed(start.elapsed())
+        )
+        .dimmed()
+    )?;
+    Ok(())
 }

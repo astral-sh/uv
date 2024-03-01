@@ -1,4 +1,5 @@
 use std::io;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
@@ -9,6 +10,7 @@ use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout, Command};
 use tokio::task::JoinError;
+use uv_warnings::warn_user;
 use walkdir::WalkDir;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
@@ -18,8 +20,6 @@ const MAIN_TIMEOUT: Duration = Duration::from_secs(10);
 pub enum CompileError {
     #[error("Failed to list files in site-packages")]
     Walkdir(#[from] walkdir::Error),
-    #[error("Couldn't determine number of cores")]
-    AvailableParallelism(#[source] io::Error),
     #[error("Failed to send task to worker")]
     WorkerDisappeared(SendError<PathBuf>),
     #[error("The task executor is broken, did some other task panic?")]
@@ -48,10 +48,11 @@ pub enum CompileError {
 /// We only compile all files, but we don't update the RECORD, relying on PEP 491:
 /// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
 pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize, CompileError> {
-    let workers =
-        std::thread::available_parallelism().map_err(CompileError::AvailableParallelism)?;
-    // 10 is an arbitrary number.
-    let (sender, receiver) = async_channel::bounded::<PathBuf>(workers.get() * 10);
+    let workers = std::thread::available_parallelism().unwrap_or_else(|err| {
+        warn_user!("Couldn't determine number of cores, compiling with a single thread: {err}");
+        NonZeroUsize::MIN
+    });
+    let (sender, receiver) = async_channel::bounded::<PathBuf>(1);
 
     // Start the workers.
     let mut worker_handles = Vec::new();
@@ -85,7 +86,7 @@ pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize,
     }
 
     // All workers will receive an error after the last item. Note that there are still
-    // up to workers * 10 items in the queue.
+    // up to workers items in the queue.
     drop(sender);
 
     // Make sure all workers exit regularly, avoid hiding errors.

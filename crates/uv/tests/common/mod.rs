@@ -168,6 +168,11 @@ impl TestContext {
             .chain(INSTA_FILTERS.iter().copied())
             .collect()
     }
+
+    /// For when we add pypy to the test suite.
+    pub fn python_kind(&self) -> &str {
+        "python"
+    }
 }
 
 pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
