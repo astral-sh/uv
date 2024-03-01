@@ -26,7 +26,10 @@ pub(crate) fn pip_show(
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     if sources.is_empty() {
-        eprint!("Please provide a package name or names.");
+        #[allow(clippy::print_stderr)]
+        {
+            eprint!("Please provide a package name or names.");
+        }
         return Ok(ExitStatus::Failure);
     }
 
@@ -137,8 +140,8 @@ pub(crate) fn pip_show(
     }
 
     for distribution in &distributions {
-        writeln!(printer, "Name: {}", distribution.name().to_string()).unwrap();
-        writeln!(printer, "Version: {}", distribution.version().to_string()).unwrap();
+        writeln!(printer, "Name: {}", distribution.name()).unwrap();
+        writeln!(printer, "Version: {}", distribution.version()).unwrap();
         let location = if distribution.is_editable() {
             distribution
                 .as_editable()
@@ -151,7 +154,7 @@ pub(crate) fn pip_show(
         } else {
             distribution.path().parent().unwrap().display().to_string()
         };
-        writeln!(printer, "Location: {}", location).unwrap();
+        writeln!(printer, "Location: {location}").unwrap();
     }
 
     // Validate that the environment is consistent.

@@ -73,12 +73,11 @@ fn found_single_package() -> Result<()> {
     );
 
     context.assert_command("import markupsafe").success();
-
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"Location:.*/.venv", "Location: [VENV]")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let filters = [(
+        r"Location:.*site-packages",
+        "Location: [WORKSPACE_DIR]/site-packages",
+    )]
+    .to_vec();
 
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
@@ -95,7 +94,7 @@ fn found_single_package() -> Result<()> {
     ----- stderr -----
     Name: markupsafe
     Version: 2.1.3
-    Location: [VENV]/lib/python3.12/site-packages
+    Location: [WORKSPACE_DIR]/site-packages
     "###
     );
 
@@ -134,10 +133,11 @@ fn found_multiple_packages() -> Result<()> {
     context.assert_command("import markupsafe").success();
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"Location:.*/.venv", "Location: [VENV]")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let filters = [(
+        r"Location:.*site-packages",
+        "Location: [WORKSPACE_DIR]/site-packages",
+    )]
+    .to_vec();
 
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
@@ -155,10 +155,10 @@ fn found_multiple_packages() -> Result<()> {
     ----- stderr -----
     Name: markupsafe
     Version: 2.1.3
-    Location: [VENV]/lib/python3.12/site-packages
+    Location: [WORKSPACE_DIR]/site-packages
     Name: pip
     Version: 21.3.1
-    Location: [VENV]/lib/python3.12/site-packages
+    Location: [WORKSPACE_DIR]/site-packages
     "###
     );
 
@@ -197,10 +197,11 @@ fn found_one_out_of_two() -> Result<()> {
     context.assert_command("import markupsafe").success();
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"Location:.*/.venv", "Location: [VENV]")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let filters = [(
+        r"Location:.*site-packages",
+        "Location: [WORKSPACE_DIR]/site-packages",
+    )]
+    .to_vec();
 
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
@@ -219,7 +220,7 @@ fn found_one_out_of_two() -> Result<()> {
     warning: Skipping flask as it is not installed.
     Name: markupsafe
     Version: 2.1.3
-    Location: [VENV]/lib/python3.12/site-packages
+    Location: [WORKSPACE_DIR]/site-packages
     "###
     );
 
@@ -256,14 +257,7 @@ fn found_one_out_of_two_quiet() -> Result<()> {
     );
 
     context.assert_command("import markupsafe").success();
-
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"Location:.*/.venv", "Location: [VENV]")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("show")
         .arg("markupsafe")
@@ -314,14 +308,7 @@ fn empty_quiet() -> Result<()> {
     );
 
     context.assert_command("import markupsafe").success();
-
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"Location:.*/.venv", "Location: [VENV]")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("show")
         .arg("flask")
@@ -347,7 +334,7 @@ fn editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
-    let mut workspace_dir = regex::escape(
+    let workspace_dir = regex::escape(
         Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
             .unwrap()
             .as_str(),
@@ -387,20 +374,24 @@ fn editable() -> Result<()> {
 
     // Account for difference length workspace dir
     let prefix = if cfg!(windows) { "file:///" } else { "file://" };
-    let workspace_without_prefix = workspace_dir.split_off(prefix.len());
-    let show_filters = [(workspace_without_prefix.as_str(), "[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
+
+    let search_workspace = workspace_dir.as_str().strip_prefix(prefix).unwrap();
+    let replace_workspace = "[WORKSPACE_DIR]/";
+
+    let filters = INSTA_FILTERS
+        .iter()
+        .copied()
+        .chain(vec![(search_workspace, replace_workspace)])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(show_filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("show")
-        .arg("poetry-editable")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, Command::new(get_bin())
+    .arg("pip")
+    .arg("show")
+    .arg("poetry-editable")
+    .arg("--cache-dir")
+    .arg(context.cache_dir.path())
+    .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
