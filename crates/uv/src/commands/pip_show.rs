@@ -46,6 +46,28 @@ pub(crate) fn pip_show(
         extras: _extras,
     } = RequirementsSpecification::from_simple_sources(sources)?;
 
+    // Sort and deduplicate the packages, which are keyed by name.
+    let packages = {
+        let mut packages = requirements
+            .into_iter()
+            .map(|requirement| requirement.name)
+            .collect::<Vec<_>>();
+        packages.sort_unstable();
+        packages.dedup();
+        packages
+    };
+
+    // Sort and deduplicate the editable packages, which are keyed by URL rather than package name.
+    let editables = {
+        let mut editables = editables
+            .iter()
+            .map(requirements_txt::EditableRequirement::raw)
+            .collect::<Vec<_>>();
+        editables.sort_unstable();
+        editables.dedup();
+        editables
+    };
+
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let venv = if let Some(python) = python {
@@ -71,19 +93,48 @@ pub(crate) fn pip_show(
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&venv)?;
 
-    // Filter if `--editable` is specified; always sort by name.
-    let results = site_packages
-        .iter()
-        // .filter(|f| (requirements.map(|r| r.name).contains(f.name())))
-        .filter(|f| (!f.is_editable()) || (f.is_editable() && !exclude_editable))
-        .filter(|f| !exclude.contains(f.name()))
-        .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
-        .collect_vec();
-    if results.is_empty() {
-        return Ok(ExitStatus::Success);
-    }
-    println!();
-    println!("{:?}", results[0]);
+    // Map to the local distributions.
+    let distributions = {
+        let mut distributions = Vec::with_capacity(packages.len() + editables.len());
+
+        // Identify all packages that are installed.
+        for package in &packages {
+            let installed = site_packages.get_packages(package);
+            if installed.is_empty() {
+                writeln!(
+                    printer,
+                    "{}{} Skipping {} as it is not installed.",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                    package.as_ref().bold()
+                )?;
+            } else {
+                distributions.extend(installed);
+            }
+        }
+
+        // Identify all editables that are installed.
+        for editable in &editables {
+            let installed = site_packages.get_editables(editable);
+            if installed.is_empty() {
+                writeln!(
+                    printer,
+                    "{}{} Skipping {} as it is not installed.",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                    editable.as_ref().bold()
+                )?;
+            } else {
+                distributions.extend(installed);
+            }
+        }
+
+        // Deduplicate, since a package could be listed both by name and editable URL.
+        distributions.sort_unstable_by_key(|dist| dist.path());
+        distributions.dedup_by_key(|dist| dist.path());
+        distributions
+    };
+    println!("{:?}", distributions);
 
     // Validate that the environment is consistent.
     if strict {
