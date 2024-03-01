@@ -317,21 +317,37 @@ pub struct RequirementsTxt {
     pub no_index: bool,
 }
 
-/// Calculates column and line based on the cursor and content.
+/// Calculates column and line offset according to the
+/// number of Unicode codepoints given the cursor and content.
 fn calculate_line_column_pair(content: &str, position: usize) -> (usize, usize) {
     let mut line = 1;
     let mut column = 1;
+    let mut chars = content.char_indices().peekable();
 
-    for (index, char) in content.char_indices() {
+    while let Some((index, char)) = chars.next() {
         if index >= position {
             break;
         }
-        // This should work fine for both Windows and Linux line endings
-        if char == '\n' {
-            line += 1;
-            column = 1;
-        } else if char != '\r' {
-            column += 1;
+
+        match char {
+            '\r' => {
+                // Don't count if \r is followed by \n
+                if !chars
+                    .peek()
+                    .map_or(false, |&(_, next_char)| next_char == '\n')
+                {
+                    column += 1;
+                }
+            }
+            '\n' => {
+                // Reset line/column
+                line += 1;
+                column = 1;
+            }
+            // Increment column by unicode codepoint
+            // We don't do visual width (e.g. UnicodeWidthChar::width(char).unwrap_or(0))
+            // since that's not what editors typically count
+            _ => column += 1,
         }
     }
 
@@ -874,7 +890,7 @@ impl Display for RequirementsTxtParserError {
                 line,
                 column,
             } => {
-                write!(f, "{message} at position {line}:{column}")
+                write!(f, "{message} at {line}:{column}")
             }
             Self::UnsupportedRequirement { start, end, .. } => {
                 write!(f, "Unsupported requirement in position {start} to {end}")
@@ -952,7 +968,7 @@ impl Display for RequirementsTxtFileError {
             } => {
                 write!(
                     f,
-                    "{message} in `{}` at position {line}:{column}",
+                    "{message} at {}:{line}:{column}",
                     self.file.simplified_display(),
                 )
             }
@@ -1004,9 +1020,10 @@ mod test {
     use itertools::Itertools;
     use tempfile::tempdir;
     use test_case::test_case;
+    use unscanny::Scanner;
     use uv_fs::Simplified;
 
-    use crate::{EditableRequirement, RequirementsTxt};
+    use crate::{calculate_line_column_pair, EditableRequirement, RequirementsTxt};
 
     fn workspace_test_data_dir() -> PathBuf {
         PathBuf::from("./test-data")
@@ -1349,9 +1366,33 @@ mod test {
             filters => filters
         }, {
             insta::assert_display_snapshot!(errors, @r###"
-            Unexpected '-', expected '-c', '-e', '-r' or the start of a requirement in `<REQUIREMENTS_TXT>` at position 2:3
+            Unexpected '-', expected '-c', '-e', '-r' or the start of a requirement at <REQUIREMENTS_TXT>:2:3
             "###);
         });
+
+        Ok(())
+    }
+
+    #[test_case("numpy>=1,<2\n  @-borken\ntqdm", "2:4"; "ASCII Character with LF")]
+    #[test_case("numpy>=1,<2\r\n  #-borken\ntqdm", "2:4"; "ASCII Character with CRLF")]
+    #[test_case("numpy>=1,<2\n  \n-borken\ntqdm", "3:1"; "ASCII Character LF then LF")]
+    #[test_case("numpy>=1,<2\n  \r-borken\ntqdm", "2:4"; "ASCII Character LF then CR but no LF")]
+    #[test_case("numpy>=1,<2\n  \r\n-borken\ntqdm", "3:1"; "ASCII Character LF then CRLF")]
+    #[test_case("numpy>=1,<2\n  🚀-borken\ntqdm", "2:4"; "Emoji (Wide) Character")]
+    #[test_case("numpy>=1,<2\n  中-borken\ntqdm", "2:4"; "Fullwidth character")]
+    #[test_case("numpy>=1,<2\n  é-borken\ntqdm", "2:5"; "Two codepoints")]
+    #[test_case("numpy>=1,<2\n  à̖-borken\ntqdm", "2:6"; "Three codepoints")]
+    fn test_calculate_line_column_pair(input: &str, expected: &str) -> Result<()> {
+        let mut s = Scanner::new(input);
+        // Place cursor right after the character we want to test
+        s.eat_until('-');
+
+        // Compute line/column
+        let (line, column) = calculate_line_column_pair(input, s.cursor());
+        let line_column = format!("{line}:{column}");
+
+        // Assert line and columns are expected
+        assert_eq!(line_column, expected, "Issues with input: {}", input);
 
         Ok(())
     }
