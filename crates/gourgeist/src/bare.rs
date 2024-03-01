@@ -66,6 +66,7 @@ pub fn create_bare_venv(
     location: &Utf8Path,
     interpreter: &Interpreter,
     prompt: Prompt,
+    system_site_packages: bool,
     extra_cfg: Vec<(String, String)>,
 ) -> Result<VenvPaths, Error> {
     // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
@@ -251,7 +252,11 @@ pub fn create_bare_venv(
         ),
         (
             "include-system-site-packages".to_string(),
-            "false".to_string(),
+            if system_site_packages {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            },
         ),
         (
             "base-prefix".to_string(),

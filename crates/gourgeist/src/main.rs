@@ -23,6 +23,8 @@ struct Cli {
     python: Option<String>,
     #[clap(long)]
     prompt: Option<String>,
+    #[clap(long)]
+    system_site_packages: bool,
 }
 
 fn run() -> Result<(), gourgeist::Error> {
@@ -45,6 +47,7 @@ fn run() -> Result<(), gourgeist::Error> {
         &location,
         &interpreter,
         Prompt::from_args(cli.prompt),
+        cli.system_site_packages,
         Vec::new(),
     )?;
     Ok(())
