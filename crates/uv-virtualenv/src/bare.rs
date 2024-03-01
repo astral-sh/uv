@@ -4,7 +4,7 @@ use std::env;
 use std::env::consts::EXE_SUFFIX;
 use std::io;
 use std::io::{BufWriter, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use fs_err as fs;
 use fs_err::File;

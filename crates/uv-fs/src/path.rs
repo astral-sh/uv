@@ -87,19 +87,62 @@ pub fn normalize_path(path: impl AsRef<Path>) -> PathBuf {
 /// Attempting to canonicalize this path will fail with `ErrorKind::Uncategorized`.
 pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
     let path = path.as_ref();
-    match fs_err::canonicalize(path) {
-        Ok(path) => Ok(path),
-        Err(err) =>  {
-            if cfg!(windows) {
-                if path.is_absolute() {
-                    if path.components().any(|component| component.as_os_str() == "Microsoft") {
-                        return Ok(path.to_path_buf());
-                    }
-                }
-            }
-            Err(err)
-        }
+    if is_windows_store_python(path) {
+        Ok(path.to_path_buf())
+    } else {
+        fs_err::canonicalize(path)
     }
+}
+
+/// Returns `true` if this is a Python executable installed via the Windows Store, like:
+///
+///     `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0\python.exe`.
+fn is_windows_store_python(path: &Path) -> bool {
+    if !cfg!(windows) {
+        return false;
+    }
+
+    if !path.is_absolute() {
+        return false;
+    }
+
+    let mut components = path.components().rev();
+
+    // Ex) `python.exe`
+    if !components
+        .next()
+        .and_then(|component| component.as_os_str().to_str())
+        .is_some_and(|component| component.starts_with("python"))
+    {
+        return false;
+    }
+
+    // Ex) `PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0`
+    if !components
+        .next()
+        .and_then(|component| component.as_os_str().to_str())
+        .is_some_and(|component| component.starts_with("PythonSoftwareFoundation.Python.3."))
+    {
+        return false;
+    }
+
+    // Ex) `WindowsApps`
+    if !components
+        .next()
+        .is_some_and(|component| component.as_os_str() == "WindowsApps")
+    {
+        return false;
+    }
+
+    // Ex) `Microsoft`
+    if !components
+        .next()
+        .is_some_and(|component| component.as_os_str() == "Microsoft")
+    {
+        return false;
+    }
+
+    true
 }
 
 #[cfg(test)]
