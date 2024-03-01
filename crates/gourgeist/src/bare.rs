@@ -11,7 +11,7 @@ use fs_err::File;
 use tracing::info;
 use uv_fs::Simplified;
 
-use uv_interpreter::Interpreter;
+use uv_interpreter::{Interpreter, SysconfigPaths, Virtualenv};
 
 use crate::{Error, Prompt};
 
@@ -40,27 +40,6 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
     Ok(())
 }
 
-/// Absolute paths of the virtualenv
-#[derive(Debug)]
-pub struct VenvPaths {
-    /// The location of the virtualenv, e.g. `.venv`
-    #[allow(unused)]
-    pub root: Utf8PathBuf,
-
-    /// The python interpreter.rs inside the virtualenv, on unix `.venv/bin/python`
-    #[allow(unused)]
-    pub interpreter: Utf8PathBuf,
-
-    /// The directory with the scripts, on unix `.venv/bin`
-    #[allow(unused)]
-    pub bin: Utf8PathBuf,
-
-    /// The site-packages directory where all the packages are installed to, on unix
-    /// and python 3.11 `.venv/lib/python3.11/site-packages`
-    #[allow(unused)]
-    pub site_packages: Utf8PathBuf,
-}
-
 /// Write all the files that belong to a venv without any packages installed.
 pub fn create_bare_venv(
     location: &Utf8Path,
@@ -68,7 +47,7 @@ pub fn create_bare_venv(
     prompt: Prompt,
     system_site_packages: bool,
     extra_cfg: Vec<(String, String)>,
-) -> Result<VenvPaths, Error> {
+) -> Result<Virtualenv, Error> {
     // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
     // This would make python-build-standalone fail with the encodings module not being found because its home is wrong.
     let base_python: Utf8PathBuf = fs_err::canonicalize(interpreter.sys_executable())?
@@ -107,8 +86,8 @@ pub fn create_bare_venv(
         Err(err) => return Err(Error::IO(err)),
     }
 
-    // TODO(konstin): I bet on windows we'll have to strip the prefix again
     let location = location.canonicalize_utf8()?;
+
     let bin_name = if cfg!(unix) {
         "bin"
     } else if cfg!(windows) {
@@ -116,7 +95,7 @@ pub fn create_bare_venv(
     } else {
         unimplemented!("Only Windows and Unix are supported")
     };
-    let bin_dir = location.join(bin_name);
+    let scripts = location.join(bin_name);
     let prompt = match prompt {
         Prompt::CurrentDirectoryName => env::current_dir()?
             .file_name()
@@ -132,27 +111,29 @@ pub fn create_bare_venv(
     fs::write(location.join(".gitignore"), "*")?;
 
     // Different names for the python interpreter
-    fs::create_dir(&bin_dir)?;
-    let venv_python = bin_dir.join(format!("python{EXE_SUFFIX}"));
+    fs::create_dir(&scripts)?;
+    let executable = scripts.join(format!("python{EXE_SUFFIX}"));
+
     // No symlinking on Windows, at least not on a regular non-dev non-admin Windows install.
     #[cfg(unix)]
     {
         use fs_err::os::unix::fs::symlink;
 
-        symlink(&base_python, &venv_python)?;
+        symlink(&base_python, &executable)?;
         symlink(
             "python",
-            bin_dir.join(format!("python{}", interpreter.python_major())),
+            scripts.join(format!("python{}", interpreter.python_major())),
         )?;
         symlink(
             "python",
-            bin_dir.join(format!(
+            scripts.join(format!(
                 "python{}.{}",
                 interpreter.python_major(),
                 interpreter.python_minor(),
             )),
         )?;
     }
+
     #[cfg(windows)]
     {
         // https://github.com/python/cpython/blob/d457345bbc6414db0443819290b04a9a4333313d/Lib/venv/__init__.py#L261-L267
@@ -166,7 +147,7 @@ pub fn create_bare_venv(
                 .join("scripts")
                 .join("nt")
                 .join(python_exe);
-            fs_err::copy(shim, bin_dir.join(python_exe))?;
+            fs_err::copy(shim, scripts.join(python_exe))?;
         }
     }
     #[cfg(not(any(unix, windows)))]
@@ -175,9 +156,19 @@ pub fn create_bare_venv(
     }
 
     // Add all the activate scripts for different shells
-    // TODO(konstin): RELATIVE_SITE_PACKAGES is currently only the unix path. We should ensure that all launchers work
-    // cross-platform.
     for (name, template) in ACTIVATE_TEMPLATES {
+        let relative_site_packages = if cfg!(unix) {
+            format!(
+                "../lib/{}{}.{}/site-packages",
+                interpreter.site_packages_python(),
+                interpreter.python_major(),
+                interpreter.python_minor(),
+            )
+        } else if cfg!(windows) {
+            "../Lib/site-packages".to_string()
+        } else {
+            unimplemented!("Only Windows and Unix are supported")
+        };
         let activator = template
             .replace(
                 "{{ VIRTUAL_ENV_DIR }}",
@@ -191,14 +182,9 @@ pub fn create_bare_venv(
             )
             .replace(
                 "{{ RELATIVE_SITE_PACKAGES }}",
-                &format!(
-                    "../lib/{}{}.{}/site-packages",
-                    interpreter.site_packages_python(),
-                    interpreter.python_major(),
-                    interpreter.python_minor(),
-                ),
+                relative_site_packages.as_str(),
             );
-        fs::write(bin_dir.join(name), activator)?;
+        fs::write(scripts.join(name), activator)?;
     }
 
     // pyvenv.cfg
@@ -280,6 +266,7 @@ pub fn create_bare_venv(
     write_cfg(&mut pyvenv_cfg, &pyvenv_cfg_data)?;
     drop(pyvenv_cfg);
 
+    // Construct the path to the `site-packages` directory.
     let site_packages = if cfg!(unix) {
         location
             .join("lib")
@@ -295,17 +282,42 @@ pub fn create_bare_venv(
     } else {
         unimplemented!("Only Windows and Unix are supported")
     };
+
+    // Construct the path to the `platstdlib` directory.
+    let platstdlib = if cfg!(windows) {
+        location.join("Lib")
+    } else {
+        location
+            .join("lib")
+            .join(format!(
+                "{}{}.{}",
+                interpreter.site_packages_python(),
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))
+            .join("site-packages")
+    };
+
+    // Populate `site-packages` with a `_virtualenv.py` file.
     fs::create_dir_all(&site_packages)?;
-    // Install _virtualenv.py patch.
-    // Frankly no idea what that does, i just copied it from virtualenv knowing that
-    // distutils/setuptools will have their cursed reasons
     fs::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
     fs::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
 
-    Ok(VenvPaths {
-        root: location.to_path_buf(),
-        interpreter: venv_python,
-        bin: bin_dir,
-        site_packages,
+    Ok(Virtualenv {
+        root: location.clone().into_std_path_buf(),
+        executable: executable.into_std_path_buf(),
+        sysconfig_paths: SysconfigPaths {
+            // Paths that were already constructed above.
+            scripts: scripts.into_std_path_buf(),
+            platstdlib: platstdlib.into_std_path_buf(),
+            // Set `purelib` and `platlib` to the same value.
+            purelib: site_packages.clone().into_std_path_buf(),
+            platlib: site_packages.into_std_path_buf(),
+            // Inherited from the interpreter.
+            stdlib: interpreter.stdlib().to_path_buf(),
+            include: interpreter.include().to_path_buf(),
+            platinclude: interpreter.platinclude().to_path_buf(),
+            data: location.into_std_path_buf(),
+        },
     })
 }
