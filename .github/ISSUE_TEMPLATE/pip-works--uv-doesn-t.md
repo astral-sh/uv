@@ -25,7 +25,7 @@ pip install --no-cache-dir <your_options_here>
 ```
 
 **uv command**
-<!-- The command you use to install with uv. Please make sure you are using `--no-cache`. -->
+<!-- The uv command you tried. Please make sure you are using `--no-cache`. -->
 
 ```shell
 uv pip install --no-cache <your_options_here>
