@@ -412,7 +412,7 @@ impl RequirementsTxt {
                 }
                 RequirementsTxtStatement::IndexUrl(url) => {
                     if data.index_url.is_some() {
-                        let (line, column) = to_row_column(content, s.cursor());
+                        let (line, column) = calculate_row_column(content, s.cursor());
                         return Err(RequirementsTxtParserError::Parser {
                             message: "Multiple `--index-url` values provided".to_string(),
                             line,
@@ -526,7 +526,7 @@ fn parse_entry(
             editable: false,
         })
     } else if let Some(char) = s.peek() {
-        let (line, column) = to_row_column(content, s.cursor());
+        let (line, column) = calculate_row_column(content, s.cursor());
         return Err(RequirementsTxtParserError::Parser {
             message: format!(
                 "Unexpected '{char}', expected '-c', '-e', '-r' or the start of a requirement"
@@ -567,7 +567,7 @@ fn eat_trailing_line(content: &str, s: &mut Scanner) -> Result<(), RequirementsT
             }
         }
         Some(other) => {
-            let (line, column) = to_row_column(content, s.cursor());
+            let (line, column) = calculate_row_column(content, s.cursor());
             return Err(RequirementsTxtParserError::Parser {
                 message: format!("Expected comment or end-of-line, found '{other}'"),
                 line,
@@ -688,7 +688,7 @@ fn parse_requirement_and_hashes(
 fn parse_hashes(content: &str, s: &mut Scanner) -> Result<Vec<String>, RequirementsTxtParserError> {
     let mut hashes = Vec::new();
     if s.eat_while("--hash").is_empty() {
-        let (line, column) = to_row_column(content, s.cursor());
+        let (line, column) = calculate_row_column(content, s.cursor());
         return Err(RequirementsTxtParserError::Parser {
             message: format!(
                 "Expected '--hash', found '{:?}'",
@@ -725,7 +725,7 @@ fn parse_value<'a, T>(
         s.eat_whitespace();
         Ok(s.eat_while(while_pattern).trim_end())
     } else {
-        let (line, column) = to_row_column(content, s.cursor());
+        let (line, column) = calculate_row_column(content, s.cursor());
         Err(RequirementsTxtParserError::Parser {
             message: format!("Expected '=' or whitespace, found {:?}", s.peek()),
             line,
@@ -974,7 +974,7 @@ impl From<io::Error> for RequirementsTxtParserError {
 
 /// Calculates the column and line offset of a given cursor based on the
 /// number of Unicode codepoints.
-fn to_row_column(content: &str, position: usize) -> (usize, usize) {
+fn calculate_row_column(content: &str, position: usize) -> (usize, usize) {
     let mut line = 1;
     let mut column = 1;
 
@@ -1026,7 +1026,7 @@ mod test {
     use unscanny::Scanner;
     use uv_fs::Simplified;
 
-    use crate::{to_row_column, EditableRequirement, RequirementsTxt};
+    use crate::{calculate_row_column, EditableRequirement, RequirementsTxt};
 
     fn workspace_test_data_dir() -> PathBuf {
         PathBuf::from("./test-data")
@@ -1391,7 +1391,7 @@ mod test {
         s.eat_until('-');
 
         // Compute line/column
-        let (line, column) = to_row_column(input, s.cursor());
+        let (line, column) = calculate_row_column(input, s.cursor());
         let line_column = format!("{line}:{column}");
 
         // Assert line and columns are expected
