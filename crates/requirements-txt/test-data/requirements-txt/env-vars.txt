@@ -1,0 +1,3 @@
+-r ${INCLUDE_NAME}.txt
+
+numpy==${NUMPY_VER}

@@ -35,10 +35,12 @@
 //! ```
 
 use std::borrow::Cow;
+use std::env;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tracing::{instrument, warn};
 use unscanny::{Pattern, Scanner};
@@ -298,6 +300,24 @@ impl Display for RequirementEntry {
     }
 }
 
+/// Expand environment variables that exist into their values accepting only the
+/// format `${VARIABLE_NAME_123}` where the name must follow the POSIX standard of
+/// ASCII upper case letters, numbers and underscore.
+fn replace_env(text: &str) -> String {
+    let re = Regex::new(r"\$\{([A-Z0-9_]+)\}").unwrap();
+    return re
+        .replace_all(text, |caps: &regex::Captures| {
+            if let Some(var_name) = caps.get(1) {
+                if let Ok(var_value) = env::var(var_name.as_str()) {
+                    return var_value;
+                }
+            }
+            // If the environment variable is not found, return the original placeholder
+            caps[0].to_string()
+        })
+        .into_owned();
+}
+
 /// Parsed and flattened requirements.txt with requirements and constraints
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct RequirementsTxt {
@@ -324,11 +344,12 @@ impl RequirementsTxt {
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtFileError> {
-        let content =
+        let mut content =
             uv_fs::read_to_string(&requirements_txt).map_err(|err| RequirementsTxtFileError {
                 file: requirements_txt.as_ref().to_path_buf(),
                 error: RequirementsTxtParserError::IO(err),
             })?;
+        content = replace_env(&content);
 
         let working_dir = working_dir.as_ref();
         let requirements_dir = requirements_txt.as_ref().parent().unwrap_or(working_dir);
@@ -949,6 +970,7 @@ impl From<io::Error> for RequirementsTxtParserError {
 
 #[cfg(test)]
 mod test {
+    use std::env;
     use std::path::{Path, PathBuf};
 
     use anyhow::Result;
@@ -1278,5 +1300,52 @@ mod test {
             EditableRequirement::split_extras("../editable[[dev]"),
             Some(("../editable[", "[dev]"))
         );
+    }
+
+    #[test]
+    fn parse_env_vars() {
+        let path = Path::new("env-vars.txt");
+        let working_dir = workspace_test_data_dir().join("requirements-txt");
+        let requirements_txt = working_dir.join(path);
+
+        env::set_var("INCLUDE_NAME", "include-b");
+        env::set_var("NUMPY_VER", "1.24.2");
+        let actual = RequirementsTxt::parse(requirements_txt, &working_dir).unwrap();
+        env::remove_var("INCLUDE_NAME");
+        env::remove_var("NUMPY_VER");
+
+        let snapshot = format!("parse-{}", path.to_string_lossy());
+        insta::assert_debug_snapshot!(snapshot, actual);
+    }
+
+    #[test]
+    fn parse_missing_env_vars() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            numpy==${NUMPY_VERSION}
+        "})?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt =
+            regex::escape(&requirements_txt.path().normalized_display().to_string());
+        let filters = vec![
+            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
+            (r"\\", "/"),
+        ];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_display_snapshot!(errors, @r###"
+            Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
+            expected version to start with a number, but no leading ASCII digits were found
+            numpy==${NUMPY_VERSION}
+                 ^^^^^^^^^^^^^^^^^^
+            "###);
+        });
+
+        Ok(())
     }
 }
