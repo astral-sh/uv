@@ -45,6 +45,7 @@ pub(crate) fn pip_show(
         find_links: _find_links,
         extras: _extras,
     } = RequirementsSpecification::from_simple_sources(sources)?;
+
     // Sort and deduplicate the packages, which are keyed by name.
     let packages = {
         let mut packages = requirements
@@ -133,11 +134,15 @@ pub(crate) fn pip_show(
         distributions
     };
 
+    if distributions.is_empty() {
+        return Ok(ExitStatus::Failure);
+    }
+
     for distribution in &distributions {
-        println!("{:?}", distribution);
-        println!("Name: {}", distribution.name().to_string());
-        println!("Version: {}", distribution.version().to_string());
-        println!(
+        writeln!(printer, "Name: {}", distribution.name().to_string());
+        writeln!(printer, "Version: {}", distribution.version().to_string());
+        writeln!(
+            printer,
             "Location: {}",
             distribution.path().parent().unwrap().display()
         );
