@@ -48,9 +48,17 @@ pub fn create_bare_venv(
     system_site_packages: bool,
     extra_cfg: Vec<(String, String)>,
 ) -> Result<Virtualenv, Error> {
-    // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
-    // This would make python-build-standalone fail with the encodings module not being found because its home is wrong.
-    let base_python = fs_err::canonicalize(interpreter.sys_executable())?;
+    let base_python = if cfg!(unix) {
+        fs_err::canonicalize(interpreter.sys_executable())?
+    } else if cfg!(windows) {
+        if let Some(base_executable) = interpreter.base_executable() {
+            base_executable.to_path_buf()
+        } else {
+            fs_err::canonicalize(interpreter.sys_executable())?
+        }
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    };
 
     // Validate the existing location.
     match location.metadata() {
