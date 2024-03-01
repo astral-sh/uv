@@ -330,7 +330,7 @@ fn calculate_line_column_pair(content: &str, position: usize) -> (usize, usize) 
         if char == '\n' {
             line += 1;
             column = 1;
-        } else {
+        } else if char != '\r' {
             column += 1;
         }
     }
