@@ -4,8 +4,8 @@ use std::env;
 use std::env::consts::EXE_SUFFIX;
 use std::io;
 use std::io::{BufWriter, Write};
+use std::path::Path;
 
-use camino::{FromPathBufError, Utf8Path, Utf8PathBuf};
 use fs_err as fs;
 use fs_err::File;
 use tracing::info;
@@ -42,7 +42,7 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
 
 /// Write all the files that belong to a venv without any packages installed.
 pub fn create_bare_venv(
-    location: &Utf8Path,
+    location: &Path,
     interpreter: &Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
@@ -50,9 +50,7 @@ pub fn create_bare_venv(
 ) -> Result<Virtualenv, Error> {
     // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
     // This would make python-build-standalone fail with the encodings module not being found because its home is wrong.
-    let base_python: Utf8PathBuf = fs_err::canonicalize(interpreter.sys_executable())?
-        .try_into()
-        .map_err(|err: FromPathBufError| err.into_io_error())?;
+    let base_python = fs_err::canonicalize(interpreter.sys_executable())?;
 
     // Validate the existing location.
     match location.metadata() {
@@ -60,7 +58,7 @@ pub fn create_bare_venv(
             if metadata.is_file() {
                 return Err(Error::IO(io::Error::new(
                     io::ErrorKind::AlreadyExists,
-                    format!("File exists at `{location}`"),
+                    format!("File exists at `{}`", location.simplified_display()),
                 )));
             } else if metadata.is_dir() {
                 if location.join("pyvenv.cfg").is_file() {
@@ -75,7 +73,10 @@ pub fn create_bare_venv(
                 } else {
                     return Err(Error::IO(io::Error::new(
                         io::ErrorKind::AlreadyExists,
-                        format!("The directory `{location}` exists, but it's not a virtualenv"),
+                        format!(
+                            "The directory `{}` exists, but it's not a virtualenv",
+                            location.simplified_display()
+                        ),
                     )));
                 }
             }
@@ -86,7 +87,7 @@ pub fn create_bare_venv(
         Err(err) => return Err(Error::IO(err)),
     }
 
-    let location = location.canonicalize_utf8()?;
+    let location = location.canonicalize()?;
 
     let bin_name = if cfg!(unix) {
         "bin"
@@ -198,13 +199,14 @@ pub fn create_bare_venv(
                     "The python interpreter needs to have a parent directory",
                 )
             })?
+            .simplified_display()
             .to_string()
     } else if cfg!(windows) {
         // `virtualenv` seems to rely on the undocumented, private `sys._base_executable`. When I tried,
         // `sys.base_prefix` was the same as the parent of `sys._base_executable`, but a much simpler logic and
         // documented.
         // https://github.com/pypa/virtualenv/blob/d9fdf48d69f0d0ca56140cf0381edbb5d6fe09f5/src/virtualenv/discovery/py_info.py#L136-L156
-        interpreter.base_prefix().display().to_string()
+        interpreter.base_prefix().simplified_display().to_string()
     } else {
         unimplemented!("Only Windows and Unix are supported")
     };
@@ -252,7 +254,10 @@ pub fn create_bare_venv(
             "base-exec-prefix".to_string(),
             interpreter.base_exec_prefix().to_string_lossy().to_string(),
         ),
-        ("base-executable".to_string(), base_python.to_string()),
+        (
+            "base-executable".to_string(),
+            base_python.to_string_lossy().to_string(),
+        ),
     ]
     .into_iter()
     .chain(extra_cfg)
@@ -304,20 +309,20 @@ pub fn create_bare_venv(
     fs::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
 
     Ok(Virtualenv {
-        root: location.clone().into_std_path_buf(),
-        executable: executable.into_std_path_buf(),
         sysconfig_paths: SysconfigPaths {
             // Paths that were already constructed above.
-            scripts: scripts.into_std_path_buf(),
-            platstdlib: platstdlib.into_std_path_buf(),
+            scripts,
+            platstdlib,
             // Set `purelib` and `platlib` to the same value.
-            purelib: site_packages.clone().into_std_path_buf(),
-            platlib: site_packages.into_std_path_buf(),
+            purelib: site_packages.clone(),
+            platlib: site_packages,
             // Inherited from the interpreter.
             stdlib: interpreter.stdlib().to_path_buf(),
             include: interpreter.include().to_path_buf(),
             platinclude: interpreter.platinclude().to_path_buf(),
-            data: location.into_std_path_buf(),
+            data: location.clone(),
         },
+        root: location,
+        executable,
     })
 }
