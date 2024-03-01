@@ -76,6 +76,32 @@ pub fn normalize_path(path: impl AsRef<Path>) -> PathBuf {
     ret
 }
 
+/// Like `fs_err::canonicalize`, but with permissive failures on Windows.
+///
+/// On Windows, we can't canonicalize the resolved path to Pythons that are installed via the
+/// Windows Store. For example, if you install Python via the Windows Store, then run `python`
+/// and print the `sys.executable` path, you'll get a path like:
+///
+///     `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0\python.exe`.
+///
+/// Attempting to canonicalize this path will fail with `ErrorKind::Uncategorized`.
+pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
+    let path = path.as_ref();
+    match fs_err::canonicalize(path) {
+        Ok(path) => Ok(path),
+        Err(err) =>  {
+            if cfg!(windows) {
+                if path.is_absolute() {
+                    if path.components().any(|component| component.as_os_str() == "Microsoft") {
+                        return Ok(path.to_path_buf());
+                    }
+                }
+            }
+            Err(err)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

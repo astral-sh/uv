@@ -4618,6 +4618,7 @@ dependencies = [
  "uv-fs",
  "uv-interpreter",
  "which",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

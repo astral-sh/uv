@@ -38,6 +38,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, optional = true }
 which = { workspace = true }
+windows-sys = "0.52.0"
 
 [features]
 cli = ["clap", "tracing-subscriber"]

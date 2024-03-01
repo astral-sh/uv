@@ -4,7 +4,7 @@ use std::env;
 use std::env::consts::EXE_SUFFIX;
 use std::io;
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use fs_err as fs;
 use fs_err::File;
@@ -55,7 +55,7 @@ pub fn create_bare_venv(
     let base_python = if cfg!(unix) {
         // On Unix, follow symlinks to resolve the base interpreter, since the Python executable in
         // a virtual environment is a symlink to the base interpreter.
-        fs_err::canonicalize(interpreter.sys_executable())?
+        uv_fs::canonicalize_executable(interpreter.sys_executable())?
     } else if cfg!(windows) {
         // On Windows, follow `virtualenv`. If we're in a virtual environment, use
         // `sys._base_executable` if it exists; if not, use `sys.base_prefix`. For example, with
@@ -73,7 +73,7 @@ pub fn create_bare_venv(
                 interpreter.base_prefix().join("python.exe")
             }
         } else {
-            fs_err::canonicalize(interpreter.sys_executable())?
+            uv_fs::canonicalize_executable(interpreter.sys_executable())?
         }
     } else {
         unimplemented!("Only Windows and Unix are supported")
@@ -329,4 +329,70 @@ pub fn create_bare_venv(
         root: location,
         executable,
     })
+}
+
+/// Given a path, return the "real" path.
+///
+/// The only modifications applied here are for the Windows Store. Specifically, the Windows Store
+/// Python executable is located at a path like:
+///
+///     `C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0`.
+///
+/// However, users actually aren't allowed to run executables from this path directly. So, instead,
+/// we need to use a path like:
+///
+///     `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0`
+///
+/// In practice, this is achieved by replacing `%ProgramFiles%\WindowsApps` with `%LocalAppData%\Microsoft\WindowsApps`.
+///
+/// See: <https://github.com/python-poetry/poetry/pull/5931>
+fn real_path(path: &Path) -> io::Result<PathBuf> {
+    #[cfg(windows)]
+    if path.is_absolute() {
+        if path.components().any(|component| component.as_os_str() == "Microsoft") {
+            return real_windows_path(path);
+        }
+    }
+
+    Ok(path.to_path_buf())
+}
+
+#[cfg(windows)]
+fn real_windows_path(path: &Path) -> io::Result<PathBuf> {
+    use windows_sys::Win32::UI::Shell::{CSIDL_LOCAL_APPDATA, CSIDL_PROFILE};
+
+    let program_files = windows_folder(CSIDL_PROGRAM_FILES)?;
+    let local_appdata = windows_folder(CSIDL_LOCAL_APPDATA)?;
+
+    let suffix = path.strip_prefix(&program_files)?;
+    Ok(local_appdata.join(suffix))
+}
+
+#[cfg(windows)]
+fn windows_folder(csidl: u32) -> Option<PathBuf> {
+    use std::env;
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    use std::path::PathBuf;
+
+    use windows_sys::Win32::Foundation::{MAX_PATH, S_OK};
+    use windows_sys::Win32::UI::Shell::{SHGetFolderPathW};
+
+    unsafe {
+        let mut path: Vec<u16> = Vec::with_capacity(MAX_PATH as usize);
+        match SHGetFolderPathW(0, csidl as i32, 0, 0, path.as_mut_ptr()) {
+            S_OK => {
+                let len = wcslen(path.as_ptr());
+                path.set_len(len);
+                let s = OsString::from_wide(&path);
+                Some(PathBuf::from(s))
+            }
+            _ => None,
+        }
+    }
+}
+
+#[cfg(windows)]
+extern "C" {
+    fn wcslen(buf: *const u16) -> usize;
 }
