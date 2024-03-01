@@ -25,6 +25,11 @@ pub(crate) fn pip_show(
     cache: &Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
+    if sources.is_empty() {
+        eprint!("Please provide a package name or names.");
+        return Ok(ExitStatus::Failure);
+    }
+
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project: _project,
