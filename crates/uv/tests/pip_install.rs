@@ -1435,6 +1435,56 @@ fn install_constraints_inline() -> Result<()> {
     Ok(())
 }
 
+/// Install a package from a `constraints.txt` file on a remote http server.
+#[test]
+fn install_constraints_remote() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+            .arg("-c")
+            .arg("https://raw.githubusercontent.com/apache/airflow/constraints-2-6/constraints-3.11.txt")
+            .arg("typing_extensions>=4.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.7.1
+    "###
+    ); // would yield typing-extensions==4.8.2 without constraint file
+
+    Ok(())
+}
+
+/// Install a package from a `requirements.txt` file, with an inline constraint, which points
+/// to a remote http server.
+#[test]
+fn install_constraints_inline_remote() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirementstxt = context.temp_dir.child("requirements.txt");
+    requirementstxt.write_str("typing-extensions>=4.0\n-c https://raw.githubusercontent.com/apache/airflow/constraints-2-6/constraints-3.11.txt")?;
+
+    uv_snapshot!(command(&context)
+            .arg("-r")
+            .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.7.1
+    "### // would yield typing-extensions==4.8.2 without constraint file
+    );
+
+    Ok(())
+}
+
 /// Tests that we can install `polars==0.14.0`, which has this odd dependency
 /// requirement in its wheel metadata: `pyarrow>=4.0.*; extra == 'pyarrow'`.
 ///
