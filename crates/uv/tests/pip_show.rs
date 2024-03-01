@@ -48,7 +48,7 @@ fn empty() {
 }
 
 #[test]
-fn found() -> Result<()> {
+fn found_single_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -72,8 +72,14 @@ fn found() -> Result<()> {
     );
 
     context.assert_command("import markupsafe").success();
-    println!("context: {:?}", context);
-    uv_snapshot!(Command::new(get_bin())
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let filters: Vec<_> = [(r"Location:.*/.venv", "Location: [VENV]")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("show")
         .arg("markupsafe")
@@ -84,14 +90,11 @@ fn found() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package    Version
-    ---------- -------
-    markupsafe 2.1.3
 
     ----- stderr -----
     Name: markupsafe
     Version: 2.1.3
-    Location: [TEMP_DIR]/.venv/lib/python3.12/site-packages
+    Location: [VENV]/lib/python3.12/site-packages
     "###
     );
 
