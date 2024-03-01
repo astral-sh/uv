@@ -45,7 +45,6 @@ pub(crate) fn pip_show(
         find_links: _find_links,
         extras: _extras,
     } = RequirementsSpecification::from_simple_sources(sources)?;
-
     // Sort and deduplicate the packages, which are keyed by name.
     let packages = {
         let mut packages = requirements
@@ -92,7 +91,6 @@ pub(crate) fn pip_show(
 
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&venv)?;
-
     // Map to the local distributions.
     let distributions = {
         let mut distributions = Vec::with_capacity(packages.len() + editables.len());
@@ -134,7 +132,16 @@ pub(crate) fn pip_show(
         distributions.dedup_by_key(|dist| dist.path());
         distributions
     };
-    println!("{:?}", distributions);
+
+    for distribution in &distributions {
+        println!("{:?}", distribution);
+        println!("Name: {}", distribution.name().to_string());
+        println!("Version: {}", distribution.version().to_string());
+        println!(
+            "Location: {}",
+            distribution.path().parent().unwrap().display()
+        );
+    }
 
     // Validate that the environment is consistent.
     if strict {
