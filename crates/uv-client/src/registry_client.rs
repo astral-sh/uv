@@ -225,6 +225,7 @@ impl RegistryClient {
     ) -> Result<Result<OwnedArchive<SimpleMetadata>, CachedClientError<Error>>, Error> {
         // Format the URL for PyPI.
         let mut url: Url = index.clone().into();
+        url.set_fragment(None);
         url.path_segments_mut()
             .unwrap()
             .pop_if_empty()
@@ -386,7 +387,10 @@ impl RegistryClient {
             .as_ref()
             .is_some_and(pypi_types::DistInfoMetadata::is_available)
         {
-            let url = Url::parse(&format!("{url}.metadata")).map_err(ErrorKind::UrlParseError)?;
+            // Like `pip`, drop the fragment, if it exists.
+            let mut url = url.clone();
+            url.set_fragment(None);
+            url.set_path(&format!("{}.metadata", url.path()));
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
@@ -455,6 +459,10 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
+        // Like `pip`, drop the fragment, if it exists.
+        let mut url = url.clone();
+        url.set_fragment(None);
+
         let client = self.client_raw.clone();
         let req = self
             .client
@@ -521,7 +529,7 @@ impl RegistryClient {
         }
 
         // Stream the file, searching for the METADATA.
-        let reader = self.stream_external(url).await?;
+        let reader = self.stream_external(&url).await?;
         read_metadata_async_stream(filename, url.to_string(), reader).await
     }
 
