@@ -204,13 +204,13 @@ fn date_or_datetime(input: &str) -> Result<DateTime<Utc>, String> {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 struct PipCompileArgs {
-    /// Include all packages listed in the given `requirements.in` files.
+    /// Include all packages listed in the given `requirements.in` files  (either local paths or HTTPS urls).
     ///
     /// When the path is `-`, then requirements are read from stdin.
     #[clap(required(true))]
     src_file: Vec<PathBuf>,
 
-    /// Constrain versions using the given requirements files.
+    /// Constrain versions using the given requirements files (either local paths or https urls).
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
@@ -220,7 +220,7 @@ struct PipCompileArgs {
     #[clap(long, short)]
     constraint: Vec<PathBuf>,
 
-    /// Override versions using the given requirements files.
+    /// Override versions using the given requirements files (either local paths or HTTPS urls).
     ///
     /// Overrides files are `requirements.txt`-like files that force a specific version of a
     /// requirement to be installed, regardless of the requirements declared by any constituent
@@ -387,7 +387,7 @@ struct PipCompileArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 struct PipSyncArgs {
-    /// Include all packages listed in the given `requirements.txt` files.
+    /// Include all packages listed in the given `requirements.txt` files (either local paths or HTTPS urls).
     #[clap(required(true))]
     src_file: Vec<PathBuf>,
 
@@ -525,7 +525,7 @@ struct PipInstallArgs {
     #[clap(group = "sources")]
     package: Vec<String>,
 
-    /// Install all packages listed in the given requirements files.
+    /// Install all packages listed in the given requirements files (either local paths or HTTPS urls).
     #[clap(long, short, group = "sources")]
     requirement: Vec<PathBuf>,
 
@@ -533,7 +533,7 @@ struct PipInstallArgs {
     #[clap(long, short, group = "sources")]
     editable: Vec<String>,
 
-    /// Constrain versions using the given requirements files.
+    /// Constrain versions using the given requirements files (either local paths or https urls).
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
     /// requirement that's installed. However, including a package in a constraints file will _not_
@@ -543,7 +543,7 @@ struct PipInstallArgs {
     #[clap(long, short)]
     constraint: Vec<PathBuf>,
 
-    /// Override versions using the given requirements files.
+    /// Override versions using the given requirements files (either local paths or HTTPS urls).
     ///
     /// Overrides files are `requirements.txt`-like files that force a specific version of a
     /// requirement to be installed, regardless of the requirements declared by any constituent
@@ -727,7 +727,7 @@ struct PipUninstallArgs {
     #[clap(group = "sources")]
     package: Vec<String>,
 
-    /// Uninstall all packages listed in the given requirements files.
+    /// Uninstall all packages listed in the given requirements files (either local paths or HTTPS urls).
     #[clap(long, short, group = "sources")]
     requirement: Vec<PathBuf>,
 
