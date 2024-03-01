@@ -19,7 +19,7 @@ use uv_normalize::PackageName;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
-/// Enumerate the installed packages in the current environment.
+/// Show information about one or more installed packages.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_show(
     strict: bool,
