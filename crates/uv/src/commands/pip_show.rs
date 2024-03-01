@@ -74,7 +74,7 @@ pub(crate) fn pip_show(
     // Filter if `--editable` is specified; always sort by name.
     let results = site_packages
         .iter()
-        .filter(|f| (requirements.map(|r| r.name).contains(f.name())))
+        // .filter(|f| (requirements.map(|r| r.name).contains(f.name())))
         .filter(|f| (!f.is_editable()) || (f.is_editable() && !exclude_editable))
         .filter(|f| !exclude.contains(f.name()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
@@ -84,47 +84,6 @@ pub(crate) fn pip_show(
     }
     println!();
     println!("{:?}", results[0]);
-
-    // The package name and version are always present.
-    let mut columns = vec![
-        Column {
-            header: String::from("Package"),
-            rows: results.iter().map(|f| f.name().to_string()).collect_vec(),
-        },
-        Column {
-            header: String::from("Version"),
-            rows: results
-                .iter()
-                .map(|f| f.version().to_string())
-                .collect_vec(),
-        },
-    ];
-
-    // Editable column is only displayed if at least one editable package is found.
-    if results.iter().any(|f| f.is_editable()) {
-        columns.push(Column {
-            header: String::from("Editable project location"),
-            rows: results
-                .iter()
-                .map(|f| f.as_editable())
-                .map(|e| {
-                    if let Some(url) = e {
-                        url.to_file_path()
-                            .unwrap()
-                            .into_os_string()
-                            .into_string()
-                            .unwrap()
-                    } else {
-                        String::new()
-                    }
-                })
-                .collect_vec(),
-        });
-    }
-
-    for elems in Multizip(columns.iter().map(Column::fmt_padded).collect_vec()) {
-        println!("{0}", elems.join(" "));
-    }
 
     // Validate that the environment is consistent.
     if strict {
