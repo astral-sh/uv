@@ -139,28 +139,19 @@ pub(crate) fn pip_show(
     for distribution in &distributions {
         writeln!(printer, "Name: {}", distribution.name().to_string()).unwrap();
         writeln!(printer, "Version: {}", distribution.version().to_string()).unwrap();
-        if distribution.is_editable() {
-            writeln!(
-                printer,
-                "Location: {}",
-                distribution
-                    .as_editable()
-                    .unwrap()
-                    .to_file_path()
-                    .unwrap()
-                    .into_os_string()
-                    .into_string()
-                    .unwrap()
-            )
-            .unwrap();
+        let location = if distribution.is_editable() {
+            distribution
+                .as_editable()
+                .unwrap()
+                .to_file_path()
+                .unwrap()
+                .into_os_string()
+                .into_string()
+                .unwrap()
         } else {
-            writeln!(
-                printer,
-                "Location: {}",
-                distribution.path().parent().unwrap().display()
-            )
-            .unwrap();
-        }
+            distribution.path().parent().unwrap().display().to_string()
+        };
+        writeln!(printer, "Location: {}", location).unwrap();
     }
 
     // Validate that the environment is consistent.
