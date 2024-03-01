@@ -893,14 +893,21 @@ struct PipListArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 struct PipShowArgs {
+    #[clap(group = "sources")]
+    package: Vec<String>,
+
+    /// Uninstall all packages listed in the given requirements files.
+    #[clap(long, short, group = "sources")]
+    requirement: Vec<PathBuf>,
+
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
     #[clap(long)]
     strict: bool,
 
-    /// Only include editable projects.
-    #[clap(short, long)]
-    editable: bool,
+    /// Install the editable package based on the provided local file path.
+    #[clap(long, short, group = "sources")]
+    editable: Vec<String>,
 
     /// Exclude any editable packages from output.
     #[clap(long)]
@@ -1408,16 +1415,29 @@ async fn run() -> Result<ExitStatus> {
         ),
         Commands::Pip(PipNamespace {
             command: PipCommand::Show(args),
-        }) => commands::pip_show(
-            args.strict,
-            args.editable,
-            args.exclude_editable,
-            &args.exclude,
-            args.python.as_deref(),
-            args.system,
-            &cache,
-            printer,
-        ),
+        }) => {
+            let sources = args
+                .package
+                .into_iter()
+                .map(RequirementsSource::from_package)
+                .chain(args.editable.into_iter().map(RequirementsSource::Editable))
+                .chain(
+                    args.requirement
+                        .into_iter()
+                        .map(RequirementsSource::from_path),
+                )
+                .collect::<Vec<_>>();
+            commands::pip_show(
+                &sources,
+                args.strict,
+                args.exclude_editable,
+                &args.exclude,
+                args.python.as_deref(),
+                args.system,
+                &cache,
+                printer,
+            )
+        }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })

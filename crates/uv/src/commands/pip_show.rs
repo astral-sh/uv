@@ -18,12 +18,13 @@ use uv_normalize::PackageName;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
+use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
 /// Show information about one or more installed packages.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_show(
+    sources: &[RequirementsSource],
     strict: bool,
-    editable: bool,
     exclude_editable: bool,
     exclude: &[PackageName],
     python: Option<&str>,
@@ -31,6 +32,20 @@ pub(crate) fn pip_show(
     cache: &Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
+    // Read all requirements from the provided sources.
+    let RequirementsSpecification {
+        project: _project,
+        requirements,
+        constraints: _constraints,
+        overrides: _overrides,
+        editables,
+        index_url: _index_url,
+        extra_index_urls: _extra_index_urls,
+        no_index: _no_index,
+        find_links: _find_links,
+        extras: _extras,
+    } = RequirementsSpecification::from_simple_sources(sources)?;
+
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
     let venv = if let Some(python) = python {
@@ -59,13 +74,16 @@ pub(crate) fn pip_show(
     // Filter if `--editable` is specified; always sort by name.
     let results = site_packages
         .iter()
-        .filter(|f| (!f.is_editable() && !editable) || (f.is_editable() && !exclude_editable))
+        .filter(|f| (requirements.map(|r| r.name).contains(f.name())))
+        .filter(|f| (!f.is_editable()) || (f.is_editable() && !exclude_editable))
         .filter(|f| !exclude.contains(f.name()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .collect_vec();
     if results.is_empty() {
         return Ok(ExitStatus::Success);
     }
+    println!();
+    println!("{:?}", results[0]);
 
     // The package name and version are always present.
     let mut columns = vec![
