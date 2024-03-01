@@ -25,13 +25,13 @@ pub async fn read(path: impl AsRef<Path>) -> std::io::Result<Vec<u8>> {
         std::io::stdin().read_to_end(&mut buf)?;
         Ok(buf)
     } else {
-        let path_utf8 = path.to_str().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Path '{:?}' is not valid unicode.", &path),
-            )
-        })?;
-        if path_utf8.starts_with("http://") | path_utf8.starts_with("https://") {
+        if path.starts_with("http://") | path.starts_with("https://") {
+            let path_utf8 = path.to_str().ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Path '{:?}' is not valid unicode.", &path),
+                )
+            })?;
             Ok(reqwest::get(path_utf8)
                 .await
                 .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?
@@ -58,13 +58,13 @@ pub async fn read_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
         std::io::stdin().read_to_string(&mut buf)?;
         Ok(buf)
     } else {
-        let path_utf8 = path.to_str().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Path '{:?}' is not valid unicode.", &path),
-            )
-        })?;
-        if path_utf8.starts_with("http://") | path_utf8.starts_with("https://") {
+        if path.starts_with("http://") | path.starts_with("https://") {
+            let path_utf8 = path.to_str().ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Path '{:?}' is not valid unicode.", &path),
+                )
+            })?;
             Ok(reqwest::get(path_utf8)
                 .await
                 .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?
