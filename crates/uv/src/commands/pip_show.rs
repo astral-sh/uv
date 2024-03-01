@@ -21,7 +21,7 @@ use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
-pub(crate) fn pip_list(
+pub(crate) fn pip_show(
     strict: bool,
     editable: bool,
     exclude_editable: bool,
