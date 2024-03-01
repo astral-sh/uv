@@ -317,7 +317,6 @@ pub struct RequirementsTxt {
     pub no_index: bool,
 }
 
-
 impl RequirementsTxt {
     /// See module level documentation
     #[instrument(skip_all, fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str()))]
@@ -972,7 +971,6 @@ impl From<io::Error> for RequirementsTxtParserError {
         Self::IO(err)
     }
 }
-
 
 /// Calculates the column and line offset of a given cursor based on the
 /// number of Unicode codepoints.
