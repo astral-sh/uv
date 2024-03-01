@@ -50,7 +50,7 @@ impl PythonEnvironment {
             return Err(Error::RequestedPythonNotFound(python.to_string()));
         };
         Ok(Self {
-            root: interpreter.base_prefix().to_path_buf(),
+            root: interpreter.prefix().to_path_buf(),
             interpreter,
         })
     }
@@ -59,7 +59,7 @@ impl PythonEnvironment {
     pub fn from_default_python(platform: &Platform, cache: &Cache) -> Result<Self, Error> {
         let interpreter = find_default_python(platform, cache)?;
         Ok(Self {
-            root: interpreter.base_prefix().to_path_buf(),
+            root: interpreter.prefix().to_path_buf(),
             interpreter,
         })
     }
