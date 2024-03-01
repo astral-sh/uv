@@ -188,28 +188,17 @@ pub fn create_bare_venv(
         fs::write(scripts.join(name), activator)?;
     }
 
-    // pyvenv.cfg
-    let python_home = if cfg!(unix) {
-        // On Linux and Mac, Python is symlinked so the base home is the parent of the resolved-by-canonicalize path.
-        base_python
-            .parent()
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "The python interpreter needs to have a parent directory",
-                )
-            })?
-            .simplified_display()
-            .to_string()
-    } else if cfg!(windows) {
-        // `virtualenv` seems to rely on the undocumented, private `sys._base_executable`. When I tried,
-        // `sys.base_prefix` was the same as the parent of `sys._base_executable`, but a much simpler logic and
-        // documented.
-        // https://github.com/pypa/virtualenv/blob/d9fdf48d69f0d0ca56140cf0381edbb5d6fe09f5/src/virtualenv/discovery/py_info.py#L136-L156
-        interpreter.base_prefix().simplified_display().to_string()
-    } else {
-        unimplemented!("Only Windows and Unix are supported")
-    };
+    // Per PEP 405, the Python `home` is the parent directory of the interpreter.
+    let python_home = base_python
+        .parent()
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "The python interpreter needs to have a parent directory",
+            )
+        })?
+        .simplified_display()
+        .to_string();
 
     // Validate extra_cfg
     let reserved_keys = [
