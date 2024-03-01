@@ -1437,7 +1437,7 @@ fn install_constraints_inline() -> Result<()> {
 
 /// Install a package from a `constraints.txt` file on a remote http server.
 #[test]
-fn install_constraints_remote() -> Result<()> {
+fn install_constraints_remote() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(command(&context)
@@ -1455,8 +1455,6 @@ fn install_constraints_remote() -> Result<()> {
      + typing-extensions==4.7.1
     "###
     ); // would yield typing-extensions==4.8.2 without constraint file
-
-    Ok(())
 }
 
 /// Install a package from a `requirements.txt` file, with an inline constraint, which points
