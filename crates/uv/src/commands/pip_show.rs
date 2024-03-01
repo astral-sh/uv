@@ -10,7 +10,6 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
-use uv_normalize::PackageName;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -21,8 +20,6 @@ use crate::requirements::{RequirementsSource, RequirementsSpecification};
 pub(crate) fn pip_show(
     sources: &[RequirementsSource],
     strict: bool,
-    exclude_editable: bool,
-    exclude: &[PackageName],
     python: Option<&str>,
     system: bool,
     cache: &Cache,

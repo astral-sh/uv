@@ -1430,8 +1430,6 @@ async fn run() -> Result<ExitStatus> {
             commands::pip_show(
                 &sources,
                 args.strict,
-                args.exclude_editable,
-                &args.exclude,
                 args.python.as_deref(),
                 args.system,
                 &cache,
