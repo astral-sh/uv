@@ -105,20 +105,18 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     }
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
-        let markers = self.interpreter.markers();
-        let tags = self.interpreter.tags()?;
         let resolver = Resolver::new(
             Manifest::simple(requirements.to_vec()),
             self.options,
-            markers,
+            self.interpreter.markers(),
             self.interpreter,
-            tags,
+            self.interpreter.tags()?,
             self.client,
             self.flat_index,
             self.index,
             self,
         )?;
-        let graph = resolver.resolve().await.with_context(|| {
+        let graph = resolver.resolve().boxed().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
                 requirements.iter().map(ToString::to_string).join(", "),
