@@ -3,9 +3,10 @@ use std::process::Command;
 use anyhow::Result;
 use assert_fs::fixture::PathChild;
 use assert_fs::fixture::{FileTouch, FileWriteStr};
+use indoc::indoc;
+use url::Url;
 
 use common::uv_snapshot;
-use indoc::indoc;
 
 use crate::common::{get_bin, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
 
@@ -334,6 +335,78 @@ fn empty_quiet() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "maturin")]
+fn editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let current_dir = std::env::current_dir()?;
+    let workspace_dir = regex::escape(
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str(),
+    );
+
+    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    // Install the editable package.
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("pip")
+        .arg("install")
+        .arg("-e")
+        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + numpy==1.26.2
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+    "###
+    );
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let show_filters: Vec<_> = [(r"Location:.*/.venv", "Location: [VENV]")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    uv_snapshot!(show_filters, Command::new(get_bin())
+        .arg("pip")
+        .arg("show")
+        .arg("poetry-editable")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Name: poetry-editable
+    Version: 0.1.0
+    Location: [VENV]/lib/python3.12/site-packages
     "###
     );
 
