@@ -13,7 +13,7 @@ pub use crate::path::*;
 
 mod path;
 
-/// Reads the contents of the file path given into memory.
+/// Reads the contents of the file path given (local or https) into memory.
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
 pub async fn read(path: impl AsRef<Path>) -> std::io::Result<Vec<u8>> {
@@ -46,7 +46,7 @@ pub async fn read(path: impl AsRef<Path>) -> std::io::Result<Vec<u8>> {
     }
 }
 
-/// Reads the contents of the file path given into memory as a `String`.
+/// Reads the contents of the file path given (local or https) into memory as a `String`.
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
 pub async fn read_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
