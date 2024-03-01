@@ -422,15 +422,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "camino"
-version = "1.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c59e92b5a388f549b863a7bea62612c09f24c8393560709a54558a9abdfb3b9c"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "cargo-util"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1274,29 +1265,6 @@ dependencies = [
  "log",
  "plain",
  "scroll",
-]
-
-[[package]]
-name = "gourgeist"
-version = "0.0.4"
-dependencies = [
- "anstream",
- "cachedir",
- "camino",
- "clap",
- "directories",
- "fs-err",
- "platform-host",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tracing",
- "tracing-subscriber",
- "uv-cache",
- "uv-fs",
- "uv-interpreter",
- "which",
 ]
 
 [[package]]
@@ -4152,7 +4120,6 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
- "gourgeist",
  "indexmap 2.2.3",
  "indicatif",
  "indoc",
@@ -4199,6 +4166,7 @@ dependencies = [
  "uv-normalize",
  "uv-resolver",
  "uv-traits",
+ "uv-virtualenv",
  "uv-warnings",
  "which",
 ]
@@ -4218,7 +4186,6 @@ dependencies = [
  "anyhow",
  "distribution-types",
  "fs-err",
- "gourgeist",
  "indoc",
  "insta",
  "itertools 0.12.1",
@@ -4240,6 +4207,7 @@ dependencies = [
  "uv-fs",
  "uv-interpreter",
  "uv-traits",
+ "uv-virtualenv",
 ]
 
 [[package]]
@@ -4322,7 +4290,6 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
- "gourgeist",
  "indicatif",
  "install-wheel-rs",
  "itertools 0.12.1",
@@ -4358,6 +4325,7 @@ dependencies = [
  "uv-normalize",
  "uv-resolver",
  "uv-traits",
+ "uv-virtualenv",
  "which",
 ]
 
@@ -4369,7 +4337,6 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
- "gourgeist",
  "itertools 0.12.1",
  "pep508_rs",
  "platform-host",
@@ -4387,6 +4354,7 @@ dependencies = [
  "uv-interpreter",
  "uv-resolver",
  "uv-traits",
+ "uv-virtualenv",
 ]
 
 [[package]]
@@ -4575,7 +4543,6 @@ dependencies = [
  "either",
  "fs-err",
  "futures",
- "gourgeist",
  "indexmap 2.2.3",
  "insta",
  "install-wheel-rs",
@@ -4609,6 +4576,7 @@ dependencies = [
  "uv-interpreter",
  "uv-normalize",
  "uv-traits",
+ "uv-virtualenv",
  "uv-warnings",
  "zip",
 ]
@@ -4628,6 +4596,28 @@ dependencies = [
  "uv-cache",
  "uv-interpreter",
  "uv-normalize",
+]
+
+[[package]]
+name = "uv-virtualenv"
+version = "0.0.4"
+dependencies = [
+ "anstream",
+ "cachedir",
+ "clap",
+ "directories",
+ "fs-err",
+ "platform-host",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+ "uv-cache",
+ "uv-fs",
+ "uv-interpreter",
+ "which",
 ]
 
 [[package]]

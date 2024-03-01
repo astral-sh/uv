@@ -88,14 +88,20 @@ pub(crate) fn scripts_from_ini(
     // Special case to generate versioned pip launchers.
     // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/operations/install/wheel.py#L283
     // https://github.com/astral-sh/uv/issues/1593
-    for script in &mut console_scripts {
+    // Older pip versions have a wrong `pip3.x` launcher we have to remove, while newer pip versions
+    // (post https://github.com/pypa/pip/pull/12536) don't, ...
+    console_scripts.retain(|script| {
         let Some((left, right)) = script.name.split_once('.') else {
-            continue;
+            return true;
         };
-        if left != "pip3" || right.parse::<u8>().is_err() {
-            continue;
-        }
-        script.name = format!("pip3.{python_minor}");
+        !(left == "pip3" || right.parse::<u8>().is_ok())
+    });
+    // ... either has a `pip3` launcher we can use as template for the `pip3.x` users expect.
+    if let Some(pip_script) = console_scripts.iter().find(|script| script.name == "pip3") {
+        console_scripts.push(Script {
+            name: format!("pip3.{python_minor}"),
+            ..pip_script.clone()
+        });
     }
 
     Ok((console_scripts, gui_scripts))

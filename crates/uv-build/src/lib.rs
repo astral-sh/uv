@@ -75,7 +75,7 @@ pub enum Error {
     #[error("Source distribution not found at: {0}")]
     NotFound(PathBuf),
     #[error("Failed to create temporary virtualenv")]
-    Gourgeist(#[from] gourgeist::Error),
+    Virtualenv(#[from] uv_virtualenv::Error),
     #[error("Failed to run {0}")]
     CommandFailed(PathBuf, #[source] io::Error),
     #[error("{message}:\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
@@ -398,10 +398,11 @@ impl SourceBuild {
         let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)
             .map_err(|err| *err)?;
 
-        let venv = gourgeist::create_venv(
+        let venv = uv_virtualenv::create_venv(
             &temp_dir.path().join(".venv"),
             interpreter.clone(),
-            gourgeist::Prompt::None,
+            uv_virtualenv::Prompt::None,
+            false,
             Vec::new(),
         )?;
 

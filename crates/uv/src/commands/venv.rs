@@ -12,7 +12,6 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name};
-use gourgeist::Prompt;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -33,7 +32,8 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
-    prompt: Prompt,
+    prompt: uv_virtualenv::Prompt,
+    system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -45,6 +45,7 @@ pub(crate) async fn venv(
         python_request,
         index_locations,
         prompt,
+        system_site_packages,
         connectivity,
         seed,
         exclude_newer,
@@ -65,7 +66,7 @@ pub(crate) async fn venv(
 enum VenvError {
     #[error("Failed to create virtualenv")]
     #[diagnostic(code(uv::venv::creation))]
-    Creation(#[source] gourgeist::Error),
+    Creation(#[source] uv_virtualenv::Error),
 
     #[error("Failed to install seed packages")]
     #[diagnostic(code(uv::venv::seed))]
@@ -86,7 +87,8 @@ async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
-    prompt: Prompt,
+    prompt: uv_virtualenv::Prompt,
+    system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -123,8 +125,9 @@ async fn venv_impl(
     let extra_cfg = vec![("uv".to_string(), env!("CARGO_PKG_VERSION").to_string())];
 
     // Create the virtual environment.
-    let venv = gourgeist::create_venv(path, interpreter, prompt, extra_cfg)
-        .map_err(VenvError::Creation)?;
+    let venv =
+        uv_virtualenv::create_venv(path, interpreter, prompt, system_site_packages, extra_cfg)
+            .map_err(VenvError::Creation)?;
 
     // Install seed packages.
     if seed {

@@ -18,10 +18,10 @@ use platform_tags::{Tags, TagsError};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::write_atomic_sync;
 
-use crate::python_environment::detect_virtual_env;
+use crate::python_environment::{detect_python_executable, detect_virtual_env};
 use crate::python_query::try_find_default_python;
-use crate::virtualenv_layout::VirtualenvLayout;
-use crate::{find_requested_python, Error, PythonVersion};
+use crate::sysconfig::SysconfigPaths;
+use crate::{find_requested_python, Error, PythonVersion, Virtualenv};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -84,36 +84,11 @@ impl Interpreter {
 
     /// Return a new [`Interpreter`] with the given virtual environment root.
     #[must_use]
-    pub(crate) fn with_venv_root(self, venv_root: PathBuf) -> Self {
-        let layout = VirtualenvLayout::from_platform(&self.platform);
+    pub fn with_virtualenv(self, virtualenv: Virtualenv) -> Self {
         Self {
-            // Given that we know `venv_root` is a virtualenv, and not an arbitrary Python
-            // interpreter, we can safely assume that the platform is the same as the host
-            // platform. Further, we can safely assume that the paths follow a predictable
-            // structure, which allows us to avoid querying the interpreter for the `sysconfig`
-            // paths.
-            sysconfig_paths: SysconfigPaths {
-                purelib: layout.site_packages(
-                    &venv_root,
-                    self.site_packages_python(),
-                    self.python_tuple(),
-                ),
-                platlib: layout.site_packages(
-                    &venv_root,
-                    self.site_packages_python(),
-                    self.python_tuple(),
-                ),
-                platstdlib: layout.platstdlib(
-                    &venv_root,
-                    self.site_packages_python(),
-                    self.python_tuple(),
-                ),
-                scripts: layout.scripts(&venv_root),
-                data: layout.data(&venv_root),
-                ..self.sysconfig_paths
-            },
-            sys_executable: layout.python_executable(&venv_root),
-            prefix: venv_root,
+            sysconfig_paths: virtualenv.sysconfig_paths,
+            sys_executable: virtualenv.executable,
+            prefix: virtualenv.root,
             ..self
         }
     }
@@ -199,9 +174,8 @@ impl Interpreter {
         };
 
         // Check if the venv Python matches.
-        let python_platform = VirtualenvLayout::from_platform(platform);
-        if let Some(venv) = detect_virtual_env(&python_platform)? {
-            let executable = python_platform.python_executable(venv);
+        if let Some(venv) = detect_virtual_env()? {
+            let executable = detect_python_executable(venv);
             let interpreter = Self::query(&executable, platform.clone(), cache)?;
 
             if version_matches(&interpreter) {
@@ -376,6 +350,11 @@ impl Interpreter {
         &self.base_prefix
     }
 
+    /// Return the `sys.prefix` path for this Python interpreter.
+    pub fn prefix(&self) -> &Path {
+        &self.prefix
+    }
+
     /// Return the `sys.executable` path for this Python interpreter.
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
@@ -404,6 +383,11 @@ impl Interpreter {
     /// Return the `include` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn include(&self) -> &Path {
         &self.sysconfig_paths.include
+    }
+
+    /// Return the `platinclude` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn platinclude(&self) -> &Path {
+        &self.sysconfig_paths.platinclude
     }
 
     /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
@@ -462,21 +446,6 @@ impl ExternallyManaged {
     pub fn into_error(self) -> Option<String> {
         self.error
     }
-}
-
-/// The installation paths returned by `sysconfig.get_paths()`.
-///
-/// See: <https://docs.python.org/3.12/library/sysconfig.html#installation-paths>
-#[derive(Debug, Deserialize, Serialize, Clone)]
-struct SysconfigPaths {
-    stdlib: PathBuf,
-    platstdlib: PathBuf,
-    purelib: PathBuf,
-    platlib: PathBuf,
-    include: PathBuf,
-    platinclude: PathBuf,
-    scripts: PathBuf,
-    data: PathBuf,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
