@@ -347,7 +347,7 @@ fn editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
+    let mut workspace_dir = regex::escape(
         Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
             .unwrap()
             .as_str(),
@@ -385,11 +385,13 @@ fn editable() -> Result<()> {
     "###
     );
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let show_filters: Vec<_> = [(r"Location:.*/.venv", "Location: [VENV]")]
+    // Account for difference length workspace dir
+    let prefix = if cfg!(windows) { "file:///" } else { "file://" };
+    let workspace_without_prefix = workspace_dir.split_off(prefix.len());
+    let show_filters = [(workspace_without_prefix.as_str(), "[WORKSPACE_DIR]/")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
-        .collect();
+        .collect::<Vec<_>>();
 
     uv_snapshot!(show_filters, Command::new(get_bin())
         .arg("pip")
@@ -406,7 +408,7 @@ fn editable() -> Result<()> {
     ----- stderr -----
     Name: poetry-editable
     Version: 0.1.0
-    Location: [VENV]/lib/python3.12/site-packages
+    Location: [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
     "###
     );
 
