@@ -246,18 +246,6 @@ pub fn create_bare_venv(
                 "false".to_string()
             },
         ),
-        (
-            "base-prefix".to_string(),
-            interpreter.base_prefix().to_string_lossy().to_string(),
-        ),
-        (
-            "base-exec-prefix".to_string(),
-            interpreter.base_exec_prefix().to_string_lossy().to_string(),
-        ),
-        (
-            "base-executable".to_string(),
-            base_python.to_string_lossy().to_string(),
-        ),
     ]
     .into_iter()
     .chain(extra_cfg)
