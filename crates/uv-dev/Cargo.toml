@@ -61,6 +61,7 @@ tracing-durations-export = { workspace = true, features = ["plot"] }
 tracing-indicatif = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
+walkdir = { workspace = true }
 which = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

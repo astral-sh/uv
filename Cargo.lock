@@ -4378,6 +4378,7 @@ dependencies = [
  "uv-resolver",
  "uv-traits",
  "uv-virtualenv",
+ "walkdir",
  "which",
 ]
 
