@@ -1,6 +1,7 @@
 use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
+use std::process::ExitStatus;
 
 use thiserror::Error;
 
@@ -55,9 +56,10 @@ pub enum Error {
         "Could not find `python.exe` through `py --list-paths` or in 'PATH'. Is Python installed?"
     )]
     NoPythonInstalledWindows,
-    #[error("{message}:\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
+    #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     PythonSubcommandOutput {
         message: String,
+        exit_code: ExitStatus,
         stdout: String,
         stderr: String,
     },
