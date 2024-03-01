@@ -1,9 +1,9 @@
 use std::error::Error;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
 use anstream::eprintln;
-use camino::Utf8PathBuf;
 use clap::Parser;
 use directories::ProjectDirs;
 use tracing::info;
@@ -18,7 +18,7 @@ use uv_virtualenv::{create_bare_venv, Prompt};
 
 #[derive(Parser, Debug)]
 struct Cli {
-    path: Option<Utf8PathBuf>,
+    path: Option<PathBuf>,
     #[clap(short, long)]
     python: Option<String>,
     #[clap(long)]
@@ -29,7 +29,7 @@ struct Cli {
 
 fn run() -> Result<(), uv_virtualenv::Error> {
     let cli = Cli::parse();
-    let location = cli.path.unwrap_or(Utf8PathBuf::from(".venv"));
+    let location = cli.path.unwrap_or(PathBuf::from(".venv"));
     let platform = Platform::current()?;
     let cache = if let Some(project_dirs) = ProjectDirs::from("", "", "uv-virtualenv") {
         Cache::from_path(project_dirs.cache_dir())?
