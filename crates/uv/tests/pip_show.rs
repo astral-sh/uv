@@ -3,7 +3,6 @@ use std::process::Command;
 use anyhow::Result;
 use assert_fs::fixture::PathChild;
 use assert_fs::fixture::{FileTouch, FileWriteStr};
-use url::Url;
 
 use common::uv_snapshot;
 use indoc::indoc;

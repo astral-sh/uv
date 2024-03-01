@@ -896,26 +896,10 @@ struct PipShowArgs {
     #[clap(group = "sources")]
     package: Vec<String>,
 
-    /// Uninstall all packages listed in the given requirements files.
-    #[clap(long, short, group = "sources")]
-    requirement: Vec<PathBuf>,
-
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
     #[clap(long)]
     strict: bool,
-
-    /// Install the editable package based on the provided local file path.
-    #[clap(long, short, group = "sources")]
-    editable: Vec<String>,
-
-    /// Exclude any editable packages from output.
-    #[clap(long)]
-    exclude_editable: bool,
-
-    /// Exclude the specified package(s) from the output.
-    #[clap(long)]
-    r#exclude: Vec<PackageName>,
 
     /// The Python interpreter for which packages should be listed.
     ///
@@ -1430,12 +1414,6 @@ async fn run() -> Result<ExitStatus> {
                 .package
                 .into_iter()
                 .map(RequirementsSource::from_package)
-                .chain(args.editable.into_iter().map(RequirementsSource::Editable))
-                .chain(
-                    args.requirement
-                        .into_iter()
-                        .map(RequirementsSource::from_path),
-                )
                 .collect::<Vec<_>>();
             commands::pip_show(
                 &sources,
