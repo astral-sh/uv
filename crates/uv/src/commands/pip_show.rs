@@ -1,12 +1,8 @@
-use std::cmp::max;
 use std::fmt::Write;
 
-use anstream::println;
 use anyhow::Result;
-use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
-use unicode_width::UnicodeWidthStr;
 
 use distribution_types::Name;
 use platform_host::Platform;
@@ -139,13 +135,14 @@ pub(crate) fn pip_show(
     }
 
     for distribution in &distributions {
-        writeln!(printer, "Name: {}", distribution.name().to_string());
-        writeln!(printer, "Version: {}", distribution.version().to_string());
+        writeln!(printer, "Name: {}", distribution.name().to_string()).unwrap();
+        writeln!(printer, "Version: {}", distribution.version().to_string()).unwrap();
         writeln!(
             printer,
             "Location: {}",
             distribution.path().parent().unwrap().display()
-        );
+        )
+        .unwrap();
     }
 
     // Validate that the environment is consistent.
