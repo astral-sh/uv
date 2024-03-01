@@ -1,5 +1,5 @@
 [package]
-name = "gourgeist"
+name = "uv-virtualenv"
 version = "0.0.4"
 publish = false
 description = "virtualenv creation implemented in rust"
@@ -14,7 +14,7 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [[bin]]
-name = "gourgeist"
+name = "uv-virtualenv"
 required-features = ["cli"]
 
 [lints]

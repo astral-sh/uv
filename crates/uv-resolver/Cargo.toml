@@ -22,6 +22,7 @@ pep440_rs = { path = "../pep440-rs", features = ["pubgrub"] }
 pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
+pypi-types = { path = "../pypi-types" }
 uv-cache = { path = "../uv-cache" }
 uv-client = { path = "../uv-client" }
 uv-distribution = { path = "../uv-distribution" }
@@ -30,7 +31,6 @@ uv-interpreter = { path = "../uv-interpreter" }
 uv-normalize = { path = "../uv-normalize" }
 uv-traits = { path = "../uv-traits" }
 uv-warnings = { path = "../uv-warnings" }
-pypi-types = { path = "../pypi-types" }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
@@ -62,7 +62,7 @@ url = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]
-gourgeist = { path = "../gourgeist" }
+uv-virtualenv = { path = "../uv-virtualenv" }
 uv-interpreter = { path = "../uv-interpreter" }
 
 once_cell = { version = "1.19.0" }
