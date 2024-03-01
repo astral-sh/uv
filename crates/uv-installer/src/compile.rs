@@ -10,8 +10,10 @@ use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout, Command};
 use tokio::task::JoinError;
-use uv_warnings::warn_user;
+use tracing::instrument;
 use walkdir::WalkDir;
+
+use uv_warnings::warn_user;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
 const MAIN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -41,25 +43,37 @@ pub enum CompileError {
 /// Bytecode compile all file in `dir` using a pool of work-stealing python interpreters running a
 /// Python script that calls `compileall.compile_file`.
 ///
-/// All compilation errors are muted (like pip). There is a 10s timeout to catch anything gotten
-/// stuck; This happens way to easily with channels and subprocesses, e.g. because some pipe is
-/// full, we're waiting when it's buffered or we didn't handle channel closing properly.
+/// All compilation errors are muted (like pip). There is a 10s timeout to handle the case that
+/// the workers have gotten stuck; This happens way to easily with channels and subprocesses, e.g.
+/// because some pipe is full, we're waiting when it's buffered, or we didn't handle channel closing
+/// properly.
 ///
 /// We only compile all files, but we don't update the RECORD, relying on PEP 491:
 /// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
+#[instrument(skip(python_executable))]
 pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize, CompileError> {
-    let workers = std::thread::available_parallelism().unwrap_or_else(|err| {
+    debug_assert!(
+        dir.is_absolute(),
+        "compileall doesn't work with relative paths"
+    );
+    let worker_count = std::thread::available_parallelism().unwrap_or_else(|err| {
         warn_user!("Couldn't determine number of cores, compiling with a single thread: {err}");
         NonZeroUsize::MIN
     });
-    let (sender, receiver) = async_channel::bounded::<PathBuf>(1);
+
+    let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count.get() * 10);
+
+    // Running python with an actual file will produce better error messages.
+    let tempdir = tempdir().map_err(CompileError::TempFile)?;
+    let pip_compileall_py = tempdir.path().join("pip_compileall.py");
 
     // Start the workers.
     let mut worker_handles = Vec::new();
-    for _ in 0..workers.get() {
+    for _ in 0..worker_count.get() {
         worker_handles.push(tokio::task::spawn(worker(
             dir.to_path_buf(),
             python_executable.to_path_buf(),
+            pip_compileall_py.clone(),
             receiver.clone(),
         )));
     }
@@ -67,13 +81,20 @@ pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize,
     // Start the producer, sending all `.py` files to workers.
     let mut source_files = 0;
     let mut send_error = None;
-    for entry in WalkDir::new(dir) {
+    let walker = WalkDir::new(dir)
+        .into_iter()
+        // Otherwise we stumble over temporary files from `compileall`
+        .filter_entry(|dir| dir.file_name() != "__pycache__");
+    for entry in walker {
         let entry = entry?;
         // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
         if entry.metadata()?.is_file() && entry.path().extension().is_some_and(|ext| ext == "py") {
             source_files += 1;
             match tokio::time::timeout(MAIN_TIMEOUT, sender.send(entry.path().to_owned())).await {
                 // The workers are stuck.
+                // If we hit this condition, none of the workers made progress in the last 10s.
+                // For reference, on my desktop compiling a venv with "jupyter plotly django" while
+                // a cargo build was also running the slowest file took 100ms.
                 Err(_) => return Err(CompileError::Timeout(MAIN_TIMEOUT)),
                 // The workers exited.
                 // If e.g. something with the Python interpreter is wrong, the workers have exited
@@ -86,7 +107,7 @@ pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize,
     }
 
     // All workers will receive an error after the last item. Note that there are still
-    // up to workers items in the queue.
+    // up to worker_count * 10 items in the queue.
     drop(sender);
 
     // Make sure all workers exit regularly, avoid hiding errors.
@@ -124,11 +145,9 @@ pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize,
 async fn worker(
     dir: PathBuf,
     interpreter: PathBuf,
+    pip_compileall_py: PathBuf,
     receiver: Receiver<PathBuf>,
 ) -> Result<(), CompileError> {
-    // Running python with an actual file will produce better error messages.
-    let tempdir = tempdir().map_err(CompileError::TempFile)?;
-    let pip_compileall_py = tempdir.path().join("pip_compileall.py");
     fs_err::tokio::write(&pip_compileall_py, COMPILEALL_SCRIPT)
         .await
         .map_err(CompileError::TempFile)?;
@@ -158,8 +177,7 @@ async fn worker(
     );
 
     let result = worker_main_loop(receiver, child_stdin, &mut child_stdout).await;
-    // Avoid `/.venv/bin/python: can't open file` on stderr after success because the tempdir was
-    // dropped before the Python process even started.
+    // Reap the process to avoid zombies.
     let _ = bytecode_compiler.kill().await;
     result
 }
@@ -174,21 +192,18 @@ async fn worker_main_loop(
 ) -> Result<(), CompileError> {
     let mut out_line = String::new();
     while let Ok(source_file) = receiver.recv().await {
-        // Luckily, LF alone works on windows too
-        let bytes = format!("{}\n", source_file.display()).into_bytes();
-        // Ensure we don't get stuck here because some pipe ran full. The Python process isn't doing
-        // anything at this point except waiting for stdin, so this should be immediate.
-        let timeout = Duration::from_secs(1);
-        match tokio::time::timeout(timeout, child_stdin.write_all(&bytes)).await {
-            // Timeout
-            Err(_) => {
-                receiver.close();
-                return Err(CompileError::Timeout(timeout));
-            }
-            // Write error
-            Ok(Err(err)) => return Err(CompileError::ChildStdin(err)),
-            Ok(Ok(())) => {}
+        let source_file = source_file.display().to_string();
+        if source_file.contains(['\r', '\n']) {
+            warn_user!("Path contains newline, skipping: {source_file:?}");
+            continue;
         }
+        // Luckily, LF alone works on windows too
+        let bytes = format!("{source_file}\n").into_bytes();
+
+        child_stdin
+            .write_all(&bytes)
+            .await
+            .map_err(CompileError::ChildStdin)?;
 
         out_line.clear();
         child_stdout
@@ -199,9 +214,8 @@ async fn worker_main_loop(
         // This is a sanity check, if we don't get the path back something has gone wrong, e.g.
         // we're not actually running a python interpreter.
         let actual = out_line.trim_end_matches(['\n', '\r']);
-        let expected = source_file.display().to_string();
-        if expected != actual {
-            return Err(CompileError::WrongPath(expected, actual.to_string()));
+        if actual != source_file {
+            return Err(CompileError::WrongPath(source_file, actual.to_string()));
         }
     }
     Ok(())

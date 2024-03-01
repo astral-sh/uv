@@ -683,7 +683,7 @@ async fn install(
     }
 
     if compile {
-        compile_and_report(&mut printer, &venv).await?;
+        compile_and_report(&mut printer, venv).await?;
     }
 
     // TODO(konstin): Also check the cache whether any cached or installed dist is already known to

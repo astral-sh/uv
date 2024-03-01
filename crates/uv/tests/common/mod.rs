@@ -170,6 +170,7 @@ impl TestContext {
     }
 
     /// For when we add pypy to the test suite.
+    #[allow(clippy::unused_self)]
     pub fn python_kind(&self) -> &str {
         "python"
     }
