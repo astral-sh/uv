@@ -8,7 +8,6 @@ assignees: ''
 ---
 
 **Description**
-<!-- If you're using a non-standard python setup, please include some context on your setup. -->
 
 **Requirements**
 <!-- Please provide a list of requirements (requirements.in or requirements.txt), ideally a minimal set that fails. -->
