@@ -317,42 +317,6 @@ pub struct RequirementsTxt {
     pub no_index: bool,
 }
 
-/// Calculates column and line offset according to the
-/// number of Unicode codepoints given the cursor and content.
-fn calculate_line_column_pair(content: &str, position: usize) -> (usize, usize) {
-    let mut line = 1;
-    let mut column = 1;
-    let mut chars = content.char_indices().peekable();
-
-    while let Some((index, char)) = chars.next() {
-        if index >= position {
-            break;
-        }
-
-        match char {
-            '\r' => {
-                // Don't count if \r is followed by \n
-                if !chars
-                    .peek()
-                    .map_or(false, |&(_, next_char)| next_char == '\n')
-                {
-                    column += 1;
-                }
-            }
-            '\n' => {
-                // Reset line/column
-                line += 1;
-                column = 1;
-            }
-            // Increment column by unicode codepoint
-            // We don't do visual width (e.g. UnicodeWidthChar::width(char).unwrap_or(0))
-            // since that's not what editors typically count
-            _ => column += 1,
-        }
-    }
-
-    (line, column)
-}
 
 impl RequirementsTxt {
     /// See module level documentation
@@ -449,7 +413,7 @@ impl RequirementsTxt {
                 }
                 RequirementsTxtStatement::IndexUrl(url) => {
                     if data.index_url.is_some() {
-                        let (line, column) = calculate_line_column_pair(content, s.cursor());
+                        let (line, column) = to_row_column(content, s.cursor());
                         return Err(RequirementsTxtParserError::Parser {
                             message: "Multiple `--index-url` values provided".to_string(),
                             line,
@@ -563,7 +527,7 @@ fn parse_entry(
             editable: false,
         })
     } else if let Some(char) = s.peek() {
-        let (line, column) = calculate_line_column_pair(content, s.cursor());
+        let (line, column) = to_row_column(content, s.cursor());
         return Err(RequirementsTxtParserError::Parser {
             message: format!(
                 "Unexpected '{char}', expected '-c', '-e', '-r' or the start of a requirement"
@@ -604,7 +568,7 @@ fn eat_trailing_line(content: &str, s: &mut Scanner) -> Result<(), RequirementsT
             }
         }
         Some(other) => {
-            let (line, column) = calculate_line_column_pair(content, s.cursor());
+            let (line, column) = to_row_column(content, s.cursor());
             return Err(RequirementsTxtParserError::Parser {
                 message: format!("Expected comment or end-of-line, found '{other}'"),
                 line,
@@ -725,7 +689,7 @@ fn parse_requirement_and_hashes(
 fn parse_hashes(content: &str, s: &mut Scanner) -> Result<Vec<String>, RequirementsTxtParserError> {
     let mut hashes = Vec::new();
     if s.eat_while("--hash").is_empty() {
-        let (line, column) = calculate_line_column_pair(content, s.cursor());
+        let (line, column) = to_row_column(content, s.cursor());
         return Err(RequirementsTxtParserError::Parser {
             message: format!(
                 "Expected '--hash', found '{:?}'",
@@ -762,7 +726,7 @@ fn parse_value<'a, T>(
         s.eat_whitespace();
         Ok(s.eat_while(while_pattern).trim_end())
     } else {
-        let (line, column) = calculate_line_column_pair(content, s.cursor());
+        let (line, column) = to_row_column(content, s.cursor());
         Err(RequirementsTxtParserError::Parser {
             message: format!("Expected '=' or whitespace, found {:?}", s.peek()),
             line,
@@ -1009,6 +973,47 @@ impl From<io::Error> for RequirementsTxtParserError {
     }
 }
 
+
+/// Calculates the column and line offset of a given cursor based on the
+/// number of Unicode codepoints.
+fn to_row_column(content: &str, position: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut column = 1;
+
+    let mut chars = content.char_indices().peekable();
+    while let Some((index, char)) = chars.next() {
+        if index >= position {
+            break;
+        }
+        match char {
+            '\r' => {
+                // If the next character is a newline, skip it.
+                if chars
+                    .peek()
+                    .map_or(false, |&(_, next_char)| next_char == '\n')
+                {
+                    chars.next();
+                }
+
+                // Reset.
+                line += 1;
+                column = 1;
+            }
+            '\n' => {
+                //
+                line += 1;
+                column = 1;
+            }
+            // Increment column by Unicode codepoint. We don't use visual width
+            // (e.g., `UnicodeWidthChar::width(char).unwrap_or(0)`), since that's
+            // not what editors typically count.
+            _ => column += 1,
+        }
+    }
+
+    (line, column)
+}
+
 #[cfg(test)]
 mod test {
     use std::path::{Path, PathBuf};
@@ -1023,7 +1028,7 @@ mod test {
     use unscanny::Scanner;
     use uv_fs::Simplified;
 
-    use crate::{calculate_line_column_pair, EditableRequirement, RequirementsTxt};
+    use crate::{to_row_column, EditableRequirement, RequirementsTxt};
 
     fn workspace_test_data_dir() -> PathBuf {
         PathBuf::from("./test-data")
@@ -1376,7 +1381,7 @@ mod test {
     #[test_case("numpy>=1,<2\n  @-borken\ntqdm", "2:4"; "ASCII Character with LF")]
     #[test_case("numpy>=1,<2\r\n  #-borken\ntqdm", "2:4"; "ASCII Character with CRLF")]
     #[test_case("numpy>=1,<2\n  \n-borken\ntqdm", "3:1"; "ASCII Character LF then LF")]
-    #[test_case("numpy>=1,<2\n  \r-borken\ntqdm", "2:4"; "ASCII Character LF then CR but no LF")]
+    #[test_case("numpy>=1,<2\n  \r-borken\ntqdm", "3:1"; "ASCII Character LF then CR but no LF")]
     #[test_case("numpy>=1,<2\n  \r\n-borken\ntqdm", "3:1"; "ASCII Character LF then CRLF")]
     #[test_case("numpy>=1,<2\n  🚀-borken\ntqdm", "2:4"; "Emoji (Wide) Character")]
     #[test_case("numpy>=1,<2\n  中-borken\ntqdm", "2:4"; "Fullwidth character")]
@@ -1388,7 +1393,7 @@ mod test {
         s.eat_until('-');
 
         // Compute line/column
-        let (line, column) = calculate_line_column_pair(input, s.cursor());
+        let (line, column) = to_row_column(input, s.cursor());
         let line_column = format!("{line}:{column}");
 
         // Assert line and columns are expected
