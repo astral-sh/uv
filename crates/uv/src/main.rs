@@ -1397,7 +1397,7 @@ async fn run() -> Result<ExitStatus> {
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
-                gourgeist::Prompt::from_args(prompt),
+                uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 if args.offline {
                     Connectivity::Offline
