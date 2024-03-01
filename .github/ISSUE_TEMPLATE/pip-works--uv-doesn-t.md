@@ -18,7 +18,7 @@ assignees: ''
 ```
 
 **pip command and output**
-<!-- The command you use to install with pip. Please make sure you are using `--no-cache-dir` to disable using cached built wheels. You can link long output as a [gist](https://gist.github.com/). -->
+<!-- The working pip command. Please make sure you are using `--no-cache-dir` to disable using cached built wheels. You can link long output as a [gist](https://gist.github.com/). -->
 
 ```shell
 pip install --no-cache-dir <your_options_here>
