@@ -646,7 +646,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
 
                 // Find a version.
-                let Some(candidate) = self.selector.select(package_name, range, version_maps) else {
+                let Some(candidate) = self.selector.select(package_name, range, version_maps)
+                else {
                     // Short circuit: we couldn't find _any_ versions for a package.
                     return Ok(None);
                 };
