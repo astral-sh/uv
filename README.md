@@ -169,18 +169,27 @@ search for a Python interpreter matching that version in the following order:
 - On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
   version.
 
+### Installing into arbitrary Python environments
+
 Since uv has no dependency on Python, it can even install into virtual environments other than
 its own. For example, setting `VIRTUAL_ENV=/path/to/venv` will cause uv to install into
 `/path/to/venv`, no matter where uv is installed.
 
-Finally, uv can also install into non-virtual environments by providing a `--python` argument to
-`uv pip sync` or `uv pip install`. For example, `uv pip install --python=/path/to/python` will
+uv can also install into arbitrary, even non-virtual environments by providing a `--python` argument
+to `uv pip sync` or `uv pip install`. For example, `uv pip install --python=/path/to/python` will
 install into the environment linked to the `/path/to/python` interpreter.
 
 For convenience, `uv pip install --system` will install into the system Python environment, as an
 approximate shorthand for, e.g., `uv pip install --python=$(which python3)`. Though we generally
 recommend the use of virtual environments for dependency management, `--system` is intended to
 enable the use of `uv` in continuous integration and containerized environments.
+
+Installing into system Python across platforms and distributions is notoriously difficult. `uv`
+supports the common cases, but will not work in all cases. For example, installing into system
+Python on Debian prior to Python 3.10 is unsupported due to the [distribution's patching
+of `distutils` (but not `sysconfig`)](https://ffy00.github.io/blog/02-python-debian-and-the-install-locations/).
+While we always recommend the use of virtual environments, `uv` considers them to be required in
+these non-standard environments.
 
 ### Git authentication
 
