@@ -93,9 +93,9 @@ impl VerbatimUrl {
 
     /// Set the verbatim representation of the URL.
     #[must_use]
-    pub fn with_given(self, given: String) -> Self {
+    pub fn with_given(self, given: impl Into<String>) -> Self {
         Self {
-            given: Some(given),
+            given: Some(given.into()),
             ..self
         }
     }
