@@ -4,6 +4,7 @@
 
 use anyhow::Result;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
+use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use uv_traits::NoBinary;
 
@@ -67,11 +68,14 @@ impl<'a> DistFinder<'a> {
         match requirement.version_or_url.as_ref() {
             None | Some(VersionOrUrl::VersionSpecifier(_)) => {
                 // Query the index(es) (cached) to get the URLs for the available files.
-                let (index, raw_metadata) = self.client.simple(&requirement.name).await?;
-                let metadata = OwnedArchive::deserialize(&raw_metadata);
+                let results = self.client.simple(&requirement.name).await?;
+                let results = results
+                    .iter()
+                    .map(|(index, raw_metadata)| (index, OwnedArchive::deserialize(&raw_metadata)))
+                    .collect::<Vec<_>>();
 
                 // Pick a version that satisfies the requirement.
-                let Some(dist) = self.select(requirement, metadata, &index, flat_index) else {
+                let Some(dist) = self.select(requirement, results, flat_index) else {
                     return Err(ResolveError::NotFound(requirement.clone()));
                 };
 
@@ -126,8 +130,7 @@ impl<'a> DistFinder<'a> {
     fn select(
         &self,
         requirement: &Requirement,
-        metadata: SimpleMetadata,
-        index: &IndexUrl,
+        metadata_tuples: Vec<(&IndexUrl, SimpleMetadata)>,
         flat_index: Option<&FlatDistributions>,
     ) -> Option<Dist> {
         let no_binary = match self.no_binary {
@@ -161,7 +164,18 @@ impl<'a> DistFinder<'a> {
                 (None, None, None)
             };
 
-        for SimpleMetadatum { version, files } in metadata.into_iter().rev() {
+        for (index, SimpleMetadatum { version, files }) in metadata_tuples
+            .into_iter()
+            .map(|(index, metadata)| {
+                metadata
+                    .into_iter()
+                    .map(move |metadatum| (index, metadatum))
+                    .rev()
+            })
+            .kmerge_by(|(_index1, metadata1), (_index2, metadata2)| {
+                metadata1.version >= metadata2.version
+            })
+        {
             // If we iterated past the first-compatible version, break.
             if best_version
                 .as_ref()

@@ -89,14 +89,16 @@ impl CandidateSelector {
         &'a self,
         package_name: &'a PackageName,
         range: &'a Range<Version>,
-        version_map: &'a VersionMap,
+        version_maps: &'a [VersionMap],
     ) -> Option<Candidate<'a>> {
         // If the package has a preference (e.g., an existing version from an existing lockfile),
         // and the preference satisfies the current range, use that.
         if let Some(version) = self.preferences.get(package_name) {
             if range.contains(version) {
-                if let Some(file) = version_map.get(version) {
-                    return Some(Candidate::new(package_name, version, file));
+                for version_map in version_maps {
+                    if let Some(file) = version_map.get(version) {
+                        return Some(Candidate::new(package_name, version, file));
+                    }
                 }
             }
         }
@@ -126,29 +128,29 @@ impl CandidateSelector {
             "selecting candidate for package {:?} with range {:?} with {} versions",
             package_name,
             range,
-            version_map.len()
+            version_maps
+                .iter()
+                .map(|version_map| version_map.len())
+                .sum::<usize>(),
         );
         match &self.resolution_strategy {
-            ResolutionStrategy::Highest => Self::select_candidate(
-                version_map.iter().rev(),
-                package_name,
-                range,
-                allow_prerelease,
-            ),
+            ResolutionStrategy::Highest => {
+                Self::select_highest_candidate(version_maps, package_name, range, allow_prerelease)
+            }
             ResolutionStrategy::Lowest => {
-                Self::select_candidate(version_map.iter(), package_name, range, allow_prerelease)
+                Self::select_lowest_candidate(version_maps, package_name, range, allow_prerelease)
             }
             ResolutionStrategy::LowestDirect(direct_dependencies) => {
                 if direct_dependencies.contains(package_name) {
-                    Self::select_candidate(
-                        version_map.iter(),
+                    Self::select_lowest_candidate(
+                        version_maps,
                         package_name,
                         range,
                         allow_prerelease,
                     )
                 } else {
-                    Self::select_candidate(
-                        version_map.iter().rev(),
+                    Self::select_highest_candidate(
+                        version_maps,
                         package_name,
                         range,
                         allow_prerelease,
@@ -156,6 +158,39 @@ impl CandidateSelector {
                 }
             }
         }
+    }
+
+    fn select_highest_candidate<'a>(
+        version_maps: &'a [VersionMap],
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        allow_prerelease: AllowPreRelease,
+    ) -> Option<Candidate<'a>> {
+        version_maps
+            .iter()
+            .filter_map(|version_map| {
+                Self::select_candidate(
+                    version_map.iter().rev(),
+                    package_name,
+                    range,
+                    allow_prerelease,
+                )
+            })
+            .max_by_key(|candidate| candidate.version)
+    }
+
+    fn select_lowest_candidate<'a>(
+        version_maps: &'a [VersionMap],
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        allow_prerelease: AllowPreRelease,
+    ) -> Option<Candidate<'a>> {
+        version_maps
+            .iter()
+            .filter_map(|version_map| {
+                Self::select_candidate(version_map.iter(), package_name, range, allow_prerelease)
+            })
+            .min_by_key(|candidate| candidate.version)
     }
 
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,

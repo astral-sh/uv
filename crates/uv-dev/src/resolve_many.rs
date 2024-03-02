@@ -48,10 +48,15 @@ async fn find_latest_version(
     client: &RegistryClient,
     package_name: &PackageName,
 ) -> Option<Version> {
-    let (_, raw_simple_metadata) = client.simple(package_name).await.ok()?;
-    let simple_metadata = OwnedArchive::deserialize(&raw_simple_metadata);
-    let version = simple_metadata.into_iter().next()?.version;
-    Some(version)
+    let results = client.simple(package_name).await.ok()?;
+
+    results
+        .into_iter()
+        .filter_map(|(_index, raw_simple_metadata)| {
+            let simple_metadata = OwnedArchive::deserialize(&raw_simple_metadata);
+            Some(simple_metadata.into_iter().next()?.version)
+        })
+        .max()
 }
 
 pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {

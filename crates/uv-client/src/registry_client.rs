@@ -183,17 +183,20 @@ impl RegistryClient {
     pub async fn simple(
         &self,
         package_name: &PackageName,
-    ) -> Result<(IndexUrl, OwnedArchive<SimpleMetadata>), Error> {
+    ) -> Result<Vec<(IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
         let mut it = self.index_urls.indexes().peekable();
         if it.peek().is_none() {
             return Err(ErrorKind::NoIndex(package_name.as_ref().to_string()).into());
         }
 
+        let mut results = vec![];
         for index in it {
             let result = self.simple_single_index(package_name, index).await?;
 
-            return match result {
-                Ok(metadata) => Ok((index.clone(), metadata)),
+            match result {
+                Ok(metadata) => {
+                    results.push((index.clone(), metadata));
+                }
                 Err(CachedClientError::Client(err)) => match err.into_kind() {
                     ErrorKind::Offline(_) => continue,
                     ErrorKind::RequestError(err) => {
@@ -201,13 +204,18 @@ impl RegistryClient {
                             || err.status() == Some(StatusCode::FORBIDDEN)
                         {
                             continue;
+                        } else {
+                            return Err(ErrorKind::RequestError(err).into());
                         }
-                        Err(ErrorKind::RequestError(err).into())
                     }
-                    other => Err(other.into()),
+                    other => {
+                        return Err(other.into());
+                    }
                 },
-                Err(CachedClientError::Callback(err)) => Err(err),
-            };
+                Err(CachedClientError::Callback(err)) => {
+                    return Err(err);
+                }
+            }
         }
 
         match self.connectivity {

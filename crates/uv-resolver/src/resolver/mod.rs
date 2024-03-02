@@ -614,8 +614,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .ok_or(ResolveError::Unregistered)?;
                 self.visited.insert(package_name.clone());
 
-                let version_map = match *versions_response {
-                    VersionsResponse::Found(ref version_map) => version_map,
+                let version_maps = match *versions_response {
+                    VersionsResponse::Found(ref version_maps) => version_maps,
                     // Short-circuit if we do not find any versions for the package
                     VersionsResponse::NoIndex => {
                         self.unavailable_packages
@@ -646,7 +646,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
 
                 // Find a version.
-                let Some(candidate) = self.selector.select(package_name, range, version_map) else {
+                let Some(candidate) = self.selector.select(package_name, range, version_maps) else {
                     // Short circuit: we couldn't find _any_ versions for a package.
                     return Ok(None);
                 };
@@ -1008,8 +1008,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .await
                     .ok_or(ResolveError::Unregistered)?;
 
-                let version_map = match *versions_response {
-                    VersionsResponse::Found(ref version_map) => version_map,
+                let version_maps = match *versions_response {
+                    VersionsResponse::Found(ref version_maps) => version_maps,
                     // Short-circuit if we did not find any versions for the package
                     VersionsResponse::NoIndex => {
                         self.unavailable_packages
@@ -1033,7 +1033,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit and return `None`.
-                let Some(candidate) = self.selector.select(&package_name, &range, version_map)
+                let Some(candidate) = self.selector.select(&package_name, &range, version_maps)
                 else {
                     return Ok(None);
                 };

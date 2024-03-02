@@ -86,12 +86,14 @@ impl ResolutionGraph {
 
                     // Add its hashes to the index.
                     if let Some(versions_response) = packages.get(package_name) {
-                        if let VersionsResponse::Found(ref version_map) = *versions_response {
-                            hashes.insert(package_name.clone(), {
-                                let mut hashes = version_map.hashes(version);
-                                hashes.sort_unstable();
-                                hashes
-                            });
+                        if let VersionsResponse::Found(ref version_maps) = *versions_response {
+                            for version_map in version_maps {
+                                hashes.insert(package_name.clone(), {
+                                    let mut hashes = version_map.hashes(version);
+                                    hashes.sort_unstable();
+                                    hashes
+                                });
+                            }
                         }
                     }
 
@@ -113,12 +115,14 @@ impl ResolutionGraph {
 
                     // Add its hashes to the index.
                     if let Some(versions_response) = packages.get(package_name) {
-                        if let VersionsResponse::Found(ref version_map) = *versions_response {
-                            hashes.insert(package_name.clone(), {
-                                let mut hashes = version_map.hashes(version);
-                                hashes.sort_unstable();
-                                hashes
-                            });
+                        if let VersionsResponse::Found(ref version_maps) = *versions_response {
+                            for version_map in version_maps {
+                                hashes.insert(package_name.clone(), {
+                                    let mut hashes = version_map.hashes(version);
+                                    hashes.sort_unstable();
+                                    hashes
+                                });
+                            }
                         }
                     }
 
