@@ -618,8 +618,45 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
         return Ok(vec![]);
     };
     let mut extras = Vec::new();
+    let mut is_first_iteration = true;
 
     loop {
+        cursor.eat_whitespace();
+
+        // end of the extras section
+        if let Some(']') = cursor.peek_char() {
+            cursor.next();
+            break;
+        }
+
+        // comma separator, except for the first iteration
+        match (cursor.peek(), is_first_iteration) {
+            (Some((pos, ',')), true) => {
+                return Err(Pep508Error {
+                    message: Pep508ErrorSource::String(
+                        "Expected either alphanumerical character (starting the extra name) ']' (ending the extras section), found ','".to_string()
+                    ),
+                    start: pos,
+                    len: 1,
+                    input: cursor.to_string(),
+                });
+            }
+            (Some((_, ',')), false) => {
+                cursor.next();
+            }
+            (Some((pos, other)), false) => {
+                return Err(Pep508Error {
+                    message: Pep508ErrorSource::String(
+                        format!("Expected either ',' (separating extras) or ']' (ending the extras section), found '{other}'",)
+                    ),
+                    start: pos,
+                    len: 1,
+                    input: cursor.to_string(),
+                });
+            }
+            _ => {}
+        }
+
         // wsp* before the identifier
         cursor.eat_whitespace();
         let mut buffer = String::new();
@@ -671,35 +708,12 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
             }
             _ => {}
         };
-        // wsp* after the identifier
         cursor.eat_whitespace();
-        // end or next identifier?
-        match cursor.next() {
-            Some((_, ',')) => {
-                extras.push(
-                    ExtraName::new(buffer)
-                        .expect("`ExtraName` validation should match PEP 508 parsing"),
-                );
-            }
-            Some((_, ']')) => {
-                extras.push(
-                    ExtraName::new(buffer)
-                        .expect("`ExtraName` validation should match PEP 508 parsing"),
-                );
-                break;
-            }
-            Some((pos, other)) => {
-                return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(format!(
-                        "Expected either ',' (separating extras) or ']' (ending the extras section), found '{other}'"
-                    )),
-                    start: pos,
-                    len: other.len_utf8(),
-                    input: cursor.to_string(),
-                });
-            }
-            None => return Err(early_eof_error),
-        }
+        // wsp* after the identifier
+        extras.push(
+            ExtraName::new(buffer).expect("`ExtraName` validation should match PEP 508 parsing"),
+        );
+        is_first_iteration = false;
     }
 
     Ok(extras)
@@ -1268,6 +1282,30 @@ mod tests {
                 ExtraName::from_str("d").unwrap(),
                 ExtraName::from_str("jupyter").unwrap(),
             ]
+        );
+    }
+
+    #[test]
+    fn empty_extras() {
+        let black = Requirement::from_str("black[]").unwrap();
+        assert_eq!(black.extras, vec![]);
+    }
+
+    #[test]
+    fn empty_extras_with_spaces() {
+        let black = Requirement::from_str("black[  ]").unwrap();
+        assert_eq!(black.extras, vec![]);
+    }
+
+    #[test]
+    fn error_extra_with_trailing_comma() {
+        assert_err(
+            "black[d,]",
+            indoc! {"
+                Expected an alphanumeric character starting the extra name, found ']'
+                black[d,]
+                        ^"
+            },
         );
     }
 
