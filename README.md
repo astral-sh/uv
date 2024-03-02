@@ -369,6 +369,16 @@ to build on aarch64 Windows, but does not consider either platform to be support
 
 uv supports and is tested against Python 3.8, 3.9, 3.10, 3.11, and 3.12.
 
+## Custom CA Certificates
+
+`uv` supports custom CA certificates (such as those needed by corporate proxies) by utilizing the
+system's trust store. To ensure this works out of the box, ensure your certificates are added to the
+system's trust store.
+
+If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT_FILE` environment
+variable to the path of the certificate bundle, to instruct `uv` to use that file instead of the
+system's trust store.
+
 ## Acknowledgements
 
 uv's dependency resolver uses [PubGrub](https://github.com/pubgrub-rs/pubgrub) under the hood.
