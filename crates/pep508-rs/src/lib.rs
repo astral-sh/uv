@@ -623,14 +623,15 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
     loop {
         cursor.eat_whitespace();
 
-        // end of the extras section
+        // End of the extras section
         if let Some(']') = cursor.peek_char() {
             cursor.next();
             break;
         }
 
-        // comma separator, except for the first iteration
+        // Comma separator
         match (cursor.peek(), is_first_iteration) {
+            // For the first iteration, we don't expect a comma
             (Some((pos, ',')), true) => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(
@@ -641,6 +642,7 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
                     input: cursor.to_string(),
                 });
             }
+            // For the other iterations, the comma is required
             (Some((_, ',')), false) => {
                 cursor.next();
             }
@@ -708,8 +710,9 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
             }
             _ => {}
         };
-        cursor.eat_whitespace();
         // wsp* after the identifier
+        cursor.eat_whitespace();
+        // Add the parsed extra
         extras.push(
             ExtraName::new(buffer).expect("`ExtraName` validation should match PEP 508 parsing"),
         );
