@@ -617,13 +617,13 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
     let Some(bracket_pos) = cursor.eat_char('[') else {
         return Ok(vec![]);
     };
+    cursor.eat_whitespace();
+
     let mut extras = Vec::new();
     let mut is_first_iteration = true;
 
     loop {
-        cursor.eat_whitespace();
-
-        // End of the extras section
+        // End of the extras section. (Empty extras are allowed.)
         if let Some(']') = cursor.peek_char() {
             cursor.next();
             break;
@@ -631,7 +631,7 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
 
         // Comma separator
         match (cursor.peek(), is_first_iteration) {
-            // For the first iteration, we don't expect a comma
+            // For the first iteration, we don't expect a comma.
             (Some((pos, ',')), true) => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(
@@ -642,7 +642,7 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
                     input: cursor.to_string(),
                 });
             }
-            // For the other iterations, the comma is required
+            // For the other iterations, the comma is required.
             (Some((_, ',')), false) => {
                 cursor.next();
             }
@@ -672,7 +672,7 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
             input: cursor.to_string(),
         };
 
-        // First char of the identifier
+        // First char of the identifier.
         match cursor.next() {
             // letterOrDigit
             Some((_, alphanumeric @ ('a'..='z' | 'A'..='Z' | '0'..='9'))) => {
@@ -712,6 +712,7 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
         };
         // wsp* after the identifier
         cursor.eat_whitespace();
+
         // Add the parsed extra
         extras.push(
             ExtraName::new(buffer).expect("`ExtraName` validation should match PEP 508 parsing"),
@@ -1253,6 +1254,18 @@ mod tests {
             indoc! {"
                 Expected an alphanumeric character starting the extra name, found '_'
                 black[_d]
+                      ^"
+            },
+        );
+    }
+
+    #[test]
+    fn error_extras_illegal_start3() {
+        assert_err(
+            "black[,]",
+            indoc! {"
+                Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','
+                black[,]
                       ^"
             },
         );
