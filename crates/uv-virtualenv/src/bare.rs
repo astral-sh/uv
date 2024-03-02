@@ -48,11 +48,30 @@ pub fn create_bare_venv(
     system_site_packages: bool,
     extra_cfg: Vec<(String, String)>,
 ) -> Result<Virtualenv, Error> {
+    // Determine the base Python executable; that is, the Python executable that should be
+    // considered the "base" for the virtual environment. This is typically the Python executable
+    // from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
+    // the base Python executable is the Python executable of the interpreter's base interpreter.
     let base_python = if cfg!(unix) {
+        // On Unix, follow symlinks to resolve the base interpreter, since the Python executable in
+        // a virtual environment is a symlink to the base interpreter.
         fs_err::canonicalize(interpreter.sys_executable())?
     } else if cfg!(windows) {
-        if let Some(base_executable) = interpreter.base_executable() {
-            base_executable.to_path_buf()
+        // On Windows, follow `virtualenv`. If we're in a virtual environment, use
+        // `sys._base_executable` if it exists; if not, use `sys.base_prefix`. For example, with
+        // Python installed from the Windows Store, `sys.base_prefix` is slightly "incorrect".
+        //
+        // If we're _not_ in a virtual environment, use the interpreter's executable, since it's
+        // already a "system Python". We canonicalize the path to ensure that it's real and
+        // consistent, though we don't expect any symlinks on Windows.
+        if interpreter.is_virtualenv() {
+            if let Some(base_executable) = interpreter.base_executable() {
+                base_executable.to_path_buf()
+            } else {
+                // Assume `python.exe`, though the exact executable name is never used (below) on
+                // Windows, only its parent directory.
+                interpreter.base_prefix().join("python.exe")
+            }
         } else {
             fs_err::canonicalize(interpreter.sys_executable())?
         }
@@ -202,7 +221,7 @@ pub fn create_bare_venv(
         .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::NotFound,
-                "The python interpreter needs to have a parent directory",
+                "The Python interpreter needs to have a parent directory",
             )
         })?
         .simplified_display()
