@@ -1205,7 +1205,7 @@ mod test {
         }, {
             insta::assert_display_snapshot!(errors, @r###"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 6
-            Expected either alphanumerical character (starting the extra name) ']' (ending the extras section), found ','
+            Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','
             black[,abcdef]
                   ^
             "###);

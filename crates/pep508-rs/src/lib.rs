@@ -634,7 +634,7 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
             (Some((pos, ',')), true) => {
                 return Err(Pep508Error {
                     message: Pep508ErrorSource::String(
-                        "Expected either alphanumerical character (starting the extra name) ']' (ending the extras section), found ','".to_string()
+                        "Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','".to_string()
                     ),
                     start: pos,
                     len: 1,
