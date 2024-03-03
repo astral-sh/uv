@@ -201,6 +201,17 @@ fn date_or_datetime(input: &str) -> Result<DateTime<Utc>, String> {
     ))
 }
 
+/// Clap parser for the index url
+fn parse_index_url(mut arg: &str) -> Result<IndexUrl, String> {
+    if arg.is_empty() {
+        arg = "https://pypi.org/simple";
+    }
+    match IndexUrl::from_str(arg) {
+        Ok(url) => Ok(url),
+        Err(err) => Err(err.to_string()),
+    }
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 struct PipCompileArgs {
@@ -291,7 +302,7 @@ struct PipCompileArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, short, env = "UV_INDEX_URL")]
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
     index_url: Option<IndexUrl>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
@@ -443,7 +454,7 @@ struct PipSyncArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, short, env = "UV_INDEX_URL")]
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
     index_url: Option<IndexUrl>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
@@ -656,7 +667,7 @@ struct PipInstallArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, short, env = "UV_INDEX_URL")]
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
     index_url: Option<IndexUrl>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
@@ -954,7 +965,7 @@ struct VenvArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, short, env = "UV_INDEX_URL")]
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
     index_url: Option<IndexUrl>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
