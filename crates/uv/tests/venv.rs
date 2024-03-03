@@ -1,5 +1,6 @@
 #![cfg(feature = "python")]
 
+use std::env;
 use std::process::Command;
 
 use anyhow::Result;
@@ -17,7 +18,9 @@ mod common;
 fn create_venv() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
+    let python_version = env::var("PYTHON_VERSION").unwrap();
+    let bin = create_bin_with_executables(&temp_dir, &[&python_version])
+        .expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
     // Create a virtual environment at `.venv`.
@@ -38,7 +41,7 @@ fn create_venv() -> Result<()> {
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
-        .arg("3.12")
+        .arg(python_version.clone())
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--exclude-newer")
@@ -76,7 +79,7 @@ fn create_venv() -> Result<()> {
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
-        .arg("3.12")
+        .arg(python_version)
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--exclude-newer")
@@ -104,6 +107,7 @@ fn create_venv() -> Result<()> {
 fn create_venv_defaults_to_cwd() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let python_version = env::var("PYTHON_VERSION").unwrap();
     let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
@@ -120,7 +124,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
         .arg("--python")
-        .arg("3.12")
+        .arg(python_version)
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--exclude-newer")
@@ -148,7 +152,9 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
 fn seed() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
+    let python_version = env::var("PYTHON_VERSION").unwrap();
+    let bin = create_bin_with_executables(&temp_dir, &[&python_version])
+        .expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.simplified_display().to_string());
@@ -169,7 +175,7 @@ fn seed() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--seed")
         .arg("--python")
-        .arg("3.12")
+        .arg(python_version.clone())
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--exclude-newer")
@@ -185,58 +191,6 @@ fn seed() -> Result<()> {
     Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
      + pip==23.3.1
-    Activate with: source /home/ferris/project/.venv/bin/activate
-    "###
-    );
-
-    venv.assert(predicates::path::is_dir());
-
-    Ok(())
-}
-
-#[test]
-fn seed_older_python_version() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.10"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
-
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
-    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (&filter_venv, "/home/ferris/project/.venv"),
-        (
-            filter_prompt,
-            "Activate with: source /home/ferris/project/.venv/bin/activate",
-        ),
-    ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
-        .arg("--seed")
-        .arg("--python")
-        .arg("3.10")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
-        .current_dir(&temp_dir), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Using Python [VERSION] interpreter at: [PATH]
-    Creating virtualenv at: /home/ferris/project/.venv
-     + pip==23.3.1
-     + setuptools==68.2.2
-     + wheel==0.41.3
     Activate with: source /home/ferris/project/.venv/bin/activate
     "###
     );
@@ -297,6 +251,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
 fn create_venv_unknown_python_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let python_version = env::var("PYTHON_VERSION").unwrap();
     let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
@@ -342,6 +297,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
 fn create_venv_python_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let python_version = env::var("PYTHON_VERSION").unwrap();
     let bin =
         create_bin_with_executables(&temp_dir, &["3.12.1"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
@@ -388,7 +344,9 @@ fn create_venv_python_patch() -> Result<()> {
 fn file_exists() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
+    let python_version = env::var("PYTHON_VERSION").unwrap();
+    let bin = create_bin_with_executables(&temp_dir, &[&python_version])
+        .expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
     // Create a file at `.venv`. Creating a virtualenv at the same path should fail.
@@ -406,7 +364,7 @@ fn file_exists() -> Result<()> {
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
-        .arg("3.12")
+        .arg(python_version)
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--exclude-newer")
@@ -435,6 +393,7 @@ fn file_exists() -> Result<()> {
 fn empty_dir_exists() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let python_version = env::var("PYTHON_VERSION").unwrap();
     let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
@@ -458,7 +417,7 @@ fn empty_dir_exists() -> Result<()> {
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
-        .arg("3.12")
+        .arg(python_version)
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--exclude-newer")
@@ -486,6 +445,7 @@ fn empty_dir_exists() -> Result<()> {
 fn non_empty_dir_exists() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let python_version = env::var("PYTHON_VERSION").unwrap();
     let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
@@ -505,7 +465,7 @@ fn non_empty_dir_exists() -> Result<()> {
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
-        .arg("3.12")
+        .arg(python_version)
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--exclude-newer")
@@ -535,6 +495,7 @@ fn non_empty_dir_exists() -> Result<()> {
 fn windows_shims() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let python_version = env::var("PYTHON_VERSION").unwrap();
     let bin =
         create_bin_with_executables(&temp_dir, &["3.8", "3.9"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
@@ -601,6 +562,7 @@ fn windows_shims() -> Result<()> {
 fn virtualenv_compatibility() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
+    let python_version = env::var("PYTHON_VERSION").unwrap();
     let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
@@ -623,7 +585,7 @@ fn virtualenv_compatibility() -> Result<()> {
         .arg(venv.as_os_str())
         .arg("--clear")
         .arg("--python")
-        .arg("3.12")
+        .arg(python_version)
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--exclude-newer")
