@@ -46,7 +46,8 @@ use url::Url;
 use uv_warnings::warn_user;
 
 use pep508_rs::{
-    split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, Scheme, VerbatimUrl,
+    expand_path_vars, split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, Scheme,
+    VerbatimUrl,
 };
 use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
@@ -369,7 +370,7 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let sub_file = requirements_dir.join(filename);
+                    let sub_file = requirements_dir.join(expand_path_vars(&filename).as_ref());
                     let sub_requirements = Self::parse(&sub_file, working_dir).map_err(|err| {
                         RequirementsTxtParserError::Subfile {
                             source: Box::new(err),
@@ -385,7 +386,7 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let sub_file = requirements_dir.join(filename);
+                    let sub_file = requirements_dir.join(expand_path_vars(&filename).as_ref());
                     let sub_constraints = Self::parse(&sub_file, working_dir).map_err(|err| {
                         RequirementsTxtParserError::Subfile {
                             source: Box::new(err),
