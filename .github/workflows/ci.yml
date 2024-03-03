@@ -64,7 +64,7 @@ jobs:
       fail-fast: false
     runs-on:
       labels: ${{ matrix.runner }}
-    name: "cargo test | ${{ matrix.os }}"
+    name: "cargo test | ${{ matrix.os }} | ${{ matrix.py }}"
     steps:
       - uses: actions/checkout@v4
       - if: ${{ matrix.os == 'macos' }}
