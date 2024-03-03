@@ -26,6 +26,7 @@ requirements-txt = { path = "../requirements-txt" }
 uv-build = { path = "../uv-build" }
 uv-cache = { path = "../uv-cache", features = ["clap"] }
 uv-client = { path = "../uv-client" }
+uv-config = { path = "../uv-config" }
 uv-dispatch = { path = "../uv-dispatch" }
 uv-distribution = { path = "../uv-distribution" }
 uv-fs = { path = "../uv-fs" }

@@ -17,6 +17,12 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
+use crate::cached_client::CacheControl;
+use crate::html::SimpleHtml;
+use crate::middleware::OfflineMiddleware;
+use crate::remote_metadata::wheel_metadata_from_remote_zip;
+use crate::rkyvutil::OwnedArchive;
+use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
 use install_wheel_rs::{find_dist_info, is_metadata_entry};
@@ -24,15 +30,9 @@ use pep440_rs::Version;
 use pypi_types::{Metadata21, SimpleJson};
 use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_config::GlobalConfig;
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
-
-use crate::cached_client::CacheControl;
-use crate::html::SimpleHtml;
-use crate::middleware::OfflineMiddleware;
-use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::rkyvutil::OwnedArchive;
-use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -88,6 +88,11 @@ impl RegistryClientBuilder {
     }
 
     pub fn build(self) -> RegistryClient {
+        // Retrieve Settings
+        let user_agent_string = GlobalConfig::settings()
+            .map(|cfg| format!("uv/{}", cfg.version))
+            .unwrap_or_else(|_| "uv".to_string());
+
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
         let default_timeout = 5 * 60;
@@ -108,7 +113,7 @@ impl RegistryClientBuilder {
         let client_raw = self.client.unwrap_or_else(|| {
             // Disallow any connections.
             let client_core = ClientBuilder::new()
-                .user_agent("uv")
+                .user_agent(user_agent_string)
                 .pool_max_idle_per_host(20)
                 .timeout(std::time::Duration::from_secs(timeout));
 
