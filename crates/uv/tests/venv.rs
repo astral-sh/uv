@@ -252,7 +252,8 @@ fn create_venv_unknown_python_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let python_version = env::var("PYTHON_VERSION").unwrap();
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
+    let bin = create_bin_with_executables(&temp_dir, &[&python_version])
+        .expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.simplified_display().to_string());
@@ -297,9 +298,9 @@ fn create_venv_unknown_python_patch() -> Result<()> {
 fn create_venv_python_patch() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
-    let python_version = env::var("PYTHON_VERSION").unwrap();
-    let bin =
-        create_bin_with_executables(&temp_dir, &["3.12.1"]).expect("Failed to create bin dir");
+    let python_version = format!("{}.1", env::var("PYTHON_VERSION").unwrap());
+    let bin = create_bin_with_executables(&temp_dir, &[&python_version])
+        .expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
 
     let filter_venv = regex::escape(&venv.simplified_display().to_string());
@@ -316,7 +317,7 @@ fn create_venv_python_patch() -> Result<()> {
         .arg("venv")
         .arg(venv.as_os_str())
         .arg("--python")
-        .arg("3.12.1")
+        .arg(python_version.clone())
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--exclude-newer")
