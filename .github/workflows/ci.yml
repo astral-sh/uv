@@ -48,6 +48,13 @@ jobs:
   cargo-test:
     strategy:
       matrix:
+        os: [ubuntu, windows, macos]
+        py:
+          - "3.8"
+          - "3.9"
+          - "3.10"
+          - "3.11"
+          - "3.12"
         include:
           # We use the large GitHub actions runners for faster testing
           # For Ubuntu and Windows, this requires Organization-level configuration
