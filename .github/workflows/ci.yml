@@ -65,6 +65,8 @@ jobs:
     runs-on:
       labels: ${{ matrix.runner }}
     name: "cargo test | ${{ matrix.os }} | ${{ matrix.py }}"
+    env:
+      PYTHON_VERSION: ${{ matrix.py }}
     steps:
       - uses: actions/checkout@v4
       - if: ${{ matrix.os == 'macos' }}
