@@ -16,7 +16,6 @@ use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use requirements::ExtrasSpecification;
 use uv_cache::{Cache, CacheArgs, Refresh};
 use uv_client::Connectivity;
-use uv_config::GlobalConfig;
 use uv_installer::{NoBinary, Reinstall};
 use uv_interpreter::PythonVersion;
 use uv_normalize::{ExtraName, PackageName};
@@ -1006,10 +1005,6 @@ struct RemoveArgs {
 
 #[instrument] // Anchor span to check for overhead
 async fn run() -> Result<ExitStatus> {
-    // Set uv version in Global Config
-    GlobalConfig::update_version(env!("CARGO_PKG_VERSION").to_string())
-        .expect("Failed to determine uv version.");
-
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(mut err) => {

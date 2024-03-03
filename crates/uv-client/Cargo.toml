@@ -13,9 +13,9 @@ pep508_rs = { path = "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
 uv-auth = { path = "../uv-auth" }
 uv-cache = { path = "../uv-cache" }
-uv-config = { path = "../uv-config" }
 uv-fs = { path = "../uv-fs", features = ["tokio"] }
 uv-normalize = { path = "../uv-normalize" }
+uv-version = { path = "../uv-version" }
 uv-warnings = { path = "../uv-warnings" }
 pypi-types = { path = "../pypi-types" }
 

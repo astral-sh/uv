@@ -4227,7 +4227,6 @@ dependencies = [
  "uv-build",
  "uv-cache",
  "uv-client",
- "uv-config",
  "uv-dispatch",
  "uv-distribution",
  "uv-fs",
@@ -4236,6 +4235,7 @@ dependencies = [
  "uv-normalize",
  "uv-resolver",
  "uv-traits",
+ "uv-version",
  "uv-virtualenv",
  "uv-warnings",
  "which",
@@ -4346,18 +4346,10 @@ dependencies = [
  "urlencoding",
  "uv-auth",
  "uv-cache",
- "uv-config",
  "uv-fs",
  "uv-normalize",
+ "uv-version",
  "uv-warnings",
-]
-
-[[package]]
-name = "uv-config"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "once_cell",
 ]
 
 [[package]]
@@ -4679,6 +4671,10 @@ dependencies = [
  "uv-interpreter",
  "uv-normalize",
 ]
+
+[[package]]
+name = "uv-version"
+version = "0.1.13"
 
 [[package]]
 name = "uv-virtualenv"

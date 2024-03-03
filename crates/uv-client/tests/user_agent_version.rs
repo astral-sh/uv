@@ -11,7 +11,7 @@ use tokio::net::TcpListener;
 
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
-use uv_config::GlobalConfig;
+use uv_version::version;
 
 #[tokio::test]
 async fn test_user_agent_has_version() -> Result<()> {
@@ -60,11 +60,10 @@ async fn test_user_agent_has_version() -> Result<()> {
     assert!(res.status().is_success());
 
     // Check User Agent
-    let version = GlobalConfig::settings().unwrap().version;
     let body = res.text().await?;
 
     // Verify body matches regex
-    assert_eq!(body, format!("uv/{version}"));
+    assert_eq!(body, format!("uv/{}", version()));
 
     // Wait for the server task to complete, to be a good citizen.
     server_task.await?;

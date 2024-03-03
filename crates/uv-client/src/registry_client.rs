@@ -30,8 +30,8 @@ use pep440_rs::Version;
 use pypi_types::{Metadata21, SimpleJson};
 use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket, WheelCache};
-use uv_config::GlobalConfig;
 use uv_normalize::PackageName;
+use uv_version::version;
 use uv_warnings::warn_user_once;
 
 /// A builder for an [`RegistryClient`].
@@ -88,10 +88,8 @@ impl RegistryClientBuilder {
     }
 
     pub fn build(self) -> RegistryClient {
-        // Retrieve Settings
-        let user_agent_string = GlobalConfig::settings()
-            .map(|cfg| format!("uv/{}", cfg.version))
-            .unwrap_or_else(|_| "uv".to_string());
+        // Create user agent
+        let user_agent_string = format!("uv/{}", version());
 
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6

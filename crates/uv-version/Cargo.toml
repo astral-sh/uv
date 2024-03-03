@@ -1,6 +1,6 @@
 [package]
-name = "uv-config"
-version = "0.0.1"
+name = "uv-version"
+version = "0.1.13" # make sure to keep this in sync with uv
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -13,5 +13,3 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
-once_cell = { workspace = true }
