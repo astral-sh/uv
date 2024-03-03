@@ -308,6 +308,11 @@ fn create_venv_python_patch() -> Result<()> {
     let filters = &[
         (r"interpreter at: .+", "interpreter at: [PATH]"),
         (&filter_venv, "/home/ferris/project/.venv"),
+        (&python_version, "[VERSION]"),
+        (
+            filter_prompt,
+            "Activate with: source /home/ferris/project/.venv/bin/activate",
+        ),
         (
             filter_prompt,
             "Activate with: source /home/ferris/project/.venv/bin/activate",
@@ -330,7 +335,7 @@ fn create_venv_python_patch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.1 interpreter at: [PATH]
+    Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: /home/ferris/project/.venv
     Activate with: source /home/ferris/project/.venv/bin/activate
     "###
