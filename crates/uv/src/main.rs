@@ -314,7 +314,7 @@ struct PipCompileArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ')]
     extra_index_url: Vec<IndexUrl>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
@@ -466,7 +466,7 @@ struct PipSyncArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ')]
     extra_index_url: Vec<IndexUrl>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
@@ -679,7 +679,7 @@ struct PipInstallArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ')]
     extra_index_url: Vec<IndexUrl>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
@@ -977,7 +977,7 @@ struct VenvArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ')]
     extra_index_url: Vec<IndexUrl>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
