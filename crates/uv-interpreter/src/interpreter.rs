@@ -562,7 +562,7 @@ impl InterpreterInfo {
             format!("{}.msgpack", digest(&executable_bytes)),
         );
 
-        let modified = Timestamp::from_path(fs_err::canonicalize(executable)?)?;
+        let modified = Timestamp::from_path(uv_fs::canonicalize_executable(executable)?)?;
 
         // Read from the cache.
         if cache

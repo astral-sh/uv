@@ -55,7 +55,7 @@ pub fn create_bare_venv(
     let base_python = if cfg!(unix) {
         // On Unix, follow symlinks to resolve the base interpreter, since the Python executable in
         // a virtual environment is a symlink to the base interpreter.
-        fs_err::canonicalize(interpreter.sys_executable())?
+        uv_fs::canonicalize_executable(interpreter.sys_executable())?
     } else if cfg!(windows) {
         // On Windows, follow `virtualenv`. If we're in a virtual environment, use
         // `sys._base_executable` if it exists; if not, use `sys.base_prefix`. For example, with
@@ -73,7 +73,7 @@ pub fn create_bare_venv(
                 interpreter.base_prefix().join("python.exe")
             }
         } else {
-            fs_err::canonicalize(interpreter.sys_executable())?
+            uv_fs::canonicalize_executable(interpreter.sys_executable())?
         }
     } else {
         unimplemented!("Only Windows and Unix are supported")
