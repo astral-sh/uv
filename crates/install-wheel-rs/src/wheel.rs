@@ -663,15 +663,15 @@ fn parse_key_value_file(
         if line.is_empty() {
             continue;
         }
-        let (key, value) = line.split_once(": ").ok_or_else(|| {
+        let (key, value) = line.split_once(':').ok_or_else(|| {
             Error::InvalidWheel(format!(
                 "Line {} of the {debug_filename} file is invalid",
                 line_no + 1
             ))
         })?;
-        data.entry(key.to_string())
+        data.entry(key.trim().to_string())
             .or_default()
-            .push(value.to_string());
+            .push(value.trim().to_string());
     }
     Ok(data)
 }
@@ -724,6 +724,7 @@ mod test {
     use std::io::Cursor;
     use std::path::Path;
 
+    use crate::Error;
     use indoc::{formatdoc, indoc};
 
     use crate::wheel::format_shebang;
@@ -890,22 +891,34 @@ mod test {
     }
 
     #[test]
-    fn test_invalid_wheel() {
+    fn test_empty_value() -> Result<(), Error> {
         let wheel = indoc! {r"
         Wheel-Version: 1.0
         Generator: custom
         Root-Is-Purelib: false
-        Tag: 
+        Tag:
         Tag: -manylinux_2_17_x86_64
         Tag: -manylinux2014_x86_64
         "
         };
         let reader = Cursor::new(wheel.to_string().into_bytes());
-        let err = parse_key_value_file(reader, "WHEEL").unwrap_err();
+        let wheel_file = parse_key_value_file(reader, "WHEEL")?;
         assert_eq!(
-            err.to_string(),
-            "The wheel is invalid: Line 4 of the WHEEL file is invalid"
+            wheel_file.get("Wheel-Version"),
+            Some(&["1.0".to_string()].to_vec())
         );
+        assert_eq!(
+            wheel_file.get("Tag"),
+            Some(
+                &[
+                    String::new(),
+                    "-manylinux_2_17_x86_64".to_string(),
+                    "-manylinux2014_x86_64".to_string()
+                ]
+                .to_vec()
+            )
+        );
+        Ok(())
     }
 
     #[test]
