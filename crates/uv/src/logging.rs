@@ -167,7 +167,7 @@ pub(crate) fn setup_logging(
                     HierarchicalLayer::default()
                         .with_targets(true)
                         .with_timer(Uptime::default())
-                        .with_writer(std::io::stderr),
+                        .with_writer(anstream::stderr),
                 )
                 .init();
         }

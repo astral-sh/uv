@@ -2397,7 +2397,7 @@ fn no_build_isolation() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build: anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz
       Caused by: Failed to build: anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
+      Caused by: Build backend failed when calling `prepare_metadata_for_build_wheel()` with exit status: 1
     --- stdout:
 
     --- stderr:
