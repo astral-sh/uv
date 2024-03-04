@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 /// See: <https://docs.python.org/3.12/library/sysconfig.html#installation-paths>
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Scheme {
-    pub stdlib: PathBuf,
     pub purelib: PathBuf,
     pub platlib: PathBuf,
     pub scripts: PathBuf,

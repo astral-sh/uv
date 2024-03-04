@@ -4662,6 +4662,7 @@ dependencies = [
  "clap",
  "directories",
  "fs-err",
+ "pathdiff",
  "platform-host",
  "pypi-types",
  "serde",
