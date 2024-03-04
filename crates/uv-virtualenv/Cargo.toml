@@ -39,6 +39,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, optional = true }
 which = { workspace = true }
+walkdir.workspace = true
 
 [features]
 cli = ["clap", "tracing-subscriber"]

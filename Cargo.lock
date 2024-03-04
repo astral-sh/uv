@@ -4626,6 +4626,7 @@ dependencies = [
  "uv-cache",
  "uv-fs",
  "uv-interpreter",
+ "walkdir",
  "which",
 ]
 
