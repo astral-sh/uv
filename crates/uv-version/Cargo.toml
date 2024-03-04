@@ -1,6 +1,6 @@
 [package]
 name = "uv-version"
-version = "0.1.13" # make sure to keep this in sync with uv
+version = "0.1.13"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }

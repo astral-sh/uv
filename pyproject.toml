@@ -64,4 +64,5 @@ changelog_contributors = false
 version_files = [
   "README.md",
   "crates/uv/Cargo.toml",
+  "crates/uv-version/Cargo.toml",
 ]
