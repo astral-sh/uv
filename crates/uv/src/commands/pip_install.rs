@@ -756,12 +756,12 @@ async fn install(
             .into_iter()
             .map(|distribution| DryRunEvent {
                 name: distribution.name().clone(),
-                version: distribution.version().to_string(),
+                version: format!("=={}", distribution.version().to_string()),
                 kind: ChangeEventKind::Removed,
             })
             .chain(wheels.into_iter().map(|distribution| DryRunEvent {
                 name: distribution.name().clone(),
-                version: distribution.version().unwrap().to_string(),
+                version: format!("=={}", distribution.version().unwrap().to_string()),
                 kind: ChangeEventKind::Added,
             }))
             .chain(local.into_iter().map(|distribution| DryRunEvent {
@@ -775,20 +775,18 @@ async fn install(
                 ChangeEventKind::Added => {
                     writeln!(
                         printer,
-                        " {} {}{}{}",
+                        " {} {}{}",
                         "+".green(),
                         event.name.as_ref().bold(),
-                        "==".dimmed(),
                         event.version.dimmed()
                     )?;
                 }
                 ChangeEventKind::Removed => {
                     writeln!(
                         printer,
-                        " {} {}{}{}",
+                        " {} {}{}",
                         "-".red(),
                         event.name.as_ref().bold(),
-                        "==".dimmed(),
                         event.version.dimmed()
                     )?;
                 }
