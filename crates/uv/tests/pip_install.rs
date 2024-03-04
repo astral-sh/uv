@@ -56,6 +56,13 @@ fn command_without_exclude_newer(context: &TestContext) -> Command {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
     command
 }
 
@@ -69,6 +76,13 @@ fn uninstall_command(context: &TestContext) -> Command {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
     command
 }
 
@@ -1920,7 +1934,7 @@ fn install_symlink() {
 }
 
 #[test]
-fn invalidate_on_change() -> Result<()> {
+fn invalidate_editable_on_change() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package.
@@ -2010,7 +2024,7 @@ requires-python = ">=3.8"
 }
 
 #[test]
-fn invalidate_dynamic() -> Result<()> {
+fn invalidate_editable_dynamic() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package with dynamic metadata
@@ -2093,6 +2107,94 @@ dependencies = {file = ["requirements.txt"]}
      + anyio==3.7.1
      - example==0.1.0 (from [WORKSPACE_DIR])
      + example==0.1.0 (from [WORKSPACE_DIR])
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalidate_path_on_change() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package.
+    let editable_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = ">=3.8"
+"#,
+    )?;
+
+    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, command(&context)
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Downloaded 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from [WORKSPACE_DIR])
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    // Re-installing should be a no-op.
+    uv_snapshot!(filters, command(&context)
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Modify the editable package.
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==3.7.1"
+]
+requires-python = ">=3.8"
+"#,
+    )?;
+
+    // Re-installing should update the package.
+    uv_snapshot!(filters, command(&context)
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==4.0.0
+     + anyio==3.7.1
+     - example==0.0.0 (from [WORKSPACE_DIR])
+     + example==0.0.0 (from [WORKSPACE_DIR])
     "###
     );
 

@@ -323,7 +323,30 @@ impl<'a> SitePackages<'a> {
                 [distribution] => {
                     // Validate that the installed version matches the requirement.
                     match &requirement.version_or_url {
-                        None | Some(pep508_rs::VersionOrUrl::Url(_)) => {}
+                        // Accept any installed version.
+                        None => {}
+
+                        // If the requirement comes from a URL, verify by URL.
+                        Some(pep508_rs::VersionOrUrl::Url(url)) => {
+                            let InstalledDist::Url(installed) = &distribution else {
+                                return Ok(false);
+                            };
+
+                            if &installed.url != url.raw() {
+                                return Ok(false);
+                            }
+
+                            // If the requirement came from a local path, check freshness.
+                            if let Ok(archive) = url.to_file_path() {
+                                if !ArchiveTimestamp::up_to_date_with(
+                                    &archive,
+                                    ArchiveTarget::Install(distribution),
+                                )? {
+                                    return Ok(false);
+                                }
+                            }
+                        }
+
                         Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
                             // The installed version doesn't satisfy the requirement.
                             if !version_specifier.contains(distribution.version()) {
@@ -343,9 +366,32 @@ impl<'a> SitePackages<'a> {
                         }
 
                         match &constraint.version_or_url {
-                            None | Some(pep508_rs::VersionOrUrl::Url(_)) => {}
+                            // Accept any installed version.
+                            None => {}
+
+                            // If the requirement comes from a URL, verify by URL.
+                            Some(pep508_rs::VersionOrUrl::Url(url)) => {
+                                let InstalledDist::Url(installed) = &distribution else {
+                                    return Ok(false);
+                                };
+
+                                if &installed.url != url.raw() {
+                                    return Ok(false);
+                                }
+
+                                // If the requirement came from a local path, check freshness.
+                                if let Ok(archive) = url.to_file_path() {
+                                    if !ArchiveTimestamp::up_to_date_with(
+                                        &archive,
+                                        ArchiveTarget::Install(distribution),
+                                    )? {
+                                        return Ok(false);
+                                    }
+                                }
+                            }
+
                             Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
-                                // The installed version doesn't satisfy the constraint.
+                                // The installed version doesn't satisfy the requirement.
                                 if !version_specifier.contains(distribution.version()) {
                                     return Ok(false);
                                 }
