@@ -263,10 +263,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        // Like `pip`, drop the fragment, if it exists.
-        let mut url = url.clone();
-        url.set_fragment(None);
-
         let download = |response| {
             async {
                 // At this point, we're seeing a new or updated source distribution. Initialize a
@@ -284,7 +280,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .boxed()
             .instrument(info_span!("download", source_dist = %source_dist))
         };
-        let req = self.client.cached_client().uncached().get(url).build()?;
+        let req = self
+            .client
+            .cached_client()
+            .uncached()
+            .get(url.clone())
+            .build()?;
         let manifest = self
             .client
             .cached_client()
@@ -365,10 +366,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        // Like `pip`, drop the fragment, if it exists.
-        let mut url = url.clone();
-        url.set_fragment(None);
-
         let download = |response| {
             async {
                 // At this point, we're seeing a new or updated source distribution. Initialize a
@@ -386,7 +383,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .boxed()
             .instrument(info_span!("download", source_dist = %source_dist))
         };
-        let req = self.client.cached_client().uncached().get(url).build()?;
+        let req = self
+            .client
+            .cached_client()
+            .uncached()
+            .get(url.clone())
+            .build()?;
         let manifest = self
             .client
             .cached_client()

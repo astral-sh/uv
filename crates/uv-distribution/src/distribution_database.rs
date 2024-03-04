@@ -104,7 +104,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     return Err(Error::NoBinary);
                 }
 
-                let mut url = match &wheel.file.url {
+                let url = match &wheel.file.url {
                     FileLocation::RelativeUrl(base, url) => {
                         pypi_types::base_url_join_relative(base, url)?
                     }
@@ -149,9 +149,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         }));
                     }
                 };
-
-                // Like `pip`, drop the fragment, if it exists.
-                url.set_fragment(None);
 
                 // Create an entry for the wheel itself alongside its HTTP cache.
                 let wheel_entry = self.cache.entry(
@@ -245,11 +242,12 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .instrument(info_span!("download", wheel = %wheel))
                 };
 
-                // Like `pip`, drop the fragment, if it exists.
-                let mut url = wheel.url.raw().clone();
-                url.set_fragment(None);
-
-                let req = self.client.cached_client().uncached().get(url).build()?;
+                let req = self
+                    .client
+                    .cached_client()
+                    .uncached()
+                    .get(wheel.url.raw().clone())
+                    .build()?;
                 let cache_control = match self.client.connectivity() {
                     Connectivity::Online => CacheControl::from(
                         self.cache
