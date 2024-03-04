@@ -13,9 +13,9 @@ use distribution_types::{
 };
 use platform_tags::Tags;
 use pypi_types::Metadata21;
-use uv_cache::{Cache, CacheBucket, Timestamp, WheelCache};
+use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, WheelCache};
 use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
-use uv_fs::metadata_if_exists;
+
 use uv_git::GitSource;
 use uv_traits::{BuildContext, NoBinary, NoBuild};
 
@@ -73,6 +73,20 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         }
     }
 
+    /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
+    fn handle_response_errors(&self, err: reqwest::Error) -> io::Error {
+        if err.is_timeout() {
+            io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!(
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",  self.client.timeout()
+                ),
+            )
+        } else {
+            io::Error::new(io::ErrorKind::Other, err)
+        }
+    }
+
     /// Either fetch the wheel or fetch and build the source distribution
     ///
     /// If `no_remote_wheel` is set, the wheel will be built from a source distribution
@@ -109,19 +123,17 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         // return it.
                         match cache_entry.path().canonicalize() {
                             Ok(archive) => {
-                                if let (Some(cache_metadata), Some(path_metadata)) = (
-                                    metadata_if_exists(&archive).map_err(Error::CacheRead)?,
-                                    metadata_if_exists(path).map_err(Error::CacheRead)?,
-                                ) {
-                                    let cache_modified = Timestamp::from_metadata(&cache_metadata);
-                                    let path_modified = Timestamp::from_metadata(&path_metadata);
-                                    if cache_modified >= path_modified {
-                                        return Ok(LocalWheel::Unzipped(UnzippedWheel {
-                                            dist: dist.clone(),
-                                            archive,
-                                            filename: wheel.filename.clone(),
-                                        }));
-                                    }
+                                if ArchiveTimestamp::up_to_date_with(
+                                    path,
+                                    ArchiveTarget::Cache(&archive),
+                                )
+                                .map_err(Error::CacheRead)?
+                                {
+                                    return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                                        dist: dist.clone(),
+                                        archive,
+                                        filename: wheel.filename.clone(),
+                                    }));
                                 }
                             }
                             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
@@ -150,7 +162,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     async {
                         let reader = response
                             .bytes_stream()
-                            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                            .map_err(|err| self.handle_response_errors(err))
                             .into_async_read();
 
                         // Download and unzip the wheel to a temporary directory.
@@ -212,7 +224,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     async {
                         let reader = response
                             .bytes_stream()
-                            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                            .map_err(|err| self.handle_response_errors(err))
                             .into_async_read();
 
                         // Download and unzip the wheel to a temporary directory.
@@ -276,19 +288,17 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 // return it.
                 match cache_entry.path().canonicalize() {
                     Ok(archive) => {
-                        if let (Some(cache_metadata), Some(path_metadata)) = (
-                            metadata_if_exists(&archive).map_err(Error::CacheRead)?,
-                            metadata_if_exists(&wheel.path).map_err(Error::CacheRead)?,
-                        ) {
-                            let cache_modified = Timestamp::from_metadata(&cache_metadata);
-                            let path_modified = Timestamp::from_metadata(&path_metadata);
-                            if cache_modified >= path_modified {
-                                return Ok(LocalWheel::Unzipped(UnzippedWheel {
-                                    dist: dist.clone(),
-                                    archive,
-                                    filename: wheel.filename.clone(),
-                                }));
-                            }
+                        if ArchiveTimestamp::up_to_date_with(
+                            &wheel.path,
+                            ArchiveTarget::Cache(&archive),
+                        )
+                        .map_err(Error::CacheRead)?
+                        {
+                            return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                                dist: dist.clone(),
+                                archive,
+                                filename: wheel.filename.clone(),
+                            }));
                         }
                     }
                     Err(err) if err.kind() == io::ErrorKind::NotFound => {}

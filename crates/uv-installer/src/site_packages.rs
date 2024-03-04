@@ -11,16 +11,18 @@ use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Nam
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, VerbatimUrl};
 use requirements_txt::EditableRequirement;
-use uv_cache::ArchiveTimestamp;
-use uv_interpreter::Virtualenv;
+use uv_cache::{ArchiveTarget, ArchiveTimestamp};
+use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
+
+use crate::is_dynamic;
 
 /// An index over the packages installed in an environment.
 ///
 /// Packages are indexed by both name and (for editable installs) URL.
 #[derive(Debug)]
 pub struct SitePackages<'a> {
-    venv: &'a Virtualenv,
+    venv: &'a PythonEnvironment,
     /// The vector of all installed distributions. The `by_name` and `by_url` indices index into
     /// this vector. The vector may contain `None` values, which represent distributions that were
     /// removed from the virtual environment.
@@ -35,7 +37,7 @@ pub struct SitePackages<'a> {
 
 impl<'a> SitePackages<'a> {
     /// Build an index of installed packages from the given Python executable.
-    pub fn from_executable(venv: &'a Virtualenv) -> Result<SitePackages<'a>> {
+    pub fn from_executable(venv: &'a PythonEnvironment) -> Result<SitePackages<'a>> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name = FxHashMap::default();
         let mut by_url = FxHashMap::default();
@@ -258,10 +260,10 @@ impl<'a> SitePackages<'a> {
 
         // Add the direct requirements to the queue.
         for dependency in requirements {
-            if dependency.evaluate_markers(self.venv.interpreter().markers(), &[]) {
-                if seen.insert(dependency.clone()) {
-                    stack.push(dependency.clone());
-                }
+            if dependency.evaluate_markers(self.venv.interpreter().markers(), &[])
+                && seen.insert(dependency.clone())
+            {
+                stack.push(dependency.clone());
             }
         }
 
@@ -275,16 +277,15 @@ impl<'a> SitePackages<'a> {
                 }
                 [distribution] => {
                     // Is the editable out-of-date?
-                    let Ok(Some(installed_at)) =
-                        ArchiveTimestamp::from_path(distribution.path().join("METADATA"))
-                    else {
+                    if !ArchiveTimestamp::up_to_date_with(
+                        &requirement.path,
+                        ArchiveTarget::Install(distribution),
+                    )? {
                         return Ok(false);
-                    };
-                    let Ok(Some(modified_at)) = ArchiveTimestamp::from_path(&requirement.path)
-                    else {
-                        return Ok(false);
-                    };
-                    if modified_at > installed_at {
+                    }
+
+                    // Does the editable have dynamic metadata?
+                    if is_dynamic(requirement) {
                         return Ok(false);
                     }
 
@@ -298,10 +299,9 @@ impl<'a> SitePackages<'a> {
                         if dependency.evaluate_markers(
                             self.venv.interpreter().markers(),
                             &requirement.extras,
-                        ) {
-                            if seen.insert(dependency.clone()) {
-                                stack.push(dependency);
-                            }
+                        ) && seen.insert(dependency.clone())
+                        {
+                            stack.push(dependency);
                         }
                     }
                 }
@@ -323,7 +323,30 @@ impl<'a> SitePackages<'a> {
                 [distribution] => {
                     // Validate that the installed version matches the requirement.
                     match &requirement.version_or_url {
-                        None | Some(pep508_rs::VersionOrUrl::Url(_)) => {}
+                        // Accept any installed version.
+                        None => {}
+
+                        // If the requirement comes from a URL, verify by URL.
+                        Some(pep508_rs::VersionOrUrl::Url(url)) => {
+                            let InstalledDist::Url(installed) = &distribution else {
+                                return Ok(false);
+                            };
+
+                            if &installed.url != url.raw() {
+                                return Ok(false);
+                            }
+
+                            // If the requirement came from a local path, check freshness.
+                            if let Ok(archive) = url.to_file_path() {
+                                if !ArchiveTimestamp::up_to_date_with(
+                                    &archive,
+                                    ArchiveTarget::Install(distribution),
+                                )? {
+                                    return Ok(false);
+                                }
+                            }
+                        }
+
                         Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
                             // The installed version doesn't satisfy the requirement.
                             if !version_specifier.contains(distribution.version()) {
@@ -343,9 +366,32 @@ impl<'a> SitePackages<'a> {
                         }
 
                         match &constraint.version_or_url {
-                            None | Some(pep508_rs::VersionOrUrl::Url(_)) => {}
+                            // Accept any installed version.
+                            None => {}
+
+                            // If the requirement comes from a URL, verify by URL.
+                            Some(pep508_rs::VersionOrUrl::Url(url)) => {
+                                let InstalledDist::Url(installed) = &distribution else {
+                                    return Ok(false);
+                                };
+
+                                if &installed.url != url.raw() {
+                                    return Ok(false);
+                                }
+
+                                // If the requirement came from a local path, check freshness.
+                                if let Ok(archive) = url.to_file_path() {
+                                    if !ArchiveTimestamp::up_to_date_with(
+                                        &archive,
+                                        ArchiveTarget::Install(distribution),
+                                    )? {
+                                        return Ok(false);
+                                    }
+                                }
+                            }
+
                             Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
-                                // The installed version doesn't satisfy the constraint.
+                                // The installed version doesn't satisfy the requirement.
                                 if !version_specifier.contains(distribution.version()) {
                                     return Ok(false);
                                 }
@@ -363,10 +409,9 @@ impl<'a> SitePackages<'a> {
                         if dependency.evaluate_markers(
                             self.venv.interpreter().markers(),
                             &requirement.extras,
-                        ) {
-                            if seen.insert(dependency.clone()) {
-                                stack.push(dependency);
-                            }
+                        ) && seen.insert(dependency.clone())
+                        {
+                            stack.push(dependency);
                         }
                     }
                 }

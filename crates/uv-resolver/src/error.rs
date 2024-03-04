@@ -112,9 +112,9 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<Version>, Infallibl
             | pubgrub::error::PubGrubError::ErrorRetrievingDependencies { .. } => {
                 unreachable!()
             }
-            pubgrub::error::PubGrubError::Failure(inner) => ResolveError::Failure(inner),
+            pubgrub::error::PubGrubError::Failure(inner) => Self::Failure(inner),
             pubgrub::error::PubGrubError::NoSolution(derivation_tree) => {
-                ResolveError::NoSolution(NoSolutionError {
+                Self::NoSolution(NoSolutionError {
                     derivation_tree,
                     // The following should be populated before display for the best error messages
                     available_versions: IndexMap::default(),
@@ -125,7 +125,7 @@ impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<Version>, Infallibl
                 })
             }
             pubgrub::error::PubGrubError::SelfDependency { package, version } => {
-                ResolveError::SelfDependency {
+                Self::SelfDependency {
                     package: Box::new(package),
                     version: Box::new(version),
                 }

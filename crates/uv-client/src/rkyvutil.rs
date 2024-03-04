@@ -76,13 +76,13 @@ where
     ///
     /// If the bytes fail validation (e.g., contains unaligned pointers or
     /// strings aren't valid UTF-8), then this returns an error.
-    pub fn new(raw: rkyv::util::AlignedVec) -> Result<OwnedArchive<A>, Error> {
+    pub fn new(raw: rkyv::util::AlignedVec) -> Result<Self, Error> {
         // We convert the error to a simple string because... the error type
         // does not implement Send. And I don't think we really need to keep
         // the error type around anyway.
         let _ = rkyv::validation::validators::check_archived_root::<A>(&raw)
             .map_err(|e| ErrorKind::ArchiveRead(e.to_string()))?;
-        Ok(OwnedArchive {
+        Ok(Self {
             raw,
             archive: std::marker::PhantomData,
         })
@@ -96,10 +96,10 @@ where
     ///
     /// If the bytes fail validation (e.g., contains unaligned pointers or
     /// strings aren't valid UTF-8), then this returns an error.
-    pub fn from_reader<R: std::io::Read>(mut rdr: R) -> Result<OwnedArchive<A>, Error> {
+    pub fn from_reader<R: std::io::Read>(mut rdr: R) -> Result<Self, Error> {
         let mut buf = rkyv::util::AlignedVec::with_capacity(1024);
         buf.extend_from_reader(&mut rdr).map_err(ErrorKind::Io)?;
-        OwnedArchive::new(buf)
+        Self::new(buf)
     }
 
     /// Creates an owned archive value from the unarchived value.
@@ -109,7 +109,7 @@ where
     /// This can fail if creating an archive for the given type fails.
     /// Currently, this, at minimum, includes cases where an `A` contains a
     /// `PathBuf` that is not valid UTF-8.
-    pub fn from_unarchived(unarchived: &A) -> Result<OwnedArchive<A>, Error> {
+    pub fn from_unarchived(unarchived: &A) -> Result<Self, Error> {
         use rkyv::ser::Serializer;
 
         let mut serializer = crate::rkyvutil::Serializer::<4096>::default();
@@ -117,7 +117,7 @@ where
             .serialize_value(unarchived)
             .map_err(ErrorKind::ArchiveWrite)?;
         let raw = serializer.into_serializer().into_inner();
-        Ok(OwnedArchive {
+        Ok(Self {
             raw,
             archive: std::marker::PhantomData,
         })
@@ -132,7 +132,7 @@ where
     /// # Errors
     ///
     /// Any failures from writing are returned to the caller.
-    pub fn write<W: std::io::Write>(this: &OwnedArchive<A>, mut wtr: W) -> Result<(), Error> {
+    pub fn write<W: std::io::Write>(this: &Self, mut wtr: W) -> Result<(), Error> {
         Ok(wtr.write_all(&this.raw).map_err(ErrorKind::Io)?)
     }
 
@@ -143,7 +143,7 @@ where
     /// Note that because this type has a `Deref` impl, this method requires
     /// fully-qualified syntax. So, if `o` is an `OwnedValue`, then use
     /// `OwnedValue::as_bytes(&o)`.
-    pub fn as_bytes(this: &OwnedArchive<A>) -> &[u8] {
+    pub fn as_bytes(this: &Self) -> &[u8] {
         &this.raw
     }
 
@@ -153,7 +153,7 @@ where
     /// Note that because this type has a `Deref` impl, this method requires
     /// fully-qualified syntax. So, if `o` is an `OwnedValue`, then use
     /// `OwnedValue::deserialize(&o)`.
-    pub fn deserialize(this: &OwnedArchive<A>) -> A {
+    pub fn deserialize(this: &Self) -> A {
         (**this)
             .deserialize(&mut SharedDeserializeMap::new())
             .expect("valid archive must deserialize correctly")
@@ -299,8 +299,8 @@ pub enum SerializerError {
 impl std::fmt::Display for SerializerError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            SerializerError::Composite(ref e) => e.fmt(f),
-            SerializerError::AsString(ref e) => e.fmt(f),
+            Self::Composite(ref e) => e.fmt(f),
+            Self::AsString(ref e) => e.fmt(f),
         }
     }
 }
@@ -308,8 +308,8 @@ impl std::fmt::Display for SerializerError {
 impl std::error::Error for SerializerError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match *self {
-            SerializerError::Composite(ref e) => Some(e),
-            SerializerError::AsString(ref e) => Some(e),
+            Self::Composite(ref e) => Some(e),
+            Self::AsString(ref e) => Some(e),
         }
     }
 }
@@ -335,7 +335,7 @@ impl std::error::Error for SerializerError {
 ///
 /// [AsString]: https://docs.rs/rkyv/0.7.43/rkyv/with/struct.AsString.html
 impl From<rkyv::with::AsStringError> for SerializerError {
-    fn from(e: rkyv::with::AsStringError) -> SerializerError {
-        SerializerError::AsString(e)
+    fn from(e: rkyv::with::AsStringError) -> Self {
+        Self::AsString(e)
     }
 }

@@ -9,13 +9,13 @@ use assert_fs::fixture::PathChild;
 use fs_err::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
 use fs_err::os::windows::fs::symlink_file;
-use regex::{self, Regex};
+use regex::Regex;
 use std::borrow::BorrowMut;
 use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Output;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -27,9 +27,9 @@ pub static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir [^\s]+", "--cache-dir [CACHE_DIR]"),
     // Operation times
-    (r"(\d+m )?(\d+\.)?\d+(ms|s)", "[TIME]"),
+    (r"(\s|\()(\d+m )?(\d+\.)?\d+(ms|s)", "$1[TIME]"),
     // File sizes
-    (r"(\d+\.)?\d+([KM]i)?B", "[SIZE]"),
+    (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d])", "/$1"),
     (r"uv.exe", "uv"),
@@ -96,6 +96,13 @@ impl TestContext {
             .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .current_dir(self.temp_dir.path());
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            cmd.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
+        }
+
         cmd
     }
 
@@ -132,7 +139,7 @@ impl TestContext {
                         .canonicalize()
                         .expect("Failed to create canonical path")
                         // Normalize the path to match display and remove UNC prefixes on Windows
-                        .normalized()
+                        .simplified()
                         .display()
                         .to_string(),
                 )
@@ -143,7 +150,7 @@ impl TestContext {
             // Include a non-canonicalized version
             format!(
                 r"{}\\?/?",
-                regex::escape(&path.as_ref().normalized().display().to_string())
+                regex::escape(&path.as_ref().simplified().display().to_string())
                     .replace(r"\\", r"(\\|\/)")
             ),
         ]

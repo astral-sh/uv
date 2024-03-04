@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use reqwest::Client;
-use tracing::debug;
+use tracing::{debug, instrument};
 use url::Url;
 
 use cache_key::{digest, RepositoryUrl};
@@ -49,6 +49,7 @@ impl GitSource {
     }
 
     /// Fetch the underlying Git repository at the given revision.
+    #[instrument(skip(self))]
     pub fn fetch(self) -> Result<Fetch> {
         // The path to the repo, within the Git database.
         let ident = digest(&RepositoryUrl::new(&self.git.repository));

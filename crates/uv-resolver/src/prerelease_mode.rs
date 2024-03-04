@@ -1,7 +1,9 @@
 use rustc_hash::FxHashSet;
 
-use pep508_rs::{Requirement, VersionOrUrl};
+use pep508_rs::VersionOrUrl;
 use uv_normalize::PackageName;
+
+use crate::Manifest;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
@@ -48,14 +50,23 @@ pub(crate) enum PreReleaseStrategy {
 }
 
 impl PreReleaseStrategy {
-    pub(crate) fn from_mode(mode: PreReleaseMode, direct_dependencies: &[Requirement]) -> Self {
+    pub(crate) fn from_mode(mode: PreReleaseMode, manifest: &Manifest) -> Self {
         match mode {
             PreReleaseMode::Disallow => Self::Disallow,
             PreReleaseMode::Allow => Self::Allow,
             PreReleaseMode::IfNecessary => Self::IfNecessary,
             PreReleaseMode::Explicit => Self::Explicit(
-                direct_dependencies
+                manifest
+                    .requirements
                     .iter()
+                    .chain(manifest.constraints.iter())
+                    .chain(manifest.overrides.iter())
+                    .chain(
+                        manifest
+                            .editables
+                            .iter()
+                            .flat_map(|(_editable, metadata)| metadata.requires_dist.iter()),
+                    )
                     .filter(|requirement| {
                         let Some(version_or_url) = &requirement.version_or_url else {
                             return false;
@@ -74,8 +85,17 @@ impl PreReleaseStrategy {
                     .collect(),
             ),
             PreReleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(
-                direct_dependencies
+                manifest
+                    .requirements
                     .iter()
+                    .chain(manifest.constraints.iter())
+                    .chain(manifest.overrides.iter())
+                    .chain(
+                        manifest
+                            .editables
+                            .iter()
+                            .flat_map(|(_editable, metadata)| metadata.requires_dist.iter()),
+                    )
                     .filter(|requirement| {
                         let Some(version_or_url) = &requirement.version_or_url else {
                             return false;

@@ -6,6 +6,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use distribution_types::InstalledDist;
 use fs_err as fs;
 use tempfile::{tempdir, TempDir};
 
@@ -21,6 +22,7 @@ pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
 mod by_timestamp;
+#[cfg(feature = "clap")]
 mod cli;
 mod removal;
 mod timestamp;
@@ -518,13 +520,13 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            CacheBucket::BuiltWheels => "built-wheels-v0",
-            CacheBucket::FlatIndex => "flat-index-v0",
-            CacheBucket::Git => "git-v0",
-            CacheBucket::Interpreter => "interpreter-v0",
-            CacheBucket::Simple => "simple-v3",
-            CacheBucket::Wheels => "wheels-v0",
-            CacheBucket::Archive => "archive-v0",
+            Self::BuiltWheels => "built-wheels-v0",
+            Self::FlatIndex => "flat-index-v0",
+            Self::Git => "git-v0",
+            Self::Interpreter => "interpreter-v0",
+            Self::Simple => "simple-v3",
+            Self::Wheels => "wheels-v0",
+            Self::Archive => "archive-v0",
         }
     }
 
@@ -534,7 +536,7 @@ impl CacheBucket {
     fn remove(self, cache: &Cache, name: &PackageName) -> Result<Removal, io::Error> {
         let mut summary = Removal::default();
         match self {
-            CacheBucket::Wheels => {
+            Self::Wheels => {
                 // For `pypi` wheels, we expect a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += rm_rf(root.join(name.to_string()))?;
@@ -553,7 +555,7 @@ impl CacheBucket {
                     summary += rm_rf(directory.join(name.to_string()))?;
                 }
             }
-            CacheBucket::BuiltWheels => {
+            Self::BuiltWheels => {
                 // For `pypi` wheels, we expect a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += rm_rf(root.join(name.to_string()))?;
@@ -588,7 +590,7 @@ impl CacheBucket {
                     }
                 }
             }
-            CacheBucket::Simple => {
+            Self::Simple => {
                 // For `pypi` wheels, we expect a rkyv file per package, indexed by name.
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
                 summary += rm_rf(root.join(format!("{name}.rkyv")))?;
@@ -600,19 +602,19 @@ impl CacheBucket {
                     summary += rm_rf(directory.join(format!("{name}.rkyv")))?;
                 }
             }
-            CacheBucket::FlatIndex => {
+            Self::FlatIndex => {
                 // We can't know if the flat index includes a package, so we just remove the entire
                 // cache entry.
                 let root = cache.bucket(self);
                 summary += rm_rf(root)?;
             }
-            CacheBucket::Git => {
+            Self::Git => {
                 // Nothing to do.
             }
-            CacheBucket::Interpreter => {
+            Self::Interpreter => {
                 // Nothing to do.
             }
-            CacheBucket::Archive => {
+            Self::Archive => {
                 // Nothing to do.
             }
         }
@@ -691,6 +693,36 @@ impl ArchiveTimestamp {
             Self::Approximate(timestamp) => *timestamp,
         }
     }
+
+    /// Returns `true` if the `target` (an installed or cached distribution) is up-to-date with the
+    /// source archive (`source`).
+    ///
+    /// The `target` should be an installed package in a virtual environment, or an unzipped
+    /// package in the cache.
+    ///
+    /// The `source` is a source archive, i.e., a path to a built wheel or a Python package directory.
+    pub fn up_to_date_with(source: &Path, target: ArchiveTarget) -> Result<bool, io::Error> {
+        let Some(modified_at) = Self::from_path(source)? else {
+            // If there's no entrypoint, we can't determine the modification time, so we assume that the
+            // target is not up-to-date.
+            return Ok(false);
+        };
+        let created_at = match target {
+            ArchiveTarget::Install(installed) => {
+                Timestamp::from_path(installed.path().join("METADATA"))?
+            }
+            ArchiveTarget::Cache(cache) => Timestamp::from_path(cache)?,
+        };
+        Ok(modified_at.timestamp() <= created_at)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ArchiveTarget<'a> {
+    /// The target is an installed package in a virtual environment.
+    Install(&'a InstalledDist),
+    /// The target is an unzipped package in the cache.
+    Cache(&'a Path),
 }
 
 impl PartialOrd for ArchiveTimestamp {

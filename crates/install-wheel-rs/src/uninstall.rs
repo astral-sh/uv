@@ -4,7 +4,8 @@ use std::path::{Component, Path, PathBuf};
 use fs_err as fs;
 use tracing::debug;
 
-use crate::{read_record_file, Error};
+use crate::wheel::read_record_file;
+use crate::Error;
 
 /// Uninstall the wheel represented by the given `dist_info` directory.
 pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {

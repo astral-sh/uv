@@ -79,14 +79,14 @@ where
     A::Archived: for<'a> rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'a>>
         + rkyv::Deserialize<A, rkyv::de::deserializers::SharedDeserializeMap>,
 {
-    type Target = OwnedArchive<A>;
+    type Target = Self;
 
-    fn from_aligned_bytes(bytes: AlignedVec) -> Result<OwnedArchive<A>, Error> {
-        OwnedArchive::new(bytes)
+    fn from_aligned_bytes(bytes: AlignedVec) -> Result<Self, Error> {
+        Self::new(bytes)
     }
 
     fn to_bytes(&self) -> Result<Cow<'_, [u8]>, Error> {
-        Ok(Cow::from(OwnedArchive::as_bytes(self)))
+        Ok(Cow::from(Self::as_bytes(self)))
     }
 
     fn into_target(self) -> Self::Target {
@@ -103,18 +103,18 @@ pub enum CachedClientError<CallbackError> {
 
 impl<CallbackError> From<Error> for CachedClientError<CallbackError> {
     fn from(error: Error) -> Self {
-        CachedClientError::Client(error)
+        Self::Client(error)
     }
 }
 
 impl<CallbackError> From<ErrorKind> for CachedClientError<CallbackError> {
     fn from(error: ErrorKind) -> Self {
-        CachedClientError::Client(error.into())
+        Self::Client(error.into())
     }
 }
 
-impl<E: Into<Error>> From<CachedClientError<E>> for Error {
-    fn from(error: CachedClientError<E>) -> Error {
+impl<E: Into<Self>> From<CachedClientError<E>> for Error {
+    fn from(error: CachedClientError<E>) -> Self {
         match error {
             CachedClientError::Client(error) => error,
             CachedClientError::Callback(error) => error.into(),
@@ -135,9 +135,9 @@ pub enum CacheControl {
 impl From<Freshness> for CacheControl {
     fn from(value: Freshness) -> Self {
         match value {
-            Freshness::Fresh => CacheControl::None,
-            Freshness::Stale => CacheControl::MustRevalidate,
-            Freshness::Missing => CacheControl::None,
+            Freshness::Fresh => Self::None,
+            Freshness::Stale => Self::MustRevalidate,
+            Freshness::Missing => Self::None,
         }
     }
 }
@@ -336,12 +336,9 @@ impl CachedClient {
         .await
     }
 
+    #[instrument(name="read_and_parse_cache", skip_all, fields(file = %cache_entry.path().display()))]
     async fn read_cache(cache_entry: &CacheEntry) -> Option<DataWithCachePolicy> {
-        let span = info_span!("read_and_parse_cache", file = %cache_entry.path().display());
-        match span
-            .in_scope(|| DataWithCachePolicy::from_path_async(cache_entry.path()))
-            .await
-        {
+        match DataWithCachePolicy::from_path_async(cache_entry.path()).await {
             Ok(data) => Some(data),
             Err(err) => {
                 // When we know the cache entry doesn't exist, then things are
@@ -424,9 +421,9 @@ impl CachedClient {
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
-            .map_err(ErrorKind::from_middleware)?
+            .map_err(ErrorKind::from)?
             .error_for_status()
-            .map_err(ErrorKind::RequestError)?;
+            .map_err(ErrorKind::from)?;
         match cached
             .cache_policy
             .after_response(new_cache_policy_builder, &response)
@@ -462,9 +459,9 @@ impl CachedClient {
             .0
             .execute(req)
             .await
-            .map_err(ErrorKind::from_middleware)?
+            .map_err(ErrorKind::from)?
             .error_for_status()
-            .map_err(ErrorKind::RequestError)?;
+            .map_err(ErrorKind::from)?;
         let cache_policy = cache_policy_builder.build(&response);
         let cache_policy = if cache_policy.to_archived().is_storable() {
             Some(Box::new(cache_policy))
@@ -562,9 +559,9 @@ impl DataWithCachePolicy {
     ///
     /// If the given byte buffer is not in a valid format or if reading the
     /// file given fails, then this returns an error.
-    async fn from_path_async(path: &Path) -> Result<DataWithCachePolicy, Error> {
+    async fn from_path_async(path: &Path) -> Result<Self, Error> {
         let path = path.to_path_buf();
-        tokio::task::spawn_blocking(move || DataWithCachePolicy::from_path_sync(&path))
+        tokio::task::spawn_blocking(move || Self::from_path_sync(&path))
             .await
             // This just forwards panics from the closure.
             .unwrap()
@@ -577,13 +574,14 @@ impl DataWithCachePolicy {
     ///
     /// If the given byte buffer is not in a valid format or if reading the
     /// file given fails, then this returns an error.
-    fn from_path_sync(path: &Path) -> Result<DataWithCachePolicy, Error> {
+    #[instrument]
+    fn from_path_sync(path: &Path) -> Result<Self, Error> {
         let file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
         // Note that we don't wrap our file in a buffer because it will just
         // get passed to AlignedVec::extend_from_reader, which doesn't benefit
         // from an intermediary buffer. In effect, the AlignedVec acts as the
         // buffer.
-        DataWithCachePolicy::from_reader(file)
+        Self::from_reader(file)
     }
 
     /// Loads cached data and its associated HTTP cache policy from the given
@@ -593,12 +591,12 @@ impl DataWithCachePolicy {
     ///
     /// If the given byte buffer is not in a valid format or if the reader
     /// fails, then this returns an error.
-    pub fn from_reader(mut rdr: impl std::io::Read) -> Result<DataWithCachePolicy, Error> {
+    pub fn from_reader(mut rdr: impl std::io::Read) -> Result<Self, Error> {
         let mut aligned_bytes = rkyv::util::AlignedVec::new();
         aligned_bytes
             .extend_from_reader(&mut rdr)
             .map_err(ErrorKind::Io)?;
-        DataWithCachePolicy::from_aligned_bytes(aligned_bytes)
+        Self::from_aligned_bytes(aligned_bytes)
     }
 
     /// Loads cached data and its associated HTTP cache policy form an in
@@ -608,9 +606,9 @@ impl DataWithCachePolicy {
     ///
     /// If the given byte buffer is not in a valid format, then this
     /// returns an error.
-    fn from_aligned_bytes(mut bytes: AlignedVec) -> Result<DataWithCachePolicy, Error> {
-        let cache_policy = DataWithCachePolicy::deserialize_cache_policy(&mut bytes)?;
-        Ok(DataWithCachePolicy {
+    fn from_aligned_bytes(mut bytes: AlignedVec) -> Result<Self, Error> {
+        let cache_policy = Self::deserialize_cache_policy(&mut bytes)?;
+        Ok(Self {
             data: bytes,
             cache_policy,
         })
@@ -625,7 +623,7 @@ impl DataWithCachePolicy {
     /// serialized representation, then this routine will return an error.
     fn serialize(cache_policy: &CachePolicy, data: &[u8]) -> Result<Vec<u8>, Error> {
         let mut buf = vec![];
-        DataWithCachePolicy::serialize_to_writer(cache_policy, data, &mut buf)?;
+        Self::serialize_to_writer(cache_policy, data, &mut buf)?;
         Ok(buf)
     }
 
@@ -669,7 +667,7 @@ impl DataWithCachePolicy {
     fn deserialize_cache_policy(
         bytes: &mut AlignedVec,
     ) -> Result<OwnedArchive<CachePolicy>, Error> {
-        let len = DataWithCachePolicy::deserialize_cache_policy_len(bytes)?;
+        let len = Self::deserialize_cache_policy_len(bytes)?;
         let cache_policy_bytes_start = bytes.len() - (len + 8);
         let cache_policy_bytes = &bytes[cache_policy_bytes_start..][..len];
         let mut cache_policy_bytes_aligned = AlignedVec::with_capacity(len);
@@ -711,9 +709,8 @@ impl DataWithCachePolicy {
         let len_u64 = u64::from_le_bytes(cache_policy_len_bytes);
         let Ok(len_usize) = usize::try_from(len_u64) else {
             let msg = format!(
-                "data-with-cache-policy has cache policy length of {}, \
+                "data-with-cache-policy has cache policy length of {len_u64}, \
                  but overflows usize",
-                len_u64,
             );
             return Err(ErrorKind::ArchiveRead(msg).into());
         };

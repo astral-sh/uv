@@ -7,7 +7,7 @@ use tracing::warn;
 use url::Url;
 
 use pep440_rs::Version;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
 use crate::{InstalledMetadata, InstalledVersion, Name};
@@ -117,7 +117,7 @@ impl InstalledDist {
         pypi_types::Metadata21::parse(&contents).with_context(|| {
             format!(
                 "Failed to parse METADATA file at: {}",
-                path.normalized_display()
+                path.simplified_display()
             )
         })
     }
@@ -129,6 +129,14 @@ impl InstalledDist {
             Ok(installer) => Ok(Some(installer)),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),
+        }
+    }
+
+    /// Return true if the distribution is editable.
+    pub fn is_editable(&self) -> bool {
+        match self {
+            Self::Registry(_) => false,
+            Self::Url(dist) => dist.editable,
         }
     }
 

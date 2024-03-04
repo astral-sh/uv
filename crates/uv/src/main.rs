@@ -103,9 +103,9 @@ pub enum ColorChoice {
 impl From<ColorChoice> for anstream::ColorChoice {
     fn from(value: ColorChoice) -> Self {
         match value {
-            ColorChoice::Auto => anstream::ColorChoice::Auto,
-            ColorChoice::Always => anstream::ColorChoice::Always,
-            ColorChoice::Never => anstream::ColorChoice::Never,
+            ColorChoice::Auto => Self::Auto,
+            ColorChoice::Always => Self::Always,
+            ColorChoice::Never => Self::Never,
         }
     }
 }
@@ -179,6 +179,8 @@ enum PipCommand {
     Uninstall(PipUninstallArgs),
     /// Enumerate the installed packages in the current environment.
     Freeze(PipFreezeArgs),
+    /// Enumerate the installed packages in the current environment.
+    List(PipListArgs),
 }
 
 /// Clap parser for the union of date and datetime
@@ -197,6 +199,35 @@ fn date_or_datetime(input: &str) -> Result<DateTime<Utc>, String> {
     Err(format!(
         "Neither a valid date ({date_err}) not a valid datetime ({datetime_err})"
     ))
+}
+
+/// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
+/// [`parse_index_url`].
+#[derive(Debug, Clone)]
+enum Maybe<T> {
+    Some(T),
+    None,
+}
+
+impl<T> Maybe<T> {
+    fn into_option(self) -> Option<T> {
+        match self {
+            Maybe::Some(value) => Some(value),
+            Maybe::None => None,
+        }
+    }
+}
+
+/// Parse a string into an [`IndexUrl`], mapping the empty string to `None`.
+fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match IndexUrl::from_str(input) {
+            Ok(url) => Ok(Maybe::Some(url)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
 }
 
 #[derive(Args)]
@@ -246,8 +277,11 @@ struct PipCompileArgs {
     #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
     resolution: ResolutionMode,
 
-    #[clap(long, value_enum, default_value_t = PreReleaseMode::default())]
+    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre")]
     prerelease: PreReleaseMode,
+
+    #[clap(long, hide = true, conflicts_with = "prerelease")]
+    pre: bool,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(long, short)]
@@ -279,12 +313,27 @@ struct PipCompileArgs {
     refresh_package: Vec<PackageName>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
-    #[clap(long, short, env = "UV_INDEX_URL")]
-    index_url: Option<IndexUrl>,
+    ///
+    /// The index given by this flag is given lower priority than all other
+    /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
-    extra_index_url: Vec<IndexUrl>,
+    ///
+    /// All indexes given via this flag take priority over the index
+    /// in `--index-url` (which defaults to PyPI). And when multiple
+    /// `--extra-index-url` flags are given, earlier values take priority.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    extra_index_url: Vec<Maybe<IndexUrl>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -355,7 +404,7 @@ struct PipCompileArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, value_parser = date_or_datetime, hide = true)]
+    #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
 
     /// Specify a package to omit from the output resolution. Its dependencies will still be
@@ -416,12 +465,27 @@ struct PipSyncArgs {
     link_mode: install_wheel_rs::linker::LinkMode,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
-    #[clap(long, short, env = "UV_INDEX_URL")]
-    index_url: Option<IndexUrl>,
+    ///
+    /// The index given by this flag is given lower priority than all other
+    /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
-    extra_index_url: Vec<IndexUrl>,
+    ///
+    /// All indexes given via this flag take priority over the index
+    /// in `--index-url` (which defaults to PyPI). And when multiple
+    /// `--extra-index-url` flags are given, earlier values take priority.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    extra_index_url: Vec<Maybe<IndexUrl>>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -436,6 +500,32 @@ struct PipSyncArgs {
     /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// The Python interpreter into which packages should be installed.
+    ///
+    /// By default, `uv` installs into the virtual environment in the current working directory or
+    /// any parent directory. The `--python` option allows you to specify a different interpreter,
+    /// which is intended for use in continuous integration (CI) environments or other automated
+    /// workflows.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    python: Option<String>,
+
+    /// Install packages into the system Python.
+    ///
+    /// By default, `uv` installs into the virtual environment in the current working directory or
+    /// any parent directory. The `--system` option instructs `uv` to instead use the first Python
+    /// found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
@@ -577,20 +667,38 @@ struct PipInstallArgs {
     #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
     resolution: ResolutionMode,
 
-    #[clap(long, value_enum, default_value_t = PreReleaseMode::default())]
+    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre")]
     prerelease: PreReleaseMode,
+
+    #[clap(long, hide = true, conflicts_with = "prerelease")]
+    pre: bool,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     #[clap(long, short)]
     output_file: Option<PathBuf>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
-    #[clap(long, short, env = "UV_INDEX_URL")]
-    index_url: Option<IndexUrl>,
+    ///
+    /// The index given by this flag is given lower priority than all other
+    /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
-    extra_index_url: Vec<IndexUrl>,
+    ///
+    /// All indexes given via this flag take priority over the index
+    /// in `--index-url` (which defaults to PyPI). And when multiple
+    /// `--extra-index-url` flags are given, earlier values take priority.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    extra_index_url: Vec<Maybe<IndexUrl>>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -605,6 +713,32 @@ struct PipInstallArgs {
     /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// The Python interpreter into which packages should be installed.
+    ///
+    /// By default, `uv` installs into the virtual environment in the current working directory or
+    /// any parent directory. The `--python` option allows you to specify a different interpreter,
+    /// which is intended for use in continuous integration (CI) environments or other automated
+    /// workflows.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    python: Option<String>,
+
+    /// Install packages into the system Python.
+    ///
+    /// By default, `uv` installs into the virtual environment in the current working directory or
+    /// any parent directory. The `--system` option instructs `uv` to instead use the first Python
+    /// found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
@@ -655,7 +789,7 @@ struct PipInstallArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, value_parser = date_or_datetime, hide = true)]
+    #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
 
     /// Perform a dry run, i.e., don't actually install anything but resolve the dependencies and
@@ -679,6 +813,32 @@ struct PipUninstallArgs {
     /// Uninstall the editable package based on the provided local file path.
     #[clap(long, short, group = "sources")]
     editable: Vec<String>,
+
+    /// The Python interpreter from which packages should be uninstalled.
+    ///
+    /// By default, `uv` uninstalls from the virtual environment in the current working directory or
+    /// any parent directory. The `--python` option allows you to specify a different interpreter,
+    /// which is intended for use in continuous integration (CI) environments or other automated
+    /// workflows.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    python: Option<String>,
+
+    /// Use the system Python to uninstall packages.
+    ///
+    /// By default, `uv` uninstalls from the virtual environment in the current working directory or
+    /// any parent directory. The `--system` option instructs `uv` to instead use the first Python
+    /// found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
 }
 
 #[derive(Args)]
@@ -688,6 +848,79 @@ struct PipFreezeArgs {
     /// issues.
     #[clap(long)]
     strict: bool,
+
+    /// The Python interpreter for which packages should be listed.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    python: Option<String>,
+
+    /// List packages for the system Python.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found. The `--system` option
+    /// instructs `uv` to use the first Python found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+struct PipListArgs {
+    /// Validate the virtual environment, to detect packages with missing dependencies or other
+    /// issues.
+    #[clap(long)]
+    strict: bool,
+
+    /// Only include editable projects.
+    #[clap(short, long)]
+    editable: bool,
+
+    /// Exclude any editable packages from output.
+    #[clap(long)]
+    exclude_editable: bool,
+
+    /// Exclude the specified package(s) from the output.
+    #[clap(long)]
+    r#exclude: Vec<PackageName>,
+
+    /// The Python interpreter for which packages should be listed.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    python: Option<String>,
+
+    /// List packages for the system Python.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found. The `--system` option
+    /// instructs `uv` to use the first Python found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
 }
 
 #[derive(Args)]
@@ -696,16 +929,26 @@ struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     ///
     /// Supported formats:
-    /// - `3.10` searches for an installed Python 3.10 (`py --list-paths` on Windows, `python3.10` on Linux/Mac).
-    ///   Specifying a patch version is not supported.
-    /// - `python3.10` or `python.exe` looks for a binary in `PATH`.
-    /// - `/home/ferris/.local/bin/python3.10` uses this exact Python.
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
     ///
     /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
     /// doesn't look for a Python interpreter on disk.
-    // Short `-p` to match `virtualenv`
-    #[clap(long, short, verbatim_doc_comment)]
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
     python: Option<String>,
+
+    /// Use the system Python to uninstall packages.
+    ///
+    /// By default, `uv` uninstalls from the virtual environment in the current working directory or
+    /// any parent directory. The `--system` option instructs `uv` to use the first Python found in
+    /// the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution, as it can modify the system Python installation.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
     #[clap(long)]
@@ -727,13 +970,38 @@ struct VenvArgs {
     #[clap(long, verbatim_doc_comment)]
     prompt: Option<String>,
 
+    /// Give the virtual environment access to the system site packages directory.
+    ///
+    /// Unlike `pip`, when a virtual environment is created with `--system-site-packages`, `uv` will
+    /// _not_ take system site packages into account when running commands like `uv pip list` or
+    /// `uv pip install`. The `--system-site-packages` flag will provide the virtual environment
+    /// with access to the system site packages directory at runtime, but it will not affect the
+    /// behavior of `uv` commands.
+    #[clap(long)]
+    system_site_packages: bool,
+
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
-    #[clap(long, short, env = "UV_INDEX_URL")]
-    index_url: Option<IndexUrl>,
+    ///
+    /// The index given by this flag is given lower priority than all other
+    /// indexes specified via the `--extra-index-url` flag.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
-    extra_index_url: Vec<IndexUrl>,
+    ///
+    /// All indexes given via this flag take priority over the index
+    /// in `--index-url` (which defaults to PyPI). And when multiple
+    /// `--extra-index-url` flags are given, earlier values take priority.
+    ///
+    /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
+    /// as it finds it in an index. That is, it isn't possible for `uv` to
+    /// consider versions of the same package across multiple indexes.
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    extra_index_url: Vec<Maybe<IndexUrl>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -748,7 +1016,7 @@ struct VenvArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, value_parser = date_or_datetime, hide = true)]
+    #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
 
     #[command(flatten)]
@@ -805,6 +1073,12 @@ async fn run() -> Result<ExitStatus> {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
                             ContextValue::String("uv pip freeze".to_string()),
+                        );
+                    }
+                    "list" => {
+                        err.insert(
+                            ContextKind::SuggestedSubcommand,
+                            ContextValue::String("uv pip list".to_string()),
                         );
                     }
                     _ => {}
@@ -884,8 +1158,11 @@ async fn run() -> Result<ExitStatus> {
                 .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let index_urls = IndexLocations::new(
-                args.index_url,
-                args.extra_index_url,
+                args.index_url.and_then(Maybe::into_option),
+                args.extra_index_url
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect(),
                 args.find_links,
                 args.no_index,
             );
@@ -903,6 +1180,11 @@ async fn run() -> Result<ExitStatus> {
             } else {
                 DependencyMode::Transitive
             };
+            let prerelease = if args.pre {
+                PreReleaseMode::Allow
+            } else {
+                args.prerelease
+            };
             let setup_py = if args.legacy_setup_py {
                 SetupPyStrategy::Setuptools
             } else {
@@ -916,7 +1198,7 @@ async fn run() -> Result<ExitStatus> {
                 extras,
                 args.output_file.as_deref(),
                 args.resolution,
-                args.prerelease,
+                prerelease,
                 dependency_mode,
                 upgrade,
                 args.generate_hashes,
@@ -950,8 +1232,11 @@ async fn run() -> Result<ExitStatus> {
 
             let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
             let index_urls = IndexLocations::new(
-                args.index_url,
-                args.extra_index_url,
+                args.index_url.and_then(Maybe::into_option),
+                args.extra_index_url
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect(),
                 args.find_links,
                 args.no_index,
             );
@@ -985,6 +1270,8 @@ async fn run() -> Result<ExitStatus> {
                 &no_build,
                 &no_binary,
                 args.strict,
+                args.python,
+                args.system,
                 cache,
                 printer,
             )
@@ -1016,8 +1303,11 @@ async fn run() -> Result<ExitStatus> {
                 .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let index_urls = IndexLocations::new(
-                args.index_url,
-                args.extra_index_url,
+                args.index_url.and_then(Maybe::into_option),
+                args.extra_index_url
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect(),
                 args.find_links,
                 args.no_index,
             );
@@ -1037,6 +1327,11 @@ async fn run() -> Result<ExitStatus> {
             } else {
                 DependencyMode::Transitive
             };
+            let prerelease = if args.pre {
+                PreReleaseMode::Allow
+            } else {
+                args.prerelease
+            };
             let setup_py = if args.legacy_setup_py {
                 SetupPyStrategy::Setuptools
             } else {
@@ -1050,7 +1345,7 @@ async fn run() -> Result<ExitStatus> {
                 &overrides,
                 &extras,
                 args.resolution,
-                args.prerelease,
+                prerelease,
                 dependency_mode,
                 upgrade,
                 index_urls,
@@ -1067,6 +1362,8 @@ async fn run() -> Result<ExitStatus> {
                 &no_binary,
                 args.strict,
                 args.exclude_newer,
+                args.python,
+                args.system,
                 cache,
                 printer,
                 args.dry_run,
@@ -1087,15 +1384,33 @@ async fn run() -> Result<ExitStatus> {
                         .map(RequirementsSource::from_path),
                 )
                 .collect::<Vec<_>>();
-            commands::pip_uninstall(&sources, cache, printer).await
+            commands::pip_uninstall(&sources, args.python, args.system, cache, printer).await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),
-        }) => commands::pip_freeze(&cache, args.strict, printer),
+        }) => commands::pip_freeze(
+            args.strict,
+            args.python.as_deref(),
+            args.system,
+            &cache,
+            printer,
+        ),
+        Commands::Pip(PipNamespace {
+            command: PipCommand::List(args),
+        }) => commands::pip_list(
+            args.strict,
+            args.editable,
+            args.exclude_editable,
+            &args.exclude,
+            args.python.as_deref(),
+            args.system,
+            &cache,
+            printer,
+        ),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })
-        | Commands::Clean(args) => commands::cache_clean(&cache, &args.package, printer),
+        | Commands::Clean(args) => commands::cache_clean(&args.package, &cache, printer),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
         }) => {
@@ -1106,8 +1421,11 @@ async fn run() -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             let index_locations = IndexLocations::new(
-                args.index_url,
-                args.extra_index_url,
+                args.index_url.and_then(Maybe::into_option),
+                args.extra_index_url
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect(),
                 // No find links for the venv subcommand, to keep things simple
                 Vec::new(),
                 args.no_index,
@@ -1126,7 +1444,8 @@ async fn run() -> Result<ExitStatus> {
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
-                gourgeist::Prompt::from_args(prompt),
+                uv_virtualenv::Prompt::from_args(prompt),
+                args.system_site_packages,
                 if args.offline {
                     Connectivity::Offline
                 } else {

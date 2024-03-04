@@ -75,9 +75,9 @@ checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
 name = "anstream"
-version = "0.6.11"
+version = "0.6.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e2e1ebcb11de5c03c67de28a7df593d32191b44939c482e97702baaaa6ab6a5"
+checksum = "d96bd03f33fe50a863e394ee9718a706f988b9079b20c3784fb726e7678b62fb"
 dependencies = [
  "anstyle",
  "anstyle-parse",
@@ -147,9 +147,9 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 
 [[package]]
 name = "assert_cmd"
-version = "2.0.13"
+version = "2.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00ad3f3a942eee60335ab4342358c161ee296829e0d16ff42fc1d6cb07815467"
+checksum = "ed72493ac66d5804837f480ab3766c72bdfab91a65e565fc54fa9e42db0073a8"
 dependencies = [
  "anstyle",
  "bstr",
@@ -419,15 +419,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4703f3937077db8fa35bee3c8789343c1aec2585f0146f09d658d4ccc0e8d873"
 dependencies = [
  "tempfile",
-]
-
-[[package]]
-name = "camino"
-version = "1.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c59e92b5a388f549b863a7bea62612c09f24c8393560709a54558a9abdfb3b9c"
-dependencies = [
- "serde",
 ]
 
 [[package]]
@@ -1277,29 +1268,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gourgeist"
-version = "0.0.4"
-dependencies = [
- "anstream",
- "cachedir",
- "camino",
- "clap",
- "directories",
- "fs-err",
- "platform-host",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tracing",
- "tracing-subscriber",
- "uv-cache",
- "uv-fs",
- "uv-interpreter",
- "which",
-]
-
-[[package]]
 name = "h2"
 version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1390,9 +1358,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "0.2.11"
+version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8947b1a6fad4393052c7ba1f4cd97bed3e953a95c79c92ad9b051a04611d9fbb"
+checksum = "601cbb57e577e2f5ef5be8e7b83f0f63994f25aa94d673e54a92d5c516d101f1"
 dependencies = [
  "bytes",
  "fnv",
@@ -1564,9 +1532,9 @@ checksum = "1e186cfbae8084e513daff4240b4797e342f988cecda4fb6c939150f96315fd8"
 
 [[package]]
 name = "insta"
-version = "1.35.1"
+version = "1.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c985c1bef99cf13c58fade470483d81a2bfe846ebde60ed28cc2dddec2df9e2"
+checksum = "0a7c22c4d34ef4788c351e971c52bfdfe7ea2766f8c5466bc175dd46e52ac22e"
 dependencies = [
  "console",
  "lazy_static",
@@ -1587,25 +1555,21 @@ dependencies = [
  "data-encoding",
  "distribution-filename",
  "fs-err",
- "fs2",
- "goblin",
  "indoc",
  "mailparse",
  "once_cell",
+ "pathdiff",
  "pep440_rs",
  "platform-host",
  "platform-info",
  "plist",
- "pyo3",
  "pypi-types",
- "rayon",
  "reflink-copy",
  "regex",
  "rustc-hash",
  "serde",
  "serde_json",
  "sha2",
- "target-lexicon",
  "tempfile",
  "thiserror",
  "tracing",
@@ -1844,9 +1808,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.20"
+version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
+checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
 
 [[package]]
 name = "mailparse"
@@ -2192,6 +2156,12 @@ name = "paste"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+
+[[package]]
+name = "pathdiff"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
 
 [[package]]
 name = "pep440_rs"
@@ -3189,18 +3159,18 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.196"
+version = "1.0.197"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "870026e60fa08c69f064aa766c10f10b1d62db9ccd4d0abb206472bee0ce3b32"
+checksum = "3fb1c873e1b9b056a4dc4c0c198b24c3ffa059243875552b2bd0933b1aee4ce2"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.196"
+version = "1.0.197"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33c85360c95e7d137454dc81d9a4ed2b8efd8fbe19cee57357b32b9771fccb67"
+checksum = "7eb0b34b42edc17f6b7cac84a52a1c5f0e1bb2227e997ca9011ea3dd34e8610b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3209,9 +3179,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.113"
+version = "1.0.114"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69801b70b1c3dac963ecb03a364ba0ceda9cf60c71cfe475e99864759c8b8a79"
+checksum = "c5f09b1bd632ef549eaa9f60a1f8de742bdbc698e6cee2095fc84dde5f549ae0"
 dependencies = [
  "itoa",
  "ryu",
@@ -3496,9 +3466,9 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "target-lexicon"
-version = "0.12.13"
+version = "0.12.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69758bda2e78f098e4ccb393021a0963bb3442eac05f135c30f61b7370bbafae"
+checksum = "e1fc403891a21bcfb7c37834ba66a547a8f402146eba7265b5a6d88059c9ff2f"
 
 [[package]]
 name = "task-local-extensions"
@@ -4131,7 +4101,7 @@ checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
 
 [[package]]
 name = "uv"
-version = "0.1.10"
+version = "0.1.14"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4150,7 +4120,7 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
- "gourgeist",
+ "indexmap 2.2.3",
  "indicatif",
  "indoc",
  "insta",
@@ -4183,6 +4153,7 @@ dependencies = [
  "tracing-durations-export",
  "tracing-subscriber",
  "tracing-tree",
+ "unicode-width",
  "url",
  "uv-build",
  "uv-cache",
@@ -4195,6 +4166,8 @@ dependencies = [
  "uv-normalize",
  "uv-resolver",
  "uv-traits",
+ "uv-version",
+ "uv-virtualenv",
  "uv-warnings",
  "which",
 ]
@@ -4214,7 +4187,6 @@ dependencies = [
  "anyhow",
  "distribution-types",
  "fs-err",
- "gourgeist",
  "indoc",
  "insta",
  "itertools 0.12.1",
@@ -4224,6 +4196,7 @@ dependencies = [
  "pypi-types",
  "pyproject-toml",
  "regex",
+ "rustc-hash",
  "serde",
  "serde_json",
  "tempfile",
@@ -4235,6 +4208,7 @@ dependencies = [
  "uv-fs",
  "uv-interpreter",
  "uv-traits",
+ "uv-virtualenv",
 ]
 
 [[package]]
@@ -4274,6 +4248,7 @@ dependencies = [
  "futures",
  "html-escape",
  "http",
+ "hyper",
  "insta",
  "install-wheel-rs",
  "pep440_rs",
@@ -4302,6 +4277,7 @@ dependencies = [
  "uv-cache",
  "uv-fs",
  "uv-normalize",
+ "uv-version",
  "uv-warnings",
 ]
 
@@ -4317,7 +4293,6 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
- "gourgeist",
  "indicatif",
  "install-wheel-rs",
  "itertools 0.12.1",
@@ -4353,6 +4328,7 @@ dependencies = [
  "uv-normalize",
  "uv-resolver",
  "uv-traits",
+ "uv-virtualenv",
  "which",
 ]
 
@@ -4364,12 +4340,12 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
- "gourgeist",
  "itertools 0.12.1",
  "pep508_rs",
  "platform-host",
  "platform-tags",
  "pypi-types",
+ "rustc-hash",
  "tempfile",
  "tokio",
  "tracing",
@@ -4381,6 +4357,7 @@ dependencies = [
  "uv-interpreter",
  "uv-resolver",
  "uv-traits",
+ "uv-virtualenv",
 ]
 
 [[package]]
@@ -4460,6 +4437,7 @@ dependencies = [
  "base64 0.21.7",
  "cache-key",
  "cargo-util",
+ "fs-err",
  "git2",
  "glob",
  "hex",
@@ -4491,12 +4469,15 @@ dependencies = [
  "pep508_rs",
  "platform-tags",
  "pypi-types",
+ "pyproject-toml",
  "rayon",
  "requirements-txt",
  "rustc-hash",
+ "serde",
  "tempfile",
  "thiserror",
  "tokio",
+ "toml",
  "tracing",
  "url",
  "uv-cache",
@@ -4516,15 +4497,18 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cache-key",
+ "configparser",
  "fs-err",
  "indoc",
  "insta",
+ "install-wheel-rs",
  "itertools 0.12.1",
  "once_cell",
  "pep440_rs",
  "pep508_rs",
  "platform-host",
  "platform-tags",
+ "pypi-types",
  "regex",
  "rmp-serde",
  "same-file",
@@ -4563,7 +4547,6 @@ dependencies = [
  "either",
  "fs-err",
  "futures",
- "gourgeist",
  "indexmap 2.2.3",
  "insta",
  "install-wheel-rs",
@@ -4597,6 +4580,7 @@ dependencies = [
  "uv-interpreter",
  "uv-normalize",
  "uv-traits",
+ "uv-virtualenv",
  "uv-warnings",
  "zip",
 ]
@@ -4616,6 +4600,33 @@ dependencies = [
  "uv-cache",
  "uv-interpreter",
  "uv-normalize",
+]
+
+[[package]]
+name = "uv-version"
+version = "0.1.14"
+
+[[package]]
+name = "uv-virtualenv"
+version = "0.0.4"
+dependencies = [
+ "anstream",
+ "cachedir",
+ "clap",
+ "directories",
+ "fs-err",
+ "platform-host",
+ "pypi-types",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+ "uv-cache",
+ "uv-fs",
+ "uv-interpreter",
+ "which",
 ]
 
 [[package]]

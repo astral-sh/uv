@@ -43,10 +43,9 @@ pub use marker::{
 };
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_fs::normalize_url_path;
-#[cfg(feature = "pyo3")]
-use uv_normalize::InvalidNameError;
-use uv_normalize::{ExtraName, PackageName};
-pub use verbatim_url::{split_scheme, Scheme, VerbatimUrl};
+// Parity with the crates.io version of pep508_rs
+pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
+pub use verbatim_url::{expand_path_vars, split_scheme, Scheme, VerbatimUrl};
 
 mod marker;
 mod verbatim_url;
@@ -618,9 +617,48 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
     let Some(bracket_pos) = cursor.eat_char('[') else {
         return Ok(vec![]);
     };
+    cursor.eat_whitespace();
+
     let mut extras = Vec::new();
+    let mut is_first_iteration = true;
 
     loop {
+        // End of the extras section. (Empty extras are allowed.)
+        if let Some(']') = cursor.peek_char() {
+            cursor.next();
+            break;
+        }
+
+        // Comma separator
+        match (cursor.peek(), is_first_iteration) {
+            // For the first iteration, we don't expect a comma.
+            (Some((pos, ',')), true) => {
+                return Err(Pep508Error {
+                    message: Pep508ErrorSource::String(
+                        "Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','".to_string()
+                    ),
+                    start: pos,
+                    len: 1,
+                    input: cursor.to_string(),
+                });
+            }
+            // For the other iterations, the comma is required.
+            (Some((_, ',')), false) => {
+                cursor.next();
+            }
+            (Some((pos, other)), false) => {
+                return Err(Pep508Error {
+                    message: Pep508ErrorSource::String(
+                        format!("Expected either ',' (separating extras) or ']' (ending the extras section), found '{other}'",)
+                    ),
+                    start: pos,
+                    len: 1,
+                    input: cursor.to_string(),
+                });
+            }
+            _ => {}
+        }
+
         // wsp* before the identifier
         cursor.eat_whitespace();
         let mut buffer = String::new();
@@ -634,7 +672,7 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
             input: cursor.to_string(),
         };
 
-        // First char of the identifier
+        // First char of the identifier.
         match cursor.next() {
             // letterOrDigit
             Some((_, alphanumeric @ ('a'..='z' | 'A'..='Z' | '0'..='9'))) => {
@@ -674,33 +712,12 @@ fn parse_extras(cursor: &mut Cursor) -> Result<Vec<ExtraName>, Pep508Error> {
         };
         // wsp* after the identifier
         cursor.eat_whitespace();
-        // end or next identifier?
-        match cursor.next() {
-            Some((_, ',')) => {
-                extras.push(
-                    ExtraName::new(buffer)
-                        .expect("`ExtraName` validation should match PEP 508 parsing"),
-                );
-            }
-            Some((_, ']')) => {
-                extras.push(
-                    ExtraName::new(buffer)
-                        .expect("`ExtraName` validation should match PEP 508 parsing"),
-                );
-                break;
-            }
-            Some((pos, other)) => {
-                return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(format!(
-                        "Expected either ',' (separating extras) or ']' (ending the extras section), found '{other}'"
-                    )),
-                    start: pos,
-                    len: other.len_utf8(),
-                    input: cursor.to_string(),
-                });
-            }
-            None => return Err(early_eof_error),
-        }
+
+        // Add the parsed extra
+        extras.push(
+            ExtraName::new(buffer).expect("`ExtraName` validation should match PEP 508 parsing"),
+        );
+        is_first_iteration = false;
     }
 
     Ok(extras)
@@ -755,11 +772,11 @@ fn preprocess_url(
                 #[cfg(feature = "non-pep508-extensions")]
                 if let Some(working_dir) = working_dir {
                     return Ok(
-                        VerbatimUrl::from_path(path, working_dir).with_given(url.to_string())
+                        VerbatimUrl::parse_path(path, working_dir).with_given(url.to_string())
                     );
                 }
 
-                Ok(VerbatimUrl::from_absolute_path(path)
+                Ok(VerbatimUrl::parse_absolute_path(path)
                     .map_err(|err| Pep508Error {
                         message: Pep508ErrorSource::UrlError(err),
                         start,
@@ -783,10 +800,12 @@ fn preprocess_url(
             _ => {
                 #[cfg(feature = "non-pep508-extensions")]
                 if let Some(working_dir) = working_dir {
-                    return Ok(VerbatimUrl::from_path(url, working_dir).with_given(url.to_string()));
+                    return Ok(
+                        VerbatimUrl::parse_path(url, working_dir).with_given(url.to_string())
+                    );
                 }
 
-                Ok(VerbatimUrl::from_absolute_path(url)
+                Ok(VerbatimUrl::parse_absolute_path(url)
                     .map_err(|err| Pep508Error {
                         message: Pep508ErrorSource::UrlError(err),
                         start,
@@ -800,10 +819,10 @@ fn preprocess_url(
         // Ex) `../editable/`
         #[cfg(feature = "non-pep508-extensions")]
         if let Some(working_dir) = working_dir {
-            return Ok(VerbatimUrl::from_path(url, working_dir).with_given(url.to_string()));
+            return Ok(VerbatimUrl::parse_path(url, working_dir).with_given(url.to_string()));
         }
 
-        Ok(VerbatimUrl::from_absolute_path(url)
+        Ok(VerbatimUrl::parse_absolute_path(url)
             .map_err(|err| Pep508Error {
                 message: Pep508ErrorSource::UrlError(err),
                 start,
@@ -1122,7 +1141,7 @@ mod tests {
 
     #[test]
     fn basic_examples() {
-        let input = r#"requests[security,tests] >=2.8.1, ==2.8.* ; python_version < '2.7'"#;
+        let input = r"requests[security,tests] >=2.8.1, ==2.8.* ; python_version < '2.7'";
         let requests = Requirement::from_str(input).unwrap();
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
@@ -1241,6 +1260,18 @@ mod tests {
     }
 
     #[test]
+    fn error_extras_illegal_start3() {
+        assert_err(
+            "black[,]",
+            indoc! {"
+                Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','
+                black[,]
+                      ^"
+            },
+        );
+    }
+
+    #[test]
     fn error_extras_illegal_character() {
         assert_err(
             "black[jüpyter]",
@@ -1267,6 +1298,30 @@ mod tests {
                 ExtraName::from_str("d").unwrap(),
                 ExtraName::from_str("jupyter").unwrap(),
             ]
+        );
+    }
+
+    #[test]
+    fn empty_extras() {
+        let black = Requirement::from_str("black[]").unwrap();
+        assert_eq!(black.extras, vec![]);
+    }
+
+    #[test]
+    fn empty_extras_with_spaces() {
+        let black = Requirement::from_str("black[  ]").unwrap();
+        assert_eq!(black.extras, vec![]);
+    }
+
+    #[test]
+    fn error_extra_with_trailing_comma() {
+        assert_err(
+            "black[d,]",
+            indoc! {"
+                Expected an alphanumeric character starting the extra name, found ']'
+                black[d,]
+                        ^"
+            },
         );
     }
 
@@ -1364,7 +1419,7 @@ mod tests {
     #[test]
     fn error_marker_incomplete1() {
         assert_err(
-            r#"numpy; sys_platform"#,
+            r"numpy; sys_platform",
             indoc! {"
                 Expected a valid marker operator (such as '>=' or 'not in'), found ''
                 numpy; sys_platform
@@ -1376,7 +1431,7 @@ mod tests {
     #[test]
     fn error_marker_incomplete2() {
         assert_err(
-            r#"numpy; sys_platform =="#,
+            r"numpy; sys_platform ==",
             indoc! {"\
                 Expected marker value, found end of dependency specification
                 numpy; sys_platform ==
@@ -1421,7 +1476,7 @@ mod tests {
     #[test]
     fn error_pep440() {
         assert_err(
-            r#"numpy >=1.1.*"#,
+            r"numpy >=1.1.*",
             indoc! {"
                 Operator >= cannot be used with a wildcard version specifier
                 numpy >=1.1.*
@@ -1433,7 +1488,7 @@ mod tests {
     #[test]
     fn error_no_name() {
         assert_err(
-            r#"==0.0"#,
+            r"==0.0",
             indoc! {"
                 Expected package name starting with an alphanumeric character, found '='
                 ==0.0
@@ -1445,7 +1500,7 @@ mod tests {
     #[test]
     fn error_bare_url() {
         assert_err(
-            r#"git+https://github.com/pallets/flask.git"#,
+            r"git+https://github.com/pallets/flask.git",
             indoc! {"
                 URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).
                 git+https://github.com/pallets/flask.git
@@ -1457,7 +1512,7 @@ mod tests {
     #[test]
     fn error_no_comma_between_extras() {
         assert_err(
-            r#"name[bar baz]"#,
+            r"name[bar baz]",
             indoc! {"
                 Expected either ',' (separating extras) or ']' (ending the extras section), found 'b'
                 name[bar baz]
@@ -1469,7 +1524,7 @@ mod tests {
     #[test]
     fn error_extra_comma_after_extras() {
         assert_err(
-            r#"name[bar, baz,]"#,
+            r"name[bar, baz,]",
             indoc! {"
                 Expected an alphanumeric character starting the extra name, found ']'
                 name[bar, baz,]
@@ -1481,7 +1536,7 @@ mod tests {
     #[test]
     fn error_extras_not_closed() {
         assert_err(
-            r#"name[bar, baz >= 1.0"#,
+            r"name[bar, baz >= 1.0",
             indoc! {"
                 Expected either ',' (separating extras) or ']' (ending the extras section), found '>'
                 name[bar, baz >= 1.0
@@ -1493,7 +1548,7 @@ mod tests {
     #[test]
     fn error_no_space_after_url() {
         assert_err(
-            r#"name @ https://example.com/; extra == 'example'"#,
+            r"name @ https://example.com/; extra == 'example'",
             indoc! {"
                 Missing space before ';', the end of the URL is ambiguous
                 name @ https://example.com/; extra == 'example'
@@ -1505,7 +1560,7 @@ mod tests {
     #[test]
     fn error_name_at_nothing() {
         assert_err(
-            r#"name @"#,
+            r"name @",
             indoc! {"
                 Expected URL
                 name @
@@ -1517,7 +1572,7 @@ mod tests {
     #[test]
     fn test_error_invalid_marker_key() {
         assert_err(
-            r#"name; invalid_name"#,
+            r"name; invalid_name",
             indoc! {"
                 Expected a valid marker name, found 'invalid_name'
                 name; invalid_name

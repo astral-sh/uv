@@ -8,6 +8,7 @@ use tracing::{debug, instrument};
 
 use platform_host::Platform;
 use uv_cache::Cache;
+use uv_fs::normalize_path;
 
 use crate::{Error, Interpreter};
 
@@ -29,7 +30,7 @@ pub fn find_requested_python(
     platform: &Platform,
     cache: &Cache,
 ) -> Result<Option<Interpreter>, Error> {
-    debug!("Starting interpreter discovery for Python {}", request);
+    debug!("Starting interpreter discovery for Python @ `{request}`");
     let versions = request
         .splitn(3, '.')
         .map(str::parse::<u8>)
@@ -60,15 +61,16 @@ pub fn find_requested_python(
         let Some(executable) = Interpreter::find_executable(request)? else {
             return Ok(None);
         };
-        Interpreter::query(&executable, platform, cache).map(Some)
+        Interpreter::query(&executable, platform.clone(), cache).map(Some)
     } else {
         // `-p /home/ferris/.local/bin/python3.10`
-        let executable = fs_err::canonicalize(request)?;
-        Interpreter::query(&executable, platform, cache).map(Some)
+        let executable = normalize_path(request);
+
+        Interpreter::query(&executable, platform.clone(), cache).map(Some)
     }
 }
 
-/// Pick a sensible default for the python a user wants when they didn't specify a version.
+/// Pick a sensible default for the Python a user wants when they didn't specify a version.
 ///
 /// We prefer the test overwrite `UV_TEST_PYTHON_PATH` if it is set, otherwise `python3`/`python` or
 /// `python.exe` respectively.
@@ -94,7 +96,6 @@ pub(crate) fn try_find_default_python(
 
 /// Finds a python version matching `selector`.
 /// It searches for an existing installation in the following order:
-/// * (windows): Discover installations using `py --list-paths` (PEP514). Continue if `py` is not installed.
 /// * Search for the python binary in `PATH` (or `UV_TEST_PYTHON_PATH` if set). Visits each path and for each path resolves the
 ///   files in the following order:
 ///   * Major.Minor.Patch: `pythonx.y.z`, `pythonx.y`, `python.x`, `python`
@@ -102,6 +103,7 @@ pub(crate) fn try_find_default_python(
 ///   * Major: `pythonx`, `python`
 ///   * Default: `python3`, `python`
 ///   * (windows): For each of the above, test for the existence of `python.bat` shim (pyenv-windows) last.
+/// * (windows): Discover installations using `py --list-paths` (PEP514). Continue if `py` is not installed.
 ///
 /// (Windows): Filter out the windows store shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).
 fn find_python(
@@ -112,25 +114,7 @@ fn find_python(
     #[allow(non_snake_case)]
     let UV_TEST_PYTHON_PATH = env::var_os("UV_TEST_PYTHON_PATH");
 
-    if cfg!(windows) && UV_TEST_PYTHON_PATH.is_none() {
-        // Use `py` to find the python installation on the system.
-        match windows::py_list_paths(selector, platform, cache) {
-            Ok(Some(interpreter)) => return Ok(Some(interpreter)),
-            Ok(None) => {
-                // No matching Python version found, continue searching PATH
-            }
-            Err(Error::PyList(error)) => {
-                if error.kind() == std::io::ErrorKind::NotFound {
-                    tracing::debug!(
-                        "`py` is not installed. Falling back to searching Python on the path"
-                    );
-                    // Continue searching for python installations on the path.
-                }
-            }
-            Err(error) => return Err(error),
-        }
-    }
-
+    let override_path = UV_TEST_PYTHON_PATH.is_some();
     let possible_names = selector.possible_names();
 
     #[allow(non_snake_case)]
@@ -149,14 +133,14 @@ fn find_python(
                         continue;
                     }
 
-                    let interpreter = match Interpreter::query(&path, platform, cache) {
+                    let interpreter = match Interpreter::query(&path, platform.clone(), cache) {
                         Ok(interpreter) => interpreter,
                         Err(Error::Python2OrOlder) => {
                             if selector.major() <= Some(2) {
                                 return Err(Error::Python2OrOlder);
                             }
                             // Skip over Python 2 or older installation when querying for a recent python installation.
-                            tracing::debug!("Found a Python 2 installation that isn't supported by uv, skipping.");
+                            debug!("Found a Python 2 installation that isn't supported by uv, skipping.");
                             continue;
                         }
                         Err(error) => return Err(error),
@@ -177,7 +161,7 @@ fn find_python(
         if cfg!(windows) {
             if let Ok(shims) = which::which_in_global("python.bat", Some(&path)) {
                 for shim in shims {
-                    let interpreter = match Interpreter::query(&shim, platform, cache) {
+                    let interpreter = match Interpreter::query(&shim, platform.clone(), cache) {
                         Ok(interpreter) => interpreter,
                         Err(error) => {
                             // Don't fail when querying the shim failed. E.g it's possible that no python version is selected
@@ -197,6 +181,20 @@ fn find_python(
         }
     }
 
+    if cfg!(windows) && !override_path {
+        // Use `py` to find the python installation on the system.
+        match windows::py_list_paths(selector, platform, cache) {
+            Ok(Some(interpreter)) => return Ok(Some(interpreter)),
+            Ok(None) => {}
+            Err(Error::PyList(error)) => {
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    debug!("`py` is not installed");
+                }
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
     Ok(None)
 }
 
@@ -213,15 +211,15 @@ enum PythonInstallation {
 impl PythonInstallation {
     fn major(&self) -> u8 {
         match self {
-            PythonInstallation::PyListPath { major, .. } => *major,
-            PythonInstallation::Interpreter(interpreter) => interpreter.python_major(),
+            Self::PyListPath { major, .. } => *major,
+            Self::Interpreter(interpreter) => interpreter.python_major(),
         }
     }
 
     fn minor(&self) -> u8 {
         match self {
-            PythonInstallation::PyListPath { minor, .. } => *minor,
-            PythonInstallation::Interpreter(interpreter) => interpreter.python_minor(),
+            Self::PyListPath { minor, .. } => *minor,
+            Self::Interpreter(interpreter) => interpreter.python_minor(),
         }
     }
 
@@ -268,10 +266,10 @@ impl PythonInstallation {
         cache: &Cache,
     ) -> Result<Interpreter, Error> {
         match self {
-            PythonInstallation::PyListPath {
+            Self::PyListPath {
                 executable_path, ..
-            } => Interpreter::query(&executable_path, platform, cache),
-            PythonInstallation::Interpreter(interpreter) => Ok(interpreter),
+            } => Interpreter::query(&executable_path, platform.clone(), cache),
+            Self::Interpreter(interpreter) => Ok(interpreter),
         }
     }
 }
@@ -297,20 +295,20 @@ impl PythonVersionSelector {
         };
 
         match self {
-            PythonVersionSelector::Default => [Some(python3), Some(python), None, None],
-            PythonVersionSelector::Major(major) => [
+            Self::Default => [Some(python3), Some(python), None, None],
+            Self::Major(major) => [
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
                 None,
                 None,
             ],
-            PythonVersionSelector::MajorMinor(major, minor) => [
+            Self::MajorMinor(major, minor) => [
                 Some(Cow::Owned(format!("python{major}.{minor}{extension}"))),
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
                 None,
             ],
-            PythonVersionSelector::MajorMinorPatch(major, minor, patch) => [
+            Self::MajorMinorPatch(major, minor, patch) => [
                 Some(Cow::Owned(format!(
                     "python{major}.{minor}.{patch}{extension}",
                 ))),
@@ -323,10 +321,10 @@ impl PythonVersionSelector {
 
     fn major(self) -> Option<u8> {
         match self {
-            PythonVersionSelector::Default => None,
-            PythonVersionSelector::Major(major) => Some(major),
-            PythonVersionSelector::MajorMinor(major, _) => Some(major),
-            PythonVersionSelector::MajorMinorPatch(major, _, _) => Some(major),
+            Self::Default => None,
+            Self::Major(major) => Some(major),
+            Self::MajorMinor(major, _) => Some(major),
+            Self::MajorMinorPatch(major, _, _) => Some(major),
         }
     }
 }
@@ -432,7 +430,7 @@ mod windows {
     mod tests {
         use std::fmt::Debug;
 
-        use insta::assert_display_snapshot;
+        use insta::assert_snapshot;
         use itertools::Itertools;
 
         use platform_host::Platform;
@@ -459,7 +457,7 @@ mod windows {
                     (r"Caused by: .* \(os error 3\)", "Caused by: The system cannot find the path specified. (os error 3)")
                 ]
             }, {
-                assert_display_snapshot!(
+                assert_snapshot!(
                     format_err(result), @r###"
         failed to canonicalize path `C:\does\not\exists\python3.12`
           Caused by: The system cannot find the path specified. (os error 3)
@@ -472,8 +470,6 @@ mod windows {
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
-    use insta::assert_display_snapshot;
-    #[cfg(unix)]
     use insta::assert_snapshot;
     use itertools::Itertools;
 
@@ -515,7 +511,7 @@ mod tests {
         )
         .unwrap()
         .ok_or(Error::NoSuchPython(request.to_string()));
-        assert_display_snapshot!(
+        assert_snapshot!(
             format_err(result),
             @"No Python python3.1000 In `PATH`. Is Python python3.1000 installed?"
         );
@@ -528,7 +524,7 @@ mod tests {
             &Platform::current().unwrap(),
             &Cache::temp().unwrap(),
         );
-        assert_display_snapshot!(
+        assert_snapshot!(
             format_err(result), @r###"
         failed to canonicalize path `/does/not/exists/python3.12`
           Caused by: No such file or directory (os error 2)

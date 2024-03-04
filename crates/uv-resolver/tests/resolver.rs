@@ -16,7 +16,7 @@ use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
 use uv_cache::Cache;
 use uv_client::{FlatIndex, RegistryClientBuilder};
-use uv_interpreter::{Interpreter, Virtualenv};
+use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     ResolutionGraph, ResolutionMode, Resolver,
@@ -57,10 +57,6 @@ impl BuildContext for DummyContext {
         &self.interpreter
     }
 
-    fn base_python(&self) -> &Path {
-        panic!("The test should not need to build source distributions")
-    }
-
     fn no_build(&self) -> &NoBuild {
         &NoBuild::None
     }
@@ -81,7 +77,7 @@ impl BuildContext for DummyContext {
         panic!("The test should not need to build source distributions")
     }
 
-    async fn install<'a>(&'a self, _: &'a Resolution, _: &'a Virtualenv) -> Result<()> {
+    async fn install<'a>(&'a self, _: &'a Resolution, _: &'a PythonEnvironment) -> Result<()> {
         panic!("The test should not need to build source distributions")
     }
 
@@ -118,14 +114,7 @@ async fn resolve(
     let client = RegistryClientBuilder::new(Cache::temp()?).build();
     let flat_index = FlatIndex::default();
     let index = InMemoryIndex::default();
-    let interpreter = Interpreter::artificial(
-        Platform::current()?,
-        markers.clone(),
-        PathBuf::from("/dev/null"),
-        PathBuf::from("/dev/null"),
-        PathBuf::from("/dev/null"),
-        PathBuf::from("/dev/null"),
-    );
+    let interpreter = Interpreter::artificial(Platform::current()?, markers.clone());
     let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
     let resolver = Resolver::new(
         manifest,

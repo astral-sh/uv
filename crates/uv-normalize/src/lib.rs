@@ -35,7 +35,7 @@ pub(crate) fn validate_and_normalize_ref(
                 match last {
                     // Names can't start with punctuation.
                     None => return Err(InvalidNameError(name.as_ref().to_string())),
-                    Some(b'-') | Some(b'_') | Some(b'.') => {}
+                    Some(b'-' | b'_' | b'.') => {}
                     Some(_) => normalized.push('-'),
                 }
             }
@@ -45,7 +45,7 @@ pub(crate) fn validate_and_normalize_ref(
     }
 
     // Names can't end with punctuation.
-    if matches!(last, Some(b'-') | Some(b'_') | Some(b'.')) {
+    if matches!(last, Some(b'-' | b'_' | b'.')) {
         return Err(InvalidNameError(name.as_ref().to_string()));
     }
 
@@ -83,7 +83,7 @@ fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
     }
 
     // Names can't end with punctuation.
-    if matches!(last, Some(b'-') | Some(b'_') | Some(b'.')) {
+    if matches!(last, Some(b'-' | b'_' | b'.')) {
         return Err(InvalidNameError(name.as_ref().to_string()));
     }
 
@@ -143,7 +143,7 @@ mod tests {
     fn check() {
         let inputs = ["friendly-bard", "friendlybard"];
         for input in inputs {
-            assert!(is_normalized(input).unwrap(), "{:?}", input);
+            assert!(is_normalized(input).unwrap(), "{input:?}");
         }
 
         let inputs = [
@@ -155,7 +155,7 @@ mod tests {
             "FrIeNdLy-._.-bArD",
         ];
         for input in inputs {
-            assert!(!is_normalized(input).unwrap(), "{:?}", input);
+            assert!(!is_normalized(input).unwrap(), "{input:?}");
         }
     }
 

@@ -3,43 +3,43 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use configparser::ini::Ini;
 use fs_err as fs;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument, warn};
 
 use cache_key::digest;
+use install_wheel_rs::Layout;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
 use platform_tags::{Tags, TagsError};
+use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::write_atomic_sync;
 
-use crate::python_platform::PythonPlatform;
+use crate::python_environment::{detect_python_executable, detect_virtual_env};
 use crate::python_query::try_find_default_python;
-use crate::virtual_env::detect_virtual_env;
-use crate::{find_requested_python, Error, PythonVersion};
+use crate::{find_requested_python, Error, PythonVersion, Virtualenv};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
 pub struct Interpreter {
-    pub(crate) platform: PythonPlatform,
-    pub(crate) markers: Box<MarkerEnvironment>,
-    pub(crate) base_exec_prefix: PathBuf,
-    pub(crate) base_prefix: PathBuf,
-    pub(crate) stdlib: PathBuf,
-    pub(crate) sys_executable: PathBuf,
+    platform: Platform,
+    markers: Box<MarkerEnvironment>,
+    scheme: Scheme,
+    prefix: PathBuf,
+    base_exec_prefix: PathBuf,
+    base_prefix: PathBuf,
+    base_executable: Option<PathBuf>,
+    sys_executable: PathBuf,
     tags: OnceCell<Tags>,
 }
 
 impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
-    pub(crate) fn query(
-        executable: &Path,
-        platform: &Platform,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
+    pub fn query(executable: &Path, platform: Platform, cache: &Cache) -> Result<Self, Error> {
         let info = InterpreterInfo::query_cached(executable, cache)?;
 
         debug_assert!(
@@ -49,41 +49,47 @@ impl Interpreter {
         );
 
         Ok(Self {
-            platform: PythonPlatform(platform.to_owned()),
+            platform,
             markers: Box::new(info.markers),
+            scheme: info.scheme,
+            prefix: info.prefix,
             base_exec_prefix: info.base_exec_prefix,
             base_prefix: info.base_prefix,
-            stdlib: info.stdlib,
+            base_executable: info.base_executable,
             sys_executable: info.sys_executable,
             tags: OnceCell::new(),
         })
     }
 
     // TODO(konstin): Find a better way mocking the fields
-    pub fn artificial(
-        platform: Platform,
-        markers: MarkerEnvironment,
-        base_exec_prefix: PathBuf,
-        base_prefix: PathBuf,
-        sys_executable: PathBuf,
-        stdlib: PathBuf,
-    ) -> Self {
+    pub fn artificial(platform: Platform, markers: MarkerEnvironment) -> Self {
         Self {
-            platform: PythonPlatform(platform),
+            platform,
             markers: Box::new(markers),
-            base_exec_prefix,
-            base_prefix,
-            stdlib,
-            sys_executable,
+            scheme: Scheme {
+                stdlib: PathBuf::from("/dev/null"),
+                purelib: PathBuf::from("/dev/null"),
+                platlib: PathBuf::from("/dev/null"),
+                include: PathBuf::from("/dev/null"),
+                scripts: PathBuf::from("/dev/null"),
+                data: PathBuf::from("/dev/null"),
+            },
+            prefix: PathBuf::from("/dev/null"),
+            base_exec_prefix: PathBuf::from("/dev/null"),
+            base_prefix: PathBuf::from("/dev/null"),
+            base_executable: None,
+            sys_executable: PathBuf::from("/dev/null"),
             tags: OnceCell::new(),
         }
     }
 
-    /// Return a new [`Interpreter`] with the given base prefix.
+    /// Return a new [`Interpreter`] with the given virtual environment root.
     #[must_use]
-    pub(crate) fn with_base_prefix(self, base_prefix: PathBuf) -> Self {
+    pub fn with_virtualenv(self, virtualenv: Virtualenv) -> Self {
         Self {
-            base_prefix,
+            scheme: virtualenv.scheme,
+            sys_executable: virtualenv.executable,
+            prefix: virtualenv.root,
             ..self
         }
     }
@@ -169,10 +175,9 @@ impl Interpreter {
         };
 
         // Check if the venv Python matches.
-        let python_platform = PythonPlatform::from(platform.to_owned());
-        if let Some(venv) = detect_virtual_env(&python_platform)? {
-            let executable = python_platform.venv_python(venv);
-            let interpreter = Self::query(&executable, &python_platform.0, cache)?;
+        if let Some(venv) = detect_virtual_env()? {
+            let executable = detect_python_executable(venv);
+            let interpreter = Self::query(&executable, platform.clone(), cache)?;
 
             if version_matches(&interpreter) {
                 return Ok(Some(interpreter));
@@ -238,6 +243,51 @@ impl Interpreter {
         })
     }
 
+    /// Returns `true` if the environment is a PEP 405-compliant virtual environment.
+    ///
+    /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/utils/virtualenv.py#L14>
+    pub fn is_virtualenv(&self) -> bool {
+        self.prefix != self.base_prefix
+    }
+
+    /// Returns `Some` if the environment is externally managed, optionally including an error
+    /// message from the `EXTERNALLY-MANAGED` file.
+    ///
+    /// See: <https://packaging.python.org/en/latest/specifications/externally-managed-environments/>
+    pub fn is_externally_managed(&self) -> Option<ExternallyManaged> {
+        // Per the spec, a virtual environment is never externally managed.
+        if self.is_virtualenv() {
+            return None;
+        }
+
+        let Ok(contents) = fs::read_to_string(self.scheme.stdlib.join("EXTERNALLY-MANAGED")) else {
+            return None;
+        };
+
+        let mut ini = Ini::new_cs();
+        ini.set_multiline(true);
+
+        let Ok(mut sections) = ini.read(contents) else {
+            // If a file exists but is not a valid INI file, we assume the environment is
+            // externally managed.
+            return Some(ExternallyManaged::default());
+        };
+
+        let Some(section) = sections.get_mut("externally-managed") else {
+            // If the file exists but does not contain an "externally-managed" section, we assume
+            // the environment is externally managed.
+            return Some(ExternallyManaged::default());
+        };
+
+        let Some(error) = section.remove("Error") else {
+            // If the file exists but does not contain an "Error" key, we assume the environment is
+            // externally managed.
+            return Some(ExternallyManaged::default());
+        };
+
+        Some(ExternallyManaged { error })
+    }
+
     /// Returns the Python version.
     #[inline]
     pub const fn python_version(&self) -> &Version {
@@ -284,32 +334,132 @@ impl Interpreter {
         (self.implementation_major(), self.implementation_minor())
     }
 
+    /// Returns the implementation name (e.g., `CPython` or `PyPy`).
     pub fn implementation_name(&self) -> &str {
         &self.markers.implementation_name
     }
+
+    /// Return the `sys.base_exec_prefix` path for this Python interpreter.
     pub fn base_exec_prefix(&self) -> &Path {
         &self.base_exec_prefix
     }
+
+    /// Return the `sys.base_prefix` path for this Python interpreter.
     pub fn base_prefix(&self) -> &Path {
         &self.base_prefix
     }
 
-    /// `sysconfig.get_path("stdlib")`
-    pub fn stdlib(&self) -> &Path {
-        &self.stdlib
+    /// Return the `sys.prefix` path for this Python interpreter.
+    pub fn prefix(&self) -> &Path {
+        &self.prefix
     }
+
+    /// Return the `sys._base_executable` path for this Python interpreter. Some platforms do not
+    /// have this attribute, so it may be `None`.
+    pub fn base_executable(&self) -> Option<&Path> {
+        self.base_executable.as_deref()
+    }
+
+    /// Return the `sys.executable` path for this Python interpreter.
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
+    }
+
+    /// Return the `purelib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn purelib(&self) -> &Path {
+        &self.scheme.purelib
+    }
+
+    /// Return the `platlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn platlib(&self) -> &Path {
+        &self.scheme.platlib
+    }
+
+    /// Return the `scripts` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn scripts(&self) -> &Path {
+        &self.scheme.scripts
+    }
+
+    /// Return the `data` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn data(&self) -> &Path {
+        &self.scheme.data
+    }
+
+    /// Return the `include` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn include(&self) -> &Path {
+        &self.scheme.include
+    }
+
+    /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn stdlib(&self) -> &Path {
+        &self.scheme.stdlib
+    }
+
+    /// Return the name of the Python directory used to build the path to the
+    /// `site-packages` directory.
+    ///
+    /// If one could not be determined, then `python` is returned.
+    pub fn site_packages_python(&self) -> &str {
+        if self.implementation_name() == "pypy" {
+            "pypy"
+        } else {
+            "python"
+        }
+    }
+
+    /// Return the [`Layout`] environment used to install wheels into this interpreter.
+    pub fn layout(&self) -> Layout {
+        Layout {
+            python_version: self.python_tuple(),
+            sys_executable: self.sys_executable().to_path_buf(),
+            os_name: self.markers.os_name.clone(),
+            scheme: Scheme {
+                stdlib: self.stdlib().to_path_buf(),
+                purelib: self.purelib().to_path_buf(),
+                platlib: self.platlib().to_path_buf(),
+                scripts: self.scripts().to_path_buf(),
+                data: self.data().to_path_buf(),
+                include: if self.is_virtualenv() {
+                    // If the interpreter is a venv, then the `include` directory has a different structure.
+                    // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/locations/_sysconfig.py#L172
+                    self.prefix.join("include").join("site").join(format!(
+                        "{}{}.{}",
+                        self.site_packages_python(),
+                        self.python_major(),
+                        self.python_minor()
+                    ))
+                } else {
+                    self.include().to_path_buf()
+                },
+            },
+        }
+    }
+}
+
+/// The `EXTERNALLY-MANAGED` file in a Python installation.
+///
+/// See: <https://packaging.python.org/en/latest/specifications/externally-managed-environments/>
+#[derive(Debug, Default, Clone)]
+pub struct ExternallyManaged {
+    error: Option<String>,
+}
+
+impl ExternallyManaged {
+    /// Return the `EXTERNALLY-MANAGED` error message, if any.
+    pub fn into_error(self) -> Option<String> {
+        self.error
     }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub(crate) struct InterpreterInfo {
-    pub(crate) markers: MarkerEnvironment,
-    pub(crate) base_exec_prefix: PathBuf,
-    pub(crate) base_prefix: PathBuf,
-    pub(crate) stdlib: PathBuf,
-    pub(crate) sys_executable: PathBuf,
+struct InterpreterInfo {
+    markers: MarkerEnvironment,
+    scheme: Scheme,
+    prefix: PathBuf,
+    base_exec_prefix: PathBuf,
+    base_prefix: PathBuf,
+    base_executable: Option<PathBuf>,
+    sys_executable: PathBuf,
 }
 
 impl InterpreterInfo {
@@ -406,7 +556,7 @@ impl InterpreterInfo {
             format!("{}.msgpack", digest(&executable_bytes)),
         );
 
-        let modified = Timestamp::from_path(fs_err::canonicalize(executable)?)?;
+        let modified = Timestamp::from_path(uv_fs::canonicalize_executable(executable)?)?;
 
         // Read from the cache.
         if cache
@@ -503,8 +653,16 @@ mod tests {
                 },
                 "base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
-                "stdlib": "/usr/lib/python3.12",
-                "sys_executable": "/home/ferris/projects/uv/.venv/bin/python"
+                "prefix": "/home/ferris/projects/uv/.venv",
+                "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
+                "scheme": {
+                    "data": "/home/ferris/.pyenv/versions/3.12.0",
+                    "include": "/home/ferris/.pyenv/versions/3.12.0/include",
+                    "platlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages",
+                    "purelib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages",
+                    "scripts": "/home/ferris/.pyenv/versions/3.12.0/bin",
+                    "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12"
+                }
             }
         "##};
 
@@ -524,7 +682,8 @@ mod tests {
             std::os::unix::fs::PermissionsExt::from_mode(0o770),
         )
         .unwrap();
-        let interpreter = Interpreter::query(&mocked_interpreter, &platform, &cache).unwrap();
+        let interpreter =
+            Interpreter::query(&mocked_interpreter, platform.clone(), &cache).unwrap();
         assert_eq!(
             interpreter.markers.python_version.version,
             Version::from_str("3.12").unwrap()
@@ -537,7 +696,8 @@ mod tests {
             "##, json.replace("3.12", "3.13")},
         )
         .unwrap();
-        let interpreter = Interpreter::query(&mocked_interpreter, &platform, &cache).unwrap();
+        let interpreter =
+            Interpreter::query(&mocked_interpreter, platform.clone(), &cache).unwrap();
         assert_eq!(
             interpreter.markers.python_version.version,
             Version::from_str("3.13").unwrap()

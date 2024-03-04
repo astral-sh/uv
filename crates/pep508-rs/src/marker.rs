@@ -235,15 +235,15 @@ impl MarkerOperator {
     /// Compare two versions, returning None for `in` and `not in`
     fn to_pep440_operator(&self) -> Option<pep440_rs::Operator> {
         match self {
-            MarkerOperator::Equal => Some(pep440_rs::Operator::Equal),
-            MarkerOperator::NotEqual => Some(pep440_rs::Operator::NotEqual),
-            MarkerOperator::GreaterThan => Some(pep440_rs::Operator::GreaterThan),
-            MarkerOperator::GreaterEqual => Some(pep440_rs::Operator::GreaterThanEqual),
-            MarkerOperator::LessThan => Some(pep440_rs::Operator::LessThan),
-            MarkerOperator::LessEqual => Some(pep440_rs::Operator::LessThanEqual),
-            MarkerOperator::TildeEqual => Some(pep440_rs::Operator::TildeEqual),
-            MarkerOperator::In => None,
-            MarkerOperator::NotIn => None,
+            Self::Equal => Some(pep440_rs::Operator::Equal),
+            Self::NotEqual => Some(pep440_rs::Operator::NotEqual),
+            Self::GreaterThan => Some(pep440_rs::Operator::GreaterThan),
+            Self::GreaterEqual => Some(pep440_rs::Operator::GreaterThanEqual),
+            Self::LessThan => Some(pep440_rs::Operator::LessThan),
+            Self::LessEqual => Some(pep440_rs::Operator::LessThanEqual),
+            Self::TildeEqual => Some(pep440_rs::Operator::TildeEqual),
+            Self::In => None,
+            Self::NotIn => None,
         }
     }
 }
@@ -559,7 +559,7 @@ impl MarkerExpression {
         &self,
         env: &MarkerEnvironment,
         extras: &[ExtraName],
-        reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
+        reporter: &mut impl FnMut(MarkerWarningKind, String, &Self),
     ) -> bool {
         match &self.l_value {
             // The only sound choice for this is `<version key> <version op> <quoted PEP 440 version>`
@@ -830,7 +830,7 @@ impl MarkerExpression {
         &self,
         l_string: &str,
         r_string: &str,
-        reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
+        reporter: &mut impl FnMut(MarkerWarningKind, String, &Self),
     ) -> bool {
         match self.operator {
             MarkerOperator::Equal => l_string == r_string,
@@ -885,7 +885,7 @@ impl MarkerExpression {
         &self,
         value: &ExtraName,
         extras: &[ExtraName],
-        reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
+        reporter: &mut impl FnMut(MarkerWarningKind, String, &Self),
     ) -> bool {
         match self.operator {
             MarkerOperator::Equal => extras.contains(value),
@@ -957,11 +957,11 @@ impl MarkerTree {
         };
         self.report_deprecated_options(&mut reporter);
         match self {
-            MarkerTree::Expression(expression) => expression.evaluate(env, extras, &mut reporter),
-            MarkerTree::And(expressions) => expressions
+            Self::Expression(expression) => expression.evaluate(env, extras, &mut reporter),
+            Self::And(expressions) => expressions
                 .iter()
                 .all(|x| x.evaluate_reporter_impl(env, extras, &mut reporter)),
-            MarkerTree::Or(expressions) => expressions
+            Self::Or(expressions) => expressions
                 .iter()
                 .any(|x| x.evaluate_reporter_impl(env, extras, &mut reporter)),
         }
@@ -986,11 +986,11 @@ impl MarkerTree {
         reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
     ) -> bool {
         match self {
-            MarkerTree::Expression(expression) => expression.evaluate(env, extras, reporter),
-            MarkerTree::And(expressions) => expressions
+            Self::Expression(expression) => expression.evaluate(env, extras, reporter),
+            Self::And(expressions) => expressions
                 .iter()
                 .all(|x| x.evaluate_reporter_impl(env, extras, reporter)),
-            MarkerTree::Or(expressions) => expressions
+            Self::Or(expressions) => expressions
                 .iter()
                 .any(|x| x.evaluate_reporter_impl(env, extras, reporter)),
         }
@@ -1010,13 +1010,13 @@ impl MarkerTree {
         python_versions: &[Version],
     ) -> bool {
         match self {
-            MarkerTree::Expression(expression) => {
+            Self::Expression(expression) => {
                 expression.evaluate_extras_and_python_version(extras, python_versions)
             }
-            MarkerTree::And(expressions) => expressions
+            Self::And(expressions) => expressions
                 .iter()
                 .all(|x| x.evaluate_extras_and_python_version(extras, python_versions)),
-            MarkerTree::Or(expressions) => expressions
+            Self::Or(expressions) => expressions
                 .iter()
                 .any(|x| x.evaluate_extras_and_python_version(extras, python_versions)),
         }
@@ -1044,7 +1044,7 @@ impl MarkerTree {
         reporter: &mut impl FnMut(MarkerWarningKind, String, &MarkerExpression),
     ) {
         match self {
-            MarkerTree::Expression(expression) => {
+            Self::Expression(expression) => {
                 for value in [&expression.l_value, &expression.r_value] {
                     match value {
                         MarkerValue::MarkerEnvString(MarkerValueString::OsNameDeprecated) => {
@@ -1103,12 +1103,12 @@ impl MarkerTree {
                     }
                 }
             }
-            MarkerTree::And(expressions) => {
+            Self::And(expressions) => {
                 for expression in expressions {
                     expression.report_deprecated_options(reporter);
                 }
             }
-            MarkerTree::Or(expressions) => {
+            Self::Or(expressions) => {
                 for expression in expressions {
                     expression.report_deprecated_options(reporter);
                 }
@@ -1119,23 +1119,23 @@ impl MarkerTree {
 
 impl Display for MarkerTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let format_inner = |expression: &MarkerTree| {
-            if matches!(expression, MarkerTree::Expression(_)) {
+        let format_inner = |expression: &Self| {
+            if matches!(expression, Self::Expression(_)) {
                 format!("{expression}")
             } else {
                 format!("({expression})")
             }
         };
         match self {
-            MarkerTree::Expression(expression) => write!(f, "{expression}"),
-            MarkerTree::And(and_list) => f.write_str(
+            Self::Expression(expression) => write!(f, "{expression}"),
+            Self::And(and_list) => f.write_str(
                 &and_list
                     .iter()
                     .map(format_inner)
                     .collect::<Vec<String>>()
                     .join(" and "),
             ),
-            MarkerTree::Or(or_list) => f.write_str(
+            Self::Or(or_list) => f.write_str(
                 &or_list
                     .iter()
                     .map(format_inner)
@@ -1392,7 +1392,7 @@ mod test {
     #[test]
     fn test_marker_equivalence() {
         let values = [
-            (r#"python_version == '2.7'"#, r#"python_version == "2.7""#),
+            (r"python_version == '2.7'", r#"python_version == "2.7""#),
             (r#"python_version == "2.7""#, r#"python_version == "2.7""#),
             (
                 r#"python_version == "2.7" and os_name == "posix""#,

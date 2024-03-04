@@ -95,7 +95,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
                     format!("there is no version of {package}{set}")
                 } else {
                     let complement = set.complement();
-                    let segments = complement.iter().collect::<Vec<_>>().len();
+                    let segments = complement.iter().count();
                     // Simple case, there's a single range to report
                     if segments == 1 {
                         format!(
@@ -455,7 +455,7 @@ pub(crate) enum PubGrubHint {
 impl std::fmt::Display for PubGrubHint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PubGrubHint::PreReleaseAvailable { package, version } => {
+            Self::PreReleaseAvailable { package, version } => {
                 write!(
                     f,
                     "{}{} Pre-releases are available for {} in the requested range (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",
@@ -465,7 +465,7 @@ impl std::fmt::Display for PubGrubHint {
                     version.bold()
                 )
             }
-            PubGrubHint::PreReleaseRequested { package, range } => {
+            Self::PreReleaseRequested { package, range } => {
                 write!(
                     f,
                     "{}{} {} was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",
@@ -475,7 +475,7 @@ impl std::fmt::Display for PubGrubHint {
                     PackageRange::compatibility(package, range).bold()
                 )
             }
-            PubGrubHint::NoIndex => {
+            Self::NoIndex => {
                 write!(
                     f,
                     "{}{} Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)",
@@ -483,7 +483,7 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                 )
             }
-            PubGrubHint::Offline => {
+            Self::Offline => {
                 write!(
                     f,
                     "{}{} Packages were unavailable because the network was disabled",

@@ -3,17 +3,17 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tracing::instrument;
 
 use distribution_types::CachedDist;
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 
 pub struct Installer<'a> {
-    venv: &'a Virtualenv,
+    venv: &'a PythonEnvironment,
     link_mode: install_wheel_rs::linker::LinkMode,
     reporter: Option<Box<dyn Reporter>>,
 }
 
 impl<'a> Installer<'a> {
     /// Initialize a new installer.
-    pub fn new(venv: &'a Virtualenv) -> Self {
+    pub fn new(venv: &'a PythonEnvironment) -> Self {
         Self {
             venv,
             link_mode: install_wheel_rs::linker::LinkMode::default(),
@@ -39,15 +39,11 @@ impl<'a> Installer<'a> {
     /// Install a set of wheels into a Python virtual environment.
     #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
     pub fn install(self, wheels: &[CachedDist]) -> Result<()> {
+        let layout = self.venv.interpreter().layout();
         tokio::task::block_in_place(|| {
             wheels.par_iter().try_for_each(|wheel| {
-                let location = install_wheel_rs::InstallLocation::new(
-                    self.venv.root(),
-                    self.venv.interpreter().python_tuple(),
-                );
-
                 install_wheel_rs::linker::install_wheel(
-                    &location,
+                    &layout,
                     wheel.path(),
                     wheel.filename(),
                     wheel

@@ -16,9 +16,11 @@ use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
 use once_cell::sync::Lazy;
-use pyproject_toml::{BuildSystem, Project};
+use pyproject_toml::Project;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use rustc_hash::FxHashMap;
+use serde::de::{value, SeqAccess, Visitor};
+use serde::{de, Deserialize, Deserializer, Serialize};
 use tempfile::{tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::process::Command;
@@ -27,8 +29,8 @@ use tracing::{debug, info_span, instrument, Instrument};
 
 use distribution_types::Resolution;
 use pep508_rs::Requirement;
-use uv_fs::Normalized;
-use uv_interpreter::{Interpreter, Virtualenv};
+use uv_fs::Simplified;
+use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_traits::{BuildContext, BuildKind, ConfigSettings, SetupPyStrategy, SourceBuildTrait};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
@@ -73,7 +75,7 @@ pub enum Error {
     #[error("Source distribution not found at: {0}")]
     NotFound(PathBuf),
     #[error("Failed to create temporary virtualenv")]
-    Gourgeist(#[from] gourgeist::Error),
+    Virtualenv(#[from] uv_virtualenv::Error),
     #[error("Failed to run {0}")]
     CommandFailed(PathBuf, #[source] io::Error),
     #[error("{message}:\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
@@ -183,6 +185,67 @@ pub struct PyProjectToml {
     pub project: Option<Project>,
 }
 
+/// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct BuildSystem {
+    /// PEP 508 dependencies required to execute the build system.
+    pub requires: Vec<Requirement>,
+    /// A string naming a Python object that will be used to perform the build.
+    pub build_backend: Option<String>,
+    /// Specify that their backend code is hosted in-tree, this key contains a list of directories.
+    pub backend_path: Option<BackendPath>,
+}
+
+impl BackendPath {
+    /// Return an iterator over the paths in the backend path.
+    fn iter(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(String::as_str)
+    }
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct BackendPath(Vec<String>);
+
+impl<'de> Deserialize<'de> for BackendPath {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct StringOrVec;
+
+        impl<'de> Visitor<'de> for StringOrVec {
+            type Value = Vec<String>;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str("list of strings")
+            }
+
+            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                // Allow exactly `backend-path = "."`, as used in `flit_core==2.3.0`.
+                if s == "." {
+                    Ok(vec![".".to_string()])
+                } else {
+                    Err(de::Error::invalid_value(de::Unexpected::Str(s), &self))
+                }
+            }
+
+            fn visit_seq<S>(self, seq: S) -> Result<Self::Value, S::Error>
+            where
+                S: SeqAccess<'de>,
+            {
+                Deserialize::deserialize(value::SeqAccessDeserializer::new(seq))
+            }
+        }
+
+        deserializer.deserialize_any(StringOrVec).map(BackendPath)
+    }
+}
+
 /// `[build-backend]` from pyproject.toml
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Pep517Backend {
@@ -194,7 +257,7 @@ struct Pep517Backend {
     /// `build-backend.requirements` in pyproject.toml
     requirements: Vec<Requirement>,
     /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
-    backend_path: Option<Vec<String>>,
+    backend_path: Option<BackendPath>,
 }
 
 impl Pep517Backend {
@@ -207,9 +270,8 @@ impl Pep517Backend {
 
         let backend_path_encoded = self
             .backend_path
-            .clone()
-            .unwrap_or_default()
             .iter()
+            .flat_map(BackendPath::iter)
             .map(|path| {
                 // Turn into properly escaped python string
                 '"'.to_string()
@@ -224,6 +286,10 @@ impl Pep517Backend {
         // > backend hooks.
         formatdoc! {r#"
             import sys
+
+            if sys.path[0] == "":
+                sys.path.pop(0)
+
             sys.path = [{backend_path}] + sys.path
 
             {import}
@@ -251,7 +317,7 @@ pub struct SourceBuild {
     /// If performing a PEP 517 build, the backend to use.
     pep517_backend: Option<Pep517Backend>,
     /// The virtual environment in which to build the source distribution.
-    venv: Virtualenv,
+    venv: PythonEnvironment,
     /// Populated if `prepare_metadata_for_build_wheel` was called.
     ///
     /// > If the build frontend has previously called prepare_metadata_for_build_wheel and depends
@@ -266,6 +332,10 @@ pub struct SourceBuild {
     package_id: String,
     /// Whether we do a regular PEP 517 build or an PEP 660 editable build
     build_kind: BuildKind,
+    /// Modified PATH that contains the `venv_bin`, `user_path` and `system_path` variables in that order
+    modified_path: OsString,
+    /// Environment variables to be passed in during metadata or wheel building
+    environment_variables: FxHashMap<OsString, OsString>,
 }
 
 impl SourceBuild {
@@ -284,7 +354,8 @@ impl SourceBuild {
         setup_py: SetupPyStrategy,
         config_settings: ConfigSettings,
         build_kind: BuildKind,
-    ) -> Result<SourceBuild, Error> {
+        mut environment_variables: FxHashMap<OsString, OsString>,
+    ) -> Result<Self, Error> {
         let temp_dir = tempdir_in(build_context.cache().root())?;
 
         let metadata = match fs::metadata(source) {
@@ -327,10 +398,11 @@ impl SourceBuild {
         let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)
             .map_err(|err| *err)?;
 
-        let venv = gourgeist::create_venv(
+        let venv = uv_virtualenv::create_venv(
             &temp_dir.path().join(".venv"),
             interpreter.clone(),
-            gourgeist::Prompt::None,
+            uv_virtualenv::Prompt::None,
+            false,
             Vec::new(),
         )?;
 
@@ -348,6 +420,36 @@ impl SourceBuild {
             .await
             .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
 
+        // Figure out what the modified path should be
+        // Remove the PATH variable from the environment variables if it's there
+        let user_path = environment_variables.remove(&OsString::from("PATH"));
+        // See if there is an OS PATH variable
+        let os_path = env::var_os("PATH");
+
+        // Prepend the user supplied PATH to the existing OS PATH
+        let modified_path = if let Some(user_path) = user_path {
+            match os_path {
+                // Prepend the user supplied PATH to the existing PATH
+                Some(env_path) => {
+                    let user_path = PathBuf::from(user_path);
+                    let new_path = env::split_paths(&user_path).chain(env::split_paths(&env_path));
+                    Some(env::join_paths(new_path).map_err(Error::BuildScriptPath)?)
+                }
+                // Use the user supplied PATH
+                None => Some(user_path),
+            }
+        } else {
+            os_path
+        };
+
+        // Prepend the venv bin directory to the modified path
+        let modified_path = if let Some(path) = modified_path {
+            let venv_path = iter::once(venv.scripts().to_path_buf()).chain(env::split_paths(&path));
+            env::join_paths(venv_path).map_err(Error::BuildScriptPath)?
+        } else {
+            OsString::from(venv.scripts())
+        };
+
         if let Some(pep517_backend) = &pep517_backend {
             create_pep517_build_environment(
                 &source_tree,
@@ -357,6 +459,8 @@ impl SourceBuild {
                 &package_id,
                 build_kind,
                 &config_settings,
+                &environment_variables,
+                &modified_path,
             )
             .await?;
         }
@@ -370,6 +474,8 @@ impl SourceBuild {
             config_settings,
             metadata_directory: None,
             package_id,
+            environment_variables,
+            modified_path,
         })
     }
 
@@ -491,7 +597,8 @@ impl SourceBuild {
             pep517_backend.backend
         );
         let script = formatdoc! {
-            r#"{}
+            r#"
+            {}
             import json
 
             prepare_metadata_for_build_wheel = getattr(backend, "prepare_metadata_for_build_wheel", None)
@@ -509,9 +616,15 @@ impl SourceBuild {
             script="prepare_metadata_for_build_wheel",
             python_version = %self.venv.interpreter().python_version()
         );
-        let output = run_python_script(&self.venv, &script, &self.source_tree)
-            .instrument(span)
-            .await?;
+        let output = run_python_script(
+            &self.venv,
+            &script,
+            &self.source_tree,
+            &self.environment_variables,
+            &self.modified_path,
+        )
+        .instrument(span)
+        .await?;
         if !output.status.success() {
             return Err(Error::from_command_output(
                 "Build backend failed to determine metadata through `prepare_metadata_for_build_wheel`".to_string(),
@@ -574,13 +687,13 @@ impl SourceBuild {
                 script="setup.py bdist_wheel",
                 python_version = %self.venv.interpreter().python_version()
             );
-            let output = Command::new(&python_interpreter)
+            let output = Command::new(python_interpreter)
                 .args(["setup.py", "bdist_wheel"])
-                .current_dir(self.source_tree.normalized())
+                .current_dir(self.source_tree.simplified())
                 .output()
                 .instrument(span)
                 .await
-                .map_err(|err| Error::CommandFailed(python_interpreter, err))?;
+                .map_err(|err| Error::CommandFailed(python_interpreter.to_path_buf(), err))?;
             if !output.status.success() {
                 return Err(Error::from_command_output(
                     "Failed building wheel through setup.py".to_string(),
@@ -625,7 +738,9 @@ impl SourceBuild {
         );
         let escaped_wheel_dir = escape_path_for_python(wheel_dir);
         let script = formatdoc! {
-            r#"{}
+            r#"
+            {}
+
             print(backend.build_{}("{}", metadata_directory={}, config_settings={}))
             "#,
             pep517_backend.backend_import(),
@@ -639,9 +754,15 @@ impl SourceBuild {
             script=format!("build_{}", self.build_kind),
             python_version = %self.venv.interpreter().python_version()
         );
-        let output = run_python_script(&self.venv, &script, &self.source_tree)
-            .instrument(span)
-            .await?;
+        let output = run_python_script(
+            &self.venv,
+            &script,
+            &self.source_tree,
+            &self.environment_variables,
+            &self.modified_path,
+        )
+        .instrument(span)
+        .await?;
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
@@ -687,14 +808,17 @@ fn escape_path_for_python(path: &Path) -> String {
 }
 
 /// Not a method because we call it before the builder is completely initialized
+#[allow(clippy::too_many_arguments)]
 async fn create_pep517_build_environment(
     source_tree: &Path,
-    venv: &Virtualenv,
+    venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
     package_id: &str,
     build_kind: BuildKind,
     config_settings: &ConfigSettings,
+    environment_variables: &FxHashMap<OsString, OsString>,
+    modified_path: &OsString,
 ) -> Result<(), Error> {
     debug!(
         "Calling `{}.get_requires_for_build_{}()`",
@@ -718,9 +842,15 @@ async fn create_pep517_build_environment(
         script=format!("get_requires_for_build_{}", build_kind),
         python_version = %venv.interpreter().python_version()
     );
-    let output = run_python_script(venv, &script, source_tree)
-        .instrument(span)
-        .await?;
+    let output = run_python_script(
+        venv,
+        &script,
+        source_tree,
+        environment_variables,
+        modified_path,
+    )
+    .instrument(span)
+    .await?;
     if !output.status.success() {
         return Err(Error::from_command_output(
             format!("Build backend failed to determine extra requires with `build_{build_kind}()`"),
@@ -778,26 +908,24 @@ async fn create_pep517_build_environment(
 
 /// It is the caller's responsibility to create an informative span.
 async fn run_python_script(
-    venv: &Virtualenv,
+    venv: &PythonEnvironment,
     script: &str,
     source_tree: &Path,
+    environment_variables: &FxHashMap<OsString, OsString>,
+    modified_path: &OsString,
 ) -> Result<Output, Error> {
-    // Prepend the venv bin dir to PATH
-    let new_path = if let Some(old_path) = env::var_os("PATH") {
-        let new_path = iter::once(venv.bin_dir()).chain(env::split_paths(&old_path));
-        env::join_paths(new_path).map_err(Error::BuildScriptPath)?
-    } else {
-        OsString::from("")
-    };
     Command::new(venv.python_executable())
         .args(["-c", script])
-        .current_dir(source_tree.normalized())
+        .current_dir(source_tree.simplified())
+        // Pass in remaining environment variables
+        .envs(environment_variables)
+        // Set the modified PATH
+        .env("PATH", modified_path)
         // Activate the venv
         .env("VIRTUAL_ENV", venv.root())
-        .env("PATH", new_path)
         .output()
         .await
-        .map_err(|err| Error::CommandFailed(venv.python_executable(), err))
+        .map_err(|err| Error::CommandFailed(venv.python_executable().to_path_buf(), err))
 }
 
 #[cfg(test)]
@@ -840,7 +968,7 @@ mod test {
             "pygraphviz-1.11",
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
-        insta::assert_display_snapshot!(err, @r###"
+        insta::assert_snapshot!(err, @r###"
         Failed building wheel through setup.py:
         --- stdout:
         running bdist_wheel
@@ -860,7 +988,7 @@ mod test {
         error: command '/usr/bin/gcc' failed with exit code 1
         ---
         "###);
-        insta::assert_display_snapshot!(
+        insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
             @r###"This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for pygraphviz-1.11"###
         );
@@ -890,7 +1018,7 @@ mod test {
             "pygraphviz-1.11",
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
-        insta::assert_display_snapshot!(err, @r###"
+        insta::assert_snapshot!(err, @r###"
         Failed building wheel through setup.py:
         --- stdout:
 
@@ -902,7 +1030,7 @@ mod test {
         error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
         ---
         "###);
-        insta::assert_display_snapshot!(
+        insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
             @"This error likely indicates that you need to install the library that provides a shared library for ncurses for pygraphviz-1.11 (e.g. libncurses-dev)"
         );

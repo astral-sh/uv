@@ -46,9 +46,10 @@ use url::Url;
 use uv_warnings::warn_user;
 
 use pep508_rs::{
-    split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, Scheme, VerbatimUrl,
+    expand_path_vars, split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, Scheme,
+    VerbatimUrl,
 };
-use uv_fs::{normalize_url_path, Normalized};
+use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
 
 /// We emit one of those for each requirements.txt entry
@@ -70,9 +71,9 @@ enum RequirementsTxtStatement {
     /// `-e`
     EditableRequirement(EditableRequirement),
     /// `--index-url`
-    IndexUrl(Url),
+    IndexUrl(VerbatimUrl),
     /// `--extra-index-url`
-    ExtraIndexUrl(Url),
+    ExtraIndexUrl(VerbatimUrl),
     /// `--find-links`
     FindLinks(FindLink),
     /// `--no-index`
@@ -172,7 +173,7 @@ impl EditableRequirement {
     pub fn parse(
         given: &str,
         working_dir: impl AsRef<Path>,
-    ) -> Result<EditableRequirement, RequirementsTxtParserError> {
+    ) -> Result<Self, RequirementsTxtParserError> {
         // Identify the extras.
         let (requirement, extras) = if let Some((requirement, extras)) = Self::split_extras(given) {
             let extras = Extras::parse(extras).map_err(|err| {
@@ -215,7 +216,7 @@ impl EditableRequirement {
                     // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
                     let path = normalize_url_path(path);
 
-                    VerbatimUrl::from_path(path, working_dir.as_ref())
+                    VerbatimUrl::parse_path(path, working_dir.as_ref())
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
@@ -226,11 +227,11 @@ impl EditableRequirement {
                 }
 
                 // Ex) `C:/Users/ferris/wheel-0.42.0.tar.gz`
-                _ => VerbatimUrl::from_path(requirement, working_dir.as_ref()),
+                _ => VerbatimUrl::parse_path(requirement, working_dir.as_ref()),
             }
         } else {
             // Ex) `../editable/`
-            VerbatimUrl::from_path(requirement, working_dir.as_ref())
+            VerbatimUrl::parse_path(requirement, working_dir.as_ref())
         };
 
         // Create a `PathBuf`.
@@ -241,7 +242,7 @@ impl EditableRequirement {
         // Add the verbatim representation of the URL to the `VerbatimUrl`.
         let url = url.with_given(requirement.to_string());
 
-        Ok(EditableRequirement { url, extras, path })
+        Ok(Self { url, extras, path })
     }
 
     /// Identify the extras in an editable URL (e.g., `../editable[dev]`).
@@ -308,9 +309,9 @@ pub struct RequirementsTxt {
     /// Editables with `-e`.
     pub editables: Vec<EditableRequirement>,
     /// The index URL, specified with `--index-url`.
-    pub index_url: Option<Url>,
+    pub index_url: Option<VerbatimUrl>,
     /// The extra index URLs, specified with `--extra-index-url`.
-    pub extra_index_urls: Vec<Url>,
+    pub extra_index_urls: Vec<VerbatimUrl>,
     /// The find links locations, specified with `--find-links`.
     pub find_links: Vec<FindLink>,
     /// Whether to ignore the index, specified with `--no-index`.
@@ -369,7 +370,7 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let sub_file = requirements_dir.join(filename);
+                    let sub_file = requirements_dir.join(expand_path_vars(&filename).as_ref());
                     let sub_requirements = Self::parse(&sub_file, working_dir).map_err(|err| {
                         RequirementsTxtParserError::Subfile {
                             source: Box::new(err),
@@ -385,7 +386,7 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let sub_file = requirements_dir.join(filename);
+                    let sub_file = requirements_dir.join(expand_path_vars(&filename).as_ref());
                     let sub_constraints = Self::parse(&sub_file, working_dir).map_err(|err| {
                         RequirementsTxtParserError::Subfile {
                             source: Box::new(err),
@@ -412,9 +413,11 @@ impl RequirementsTxt {
                 }
                 RequirementsTxtStatement::IndexUrl(url) => {
                     if data.index_url.is_some() {
+                        let (line, column) = calculate_row_column(content, s.cursor());
                         return Err(RequirementsTxtParserError::Parser {
                             message: "Multiple `--index-url` values provided".to_string(),
-                            location: s.cursor(),
+                            line,
+                            column,
                         });
                     }
                     data.index_url = Some(url);
@@ -434,7 +437,7 @@ impl RequirementsTxt {
     }
 
     /// Merges other into self
-    pub fn update_from(&mut self, other: RequirementsTxt) {
+    pub fn update_from(&mut self, other: Self) {
         self.requirements.extend(other.requirements);
         self.constraints.extend(other.constraints);
     }
@@ -453,56 +456,60 @@ fn parse_entry(
     eat_wrappable_whitespace(s);
     while s.at(['\n', '\r', '#']) {
         // skip comments
-        eat_trailing_line(s)?;
+        eat_trailing_line(content, s)?;
         eat_wrappable_whitespace(s);
     }
 
     let start = s.cursor();
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
-        let requirements_file = parse_value(s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let requirements_file = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let end = s.cursor();
-        eat_trailing_line(s)?;
+        eat_trailing_line(content, s)?;
         RequirementsTxtStatement::Requirements {
             filename: requirements_file.to_string(),
             start,
             end,
         }
     } else if s.eat_if("-c") || s.eat_if("--constraint") {
-        let constraints_file = parse_value(s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let constraints_file = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let end = s.cursor();
-        eat_trailing_line(s)?;
+        eat_trailing_line(content, s)?;
         RequirementsTxtStatement::Constraint {
             filename: constraints_file.to_string(),
             start,
             end,
         }
     } else if s.eat_if("-e") || s.eat_if("--editable") {
-        let path_or_url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
+        let path_or_url = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
         let editable_requirement = EditableRequirement::parse(path_or_url, working_dir)
             .map_err(|err| err.with_offset(start))?;
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
-        let url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
-        let url = Url::parse(url).map_err(|err| RequirementsTxtParserError::Url {
-            source: err,
-            url: url.to_string(),
-            start,
-            end: s.cursor(),
-        })?;
+        let given = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
+        let url = VerbatimUrl::parse(given)
+            .map(|url| url.with_given(given.to_owned()))
+            .map_err(|err| RequirementsTxtParserError::Url {
+                source: err,
+                url: given.to_string(),
+                start,
+                end: s.cursor(),
+            })?;
         RequirementsTxtStatement::IndexUrl(url)
     } else if s.eat_if("--extra-index-url") {
-        let url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
-        let url = Url::parse(url).map_err(|err| RequirementsTxtParserError::Url {
-            source: err,
-            url: url.to_string(),
-            start,
-            end: s.cursor(),
-        })?;
+        let given = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
+        let url = VerbatimUrl::parse(given)
+            .map(|url| url.with_given(given.to_owned()))
+            .map_err(|err| RequirementsTxtParserError::Url {
+                source: err,
+                url: given.to_string(),
+                start,
+                end: s.cursor(),
+            })?;
         RequirementsTxtStatement::ExtraIndexUrl(url)
     } else if s.eat_if("--no-index") {
         RequirementsTxtStatement::NoIndex
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
-        let path_or_url = parse_value(s, |c: char| !['\n', '\r'].contains(&c))?;
+        let path_or_url = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
         let path_or_url = FindLink::parse(path_or_url, working_dir).map_err(|err| {
             RequirementsTxtParserError::Url {
                 source: err,
@@ -520,11 +527,13 @@ fn parse_entry(
             editable: false,
         })
     } else if let Some(char) = s.peek() {
+        let (line, column) = calculate_row_column(content, s.cursor());
         return Err(RequirementsTxtParserError::Parser {
             message: format!(
                 "Unexpected '{char}', expected '-c', '-e', '-r' or the start of a requirement"
             ),
-            location: s.cursor(),
+            line,
+            column,
         });
     } else {
         // EOF
@@ -545,7 +554,7 @@ fn eat_wrappable_whitespace<'a>(s: &mut Scanner<'a>) -> &'a str {
 }
 
 /// Eats the end of line or a potential trailing comma
-fn eat_trailing_line(s: &mut Scanner) -> Result<(), RequirementsTxtParserError> {
+fn eat_trailing_line(content: &str, s: &mut Scanner) -> Result<(), RequirementsTxtParserError> {
     s.eat_while([' ', '\t']);
     match s.eat() {
         None | Some('\n') => {} // End of file or end of line, nothing to do
@@ -559,9 +568,11 @@ fn eat_trailing_line(s: &mut Scanner) -> Result<(), RequirementsTxtParserError> 
             }
         }
         Some(other) => {
+            let (line, column) = calculate_row_column(content, s.cursor());
             return Err(RequirementsTxtParserError::Parser {
                 message: format!("Expected comment or end-of-line, found '{other}'"),
-                location: s.cursor(),
+                line,
+                column,
             });
         }
     }
@@ -665,8 +676,8 @@ fn parse_requirement_and_hashes(
             }
         })?;
     let hashes = if has_hashes {
-        let hashes = parse_hashes(s)?;
-        eat_trailing_line(s)?;
+        let hashes = parse_hashes(content, s)?;
+        eat_trailing_line(content, s)?;
         hashes
     } else {
         Vec::new()
@@ -675,25 +686,27 @@ fn parse_requirement_and_hashes(
 }
 
 /// Parse `--hash=... --hash ...` after a requirement
-fn parse_hashes(s: &mut Scanner) -> Result<Vec<String>, RequirementsTxtParserError> {
+fn parse_hashes(content: &str, s: &mut Scanner) -> Result<Vec<String>, RequirementsTxtParserError> {
     let mut hashes = Vec::new();
     if s.eat_while("--hash").is_empty() {
+        let (line, column) = calculate_row_column(content, s.cursor());
         return Err(RequirementsTxtParserError::Parser {
             message: format!(
                 "Expected '--hash', found '{:?}'",
                 s.eat_while(|c: char| !c.is_whitespace())
             ),
-            location: s.cursor(),
+            line,
+            column,
         });
     }
-    let hash = parse_value(s, |c: char| !c.is_whitespace())?;
+    let hash = parse_value(content, s, |c: char| !c.is_whitespace())?;
     hashes.push(hash.to_string());
     loop {
         eat_wrappable_whitespace(s);
         if !s.eat_if("--hash") {
             break;
         }
-        let hash = parse_value(s, |c: char| !c.is_whitespace())?;
+        let hash = parse_value(content, s, |c: char| !c.is_whitespace())?;
         hashes.push(hash.to_string());
     }
     Ok(hashes)
@@ -701,6 +714,7 @@ fn parse_hashes(s: &mut Scanner) -> Result<Vec<String>, RequirementsTxtParserErr
 
 /// In `-<key>=<value>` or `-<key> value`, this parses the part after the key
 fn parse_value<'a, T>(
+    content: &str,
     s: &mut Scanner<'a>,
     while_pattern: impl Pattern<T>,
 ) -> Result<&'a str, RequirementsTxtParserError> {
@@ -712,9 +726,11 @@ fn parse_value<'a, T>(
         s.eat_whitespace();
         Ok(s.eat_while(while_pattern).trim_end())
     } else {
+        let (line, column) = calculate_row_column(content, s.cursor());
         Err(RequirementsTxtParserError::Parser {
             message: format!("Expected '=' or whitespace, found {:?}", s.peek()),
-            location: s.cursor(),
+            line,
+            column,
         })
     }
 }
@@ -742,7 +758,8 @@ pub enum RequirementsTxtParserError {
     MissingEditablePrefix(String),
     Parser {
         message: String,
-        location: usize,
+        line: usize,
+        column: usize,
     },
     UnsupportedRequirement {
         source: Pep508Error,
@@ -766,57 +783,46 @@ impl RequirementsTxtParserError {
     #[must_use]
     fn with_offset(self, offset: usize) -> Self {
         match self {
-            RequirementsTxtParserError::IO(err) => RequirementsTxtParserError::IO(err),
-            RequirementsTxtParserError::InvalidEditablePath(given) => {
-                RequirementsTxtParserError::InvalidEditablePath(given)
-            }
-            RequirementsTxtParserError::Url {
+            Self::IO(err) => Self::IO(err),
+            Self::InvalidEditablePath(given) => Self::InvalidEditablePath(given),
+            Self::Url {
                 source,
                 url,
                 start,
                 end,
-            } => RequirementsTxtParserError::Url {
+            } => Self::Url {
                 source,
                 url,
                 start: start + offset,
                 end: end + offset,
             },
-            RequirementsTxtParserError::UnsupportedUrl(url) => {
-                RequirementsTxtParserError::UnsupportedUrl(url)
-            }
-            RequirementsTxtParserError::MissingRequirementPrefix(given) => {
-                RequirementsTxtParserError::MissingRequirementPrefix(given)
-            }
-            RequirementsTxtParserError::MissingEditablePrefix(given) => {
-                RequirementsTxtParserError::MissingEditablePrefix(given)
-            }
-            RequirementsTxtParserError::Parser { message, location } => {
-                RequirementsTxtParserError::Parser {
-                    message,
-                    location: location + offset,
-                }
-            }
-            RequirementsTxtParserError::UnsupportedRequirement { source, start, end } => {
-                RequirementsTxtParserError::UnsupportedRequirement {
-                    source,
-                    start: start + offset,
-                    end: end + offset,
-                }
-            }
-            RequirementsTxtParserError::Pep508 { source, start, end } => {
-                RequirementsTxtParserError::Pep508 {
-                    source,
-                    start: start + offset,
-                    end: end + offset,
-                }
-            }
-            RequirementsTxtParserError::Subfile { source, start, end } => {
-                RequirementsTxtParserError::Subfile {
-                    source,
-                    start: start + offset,
-                    end: end + offset,
-                }
-            }
+            Self::UnsupportedUrl(url) => Self::UnsupportedUrl(url),
+            Self::MissingRequirementPrefix(given) => Self::MissingRequirementPrefix(given),
+            Self::MissingEditablePrefix(given) => Self::MissingEditablePrefix(given),
+            Self::Parser {
+                message,
+                line,
+                column,
+            } => Self::Parser {
+                message,
+                line,
+                column,
+            },
+            Self::UnsupportedRequirement { source, start, end } => Self::UnsupportedRequirement {
+                source,
+                start: start + offset,
+                end: end + offset,
+            },
+            Self::Pep508 { source, start, end } => Self::Pep508 {
+                source,
+                start: start + offset,
+                end: end + offset,
+            },
+            Self::Subfile { source, start, end } => Self::Subfile {
+                source,
+                start: start + offset,
+                end: end + offset,
+            },
         }
     }
 }
@@ -824,35 +830,39 @@ impl RequirementsTxtParserError {
 impl Display for RequirementsTxtParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            RequirementsTxtParserError::IO(err) => err.fmt(f),
-            RequirementsTxtParserError::InvalidEditablePath(given) => {
+            Self::IO(err) => err.fmt(f),
+            Self::InvalidEditablePath(given) => {
                 write!(f, "Invalid editable path: {given}")
             }
-            RequirementsTxtParserError::Url { url, start, .. } => {
+            Self::Url { url, start, .. } => {
                 write!(f, "Invalid URL at position {start}: `{url}`")
             }
-            RequirementsTxtParserError::UnsupportedUrl(url) => {
+            Self::UnsupportedUrl(url) => {
                 write!(f, "Unsupported URL (expected a `file://` scheme): `{url}`")
             }
-            RequirementsTxtParserError::MissingRequirementPrefix(given) => {
+            Self::MissingRequirementPrefix(given) => {
                 write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
             }
-            RequirementsTxtParserError::MissingEditablePrefix(given) => {
+            Self::MissingEditablePrefix(given) => {
                 write!(
                     f,
                     "Requirement `{given}` looks like a directory but was passed as a package name. Did you mean `-e {given}`?"
                 )
             }
-            RequirementsTxtParserError::Parser { message, location } => {
-                write!(f, "{message} at position {location}")
+            Self::Parser {
+                message,
+                line,
+                column,
+            } => {
+                write!(f, "{message} at {line}:{column}")
             }
-            RequirementsTxtParserError::UnsupportedRequirement { start, end, .. } => {
+            Self::UnsupportedRequirement { start, end, .. } => {
                 write!(f, "Unsupported requirement in position {start} to {end}")
             }
-            RequirementsTxtParserError::Pep508 { start, .. } => {
+            Self::Pep508 { start, .. } => {
                 write!(f, "Couldn't parse requirement at position {start}")
             }
-            RequirementsTxtParserError::Subfile { start, .. } => {
+            Self::Subfile { start, .. } => {
                 write!(f, "Error parsing included file at position {start}")
             }
         }
@@ -862,16 +872,16 @@ impl Display for RequirementsTxtParserError {
 impl std::error::Error for RequirementsTxtParserError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match &self {
-            RequirementsTxtParserError::IO(err) => err.source(),
-            RequirementsTxtParserError::Url { source, .. } => Some(source),
-            RequirementsTxtParserError::InvalidEditablePath(_) => None,
-            RequirementsTxtParserError::UnsupportedUrl(_) => None,
-            RequirementsTxtParserError::MissingRequirementPrefix(_) => None,
-            RequirementsTxtParserError::MissingEditablePrefix(_) => None,
-            RequirementsTxtParserError::UnsupportedRequirement { source, .. } => Some(source),
-            RequirementsTxtParserError::Pep508 { source, .. } => Some(source),
-            RequirementsTxtParserError::Subfile { source, .. } => Some(source.as_ref()),
-            RequirementsTxtParserError::Parser { .. } => None,
+            Self::IO(err) => err.source(),
+            Self::Url { source, .. } => Some(source),
+            Self::InvalidEditablePath(_) => None,
+            Self::UnsupportedUrl(_) => None,
+            Self::MissingRequirementPrefix(_) => None,
+            Self::MissingEditablePrefix(_) => None,
+            Self::UnsupportedRequirement { source, .. } => Some(source),
+            Self::Pep508 { source, .. } => Some(source),
+            Self::Subfile { source, .. } => Some(source.as_ref()),
+            Self::Parser { .. } => None,
         }
     }
 }
@@ -884,63 +894,67 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Invalid URL in `{}` at position {start}: `{url}`",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::InvalidEditablePath(given) => {
                 write!(
                     f,
                     "Invalid editable path in `{}`: {given}",
-                    self.file.normalized_display()
+                    self.file.simplified_display()
                 )
             }
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 write!(
                     f,
                     "Unsupported URL (expected a `file://` scheme) in `{}`: `{url}`",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::MissingRequirementPrefix(given) => {
                 write!(
                     f,
                     "Requirement `{given}` in `{}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::MissingEditablePrefix(given) => {
                 write!(
                     f,
                     "Requirement `{given}` in `{}` looks like a directory but was passed as a package name. Did you mean `-e {given}`?",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
-            RequirementsTxtParserError::Parser { message, location } => {
+            RequirementsTxtParserError::Parser {
+                message,
+                line,
+                column,
+            } => {
                 write!(
                     f,
-                    "{message} in `{}` at position {location}",
-                    self.file.normalized_display(),
+                    "{message} at {}:{line}:{column}",
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::UnsupportedRequirement { start, .. } => {
                 write!(
                     f,
                     "Unsupported requirement in {} at position {start}",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::Pep508 { start, .. } => {
                 write!(
                     f,
                     "Couldn't parse requirement in `{}` at position {start}",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
             RequirementsTxtParserError::Subfile { start, .. } => {
                 write!(
                     f,
                     "Error parsing included file in `{}` at position {start}",
-                    self.file.normalized_display(),
+                    self.file.simplified_display(),
                 )
             }
         }
@@ -959,6 +973,46 @@ impl From<io::Error> for RequirementsTxtParserError {
     }
 }
 
+/// Calculates the column and line offset of a given cursor based on the
+/// number of Unicode codepoints.
+fn calculate_row_column(content: &str, position: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut column = 1;
+
+    let mut chars = content.char_indices().peekable();
+    while let Some((index, char)) = chars.next() {
+        if index >= position {
+            break;
+        }
+        match char {
+            '\r' => {
+                // If the next character is a newline, skip it.
+                if chars
+                    .peek()
+                    .map_or(false, |&(_, next_char)| next_char == '\n')
+                {
+                    chars.next();
+                }
+
+                // Reset.
+                line += 1;
+                column = 1;
+            }
+            '\n' => {
+                //
+                line += 1;
+                column = 1;
+            }
+            // Increment column by Unicode codepoint. We don't use visual width
+            // (e.g., `UnicodeWidthChar::width(char).unwrap_or(0)`), since that's
+            // not what editors typically count.
+            _ => column += 1,
+        }
+    }
+
+    (line, column)
+}
+
 #[cfg(test)]
 mod test {
     use std::path::{Path, PathBuf};
@@ -970,9 +1024,10 @@ mod test {
     use itertools::Itertools;
     use tempfile::tempdir;
     use test_case::test_case;
-    use uv_fs::Normalized;
+    use unscanny::Scanner;
+    use uv_fs::Simplified;
 
-    use crate::{EditableRequirement, RequirementsTxt};
+    use crate::{calculate_row_column, EditableRequirement, RequirementsTxt};
 
     fn workspace_test_data_dir() -> PathBuf {
         PathBuf::from("./test-data")
@@ -1056,8 +1111,8 @@ mod test {
             .join("\n");
 
         let requirement_txt =
-            regex::escape(&requirements_txt.path().normalized_display().to_string());
-        let missing_txt = regex::escape(&missing_txt.path().normalized_display().to_string());
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let missing_txt = regex::escape(&missing_txt.path().simplified_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (missing_txt.as_str(), "<MISSING_TXT>"),
@@ -1066,7 +1121,7 @@ mod test {
         insta::with_settings!({
             filters => filters,
         }, {
-            insta::assert_display_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @r###"
             Error parsing included file in `<REQUIREMENTS_TXT>` at position 0
             failed to open file `<MISSING_TXT>`
             "###);
@@ -1087,7 +1142,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
-            regex::escape(&requirements_txt.path().normalized_display().to_string());
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1095,7 +1150,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_display_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @r###"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
             Expected an alphanumeric character starting the extra name, found 'ö'
             numpy[ö]==1.29
@@ -1118,7 +1173,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
-            regex::escape(&requirements_txt.path().normalized_display().to_string());
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1126,7 +1181,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_display_snapshot!(errors, @"Unsupported URL (expected a `file://` scheme) in `<REQUIREMENTS_TXT>`: `http://localhost:8080/`");
+            insta::assert_snapshot!(errors, @"Unsupported URL (expected a `file://` scheme) in `<REQUIREMENTS_TXT>`: `http://localhost:8080/`");
         });
 
         Ok(())
@@ -1144,14 +1199,14 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
-            regex::escape(&requirements_txt.path().normalized_display().to_string());
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
         let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_display_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @r###"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 6
-            Expected an alphanumeric character starting the extra name, found ','
+            Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','
             black[,abcdef]
                   ^
             "###);
@@ -1172,7 +1227,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
-            regex::escape(&requirements_txt.path().normalized_display().to_string());
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1180,7 +1235,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_display_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @r###"
             Invalid URL in `<REQUIREMENTS_TXT>` at position 0: `123`
             relative URL without a base
             "###);
@@ -1206,7 +1261,7 @@ mod test {
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
-            regex::escape(&requirements_txt.path().normalized_display().to_string());
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1214,7 +1269,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_display_snapshot!(errors, @"Requirement `file.txt` in `<REQUIREMENTS_TXT>` looks like a requirements file but was passed as a package name. Did you mean `-r file.txt`?");
+            insta::assert_snapshot!(errors, @"Requirement `file.txt` in `<REQUIREMENTS_TXT>` looks like a requirements file but was passed as a package name. Did you mean `-r file.txt`?");
         });
 
         Ok(())
@@ -1290,5 +1345,57 @@ mod test {
             EditableRequirement::split_extras("../editable[[dev]"),
             Some(("../editable[", "[dev]"))
         );
+    }
+
+    #[test]
+    fn parser_error_line_and_column() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            numpy>=1,<2
+              --borken
+            tqdm
+        "})?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt =
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let filters = vec![
+            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
+            (r"\\", "/"),
+        ];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_snapshot!(errors, @r###"
+            Unexpected '-', expected '-c', '-e', '-r' or the start of a requirement at <REQUIREMENTS_TXT>:2:3
+            "###);
+        });
+
+        Ok(())
+    }
+
+    #[test_case("numpy>=1,<2\n  @-borken\ntqdm", "2:4"; "ASCII Character with LF")]
+    #[test_case("numpy>=1,<2\r\n  #-borken\ntqdm", "2:4"; "ASCII Character with CRLF")]
+    #[test_case("numpy>=1,<2\n  \n-borken\ntqdm", "3:1"; "ASCII Character LF then LF")]
+    #[test_case("numpy>=1,<2\n  \r-borken\ntqdm", "3:1"; "ASCII Character LF then CR but no LF")]
+    #[test_case("numpy>=1,<2\n  \r\n-borken\ntqdm", "3:1"; "ASCII Character LF then CRLF")]
+    #[test_case("numpy>=1,<2\n  🚀-borken\ntqdm", "2:4"; "Emoji (Wide) Character")]
+    #[test_case("numpy>=1,<2\n  中-borken\ntqdm", "2:4"; "Fullwidth character")]
+    #[test_case("numpy>=1,<2\n  e\u{0301}-borken\ntqdm", "2:5"; "Two codepoints")]
+    #[test_case("numpy>=1,<2\n  a\u{0300}\u{0316}-borken\ntqdm", "2:6"; "Three codepoints")]
+    fn test_calculate_line_column_pair(input: &str, expected: &str) {
+        let mut s = Scanner::new(input);
+        // Place cursor right after the character we want to test
+        s.eat_until('-');
+
+        // Compute line/column
+        let (line, column) = calculate_row_column(input, s.cursor());
+        let line_column = format!("{line}:{column}");
+
+        // Assert line and columns are expected
+        assert_eq!(line_column, expected, "Issues with input: {input}");
     }
 }

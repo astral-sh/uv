@@ -18,7 +18,7 @@ use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, OwnedArchive, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
 use uv_installer::NoBinary;
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_resolver::InMemoryIndex;
 use uv_traits::{BuildContext, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
@@ -51,7 +51,7 @@ async fn find_latest_version(
     let (_, raw_simple_metadata) = client.simple(package_name).await.ok()?;
     let simple_metadata = OwnedArchive::deserialize(&raw_simple_metadata);
     let version = simple_metadata.into_iter().next()?.version;
-    Some(version.clone())
+    Some(version)
 }
 
 pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
@@ -73,7 +73,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     let total = requirements.len();
 
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, &cache)?;
+    let venv = PythonEnvironment::from_virtualenv(platform, &cache)?;
     let in_flight = InFlight::default();
     let client = RegistryClientBuilder::new(cache.clone()).build();
 
@@ -107,7 +107,6 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                     &flat_index,
                     &index,
                     &in_flight,
-                    venv.python_executable(),
                     setup_py,
                     &config_settings,
                     &no_build,

@@ -1,12 +1,13 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use fs_err as fs;
 use std::env::consts::EXE_SUFFIX;
-use std::fs;
 use std::path::Path;
 use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
+use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use url::Url;
@@ -14,7 +15,7 @@ use url::Url;
 use common::{
     create_bin_with_executables, create_venv, uv_snapshot, venv_to_interpreter, INSTA_FILTERS,
 };
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 
 use crate::common::{get_bin, TestContext};
 
@@ -42,6 +43,13 @@ fn command(context: &TestContext) -> Command {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
+    }
+
     command
 }
 
@@ -55,6 +63,13 @@ fn uninstall_command(context: &TestContext) -> Command {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
+    }
+
     command
 }
 
@@ -2179,10 +2194,10 @@ fn sync_editable() -> Result<()> {
             # via poetry-editable
         -e file://{current_dir}/../../scripts/editable-installs/poetry_editable
         ",
-        current_dir = current_dir.normalized_display(),
+        current_dir = current_dir.simplified_display(),
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2320,7 +2335,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2363,7 +2378,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2402,7 +2417,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2436,7 +2451,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2494,7 +2509,7 @@ fn incompatible_wheel() -> Result<()> {
         &wheel_dir
             .path()
             .canonicalize()?
-            .normalized_display()
+            .simplified_display()
             .to_string(),
     );
     let filters: Vec<_> = [(wheel_dir.as_str(), "[TEMP_DIR]")]
@@ -2583,7 +2598,7 @@ fn find_links() -> Result<()> {
     "})?;
 
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
-    let project_root_string = regex::escape(&project_root.normalized_display().to_string());
+    let project_root_string = regex::escape(&project_root.simplified_display().to_string());
     let filters: Vec<_> = [(project_root_string.as_str(), "[PROJECT_ROOT]")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
@@ -2766,36 +2781,32 @@ fn set_read_permissions() -> Result<()> {
 fn pip_entrypoints() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
-    requirements_txt.write_str("pip==24.0")?;
+    // TODO(konstin): Remove git dep when the next pip version is released.
+    for pip_requirement in ["pip==24.0", "pip @ git+https://github.com/pypa/pip"] {
+        let requirements_txt = context.temp_dir.child("requirements.txt");
+        requirements_txt.touch()?;
+        requirements_txt.write_str(pip_requirement)?;
 
-    uv_snapshot!(command(&context)
-        .arg("requirements.txt")
-        .arg("--strict"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+        command(&context)
+            .arg("requirements.txt")
+            .arg("--strict")
+            .output()
+            .expect("Failed to install pip");
 
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + pip==24.0
-    "###
-    );
-
-    let bin_dir = context.venv.join(if cfg!(unix) {
-        "bin"
-    } else if cfg!(windows) {
-        "Scripts"
-    } else {
-        unimplemented!("Only Windows and Unix are supported")
-    });
-    // Pip 24.0 contains a pip3.10 launcher.
-    // https://inspector.pypi.io/project/pip/24.0/packages/8a/6a/19e9fe04fca059ccf770861c7d5721ab4c2aebc539889e97c7977528a53b/pip-24.0-py3-none-any.whl/pip-24.0.dist-info/entry_points.txt
-    assert!(!bin_dir.join(format!("pip3.10{EXE_SUFFIX}")).exists());
-    assert!(bin_dir.join(format!("pip3.12{EXE_SUFFIX}")).exists());
+        let bin_dir = context.venv.join(if cfg!(unix) {
+            "bin"
+        } else if cfg!(windows) {
+            "Scripts"
+        } else {
+            unimplemented!("Only Windows and Unix are supported")
+        });
+        // Pip 24.0 contains a pip3.10 launcher.
+        // https://inspector.pypi.io/project/pip/24.0/packages/8a/6a/19e9fe04fca059ccf770861c7d5721ab4c2aebc539889e97c7977528a53b/pip-24.0-py3-none-any.whl/pip-24.0.dist-info/entry_points.txt
+        ChildPath::new(bin_dir.join(format!("pip3.10{EXE_SUFFIX}")))
+            .assert(predicates::path::missing());
+        ChildPath::new(bin_dir.join(format!("pip3.12{EXE_SUFFIX}")))
+            .assert(predicates::path::exists());
+    }
 
     Ok(())
 }

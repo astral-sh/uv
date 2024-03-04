@@ -7,12 +7,13 @@ use fs_err as fs;
 
 use distribution_types::IndexLocations;
 use platform_host::Platform;
+use rustc_hash::FxHashMap;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
 use uv_installer::NoBinary;
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 use uv_resolver::InMemoryIndex;
 use uv_traits::{BuildContext, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
@@ -54,7 +55,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
     let cache = Cache::try_from(args.cache_args)?;
 
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, &cache)?;
+    let venv = PythonEnvironment::from_virtualenv(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_urls = IndexLocations::default();
     let flat_index = FlatIndex::default();
@@ -71,7 +72,6 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &flat_index,
         &index,
         &in_flight,
-        venv.python_executable(),
         setup_py,
         &config_settings,
         &NoBuild::None,
@@ -88,6 +88,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         setup_py,
         config_settings.clone(),
         build_kind,
+        FxHashMap::default(),
     )
     .await?;
     Ok(wheel_dir.join(builder.build(&wheel_dir).await?))

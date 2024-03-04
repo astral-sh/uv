@@ -1,5 +1,108 @@
 # Changelog
 
+## 0.1.14
+
+### Enhancements
+
+- Add support for `--system-site-packages` in `uv venv` ([#2101](https://github.com/astral-sh/uv/pull/2101))
+- Add support for Python installed from Windows Store ([#2122](https://github.com/astral-sh/uv/pull/2122))
+- Expand environment variables in `-r` and `-c` subfile paths ([#2143](https://github.com/astral-sh/uv/pull/2143))
+- Treat empty index URL strings as null instead of erroring ([#2137](https://github.com/astral-sh/uv/pull/2137))
+- Use space as delimiter for `UV_EXTRA_INDEX_URL` ([#2140](https://github.com/astral-sh/uv/pull/2140))
+- Report line and column numbers in `requirements.txt` parser errors ([#2100](https://github.com/astral-sh/uv/pull/2100))
+- Improve error messages when `uv` is offline ([#2110](https://github.com/astral-sh/uv/pull/2110))
+
+### Bug fixes
+
+- Future-proof the `pip` entrypoints special-case ([#1982](https://github.com/astral-sh/uv/pull/1982))
+- Allow empty extras in `pep508-rs` and add more corner case to tests ([#2128](https://github.com/astral-sh/uv/pull/2128))
+- Adjust base Python lookup logic for Windows to respect Windows Store ([#2121](https://github.com/astral-sh/uv/pull/2121))
+- Consider editable dependencies to be 'direct' for `--resolution` ([#2114](https://github.com/astral-sh/uv/pull/2114))
+- Preserve environment variables in resolved Git dependencies ([#2125](https://github.com/astral-sh/uv/pull/2125))
+- Use `prefix` instead of `base_prefix` for environment root ([#2117](https://github.com/astral-sh/uv/pull/2117))
+- Wrap unsafe script shebangs in `/bin/sh` ([#2097](https://github.com/astral-sh/uv/pull/2097))
+- Make WHEEL parsing error line numbers one indexed ([#2151](https://github.com/astral-sh/uv/pull/2151))
+- Determine `site-packages` path based on implementation name ([#2094](https://github.com/astral-sh/uv/pull/2094))
+
+### Documentation
+
+- Add caveats on `--system` support to the README ([#2131](https://github.com/astral-sh/uv/pull/2131))
+- Add instructions for `SSL_CERT_FILE` env var ([#2124](https://github.com/astral-sh/uv/pull/2124))
+
+## 0.1.13
+
+### Bug fixes
+
+- Prioritize `PATH` over `py --list-paths` in Windows selection ([#2057](https://github.com/astral-sh/uv/pull/2057)).
+  This fixes an issue in which the `--system` flag would not work correctly on Windows in GitHub
+  Actions.
+- Avoid canonicalizing user-provided interpreters ([#2072](https://github.com/astral-sh/uv/pull/2072)).
+  This fixes an issue in which the `--python` flag would not work correctly with pyenv and other
+  interpreters.
+- Allow pre-releases for requirements in constraints files ([#2069](https://github.com/astral-sh/uv/pull/2069))
+- Avoid truncating EXTERNALLY-MANAGED error message ([#2073](https://github.com/astral-sh/uv/pull/2073))
+- Extend activation highlighting to entire `venv` command ([#2070](https://github.com/astral-sh/uv/pull/2070))
+- Reverse the order of `--index-url` and `--extra-index-url` priority ([#2083](https://github.com/astral-sh/uv/pull/2083))
+- Avoid assuming `RECORD` file is in `platlib` ([#2091](https://github.com/astral-sh/uv/pull/2091))
+
+## 0.1.12
+
+### CLI
+
+- Add a `--python` flag to allow installation into arbitrary Python interpreters ([#2000](https://github.com/astral-sh/uv/pull/2000))
+- Add a `--system` flag for opt-in non-virtualenv installs ([#2046](https://github.com/astral-sh/uv/pull/2046))
+
+### Enhancements
+
+- Add a `--pre` alias for `--prerelease=allow` ([#2049](https://github.com/astral-sh/uv/pull/2049))
+- Enable `freeze` and `list` to introspect non-virtualenv Pythons ([#2033](https://github.com/astral-sh/uv/pull/2033))
+- Support environment variables in index URLs in requirements files ([#2036](https://github.com/astral-sh/uv/pull/2036))
+- Add `--exclude-editable` and `--exclude` args to `uv pip list` ([#1985](https://github.com/astral-sh/uv/pull/1985))
+- Always remove color codes from output file ([#2018](https://github.com/astral-sh/uv/pull/2018))
+- Support recursive extras in direct `pyproject.toml` files ([#1990](https://github.com/astral-sh/uv/pull/1990))
+- Un-cache editable requirements with dynamic metadata ([#2029](https://github.com/astral-sh/uv/pull/2029))
+- Use a non-local lock file for locking system interpreters ([#2045](https://github.com/astral-sh/uv/pull/2045))
+- Surface the `EXTERNALLY-MANAGED` message to users ([#2032](https://github.com/astral-sh/uv/pull/2032))
+
+## 0.1.11
+
+### Enhancements
+
+- Add support for pip-compile's `--unsafe-package` flag ([#1889](https://github.com/astral-sh/uv/pull/1889))
+- Improve interpreter discovery logging ([#1909](https://github.com/astral-sh/uv/pull/1909))
+- Implement `uv pip list` ([#1662](https://github.com/astral-sh/uv/pull/1662))
+- Allow round-trip via `freeze` command ([#1936](https://github.com/astral-sh/uv/pull/1936))
+- Don't write pip compile output to stdout with `-q` ([#1962](https://github.com/astral-sh/uv/pull/1962))
+- Add long-form version output ([#1930](https://github.com/astral-sh/uv/pull/1930))
+
+### Compatibility
+
+- Accept single string for `backend-path` ([#1969](https://github.com/astral-sh/uv/pull/1969))
+- Add compatibility for deprecated `python_implementation` marker ([#1933](https://github.com/astral-sh/uv/pull/1933))
+- Generate versioned `pip` launchers ([#1918](https://github.com/astral-sh/uv/pull/1918))
+
+### Bug fixes
+
+- Avoid erroring for source distributions with symlinks in archive ([#1944](https://github.com/astral-sh/uv/pull/1944))
+- Expand scope of archive timestamping ([#1960](https://github.com/astral-sh/uv/pull/1960))
+- Gracefully handle virtual environments with conflicting packages ([#1893](https://github.com/astral-sh/uv/pull/1893))
+- Invalidate dependencies when editables are updated ([#1955](https://github.com/astral-sh/uv/pull/1955))
+- Make < exclusive for non-prerelease markers ([#1878](https://github.com/astral-sh/uv/pull/1878))
+- Properly apply constraints in venv audit ([#1956](https://github.com/astral-sh/uv/pull/1956))
+- Re-sync editables on-change ([#1959](https://github.com/astral-sh/uv/pull/1959))
+- Remove current directory from PATH in PEP 517 hooks ([#1975](https://github.com/astral-sh/uv/pull/1975))
+- Remove `--upgrade` and `--quiet` flags from generated output files ([#1873](https://github.com/astral-sh/uv/pull/1873))
+- Use full python version in `pyvenv.cfg` ([#1979](https://github.com/astral-sh/uv/pull/1979))
+
+### Performance
+- fix `uv pip install` handling of gzip'd response and PEP 691 ([#1978](https://github.com/astral-sh/uv/pull/1978))
+- Remove `spawn_blocking` from version map ([#1966](https://github.com/astral-sh/uv/pull/1966))
+
+### Documentation
+
+- Clarify `lowest` vs. `lowest-direct` resolution strategies ([#1954](https://github.com/astral-sh/uv/pull/1954))
+- Improve error message for network timeouts ([#1961](https://github.com/astral-sh/uv/pull/1961))
+
 ## 0.1.10
 
 ### Enhancements

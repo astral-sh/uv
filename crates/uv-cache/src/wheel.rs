@@ -30,7 +30,7 @@ pub enum WheelCache<'a> {
 impl<'a> WheelCache<'a> {
     fn bucket(&self) -> PathBuf {
         match self {
-            WheelCache::Index(IndexUrl::Pypi) => WheelCacheKind::Pypi.root(),
+            WheelCache::Index(IndexUrl::Pypi(_)) => WheelCacheKind::Pypi.root(),
             WheelCache::Index(url) => WheelCacheKind::Index
                 .root()
                 .join(digest(&CanonicalUrl::new(url))),
@@ -75,11 +75,11 @@ pub(crate) enum WheelCacheKind {
 impl WheelCacheKind {
     pub(crate) fn to_str(self) -> &'static str {
         match self {
-            WheelCacheKind::Pypi => "pypi",
-            WheelCacheKind::Index => "index",
-            WheelCacheKind::Url => "url",
-            WheelCacheKind::Path => "path",
-            WheelCacheKind::Git => "git",
+            Self::Pypi => "pypi",
+            Self::Index => "index",
+            Self::Url => "url",
+            Self::Path => "path",
+            Self::Git => "git",
         }
     }
 

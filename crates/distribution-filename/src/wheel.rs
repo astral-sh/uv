@@ -163,7 +163,7 @@ impl WheelFilename {
             .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?;
         let version = Version::from_str(version)
             .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
-        Ok(WheelFilename {
+        Ok(Self {
             name,
             version,
             python_tag: python_tag.split('.').map(String::from).collect(),
@@ -234,56 +234,56 @@ mod tests {
     #[test]
     fn err_not_whl_extension() {
         let err = WheelFilename::from_str("foo.rs").unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo.rs" is invalid: Must end with .whl"###);
+        insta::assert_snapshot!(err, @r###"The wheel filename "foo.rs" is invalid: Must end with .whl"###);
     }
 
     #[test]
     fn err_1_part_empty() {
         let err = WheelFilename::from_str(".whl").unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The wheel filename ".whl" is invalid: Must have a version"###);
+        insta::assert_snapshot!(err, @r###"The wheel filename ".whl" is invalid: Must have a version"###);
     }
 
     #[test]
     fn err_1_part_no_version() {
         let err = WheelFilename::from_str("foo.whl").unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo.whl" is invalid: Must have a version"###);
+        insta::assert_snapshot!(err, @r###"The wheel filename "foo.whl" is invalid: Must have a version"###);
     }
 
     #[test]
     fn err_2_part_no_pythontag() {
         let err = WheelFilename::from_str("foo-version.whl").unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-version.whl" is invalid: Must have a Python tag"###);
+        insta::assert_snapshot!(err, @r###"The wheel filename "foo-version.whl" is invalid: Must have a Python tag"###);
     }
 
     #[test]
     fn err_3_part_no_abitag() {
         let err = WheelFilename::from_str("foo-version-python.whl").unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-version-python.whl" is invalid: Must have an ABI tag"###);
+        insta::assert_snapshot!(err, @r###"The wheel filename "foo-version-python.whl" is invalid: Must have an ABI tag"###);
     }
 
     #[test]
     fn err_4_part_no_platformtag() {
         let err = WheelFilename::from_str("foo-version-python-abi.whl").unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-version-python-abi.whl" is invalid: Must have a platform tag"###);
+        insta::assert_snapshot!(err, @r###"The wheel filename "foo-version-python-abi.whl" is invalid: Must have a platform tag"###);
     }
 
     #[test]
     fn err_too_many_parts() {
         let err =
             WheelFilename::from_str("foo-1.2.3-build-python-abi-platform-oops.whl").unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-1.2.3-build-python-abi-platform-oops.whl" is invalid: Must have 5 or 6 components, but has more"###);
+        insta::assert_snapshot!(err, @r###"The wheel filename "foo-1.2.3-build-python-abi-platform-oops.whl" is invalid: Must have 5 or 6 components, but has more"###);
     }
 
     #[test]
     fn err_invalid_package_name() {
         let err = WheelFilename::from_str("f!oo-1.2.3-python-abi-platform.whl").unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The wheel filename "f!oo-1.2.3-python-abi-platform.whl" has an invalid package name"###);
+        insta::assert_snapshot!(err, @r###"The wheel filename "f!oo-1.2.3-python-abi-platform.whl" has an invalid package name"###);
     }
 
     #[test]
     fn err_invalid_version() {
         let err = WheelFilename::from_str("foo-x.y.z-python-abi-platform.whl").unwrap_err();
-        insta::assert_display_snapshot!(err, @r###"The wheel filename "foo-x.y.z-python-abi-platform.whl" has an invalid version part: expected version to start with a number, but no leading ASCII digits were found"###);
+        insta::assert_snapshot!(err, @r###"The wheel filename "foo-x.y.z-python-abi-platform.whl" has an invalid version part: expected version to start with a number, but no leading ASCII digits were found"###);
     }
 
     #[test]

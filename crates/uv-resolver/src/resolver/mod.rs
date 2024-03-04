@@ -1121,13 +1121,13 @@ pub(crate) enum Request {
 impl Display for Request {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Request::Package(package_name) => {
+            Self::Package(package_name) => {
                 write!(f, "Versions {package_name}")
             }
-            Request::Dist(dist) => {
+            Self::Dist(dist) => {
                 write!(f, "Metadata {dist}")
             }
-            Request::Prefetch(package_name, range) => {
+            Self::Prefetch(package_name, range) => {
                 write!(f, "Prefetch {package_name} {range}")
             }
         }

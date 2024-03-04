@@ -1,5 +1,7 @@
 # Contributing
 
+We have issues labeled as [Good First Issue](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) and [Help Wanted](https://github.com/astral-sh/uv/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22) which are good opportunities for new contributors.
+
 ## Setup
 
 [Rust](https://rustup.rs/), a C compiler, and CMake are required to build uv.
@@ -76,9 +78,20 @@ docker run --rm -it -v $(pwd):/app uv-builder /app/target/x86_64-unknown-linux-m
 
 We recommend using this container if you don't trust the dependency tree of the package(s) you are trying to resolve or install.
 
-## Profiling
+## Profiling and Benchmarking
 
 Please refer to Ruff's [Profiling Guide](https://github.com/astral-sh/ruff/blob/main/CONTRIBUTING.md#profiling-projects), it applies to uv, too.
+
+We provide diverse sets of requirements for testing and benchmarking the resolver in `scripts/requirements` and for the installer in `scripts/requirements/compiled`.
+
+You can use `scripts/bench` to benchmark predefined workloads between uv versions and with other tools, e.g.
+
+```
+python -m scripts.bench \
+    --uv-path ./target/release/before \
+    --uv-path ./target/release/after \
+    ./scripts/requirements/jupyter.in --benchmark resolve-cold --min-runs 20
+```
 
 ### Analysing concurrency
 
@@ -114,7 +127,8 @@ Then, editorialize the `CHANGELOG.md` file to ensure entries are consistently st
 
 Then, open a pull request e.g. `Bump version to ...`.
 
-Binary builds will automatically be tested for the release. 
+Binary builds will automatically be tested for the release.
 
 After merging the pull request, run the [release workflow](https://github.com/astral-sh/uv/actions/workflows/release.yml)
-with the version tag. **Do not include a leading `v`**. The release will automatically be created on GitHub after everything else publishes.
+with the version tag. **Do not include a leading `v`**.
+The release will automatically be created on GitHub after everything else publishes.

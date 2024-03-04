@@ -6,7 +6,7 @@ use assert_fs::prelude::*;
 use url::Url;
 
 use common::{uv_snapshot, INSTA_FILTERS};
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 
 use crate::common::{get_bin, venv_to_interpreter, TestContext};
 
@@ -328,11 +328,11 @@ fn missing_record() -> Result<()> {
         unimplemented!("Only Windows and Unix are supported")
     })
     .unwrap();
-    std::fs::remove_file(dist_info.join("RECORD"))?;
+    fs_err::remove_file(dist_info.join("RECORD"))?;
 
     let dist_info_str = regex::escape(&format!(
         "RECORD file not found at: {}",
-        dist_info.normalized_display()
+        dist_info.simplified_display()
     ));
     let filters: Vec<_> = [(
         dist_info_str.as_str(),

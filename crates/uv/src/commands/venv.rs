@@ -12,13 +12,12 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name};
-use gourgeist::Prompt;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_installer::NoBinary;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{InMemoryIndex, OptionsBuilder};
@@ -33,7 +32,8 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
-    prompt: Prompt,
+    prompt: uv_virtualenv::Prompt,
+    system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -45,6 +45,7 @@ pub(crate) async fn venv(
         python_request,
         index_locations,
         prompt,
+        system_site_packages,
         connectivity,
         seed,
         exclude_newer,
@@ -65,7 +66,7 @@ pub(crate) async fn venv(
 enum VenvError {
     #[error("Failed to create virtualenv")]
     #[diagnostic(code(uv::venv::creation))]
-    Creation(#[source] gourgeist::Error),
+    Creation(#[source] uv_virtualenv::Error),
 
     #[error("Failed to install seed packages")]
     #[diagnostic(code(uv::venv::seed))]
@@ -86,7 +87,8 @@ async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
-    prompt: Prompt,
+    prompt: uv_virtualenv::Prompt,
+    system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -106,16 +108,16 @@ async fn venv_impl(
 
     writeln!(
         printer,
-        "Using Python {} interpreter at {}",
+        "Using Python {} interpreter at: {}",
         interpreter.python_version(),
-        interpreter.sys_executable().normalized_display().cyan()
+        interpreter.sys_executable().simplified_display().cyan()
     )
     .into_diagnostic()?;
 
     writeln!(
         printer,
         "Creating virtualenv at: {}",
-        path.normalized_display().cyan()
+        path.simplified_display().cyan()
     )
     .into_diagnostic()?;
 
@@ -123,8 +125,9 @@ async fn venv_impl(
     let extra_cfg = vec![("uv".to_string(), env!("CARGO_PKG_VERSION").to_string())];
 
     // Create the virtual environment.
-    let venv = gourgeist::create_venv(path, interpreter, prompt, extra_cfg)
-        .map_err(VenvError::Creation)?;
+    let venv =
+        uv_virtualenv::create_venv(path, interpreter, prompt, system_site_packages, extra_cfg)
+            .map_err(VenvError::Creation)?;
 
     // Install seed packages.
     if seed {
@@ -166,7 +169,6 @@ async fn venv_impl(
             &flat_index,
             &index,
             &in_flight,
-            venv.python_executable(),
             SetupPyStrategy::default(),
             &config_settings,
             &NoBuild::All,
@@ -212,15 +214,22 @@ async fn venv_impl(
         writeln!(
             printer,
             // This should work whether the user is on CMD or PowerShell:
-            "Activate with: {}\\Scripts\\activate",
-            path.normalized_display().cyan()
+            "Activate with: {}",
+            path.join("Scripts")
+                .join("activate")
+                .simplified_display()
+                .green()
         )
         .into_diagnostic()?;
     } else {
         writeln!(
             printer,
-            "Activate with: source {}/bin/activate",
-            path.normalized_display().cyan()
+            "Activate with: {}",
+            format!(
+                "source {}",
+                path.join("bin").join("activate").simplified_display()
+            )
+            .green()
         )
         .into_diagnostic()?;
     };

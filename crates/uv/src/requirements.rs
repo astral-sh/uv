@@ -1,16 +1,18 @@
 //! A standard interface for working with heterogeneous sources of requirements.
 
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use console::Term;
+use indexmap::IndexMap;
 use rustc_hash::FxHashSet;
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 use tracing::{instrument, Level};
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::confirm;
@@ -47,33 +49,29 @@ impl RequirementsSource {
         // If the user provided a `requirements.txt` file without `-r` (as in
         // `uv pip install requirements.txt`), prompt them to correct it.
         #[allow(clippy::case_sensitive_file_extension_comparisons)]
-        if name.ends_with(".txt") || name.ends_with(".in") {
-            if Path::new(&name).is_file() {
-                let term = Term::stderr();
-                if term.is_term() {
-                    let prompt = format!(
-                        "`{name}` looks like a requirements file but was passed as a package name. Did you mean `-r {name}`?"
-                    );
-                    let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
-                    if confirmation {
-                        return Self::RequirementsTxt(name.into());
-                    }
+        if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
+            let term = Term::stderr();
+            if term.is_term() {
+                let prompt = format!(
+                    "`{name}` looks like a requirements file but was passed as a package name. Did you mean `-r {name}`?"
+                );
+                let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
+                if confirmation {
+                    return Self::RequirementsTxt(name.into());
                 }
             }
         }
 
         // If the user provided a path to a local directory without `-e` (as in
         // `uv pip install ../flask`), prompt them to correct it.
-        if name.contains('/') || name.contains('\\') {
-            if Path::new(&name).is_dir() {
-                let term = Term::stderr();
-                if term.is_term() {
-                    let prompt =
-                        format!("`{name}` looks like a local directory but was passed as a package name. Did you mean `-e {name}`?");
-                    let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
-                    if confirmation {
-                        return Self::RequirementsTxt(name.into());
-                    }
+        if (name.contains('/') || name.contains('\\')) && Path::new(&name).is_dir() {
+            let term = Term::stderr();
+            if term.is_term() {
+                let prompt =
+                    format!("`{name}` looks like a local directory but was passed as a package name. Did you mean `-e {name}`?");
+                let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
+                if confirmation {
+                    return Self::RequirementsTxt(name.into());
                 }
             }
         }
@@ -210,41 +208,52 @@ impl RequirementsSpecification {
             RequirementsSource::PyprojectToml(path) => {
                 let contents = uv_fs::read_to_string(path)?;
                 let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
-                    .with_context(|| format!("Failed to parse `{}`", path.normalized_display()))?;
+                    .with_context(|| format!("Failed to parse `{}`", path.simplified_display()))?;
                 let mut used_extras = FxHashSet::default();
                 let mut requirements = Vec::new();
                 let mut project_name = None;
+
                 if let Some(project) = pyproject_toml.project {
+                    // Parse the project name.
+                    let parsed_project_name =
+                        PackageName::new(project.name).with_context(|| {
+                            format!("Invalid `project.name` in {}", path.simplified_display())
+                        })?;
+
+                    // Include the default dependencies.
                     requirements.extend(project.dependencies.unwrap_or_default());
-                    // Include any optional dependencies specified in `extras`
+
+                    // Include any optional dependencies specified in `extras`.
                     if !matches!(extras, ExtrasSpecification::None) {
-                        for (name, optional_requirements) in
-                            project.optional_dependencies.unwrap_or_default()
-                        {
-                            // TODO(konstin): It's not ideal that pyproject-toml doesn't use
-                            // `ExtraName`
-                            let normalized_name = ExtraName::new(name)?;
-                            if extras.contains(&normalized_name) {
-                                used_extras.insert(normalized_name);
-                                requirements.extend(optional_requirements);
+                        if let Some(optional_dependencies) = project.optional_dependencies {
+                            for (extra_name, optional_requirements) in &optional_dependencies {
+                                // TODO(konstin): It's not ideal that pyproject-toml doesn't use
+                                // `ExtraName`
+                                let normalized_name = ExtraName::from_str(extra_name)?;
+                                if extras.contains(&normalized_name) {
+                                    used_extras.insert(normalized_name);
+                                    requirements.extend(flatten_extra(
+                                        &parsed_project_name,
+                                        optional_requirements,
+                                        &optional_dependencies,
+                                    )?);
+                                }
                             }
                         }
                     }
-                    // Parse the project name
-                    project_name = Some(PackageName::new(project.name).with_context(|| {
-                        format!("Invalid `project.name` in {}", path.normalized_display())
-                    })?);
+
+                    project_name = Some(parsed_project_name);
                 }
 
-                if requirements.is_empty() {
-                    if pyproject_toml.build_system.is_some_and(|build_system| {
+                if requirements.is_empty()
+                    && pyproject_toml.build_system.is_some_and(|build_system| {
                         build_system
                             .requires
                             .iter()
                             .any(|v| v.name.as_dist_info_name().starts_with("poetry"))
-                    }) {
-                        warn_user!("`{}` does not contain any dependencies (hint: specify dependencies in the `project.dependencies` section; `tool.poetry.dependencies` is not currently supported)", path.normalized_display());
-                    }
+                    })
+                {
+                    warn_user!("`{}` does not contain any dependencies (hint: specify dependencies in the `project.dependencies` section; `tool.poetry.dependencies` is not currently supported)", path.simplified_display());
                 }
 
                 Self {
@@ -348,4 +357,72 @@ impl RequirementsSpecification {
     pub(crate) fn from_simple_sources(requirements: &[RequirementsSource]) -> Result<Self> {
         Self::from_sources(requirements, &[], &[], &ExtrasSpecification::None)
     }
+}
+
+/// Given an extra in a project that may contain references to the project
+/// itself, flatten it into a list of requirements.
+///
+/// For example:
+/// ```toml
+/// [project]
+/// name = "my-project"
+/// version = "0.0.1"
+/// dependencies = [
+///     "tomli",
+/// ]
+///
+/// [project.optional-dependencies]
+/// test = [
+///     "pep517",
+/// ]
+/// dev = [
+///     "my-project[test]",
+/// ]
+/// ```
+fn flatten_extra(
+    project_name: &PackageName,
+    requirements: &[Requirement],
+    extras: &IndexMap<String, Vec<Requirement>>,
+) -> Result<Vec<Requirement>> {
+    fn inner(
+        project_name: &PackageName,
+        requirements: &[Requirement],
+        extras: &IndexMap<String, Vec<Requirement>>,
+        seen: &mut FxHashSet<ExtraName>,
+    ) -> Result<Vec<Requirement>> {
+        let mut flattened = Vec::with_capacity(requirements.len());
+        for requirement in requirements {
+            if requirement.name == *project_name {
+                for extra in &requirement.extras {
+                    // Avoid infinite recursion on mutually recursive extras.
+                    if !seen.insert(extra.clone()) {
+                        continue;
+                    }
+
+                    // Flatten the extra requirements.
+                    for (name, extra_requirements) in extras {
+                        let normalized_name = ExtraName::from_str(name)?;
+                        if normalized_name == *extra {
+                            flattened.extend(inner(
+                                project_name,
+                                extra_requirements,
+                                extras,
+                                seen,
+                            )?);
+                        }
+                    }
+                }
+            } else {
+                flattened.push(requirement.clone());
+            }
+        }
+        Ok(flattened)
+    }
+
+    inner(
+        project_name,
+        requirements,
+        extras,
+        &mut FxHashSet::default(),
+    )
 }

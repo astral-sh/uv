@@ -8,12 +8,12 @@ use std::{env, str};
 
 use anyhow::{anyhow, Context, Result};
 use cargo_util::{paths, ProcessBuilder};
-use git2::{self, ErrorClass, ObjectType};
+use git2::{ErrorClass, ObjectType};
 use reqwest::Client;
 use reqwest::StatusCode;
 use tracing::{debug, warn};
 use url::Url;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 
 use crate::util::retry;
 use crate::FetchStrategy;
@@ -69,25 +69,25 @@ impl GitReference {
     /// Views the short ID as a `str`.
     pub(crate) fn as_str(&self) -> &str {
         match self {
-            GitReference::Branch(rev)
-            | GitReference::Tag(rev)
-            | GitReference::BranchOrTag(rev)
-            | GitReference::FullCommit(rev)
-            | GitReference::ShortCommit(rev)
-            | GitReference::Ref(rev) => rev,
-            GitReference::DefaultBranch => "HEAD",
+            Self::Branch(rev)
+            | Self::Tag(rev)
+            | Self::BranchOrTag(rev)
+            | Self::FullCommit(rev)
+            | Self::ShortCommit(rev)
+            | Self::Ref(rev) => rev,
+            Self::DefaultBranch => "HEAD",
         }
     }
 
     pub(crate) fn kind_str(&self) -> &str {
         match self {
-            GitReference::Branch(_) => "branch",
-            GitReference::Tag(_) => "tag",
-            GitReference::BranchOrTag(_) => "branch or tag",
-            GitReference::FullCommit(_) => "commit",
-            GitReference::ShortCommit(_) => "short commit",
-            GitReference::Ref(_) => "ref",
-            GitReference::DefaultBranch => "default branch",
+            Self::Branch(_) => "branch",
+            Self::Tag(_) => "tag",
+            Self::BranchOrTag(_) => "branch or tag",
+            Self::FullCommit(_) => "commit",
+            Self::ShortCommit(_) => "short commit",
+            Self::Ref(_) => "ref",
+            Self::DefaultBranch => "default branch",
         }
     }
 }
@@ -136,8 +136,8 @@ pub(crate) struct GitCheckout<'a> {
 
 impl GitRemote {
     /// Creates an instance for a remote repository URL.
-    pub(crate) fn new(url: &Url) -> GitRemote {
-        GitRemote { url: url.clone() }
+    pub(crate) fn new(url: &Url) -> Self {
+        Self { url: url.clone() }
     }
 
     /// Gets the remote repository URL.
@@ -170,7 +170,7 @@ impl GitRemote {
         let reference = locked_ref.as_ref().unwrap_or(reference);
         if let Some(mut db) = db {
             fetch(&mut db.repo, self.url.as_str(), reference, strategy, client)
-                .with_context(|| format!("failed to fetch into: {}", into.normalized_display()))?;
+                .with_context(|| format!("failed to fetch into: {}", into.simplified_display()))?;
 
             let resolved_commit_hash = match locked_rev {
                 Some(rev) => db.contains(rev).then_some(rev),
@@ -190,7 +190,7 @@ impl GitRemote {
         paths::create_dir_all(into)?;
         let mut repo = init(into, true)?;
         fetch(&mut repo, self.url.as_str(), reference, strategy, client)
-            .with_context(|| format!("failed to clone into: {}", into.normalized_display()))?;
+            .with_context(|| format!("failed to clone into: {}", into.simplified_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
@@ -261,7 +261,7 @@ impl GitReference {
         let id = match self {
             // Note that we resolve the named tag here in sync with where it's
             // fetched into via `fetch` below.
-            GitReference::Tag(s) => (|| -> Result<git2::Oid> {
+            Self::Tag(s) => (|| -> Result<git2::Oid> {
                 let refname = format!("refs/remotes/origin/tags/{s}");
                 let id = repo.refname_to_id(&refname)?;
                 let obj = repo.find_object(id, None)?;
@@ -272,7 +272,7 @@ impl GitReference {
 
             // Resolve the remote name since that's all we're configuring in
             // `fetch` below.
-            GitReference::Branch(s) => {
+            Self::Branch(s) => {
                 let name = format!("origin/{s}");
                 let b = repo
                     .find_branch(&name, git2::BranchType::Remote)
@@ -283,7 +283,7 @@ impl GitReference {
             }
 
             // Attempt to resolve the branch, then the tag.
-            GitReference::BranchOrTag(s) => {
+            Self::BranchOrTag(s) => {
                 let name = format!("origin/{s}");
 
                 repo.find_branch(&name, git2::BranchType::Remote)
@@ -300,13 +300,13 @@ impl GitReference {
             }
 
             // We'll be using the HEAD commit
-            GitReference::DefaultBranch => {
+            Self::DefaultBranch => {
                 let head_id = repo.refname_to_id("refs/remotes/origin/HEAD")?;
                 let head = repo.find_object(head_id, None)?;
                 head.peel(ObjectType::Commit)?.id()
             }
 
-            GitReference::FullCommit(s) | GitReference::ShortCommit(s) | GitReference::Ref(s) => {
+            Self::FullCommit(s) | Self::ShortCommit(s) | Self::Ref(s) => {
                 let obj = repo.revparse_single(s)?;
                 match obj.as_tag() {
                     Some(tag) => tag.target_id(),
@@ -388,7 +388,7 @@ impl<'a> GitCheckout<'a> {
             //
             // TODO(git2): remove this when git2 supports shallow clone correctly
             if database.repo.is_shallow() {
-                std::fs::copy(
+                fs_err::copy(
                     database.repo.path().join("shallow"),
                     r.path().join("shallow"),
                 )?;

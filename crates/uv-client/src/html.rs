@@ -557,7 +557,7 @@ mod tests {
 
     #[test]
     fn parse_missing_href() {
-        let text = r#"
+        let text = r"
 <!DOCTYPE html>
 <html>
   <body>
@@ -566,10 +566,10 @@ mod tests {
   </body>
 </html>
 <!--TIMESTAMP 1703347410-->
-        "#;
+        ";
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_display_snapshot!(result, @"Missing href attribute on anchor link");
+        insta::assert_snapshot!(result, @"Missing href attribute on anchor link");
     }
 
     #[test]
@@ -586,7 +586,7 @@ mod tests {
         "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_display_snapshot!(result, @"Missing href attribute on anchor link");
+        insta::assert_snapshot!(result, @"Missing href attribute on anchor link");
     }
 
     #[test]
@@ -655,7 +655,7 @@ mod tests {
         "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_display_snapshot!(result, @"Unexpected fragment (expected `#sha256=...`) on URL: sha256");
+        insta::assert_snapshot!(result, @"Unexpected fragment (expected `#sha256=...`) on URL: sha256");
     }
 
     #[test]
@@ -672,7 +672,7 @@ mod tests {
         "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_display_snapshot!(result, @"Unsupported hash algorithm (expected `sha256`) on: sha512=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61");
+        insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected `sha256`) on: sha512=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61");
     }
 
     #[test]

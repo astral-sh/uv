@@ -1,6 +1,4 @@
 use std::future::Future;
-use std::ops::Deref;
-use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -62,11 +60,6 @@ pub trait ResolverProvider: Send + Sync {
 pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     /// The [`DistributionDatabase`] used to build source distributions.
     fetcher: DistributionDatabase<'a, Context>,
-    /// Allow moving the parameters to `VersionMap::from_metadata` to a different thread.
-    inner: Arc<DefaultResolverProviderInner>,
-}
-
-pub struct DefaultResolverProviderInner {
     /// The [`RegistryClient`] used to query the index.
     client: RegistryClient,
     /// These are the entries from `--find-links` that act as overrides for index responses.
@@ -75,14 +68,6 @@ pub struct DefaultResolverProviderInner {
     python_requirement: PythonRequirement,
     exclude_newer: Option<DateTime<Utc>>,
     no_binary: NoBinary,
-}
-
-impl<'a, Context: BuildContext + Send + Sync> Deref for DefaultResolverProvider<'a, Context> {
-    type Target = DefaultResolverProviderInner;
-
-    fn deref(&self) -> &Self::Target {
-        self.inner.as_ref()
-    }
 }
 
 impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Context> {
@@ -99,14 +84,12 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
     ) -> Self {
         Self {
             fetcher,
-            inner: Arc::new(DefaultResolverProviderInner {
-                client: client.clone(),
-                flat_index: flat_index.clone(),
-                tags: tags.clone(),
-                python_requirement,
-                exclude_newer,
-                no_binary: no_binary.clone(),
-            }),
+            client: client.clone(),
+            flat_index: flat_index.clone(),
+            tags: tags.clone(),
+            python_requirement,
+            exclude_newer,
+            no_binary: no_binary.clone(),
         }
     }
 }
@@ -124,24 +107,16 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
         // If the "Simple API" request was successful, convert to `VersionMap` on the Tokio
         // threadpool, since it can be slow.
         match result {
-            Ok((index, metadata)) => {
-                let self_send = self.inner.clone();
-                let package_name_owned = package_name.clone();
-                Ok(tokio::task::spawn_blocking(move || {
-                    VersionsResponse::Found(VersionMap::from_metadata(
-                        metadata,
-                        &package_name_owned,
-                        &index,
-                        &self_send.tags,
-                        &self_send.python_requirement,
-                        self_send.exclude_newer.as_ref(),
-                        self_send.flat_index.get(&package_name_owned).cloned(),
-                        &self_send.no_binary,
-                    ))
-                })
-                .await
-                .expect("Tokio executor failed, was there a panic?"))
-            }
+            Ok((index, metadata)) => Ok(VersionsResponse::Found(VersionMap::from_metadata(
+                metadata,
+                package_name,
+                &index,
+                &self.tags,
+                &self.python_requirement,
+                self.exclude_newer.as_ref(),
+                self.flat_index.get(package_name).cloned(),
+                &self.no_binary,
+            ))),
             Err(err) => match err.into_kind() {
                 uv_client::ErrorKind::PackageNotFound(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {

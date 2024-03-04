@@ -1,5 +1,4 @@
 use pubgrub::range::Range;
-
 use rustc_hash::FxHashMap;
 
 use distribution_types::CompatibleDist;
@@ -9,7 +8,6 @@ use pep508_rs::{Requirement, VersionOrUrl};
 use uv_normalize::PackageName;
 
 use crate::prerelease_mode::PreReleaseStrategy;
-
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Manifest, Options};
@@ -25,14 +23,8 @@ impl CandidateSelector {
     /// Return a [`CandidateSelector`] for the given [`Manifest`].
     pub(crate) fn for_resolution(manifest: &Manifest, options: Options) -> Self {
         Self {
-            resolution_strategy: ResolutionStrategy::from_mode(
-                options.resolution_mode,
-                manifest.requirements.as_slice(),
-            ),
-            prerelease_strategy: PreReleaseStrategy::from_mode(
-                options.prerelease_mode,
-                manifest.requirements.as_slice(),
-            ),
+            resolution_strategy: ResolutionStrategy::from_mode(options.resolution_mode, manifest),
+            prerelease_strategy: PreReleaseStrategy::from_mode(options.prerelease_mode, manifest),
             preferences: Preferences::from(manifest.preferences.as_slice()),
         }
     }
@@ -282,17 +274,15 @@ impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
     fn from(value: &'a PrioritizedDist) -> Self {
         if let Some(dist) = value.get() {
             CandidateDist::Compatible(dist)
+        } else if value.exclude_newer() && value.incompatible_wheel().is_none() {
+            // If empty because of exclude-newer, mark as a special case
+            CandidateDist::ExcludeNewer
         } else {
-            if value.exclude_newer() && value.incompatible_wheel().is_none() {
-                // If empty because of exclude-newer, mark as a special case
-                CandidateDist::ExcludeNewer
-            } else {
-                CandidateDist::Incompatible(
-                    value
-                        .incompatible_wheel()
-                        .map(|(_, incompatibility)| incompatibility),
-                )
-            }
+            CandidateDist::Incompatible(
+                value
+                    .incompatible_wheel()
+                    .map(|(_, incompatibility)| incompatibility),
+            )
         }
     }
 }
