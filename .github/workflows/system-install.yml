@@ -1,6 +1,10 @@
 name: System Install
 
 on:
+  pull_request:
+    paths:
+      # When we change this workflow itself...
+      - .github/workflows/system-install.yml
   workflow_dispatch:
 
 concurrency:
@@ -38,6 +42,9 @@ jobs:
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./target/debug/uv
 
+      - name: "Create virtual environment"
+        run: ./target/debug/uv venv
+
   install-macos:
     name: "Install Python on macOS"
     runs-on: macos-14
@@ -61,6 +68,9 @@ jobs:
       - name: "Validate global Python install"
         run: python3.11 scripts/check_system_python.py --uv ./target/debug/uv
 
+      - name: "Create virtual environment"
+        run: ./target/debug/uv venv
+
   install-windows-python-310:
     name: "Install Python 3.10 on Windows"
     runs-on: windows-latest
@@ -82,11 +92,11 @@ jobs:
       - name: "Print Python path"
         run: echo $(which python)
 
-      - name: "Create virtual environment"
-        run: ./target/debug/uv venv
-
       - name: "Validate global Python install"
         run: py -3.10 ./scripts/check_system_python.py --uv ./target/debug/uv
+
+      - name: "Create virtual environment"
+        run: ./target/debug/uv venv
 
   install-windows-python-313:
     name: "Install Python 3.13 on Windows"
@@ -111,14 +121,40 @@ jobs:
       - name: "Print Python path"
         run: echo $(which python)
 
-      - name: "Create virtual environment"
-        run: ./target/debug/uv venv
-
       - name: "Validate global Python install"
         run: py -3.13 ./scripts/check_system_python.py --uv ./target/debug/uv
 
+      - name: "Create virtual environment"
+        run: ./target/debug/uv venv
+
+  install-choco:
+    name: "Install Python 3.12 via Chocolatey"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: choco install python3 --verbose --version=3.9.13
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Build"
+        run: cargo build
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: py -3.9 ./scripts/check_system_python.py --uv ./target/debug/uv
+
+      - name: "Create virtual environment"
+        run: ./target/debug/uv venv
+
   install-pyenv:
-    name: "Install Python using pyenv"
+    name: "Install Python via pyenv"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -141,3 +177,6 @@ jobs:
 
       - name: "Validate global Python install"
         run: python3.9 scripts/check_system_python.py --uv ./target/debug/uv
+
+      - name: "Create virtual environment"
+        run: ./target/debug/uv venv
