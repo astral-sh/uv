@@ -741,10 +741,35 @@ async fn read_url_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
         )
     })?;
 
-    reqwest::get(path_utf8)
+    let mut response = reqwest::get(path_utf8)
         .await
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+
+    if response.status() == 401 {
+        let basic_auth_user: String = dialoguer::Input::with_theme(&dialoguer::theme::SimpleTheme)
+            .with_prompt(format!("User for {path_utf8}"))
+            .interact_text()
+            .map_err(|err| match err {
+                dialoguer::Error::IO(io_err) => io_err,
+            })?;
+        let basic_auth_password = dialoguer::Password::with_theme(&dialoguer::theme::SimpleTheme)
+            .with_prompt("Password")
+            .interact()
+            .map_err(|err| match err {
+                dialoguer::Error::IO(io_err) => io_err,
+            })?;
+
+        response = reqwest::Client::new()
+            .get(path_utf8)
+            .basic_auth(basic_auth_user, Some(basic_auth_password))
+            .send()
+            .await
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+    }
+
+    response
+        .error_for_status()
         .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?
-        .error_for_status().map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?
         .text()
         .await
         .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))

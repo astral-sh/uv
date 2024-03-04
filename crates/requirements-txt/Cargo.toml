@@ -30,6 +30,7 @@ url = { workspace = true }
 async-recursion = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true }
+dialoguer = { workspace = true }
 
 [dev-dependencies]
 anyhow = { version = "1.0.80" }
