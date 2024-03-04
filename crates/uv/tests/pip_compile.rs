@@ -1613,7 +1613,7 @@ optional-dependencies.bar = [
     ----- stderr -----
     error: the argument '--all-extras' cannot be used with '--extra <EXTRA>'
 
-    Usage: uv pip compile --cache-dir [CACHE_DIR] --all-extras <SRC_FILE>...
+    Usage: uv pip compile --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER> --all-extras <SRC_FILE>...
 
     For more information, try '--help'.
     "###

@@ -404,7 +404,7 @@ struct PipCompileArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, value_parser = date_or_datetime, hide = true)]
+    #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
 
     /// Specify a package to omit from the output resolution. Its dependencies will still be
@@ -789,7 +789,7 @@ struct PipInstallArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, value_parser = date_or_datetime, hide = true)]
+    #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
 }
 
@@ -1011,7 +1011,7 @@ struct VenvArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, value_parser = date_or_datetime, hide = true)]
+    #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
 
     #[command(flatten)]

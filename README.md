@@ -348,6 +348,18 @@ command line argument. For example, if you're running uv on Python 3.9, but want
 Python 3.8, you can run `uv pip compile --python-version=3.8 requirements.in` to produce a
 Python 3.8-compatible resolution.
 
+### Reproducible resolution
+
+uv supports an `--exclude-newer` option to limit resolution to distributions published before a specific
+date, allowing reproduction of installations regardless of new package releases. The date may be specified
+as a RFC 3339 timestamp (e.g., `2006-12-02T02:07:43Z`) or UTC date in the same format (e.g., `2006-12-02`).
+
+Note the package index must support the `upload-time` field as specified in [`PEP 700`](https://peps.python.org/pep-0700/).
+If the field is not present for a given distribution, the distribution will be treated as unavailable.
+
+To ensure reproducibility, messages for unsatisfiable resolutions will not mention that distributions were excluded
+due to the `--exclude-newer` flag — newer distributions will be treated as if they do not exist.
+
 ## Platform support
 
 uv has Tier 1 support for the following platforms:

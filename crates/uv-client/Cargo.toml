@@ -19,6 +19,7 @@ uv-version = { path = "../uv-version" }
 uv-warnings = { path = "../uv-warnings" }
 pypi-types = { path = "../pypi-types" }
 
+anyhow = { workspace = true }
 async-trait = { workspace = true }
 async_http_range_reader = { workspace = true }
 async_zip = { workspace = true, features = ["tokio"] }

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.1.14
+
+### Enhancements
+
+- Add support for `--system-site-packages` in `uv venv` ([#2101](https://github.com/astral-sh/uv/pull/2101))
+- Add support for Python installed from Windows Store ([#2122](https://github.com/astral-sh/uv/pull/2122))
+- Expand environment variables in `-r` and `-c` subfile paths ([#2143](https://github.com/astral-sh/uv/pull/2143))
+- Treat empty index URL strings as null instead of erroring ([#2137](https://github.com/astral-sh/uv/pull/2137))
+- Use space as delimiter for `UV_EXTRA_INDEX_URL` ([#2140](https://github.com/astral-sh/uv/pull/2140))
+- Report line and column numbers in `requirements.txt` parser errors ([#2100](https://github.com/astral-sh/uv/pull/2100))
+- Improve error messages when `uv` is offline ([#2110](https://github.com/astral-sh/uv/pull/2110))
+
+### Bug fixes
+
+- Future-proof the `pip` entrypoints special-case ([#1982](https://github.com/astral-sh/uv/pull/1982))
+- Allow empty extras in `pep508-rs` and add more corner case to tests ([#2128](https://github.com/astral-sh/uv/pull/2128))
+- Adjust base Python lookup logic for Windows to respect Windows Store ([#2121](https://github.com/astral-sh/uv/pull/2121))
+- Consider editable dependencies to be 'direct' for `--resolution` ([#2114](https://github.com/astral-sh/uv/pull/2114))
+- Preserve environment variables in resolved Git dependencies ([#2125](https://github.com/astral-sh/uv/pull/2125))
+- Use `prefix` instead of `base_prefix` for environment root ([#2117](https://github.com/astral-sh/uv/pull/2117))
+- Wrap unsafe script shebangs in `/bin/sh` ([#2097](https://github.com/astral-sh/uv/pull/2097))
+- Make WHEEL parsing error line numbers one indexed ([#2151](https://github.com/astral-sh/uv/pull/2151))
+- Determine `site-packages` path based on implementation name ([#2094](https://github.com/astral-sh/uv/pull/2094))
+
+### Documentation
+
+- Add caveats on `--system` support to the README ([#2131](https://github.com/astral-sh/uv/pull/2131))
+- Add instructions for `SSL_CERT_FILE` env var ([#2124](https://github.com/astral-sh/uv/pull/2124))
+
 ## 0.1.13
 
 ### Bug fixes
@@ -7,7 +36,7 @@
 - Prioritize `PATH` over `py --list-paths` in Windows selection ([#2057](https://github.com/astral-sh/uv/pull/2057)).
   This fixes an issue in which the `--system` flag would not work correctly on Windows in GitHub
   Actions.
-- Avoid canonicalizing user-provided interpreters ([#2072](https://github.com/astral-sh/uv/pull/2072))
+- Avoid canonicalizing user-provided interpreters ([#2072](https://github.com/astral-sh/uv/pull/2072)).
   This fixes an issue in which the `--python` flag would not work correctly with pyenv and other
   interpreters.
 - Allow pre-releases for requirements in constraints files ([#2069](https://github.com/astral-sh/uv/pull/2069))
