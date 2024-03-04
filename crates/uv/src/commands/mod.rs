@@ -91,7 +91,9 @@ pub(crate) enum VersionFormat {
     Json,
 }
 
-pub(super) async fn compile_and_report(
+/// Compile all Python source files in the site-packages of the venv to bytecode, to speed up the
+/// first run. See the `--compile` option on `pip sync` and `pip install`.
+pub(super) async fn compile_venv(
     printer: &mut Printer,
     venv: &PythonEnvironment,
 ) -> anyhow::Result<()> {

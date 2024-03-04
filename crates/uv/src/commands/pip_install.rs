@@ -35,7 +35,7 @@ use uv_resolver::{
 use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
-use crate::commands::{compile_and_report, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
+use crate::commands::{compile_venv, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
@@ -642,6 +642,10 @@ async fn install(
         )?;
     }
 
+    if compile {
+        compile_venv(&mut printer, venv).await?;
+    }
+
     for event in reinstalls
         .into_iter()
         .map(|distribution| ChangeEvent {
@@ -680,10 +684,6 @@ async fn install(
                 )?;
             }
         }
-    }
-
-    if compile {
-        compile_and_report(&mut printer, venv).await?;
     }
 
     // TODO(konstin): Also check the cache whether any cached or installed dist is already known to

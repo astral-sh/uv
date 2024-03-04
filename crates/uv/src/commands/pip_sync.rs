@@ -24,7 +24,7 @@ use uv_resolver::InMemoryIndex;
 use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
-use crate::commands::{compile_and_report, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
+use crate::commands::{compile_venv, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
@@ -308,6 +308,10 @@ pub(crate) async fn pip_sync(
         )?;
     }
 
+    if compile {
+        compile_venv(&mut printer, &venv).await?;
+    }
+
     // Report on any changes in the environment.
     for event in extraneous
         .into_iter()
@@ -348,10 +352,6 @@ pub(crate) async fn pip_sync(
                 )?;
             }
         }
-    }
-
-    if compile {
-        compile_and_report(&mut printer, &venv).await?;
     }
 
     // Validate that the environment is consistent.

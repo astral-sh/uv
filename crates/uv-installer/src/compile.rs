@@ -40,16 +40,17 @@ pub enum CompileError {
     Timeout(Duration),
 }
 
-/// Bytecode compile all file in `dir` using a pool of work-stealing python interpreters running a
+/// Bytecode compile all file in `dir` using a pool of work-stealing Python interpreters running a
 /// Python script that calls `compileall.compile_file`.
 ///
 /// All compilation errors are muted (like pip). There is a 10s timeout to handle the case that
-/// the workers have gotten stuck; This happens way to easily with channels and subprocesses, e.g.
+/// the workers have gotten stuck. This happens way too easily with channels and subprocesses, e.g.
 /// because some pipe is full, we're waiting when it's buffered, or we didn't handle channel closing
 /// properly.
 ///
 /// We only compile all files, but we don't update the RECORD, relying on PEP 491:
 /// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
+/// I've checked that pip 24.0 does remove the `__pycache__` directory.
 #[instrument(skip(python_executable))]
 pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize, CompileError> {
     debug_assert!(
