@@ -9,9 +9,10 @@ use std::path::Path;
 use fs_err as fs;
 use fs_err::File;
 use tracing::info;
-use uv_fs::Simplified;
 
-use uv_interpreter::{Interpreter, SysconfigPaths, Virtualenv};
+use pypi_types::Scheme;
+use uv_fs::Simplified;
+use uv_interpreter::{Interpreter, Virtualenv};
 
 use crate::{Error, Prompt};
 
@@ -292,38 +293,21 @@ pub fn create_bare_venv(
         unimplemented!("Only Windows and Unix are supported")
     };
 
-    // Construct the path to the `platstdlib` directory.
-    let platstdlib = if cfg!(windows) {
-        location.join("Lib")
-    } else {
-        location
-            .join("lib")
-            .join(format!(
-                "{}{}.{}",
-                interpreter.site_packages_python(),
-                interpreter.python_major(),
-                interpreter.python_minor()
-            ))
-            .join("site-packages")
-    };
-
     // Populate `site-packages` with a `_virtualenv.py` file.
     fs::create_dir_all(&site_packages)?;
     fs::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
     fs::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
 
     Ok(Virtualenv {
-        sysconfig_paths: SysconfigPaths {
+        scheme: Scheme {
             // Paths that were already constructed above.
             scripts,
-            platstdlib,
             // Set `purelib` and `platlib` to the same value.
             purelib: site_packages.clone(),
             platlib: site_packages,
             // Inherited from the interpreter.
             stdlib: interpreter.stdlib().to_path_buf(),
             include: interpreter.include().to_path_buf(),
-            platinclude: interpreter.platinclude().to_path_buf(),
             data: location.clone(),
         },
         root: location,

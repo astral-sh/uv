@@ -14,13 +14,14 @@ workspace = true
 
 [dependencies]
 cache-key = { path = "../cache-key" }
+install-wheel-rs = { path = "../install-wheel-rs" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
+pypi-types = { path = "../pypi-types" }
 uv-cache = { path = "../uv-cache" }
 uv-fs = { path = "../uv-fs" }
-install-wheel-rs = { path = "../install-wheel-rs" }
 
 configparser = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }

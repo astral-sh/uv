@@ -90,6 +90,6 @@ interpreter_info = {
     "prefix": sys.prefix,
     "base_executable": getattr(sys, "_base_executable", None),
     "sys_executable": sys.executable,
-    "sysconfig_paths": sysconfig.get_paths(),
+    "scheme": sysconfig.get_paths(),
 }
 print(json.dumps(interpreter_info))

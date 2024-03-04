@@ -236,9 +236,9 @@ pub(crate) fn write_script_entrypoints(
                 .to_string()
                 + ".exe";
 
-            layout.scripts.join(script_name)
+            layout.scheme.scripts.join(script_name)
         } else {
-            layout.scripts.join(&entrypoint.name)
+            layout.scheme.scripts.join(&entrypoint.name)
         };
 
         let entrypoint_relative = pathdiff::diff_paths(&entrypoint_absolute, site_packages)
@@ -440,7 +440,7 @@ fn install_script(
         )));
     }
 
-    let target_path = layout.scripts.join(file.file_name());
+    let target_path = layout.scheme.scripts.join(file.file_name());
 
     let path = file.path();
     let mut script = File::open(&path)?;
@@ -520,7 +520,7 @@ pub(crate) fn install_data(
         match path.file_name().and_then(|name| name.to_str()) {
             Some("data") => {
                 // Move the content of the folder to the root of the venv
-                move_folder_recorded(&path, &layout.data, site_packages, record)?;
+                move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
             }
             Some("scripts") => {
                 for file in fs::read_dir(path)? {
@@ -546,14 +546,14 @@ pub(crate) fn install_data(
                 }
             }
             Some("headers") => {
-                let target_path = layout.include.join(dist_name);
+                let target_path = layout.scheme.include.join(dist_name);
                 move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
             Some("purelib") => {
-                move_folder_recorded(&path, &layout.purelib, site_packages, record)?;
+                move_folder_recorded(&path, &layout.scheme.purelib, site_packages, record)?;
             }
             Some("platlib") => {
-                move_folder_recorded(&path, &layout.platlib, site_packages, record)?;
+                move_folder_recorded(&path, &layout.scheme.platlib, site_packages, record)?;
             }
             _ => {
                 return Err(Error::InvalidWheel(format!(

@@ -13,6 +13,7 @@ use zip::ZipArchive;
 use distribution_filename::WheelFilename;
 use pep440_rs::Version;
 use platform_host::{Arch, Os};
+use pypi_types::Scheme;
 pub use uninstall::{uninstall_wheel, Uninstall};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -28,20 +29,12 @@ mod wheel;
 pub struct Layout {
     /// The Python interpreter, as returned by `sys.executable`.
     pub sys_executable: PathBuf,
-    /// The `purelib` directory, as returned by `sysconfig.get_paths()`.
-    pub purelib: PathBuf,
-    /// The `platlib` directory, as returned by `sysconfig.get_paths()`.
-    pub platlib: PathBuf,
-    /// The `include` directory, as returned by `sysconfig.get_paths()`.
-    pub include: PathBuf,
-    /// The `scripts` directory, as returned by `sysconfig.get_paths()`.
-    pub scripts: PathBuf,
-    /// The `data` directory, as returned by `sysconfig.get_paths()`.
-    pub data: PathBuf,
     /// The Python version, as returned by `sys.version_info`.
     pub python_version: (u8, u8),
     /// The `os.name` value for the current platform.
     pub os_name: String,
+    /// The [`Scheme`] paths for the interpreter.
+    pub scheme: Scheme,
 }
 
 /// Note: The caller is responsible for adding the path of the wheel we're installing.
