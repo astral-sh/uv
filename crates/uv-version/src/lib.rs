@@ -1,7 +1,8 @@
-/// Represents the application version.
-/// This should be in sync with uv's version based on the crate version.
-pub fn version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
+/// Return the application version.
+///
+/// This should be in sync with uv's version based on the Crate version.
+pub fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
 }
 
 #[cfg(test)]
@@ -10,7 +11,6 @@ mod tests {
 
     #[test]
     fn test_get_version() {
-        // Check Version Value
-        assert_eq!(version(), env!("CARGO_PKG_VERSION").to_string());
+        assert_eq!(version().to_string(), env!("CARGO_PKG_VERSION").to_string());
     }
 }

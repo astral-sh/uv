@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
-
 use http::HeaderMap;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
@@ -17,12 +16,6 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
-use crate::cached_client::CacheControl;
-use crate::html::SimpleHtml;
-use crate::middleware::OfflineMiddleware;
-use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::rkyvutil::OwnedArchive;
-use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
 use install_wheel_rs::{find_dist_info, is_metadata_entry};
@@ -33,6 +26,13 @@ use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
 use uv_version::version;
 use uv_warnings::warn_user_once;
+
+use crate::cached_client::CacheControl;
+use crate::html::SimpleHtml;
+use crate::middleware::OfflineMiddleware;
+use crate::remote_metadata::wheel_metadata_from_remote_zip;
+use crate::rkyvutil::OwnedArchive;
+use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -88,7 +88,7 @@ impl RegistryClientBuilder {
     }
 
     pub fn build(self) -> RegistryClient {
-        // Create user agent
+        // Create user agent.
         let user_agent_string = format!("uv/{}", version());
 
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
