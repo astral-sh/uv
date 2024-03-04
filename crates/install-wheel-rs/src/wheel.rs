@@ -652,7 +652,7 @@ pub(crate) fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry
 
 /// Parse a file with `Key: value` entries such as WHEEL and METADATA
 fn parse_key_value_file(
-    file: &mut impl Read,
+    file: impl Read,
     debug_filename: &str,
 ) -> Result<FxHashMap<String, Vec<String>>, Error> {
     let mut data: FxHashMap<String, Vec<String>> = FxHashMap::default();
@@ -665,7 +665,8 @@ fn parse_key_value_file(
         }
         let (key, value) = line.split_once(": ").ok_or_else(|| {
             Error::InvalidWheel(format!(
-                "Line {line_no} of the {debug_filename} file is invalid"
+                "Line {} of the {debug_filename} file is invalid",
+                line_no + 1
             ))
         })?;
         data.entry(key.to_string())
@@ -720,6 +721,7 @@ pub(crate) fn parse_metadata(
 
 #[cfg(test)]
 mod test {
+    use std::io::Cursor;
     use std::path::Path;
 
     use indoc::{formatdoc, indoc};
@@ -885,6 +887,25 @@ mod test {
         let executable = Path::new("/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3");
         let os_name = "posix";
         assert_eq!(format_shebang(executable, os_name), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
+    }
+
+    #[test]
+    fn test_invalid_wheel() {
+        let wheel = indoc! {r"
+        Wheel-Version: 1.0
+        Generator: custom
+        Root-Is-Purelib: false
+        Tag: 
+        Tag: -manylinux_2_17_x86_64
+        Tag: -manylinux2014_x86_64
+        "
+        };
+        let reader = Cursor::new(wheel.to_string().into_bytes());
+        let err = parse_key_value_file(reader, "WHEEL").unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "The wheel is invalid: Line 4 of the WHEEL file is invalid"
+        );
     }
 
     #[test]
