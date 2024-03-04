@@ -1,12 +1,9 @@
 use anyhow::Result;
 use futures::future;
-use http_body_util::Full;
-use hyper::body::Bytes;
 use hyper::header::USER_AGENT;
-use hyper::server::conn::http1;
+use hyper::server::conn::Http;
 use hyper::service::service_fn;
-use hyper::{Request, Response};
-use hyper_util::rt::TokioIo;
+use hyper::{Body, Request, Response};
 use tokio::net::TcpListener;
 
 use uv_cache::Cache;
@@ -20,8 +17,8 @@ async fn test_user_agent_has_version() -> Result<()> {
     let addr = listener.local_addr()?;
 
     // Spawn the server loop in a background task
-    let server_task = tokio::spawn(async move {
-        let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
+    tokio::spawn(async move {
+        let svc = service_fn(move |req: Request<Body>| {
             // Get User Agent Header and send it back in the response
             let user_agent = req
                 .headers()
@@ -29,19 +26,16 @@ async fn test_user_agent_has_version() -> Result<()> {
                 .and_then(|v| v.to_str().ok())
                 .map(|s| s.to_string())
                 .unwrap_or_default(); // Empty Default
-            future::ok::<_, hyper::Error>(Response::new(Full::new(Bytes::from(user_agent))))
+            future::ok::<_, hyper::Error>(Response::new(Body::from(user_agent)))
         });
-        // Start Server (not wrapped in loop {} since we want a single response server)
-        // If you want server to accept multiple connections, wrap it in loop {}
+        // Start Hyper Server
         let (socket, _) = listener.accept().await.unwrap();
-        let socket = TokioIo::new(socket);
-        tokio::task::spawn(async move {
-            http1::Builder::new()
-                .serve_connection(socket, svc)
-                .with_upgrades()
-                .await
-                .expect("Server Started");
-        });
+        Http::new()
+            .http1_keep_alive(false)
+            .serve_connection(socket, svc)
+            .with_upgrades()
+            .await
+            .expect("Server Started");
     });
 
     // Initialize uv-client
@@ -64,9 +58,6 @@ async fn test_user_agent_has_version() -> Result<()> {
 
     // Verify body matches regex
     assert_eq!(body, format!("uv/{}", version()));
-
-    // Wait for the server task to complete, to be a good citizen.
-    server_task.await?;
 
     Ok(())
 }
