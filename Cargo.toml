@@ -17,7 +17,7 @@ authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-anstream = { version = "0.6.12" }
+anstream = { version = "0.6.13" }
 anyhow = { version = "1.0.80" }
 async-compression = { version = "0.4.6" }
 async-trait = { version = "0.1.77" }
