@@ -377,6 +377,7 @@ impl CachedClient {
                 );
             }
         }
+        debug!("send_cached: {:?}", req);
         Ok(match cached.cache_policy.before_request(&mut req) {
             BeforeRequest::Fresh => {
                 debug!("Found fresh response for: {}", req.url());

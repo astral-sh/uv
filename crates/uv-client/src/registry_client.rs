@@ -263,6 +263,9 @@ impl RegistryClient {
             .header("Accept", MediaType::accepts())
             .build()
             .map_err(ErrorKind::from)?;
+
+        debug!("simple_single_index: {:?}", simple_request);
+
         let parse_simple_response = |response: Response| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
@@ -425,6 +428,7 @@ impl RegistryClient {
                 .get(url.clone())
                 .build()
                 .map_err(ErrorKind::from)?;
+            debug!("wheel_metadata_registry: {:?}", req);
             Ok(self
                 .client
                 .get_serde(req, &cache_entry, cache_control, response_callback)
@@ -470,6 +474,8 @@ impl RegistryClient {
             )
             .build()
             .map_err(ErrorKind::from)?;
+
+        debug!("wheel_metadata_no_pep658: {:?}", req);
 
         // Copy authorization headers from the HEAD request to subsequent requests
         let mut headers = HeaderMap::default();
