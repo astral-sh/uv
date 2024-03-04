@@ -34,6 +34,7 @@ uv-interpreter = { path = "../uv-interpreter" }
 uv-normalize = { path = "../uv-normalize" }
 uv-resolver = { path = "../uv-resolver", features = ["clap"] }
 uv-traits = { path = "../uv-traits" }
+uv-version = { path = "../uv-version" }
 uv-virtualenv = { path = "../uv-virtualenv" }
 uv-warnings = { path = "../uv-warnings" }
 

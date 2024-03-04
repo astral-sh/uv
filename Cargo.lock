@@ -4166,6 +4166,7 @@ dependencies = [
  "uv-normalize",
  "uv-resolver",
  "uv-traits",
+ "uv-version",
  "uv-virtualenv",
  "uv-warnings",
  "which",
@@ -4247,6 +4248,7 @@ dependencies = [
  "futures",
  "html-escape",
  "http",
+ "hyper",
  "insta",
  "install-wheel-rs",
  "pep440_rs",
@@ -4275,6 +4277,7 @@ dependencies = [
  "uv-cache",
  "uv-fs",
  "uv-normalize",
+ "uv-version",
  "uv-warnings",
 ]
 
@@ -4597,6 +4600,10 @@ dependencies = [
  "uv-interpreter",
  "uv-normalize",
 ]
+
+[[package]]
+name = "uv-version"
+version = "0.1.14"
 
 [[package]]
 name = "uv-virtualenv"

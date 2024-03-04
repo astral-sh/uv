@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
-
 use http::HeaderMap;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
@@ -25,6 +24,7 @@ use pypi_types::{Metadata21, SimpleJson};
 use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
+use uv_version::version;
 use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
@@ -88,6 +88,9 @@ impl RegistryClientBuilder {
     }
 
     pub fn build(self) -> RegistryClient {
+        // Create user agent.
+        let user_agent_string = format!("uv/{}", version());
+
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
         let default_timeout = 5 * 60;
@@ -108,7 +111,7 @@ impl RegistryClientBuilder {
         let client_raw = self.client.unwrap_or_else(|| {
             // Disallow any connections.
             let client_core = ClientBuilder::new()
-                .user_agent("uv")
+                .user_agent(user_agent_string)
                 .pool_max_idle_per_host(20)
                 .timeout(std::time::Duration::from_secs(timeout));
 
