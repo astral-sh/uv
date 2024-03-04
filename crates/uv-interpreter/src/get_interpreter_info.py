@@ -88,6 +88,7 @@ interpreter_info = {
     "base_prefix": sys.base_prefix,
     "base_exec_prefix": sys.base_exec_prefix,
     "prefix": sys.prefix,
+    "base_executable": getattr(sys, "_base_executable", None),
     "sys_executable": sys.executable,
     "sysconfig_paths": sysconfig.get_paths(),
 }

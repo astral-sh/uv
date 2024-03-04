@@ -32,6 +32,7 @@ pub struct Interpreter {
     prefix: PathBuf,
     base_exec_prefix: PathBuf,
     base_prefix: PathBuf,
+    base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     tags: OnceCell<Tags>,
 }
@@ -54,6 +55,7 @@ impl Interpreter {
             prefix: info.prefix,
             base_exec_prefix: info.base_exec_prefix,
             base_prefix: info.base_prefix,
+            base_executable: info.base_executable,
             sys_executable: info.sys_executable,
             tags: OnceCell::new(),
         })
@@ -77,6 +79,7 @@ impl Interpreter {
             prefix: PathBuf::from("/dev/null"),
             base_exec_prefix: PathBuf::from("/dev/null"),
             base_prefix: PathBuf::from("/dev/null"),
+            base_executable: None,
             sys_executable: PathBuf::from("/dev/null"),
             tags: OnceCell::new(),
         }
@@ -355,6 +358,12 @@ impl Interpreter {
         &self.prefix
     }
 
+    /// Return the `sys._base_executable` path for this Python interpreter. Some platforms do not
+    /// have this attribute, so it may be `None`.
+    pub fn base_executable(&self) -> Option<&Path> {
+        self.base_executable.as_deref()
+    }
+
     /// Return the `sys.executable` path for this Python interpreter.
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
@@ -455,6 +464,7 @@ struct InterpreterInfo {
     prefix: PathBuf,
     base_exec_prefix: PathBuf,
     base_prefix: PathBuf,
+    base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
 }
 
@@ -552,7 +562,7 @@ impl InterpreterInfo {
             format!("{}.msgpack", digest(&executable_bytes)),
         );
 
-        let modified = Timestamp::from_path(fs_err::canonicalize(executable)?)?;
+        let modified = Timestamp::from_path(uv_fs::canonicalize_executable(executable)?)?;
 
         // Read from the cache.
         if cache

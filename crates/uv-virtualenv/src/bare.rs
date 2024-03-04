@@ -48,9 +48,36 @@ pub fn create_bare_venv(
     system_site_packages: bool,
     extra_cfg: Vec<(String, String)>,
 ) -> Result<Virtualenv, Error> {
-    // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
-    // This would make python-build-standalone fail with the encodings module not being found because its home is wrong.
-    let base_python = fs_err::canonicalize(interpreter.sys_executable())?;
+    // Determine the base Python executable; that is, the Python executable that should be
+    // considered the "base" for the virtual environment. This is typically the Python executable
+    // from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
+    // the base Python executable is the Python executable of the interpreter's base interpreter.
+    let base_python = if cfg!(unix) {
+        // On Unix, follow symlinks to resolve the base interpreter, since the Python executable in
+        // a virtual environment is a symlink to the base interpreter.
+        uv_fs::canonicalize_executable(interpreter.sys_executable())?
+    } else if cfg!(windows) {
+        // On Windows, follow `virtualenv`. If we're in a virtual environment, use
+        // `sys._base_executable` if it exists; if not, use `sys.base_prefix`. For example, with
+        // Python installed from the Windows Store, `sys.base_prefix` is slightly "incorrect".
+        //
+        // If we're _not_ in a virtual environment, use the interpreter's executable, since it's
+        // already a "system Python". We canonicalize the path to ensure that it's real and
+        // consistent, though we don't expect any symlinks on Windows.
+        if interpreter.is_virtualenv() {
+            if let Some(base_executable) = interpreter.base_executable() {
+                base_executable.to_path_buf()
+            } else {
+                // Assume `python.exe`, though the exact executable name is never used (below) on
+                // Windows, only its parent directory.
+                interpreter.base_prefix().join("python.exe")
+            }
+        } else {
+            uv_fs::canonicalize_executable(interpreter.sys_executable())?
+        }
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    };
 
     // Validate the existing location.
     match location.metadata() {
@@ -188,28 +215,17 @@ pub fn create_bare_venv(
         fs::write(scripts.join(name), activator)?;
     }
 
-    // pyvenv.cfg
-    let python_home = if cfg!(unix) {
-        // On Linux and Mac, Python is symlinked so the base home is the parent of the resolved-by-canonicalize path.
-        base_python
-            .parent()
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "The python interpreter needs to have a parent directory",
-                )
-            })?
-            .simplified_display()
-            .to_string()
-    } else if cfg!(windows) {
-        // `virtualenv` seems to rely on the undocumented, private `sys._base_executable`. When I tried,
-        // `sys.base_prefix` was the same as the parent of `sys._base_executable`, but a much simpler logic and
-        // documented.
-        // https://github.com/pypa/virtualenv/blob/d9fdf48d69f0d0ca56140cf0381edbb5d6fe09f5/src/virtualenv/discovery/py_info.py#L136-L156
-        interpreter.base_prefix().simplified_display().to_string()
-    } else {
-        unimplemented!("Only Windows and Unix are supported")
-    };
+    // Per PEP 405, the Python `home` is the parent directory of the interpreter.
+    let python_home = base_python
+        .parent()
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "The Python interpreter needs to have a parent directory",
+            )
+        })?
+        .simplified_display()
+        .to_string();
 
     // Validate extra_cfg
     let reserved_keys = [

@@ -201,6 +201,35 @@ fn date_or_datetime(input: &str) -> Result<DateTime<Utc>, String> {
     ))
 }
 
+/// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
+/// [`parse_index_url`].
+#[derive(Debug, Clone)]
+enum Maybe<T> {
+    Some(T),
+    None,
+}
+
+impl<T> Maybe<T> {
+    fn into_option(self) -> Option<T> {
+        match self {
+            Maybe::Some(value) => Some(value),
+            Maybe::None => None,
+        }
+    }
+}
+
+/// Parse a string into an [`IndexUrl`], mapping the empty string to `None`.
+fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match IndexUrl::from_str(input) {
+            Ok(url) => Ok(Maybe::Some(url)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 struct PipCompileArgs {
@@ -291,8 +320,8 @@ struct PipCompileArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, short, env = "UV_INDEX_URL")]
-    index_url: Option<IndexUrl>,
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     ///
@@ -303,8 +332,8 @@ struct PipCompileArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
-    extra_index_url: Vec<IndexUrl>,
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    extra_index_url: Vec<Maybe<IndexUrl>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -443,8 +472,8 @@ struct PipSyncArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, short, env = "UV_INDEX_URL")]
-    index_url: Option<IndexUrl>,
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     ///
@@ -455,8 +484,8 @@ struct PipSyncArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
-    extra_index_url: Vec<IndexUrl>,
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    extra_index_url: Vec<Maybe<IndexUrl>>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -656,8 +685,8 @@ struct PipInstallArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, short, env = "UV_INDEX_URL")]
-    index_url: Option<IndexUrl>,
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     ///
@@ -668,8 +697,8 @@ struct PipInstallArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
-    extra_index_url: Vec<IndexUrl>,
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    extra_index_url: Vec<Maybe<IndexUrl>>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -954,8 +983,8 @@ struct VenvArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, short, env = "UV_INDEX_URL")]
-    index_url: Option<IndexUrl>,
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     ///
@@ -966,8 +995,8 @@ struct VenvArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
-    extra_index_url: Vec<IndexUrl>,
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    extra_index_url: Vec<Maybe<IndexUrl>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -1124,8 +1153,11 @@ async fn run() -> Result<ExitStatus> {
                 .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let index_urls = IndexLocations::new(
-                args.index_url,
-                args.extra_index_url,
+                args.index_url.and_then(Maybe::into_option),
+                args.extra_index_url
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect(),
                 args.find_links,
                 args.no_index,
             );
@@ -1195,8 +1227,11 @@ async fn run() -> Result<ExitStatus> {
 
             let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
             let index_urls = IndexLocations::new(
-                args.index_url,
-                args.extra_index_url,
+                args.index_url.and_then(Maybe::into_option),
+                args.extra_index_url
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect(),
                 args.find_links,
                 args.no_index,
             );
@@ -1263,8 +1298,11 @@ async fn run() -> Result<ExitStatus> {
                 .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let index_urls = IndexLocations::new(
-                args.index_url,
-                args.extra_index_url,
+                args.index_url.and_then(Maybe::into_option),
+                args.extra_index_url
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect(),
                 args.find_links,
                 args.no_index,
             );
@@ -1377,8 +1415,11 @@ async fn run() -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             let index_locations = IndexLocations::new(
-                args.index_url,
-                args.extra_index_url,
+                args.index_url.and_then(Maybe::into_option),
+                args.extra_index_url
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect(),
                 // No find links for the venv subcommand, to keep things simple
                 Vec::new(),
                 args.no_index,
