@@ -7,10 +7,11 @@ use std::time::Duration;
 use async_channel::{Receiver, SendError};
 use tempfile::tempdir;
 use thiserror::Error;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout, Command};
 use tokio::task::JoinError;
-use tracing::instrument;
+use tracing::{debug, instrument};
+use uv_fs::Simplified;
 use walkdir::WalkDir;
 
 use uv_warnings::warn_user;
@@ -32,10 +33,18 @@ pub enum CompileError {
     TempFile(#[source] io::Error),
     #[error("Bytecode compilation failed, expected {0:?}, got: {1:?}")]
     WrongPath(String, String),
-    #[error("Failed to write to Python stdin")]
-    ChildStdin(#[source] io::Error),
-    #[error("Failed to read Python stdout")]
-    ChildStdout(#[source] io::Error),
+    #[error("Failed to write to Python {device}")]
+    ChildStdio {
+        device: &'static str,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Python process stderr:\n{stderr}")]
+    ErrorWithStderr {
+        stderr: String,
+        #[source]
+        err: Box<Self>,
+    },
     #[error("Bytecode timed out ({}s)", _0.as_secs_f32())]
     Timeout(Duration),
 }
@@ -153,11 +162,11 @@ async fn worker(
         .await
         .map_err(CompileError::TempFile)?;
     // We input the paths through stdin and get the successful paths returned through stdout.
-    let mut bytecode_compiler = Command::new(interpreter)
+    let mut bytecode_compiler = Command::new(&interpreter)
         .arg(&pip_compileall_py)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::piped())
         .current_dir(dir)
         // Otherwise stdout is buffered and we'll wait forever for a response
         .env("PYTHONUNBUFFERED", "1")
@@ -176,10 +185,51 @@ async fn worker(
             .take()
             .expect("Child must have stdout"),
     );
+    let mut child_stderr = BufReader::new(
+        bytecode_compiler
+            .stderr
+            .take()
+            .expect("Child must have stderr"),
+    );
+
+    let stderr_reader = tokio::task::spawn(async move {
+        let mut child_stderr_collected: Vec<u8> = Vec::new();
+        child_stderr
+            .read_to_end(&mut child_stderr_collected)
+            .await?;
+        Ok(child_stderr_collected)
+    });
 
     let result = worker_main_loop(receiver, child_stdin, &mut child_stdout).await;
     // Reap the process to avoid zombies.
     let _ = bytecode_compiler.kill().await;
+
+    // If there was something printed to stderr (which shouldn't happen, we muted all errors), tell
+    // the user, otherwise only forward the result.
+    let child_stderr_collected = stderr_reader
+        .await?
+        .map_err(|err| CompileError::ChildStdio {
+            device: "stderr",
+            err,
+        })?;
+    if !child_stderr_collected.is_empty() {
+        let stderr = String::from_utf8_lossy(&child_stderr_collected);
+        return match result {
+            Ok(()) => {
+                debug!(
+                    "Bytecode compilation `python` at {} stderr:\n{}\n---",
+                    interpreter.simplified_display(),
+                    stderr
+                );
+                Ok(())
+            }
+            Err(err) => Err(CompileError::ErrorWithStderr {
+                stderr: stderr.to_string(),
+                err: Box::new(err),
+            }),
+        };
+    }
+
     result
 }
 
@@ -204,13 +254,19 @@ async fn worker_main_loop(
         child_stdin
             .write_all(&bytes)
             .await
-            .map_err(CompileError::ChildStdin)?;
+            .map_err(|err| CompileError::ChildStdio {
+                device: "stdin",
+                err,
+            })?;
 
         out_line.clear();
         child_stdout
             .read_line(&mut out_line)
             .await
-            .map_err(CompileError::ChildStdout)?;
+            .map_err(|err| CompileError::ChildStdio {
+                device: "stdout",
+                err,
+            })?;
 
         // This is a sanity check, if we don't get the path back something has gone wrong, e.g.
         // we're not actually running a python interpreter.
