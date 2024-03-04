@@ -389,7 +389,8 @@ impl RegistryClient {
             .as_ref()
             .is_some_and(pypi_types::DistInfoMetadata::is_available)
         {
-            let url = Url::parse(&format!("{url}.metadata")).map_err(ErrorKind::UrlParseError)?;
+            let mut url = url.clone();
+            url.set_path(&format!("{}.metadata", url.path()));
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
