@@ -36,16 +36,33 @@ fn decode_token(content: &[&str]) -> String {
 
 /// Create a `pip install` command with options shared across scenarios.
 fn command(context: &TestContext) -> Command {
+    let mut command = command_without_exclude_newer(context);
+    command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
+    command
+}
+
+/// Create a `pip install` command with no `--exclude-newer` option.
+///
+/// One should avoid using this in tests to the extent possible because
+/// it can result in tests failing when the index state changes. Therefore,
+/// if you use this, there should be some other kind of mitigation in place.
+/// For example, pinning package versions.
+fn command_without_exclude_newer(context: &TestContext) -> Command {
     let mut command = Command::new(get_bin());
     command
         .arg("pip")
         .arg("install")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
     command
 }
 
@@ -59,6 +76,13 @@ fn uninstall_command(context: &TestContext) -> Command {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
     command
 }
 
@@ -802,14 +826,71 @@ fn install_no_index_version() {
     context.assert_command("import flask").failure();
 }
 
+/// Install a package via --extra-index-url.
+///
+/// This is a regression test where previously `uv` would consult test.pypi.org
+/// first, and if the package was found there, `uv` would not look at any other
+/// indexes. We fixed this by flipping the priority order of indexes so that
+/// test.pypi.org becomes the fallback (in this example) and the extra indexes
+/// (regular PyPI) are checked first.
+///
+/// (Neither approach matches `pip`'s behavior, which considers versions of
+/// each package from all indexes. `uv` stops at the first index it finds a
+/// package in.)
+///
+/// Ref: <https://github.com/astral-sh/uv/issues/1600>
+#[test]
+fn install_extra_index_url_has_priority() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command_without_exclude_newer(&context)
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("--extra-index-url")
+        .arg("https://pypi.org/simple")
+        // This tests what we want because BOTH of the following
+        // are true: `black` is on pypi.org and test.pypi.org, AND
+        // `black==24.2.0` is on pypi.org and NOT test.pypi.org. So
+        // this would previously check for `black` on test.pypi.org,
+        // find it, but then not find a compatible version. After
+        // the fix, `uv` will check pypi.org first since it is given
+        // priority via --extra-index-url.
+        .arg("black==24.2.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Downloaded 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.2.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==23.2
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    "###
+    );
+
+    context.assert_command("import flask").failure();
+}
+
 /// Install a package from a public GitHub repository
 #[test]
 #[cfg(feature = "git")]
 fn install_git_public_https() {
     let context = TestContext::new("3.8");
 
-    uv_snapshot!(command(&context)
-        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
+    let mut command = command(&context);
+    command.arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage");
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(command
         , @r###"
     success: true
     exit_code: 0
@@ -838,8 +919,7 @@ fn install_git_public_https_missing_branch_or_tag() {
 
     uv_snapshot!(filters, command(&context)
         // 2.0.0 does not exist
-        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0")
-        , @r###"
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -897,8 +977,17 @@ fn install_git_private_https_pat() {
     let mut filters = INSTA_FILTERS.to_vec();
     filters.insert(0, (&token, "***"));
 
-    uv_snapshot!(filters, command(&context)
-        .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
+    let mut command = command(&context);
+    command.arg(format!(
+        "uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"
+    ));
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(filters, command
         , @r###"
     success: true
     exit_code: 0
@@ -933,9 +1022,15 @@ fn install_git_private_https_pat_at_ref() {
         ""
     };
 
-    uv_snapshot!(filters, command(&context)
-        .arg(format!("uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"))
-        , @r###"
+    let mut command = command(&context);
+    command.arg(format!("uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"));
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(filters, command, @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -952,8 +1047,12 @@ fn install_git_private_https_pat_at_ref() {
 
 /// Install a package from a private GitHub repository using a PAT and username
 /// An arbitrary username is supported when using a PAT.
+///
+/// TODO(charlie): This test modifies the user's keyring.
+/// See: <https://github.com/astral-sh/uv/issues/1980>.
 #[test]
 #[cfg(feature = "git")]
+#[ignore]
 fn install_git_private_https_pat_and_username() {
     let context = TestContext::new("3.8");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -962,8 +1061,15 @@ fn install_git_private_https_pat_and_username() {
     let mut filters = INSTA_FILTERS.to_vec();
     filters.insert(0, (&token, "***"));
 
-    uv_snapshot!(filters, command(&context)
-        .arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
+    let mut command = command(&context);
+    command.arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"));
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(filters, command
         , @r###"
     success: true
     exit_code: 0
@@ -989,7 +1095,7 @@ fn install_git_private_https_pat_not_authorized() {
     let token = "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";
 
     let mut filters = context.filters();
-    filters.insert(0, (&token, "***"));
+    filters.insert(0, (token, "***"));
 
     // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
     // and hang the test
@@ -1007,7 +1113,7 @@ fn install_git_private_https_pat_not_authorized() {
       Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
     --- stderr
     remote: Support for password authentication was removed on August 13, 2021.
-    remote: Please see https://docs.github.com/en/get-started/getting-started-with-git/about-remote-repositories#cloning-with-https-urls for information on currently recommended modes of authentication.
+    remote: Please see https://docs.github.com/get-started/getting-started-with-git/about-remote-repositories#cloning-with-https-urls for information on currently recommended modes of authentication.
     fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
 
     "###);
@@ -1476,7 +1582,14 @@ fn direct_url_zip_file_bunk_permissions() -> Result<()> {
         "opensafely-pipeline @ https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip",
     )?;
 
-    uv_snapshot!(command(&context)
+    let mut command = command(&context);
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(command
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -1581,11 +1694,12 @@ fn launcher_with_symlink() -> Result<()> {
         context.venv.join("Scripts\\simple_launcher.exe"),
         context.temp_dir.join("simple_launcher.exe"),
     ) {
-        if error.kind() == std::io::ErrorKind::PermissionDenied {
-            // Not running as an administrator or developer mode isn't enabled.
-            // Ignore the test
+        // Os { code: 1314, kind: Uncategorized, message: "A required privilege is not held by the client." }
+        // where `Uncategorized` is unstable.
+        if error.raw_os_error() == Some(1314) {
             return Ok(());
         }
+        return Err(error.into());
     }
 
     #[cfg(unix)]
@@ -1820,7 +1934,7 @@ fn install_symlink() {
 }
 
 #[test]
-fn invalidate_on_change() -> Result<()> {
+fn invalidate_editable_on_change() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package.
@@ -1903,6 +2017,231 @@ requires-python = ">=3.8"
      + anyio==3.7.1
      - example==0.0.0 (from [WORKSPACE_DIR])
      + example==0.0.0 (from [WORKSPACE_DIR])
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalidate_editable_dynamic() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with dynamic metadata
+    let editable_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "example"
+version = "0.1.0"
+dynamic = ["dependencies"]
+requires-python = ">=3.11,<3.13"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+"#,
+    )?;
+
+    let requirements_txt = editable_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==4.0.0")?;
+
+    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, command(&context)
+        .arg("--editable")
+        .arg(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 4 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.1.0 (from [WORKSPACE_DIR])
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    // Re-installing should re-install.
+    uv_snapshot!(filters, command(&context)
+        .arg("--editable")
+        .arg(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 4 packages in [TIME]
+    Installed 1 package in [TIME]
+     - example==0.1.0 (from [WORKSPACE_DIR])
+     + example==0.1.0 (from [WORKSPACE_DIR])
+    "###
+    );
+
+    // Modify the requirements.
+    requirements_txt.write_str("anyio==3.7.1")?;
+
+    // Re-installing should update the package.
+    uv_snapshot!(filters, command(&context)
+        .arg("--editable")
+        .arg(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 4 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==4.0.0
+     + anyio==3.7.1
+     - example==0.1.0 (from [WORKSPACE_DIR])
+     + example==0.1.0 (from [WORKSPACE_DIR])
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalidate_path_on_change() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package.
+    let editable_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = ">=3.8"
+"#,
+    )?;
+
+    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, command(&context)
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Downloaded 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.0.0 (from [WORKSPACE_DIR])
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    // Re-installing should be a no-op.
+    uv_snapshot!(filters, command(&context)
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Modify the editable package.
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==3.7.1"
+]
+requires-python = ">=3.8"
+"#,
+    )?;
+
+    // Re-installing should update the package.
+    uv_snapshot!(filters, command(&context)
+        .arg("example @ .")
+        .current_dir(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==4.0.0
+     + anyio==3.7.1
+     - example==0.0.0 (from [WORKSPACE_DIR])
+     + example==0.0.0 (from [WORKSPACE_DIR])
+    "###
+    );
+
+    Ok(())
+}
+
+/// Ignore a URL dependency with a non-matching marker.
+#[test]
+fn editable_url_with_marker() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let editable_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "example"
+version = "0.1.0"
+dependencies = [
+  "anyio==4.0.0; python_version >= '3.11'",
+  "anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz ; python_version < '3.11'"
+]
+requires-python = ">=3.11,<3.13"
+"#,
+    )?;
+
+    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, command(&context)
+        .arg("--editable")
+        .arg(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 4 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.1.0 (from [WORKSPACE_DIR])
+     + idna==3.4
+     + sniffio==1.3.0
     "###
     );
 
