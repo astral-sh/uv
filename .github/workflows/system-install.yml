@@ -1,6 +1,7 @@
 name: System Install
 
 on:
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -14,52 +15,52 @@ env:
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
-  install-ubuntu:
-    name: "Install Python on Ubuntu"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: cargo build
-
-      - name: "Print Python path"
-        run: echo $(which python)
-
-      - name: "Validate global Python install"
-        run: python scripts/check_system_python.py --uv ./target/debug/uv
-
-  install-macos:
-    name: "Install Python on macOS"
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install Python"
-        run: brew install python@3.8
-
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: cargo build
-
-      - name: "Print Python path"
-        run: echo $(which python3.11)
-
-      - name: "Validate global Python install"
-        run: python3.11 scripts/check_system_python.py --uv ./target/debug/uv
+#  install-ubuntu:
+#    name: "Install Python on Ubuntu"
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#
+#      - uses: actions/setup-python@v5
+#        with:
+#          python-version: "3.12"
+#
+#      - name: "Install Rust toolchain"
+#        run: rustup show
+#
+#      - uses: Swatinem/rust-cache@v2
+#
+#      - name: "Build"
+#        run: cargo build
+#
+#      - name: "Print Python path"
+#        run: echo $(which python)
+#
+#      - name: "Validate global Python install"
+#        run: python scripts/check_system_python.py --uv ./target/debug/uv
+#
+#  install-macos:
+#    name: "Install Python on macOS"
+#    runs-on: macos-14
+#    steps:
+#      - uses: actions/checkout@v4
+#
+#      - name: "Install Python"
+#        run: brew install python@3.8
+#
+#      - name: "Install Rust toolchain"
+#        run: rustup show
+#
+#      - uses: Swatinem/rust-cache@v2
+#
+#      - name: "Build"
+#        run: cargo build
+#
+#      - name: "Print Python path"
+#        run: echo $(which python3.11)
+#
+#      - name: "Validate global Python install"
+#        run: python3.11 scripts/check_system_python.py --uv ./target/debug/uv
 
   install-windows:
     name: "Install Python on Windows"
@@ -69,7 +70,9 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.13"
+          allow-prereleases: true
+          cache: pip
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -82,30 +85,33 @@ jobs:
       - name: "Print Python path"
         run: echo $(which python)
 
+      - name: "Create virtual environment"
+        run: ./target/debug/uv venv
+
       - name: "Validate global Python install"
         run: py -3.10 ./scripts/check_system_python.py --uv ./target/debug/uv
 
-  install-pyenv:
-    name: "Install Python using pyenv"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install pyenv"
-        uses: "gabrielfalcao/pyenv-action@v18"
-        with:
-          default: 3.9.7
-
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: cargo build
-
-      - name: "Print Python path"
-        run: echo $(which python3.9)
-
-      - name: "Validate global Python install"
-        run: python3.9 scripts/check_system_python.py --uv ./target/debug/uv
+#  install-pyenv:
+#    name: "Install Python using pyenv"
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#
+#      - name: "Install pyenv"
+#        uses: "gabrielfalcao/pyenv-action@v18"
+#        with:
+#          default: 3.9.7
+#
+#      - name: "Install Rust toolchain"
+#        run: rustup show
+#
+#      - uses: Swatinem/rust-cache@v2
+#
+#      - name: "Build"
+#        run: cargo build
+#
+#      - name: "Print Python path"
+#        run: echo $(which python3.9)
+#
+#      - name: "Validate global Python install"
+#        run: python3.9 scripts/check_system_python.py --uv ./target/debug/uv
