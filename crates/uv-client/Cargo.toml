@@ -50,5 +50,5 @@ urlencoding = { workspace = true }
 [dev-dependencies]
 anyhow = { workspace = true }
 hyper = { version = "0.14.28", features = ["server", "http1"] }
-insta = { version = "1.35.1" }
+insta = { version = "1.36.1" }
 tokio = { workspace = true, features = ["fs", "macros"] }
