@@ -196,13 +196,13 @@ impl RegistryClient {
                 Ok(metadata) => Ok((index.clone(), metadata)),
                 Err(CachedClientError::Client(err)) => match err.into_kind() {
                     ErrorKind::Offline(_) => continue,
-                    ErrorKind::RequestError(err) => {
+                    ErrorKind::ReqwestError(err) => {
                         if err.status() == Some(StatusCode::NOT_FOUND)
                             || err.status() == Some(StatusCode::FORBIDDEN)
                         {
                             continue;
                         }
-                        Err(ErrorKind::RequestError(err).into())
+                        Err(ErrorKind::from(err).into())
                     }
                     other => Err(other.into()),
                 },
@@ -259,7 +259,7 @@ impl RegistryClient {
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
             .build()
-            .map_err(ErrorKind::RequestError)?;
+            .map_err(ErrorKind::from)?;
         let parse_simple_response = |response: Response| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
@@ -283,14 +283,14 @@ impl RegistryClient {
 
                 let unarchived = match media_type {
                     MediaType::Json => {
-                        let bytes = response.bytes().await.map_err(ErrorKind::RequestError)?;
+                        let bytes = response.bytes().await.map_err(ErrorKind::from)?;
                         let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
 
                         SimpleMetadata::from_files(data.files, package_name, &url)
                     }
                     MediaType::Html => {
-                        let text = response.text().await.map_err(ErrorKind::RequestError)?;
+                        let text = response.text().await.map_err(ErrorKind::from)?;
                         let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                             .map_err(|err| Error::from_html_err(err, url.clone()))?;
                         let base = safe_copy_url_auth(&url, base.into_url());
@@ -403,7 +403,7 @@ impl RegistryClient {
             };
 
             let response_callback = |response: Response| async {
-                let bytes = response.bytes().await.map_err(ErrorKind::RequestError)?;
+                let bytes = response.bytes().await.map_err(ErrorKind::from)?;
 
                 info_span!("parse_metadata21")
                     .in_scope(|| Metadata21::parse(bytes.as_ref()))
@@ -420,7 +420,7 @@ impl RegistryClient {
                 .uncached()
                 .get(url.clone())
                 .build()
-                .map_err(ErrorKind::RequestError)?;
+                .map_err(ErrorKind::from)?;
             Ok(self
                 .client
                 .get_serde(req, &cache_entry, cache_control, response_callback)
@@ -465,7 +465,7 @@ impl RegistryClient {
                 http::HeaderValue::from_static("identity"),
             )
             .build()
-            .map_err(ErrorKind::RequestError)?;
+            .map_err(ErrorKind::from)?;
 
         // Copy authorization headers from the HEAD request to subsequent requests
         let mut headers = HeaderMap::default();
@@ -536,9 +536,9 @@ impl RegistryClient {
                 .get(url.to_string())
                 .send()
                 .await
-                .map_err(ErrorKind::RequestMiddlewareError)?
+                .map_err(ErrorKind::from)?
                 .error_for_status()
-                .map_err(ErrorKind::RequestError)?
+                .map_err(ErrorKind::from)?
                 .bytes_stream()
                 .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
                 .into_async_read(),
