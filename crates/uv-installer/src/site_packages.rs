@@ -11,10 +11,11 @@ use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Nam
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, VerbatimUrl};
 use requirements_txt::EditableRequirement;
+use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 
-use crate::{is_dynamic, not_modified};
+use crate::is_dynamic;
 
 /// An index over the packages installed in an environment.
 ///
@@ -276,7 +277,10 @@ impl<'a> SitePackages<'a> {
                 }
                 [distribution] => {
                     // Is the editable out-of-date?
-                    if !not_modified(requirement, distribution) {
+                    if !ArchiveTimestamp::up_to_date_with(
+                        &requirement.path,
+                        ArchiveTarget::Install(distribution),
+                    )? {
                         return Ok(false);
                     }
 

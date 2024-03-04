@@ -1,19 +1,18 @@
 use std::collections::hash_map::Entry;
 use std::hash::BuildHasherDefault;
 use std::io;
-use std::path::Path;
 
 use anyhow::{bail, Result};
 use rustc_hash::FxHashMap;
 use tracing::{debug, warn};
 
 use distribution_types::{
-    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations, InstalledDirectUrlDist,
-    InstalledDist, InstalledMetadata, InstalledVersion, Name, SourceDist,
+    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations, InstalledDist,
+    InstalledMetadata, InstalledVersion, Name, SourceDist,
 };
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
-use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheEntry, Timestamp, WheelCache};
+use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, WheelCache};
 use uv_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
@@ -186,17 +185,20 @@ impl<'a> Planner<'a> {
 
                             // If the requirement comes from a direct URL, check by URL.
                             Some(VersionOrUrl::Url(url)) => {
-                                if let InstalledDist::Url(distribution) = &distribution {
-                                    if &distribution.url == url.raw() {
+                                if let InstalledDist::Url(installed) = &distribution {
+                                    if &installed.url == url.raw() {
                                         // If the requirement came from a local path, check freshness.
                                         if let Ok(archive) = url.to_file_path() {
-                                            if not_modified_install(distribution, &archive)? {
-                                                debug!("Requirement already satisfied (and up-to-date): {distribution}");
+                                            if ArchiveTimestamp::up_to_date_with(
+                                                &archive,
+                                                ArchiveTarget::Install(distribution),
+                                            )? {
+                                                debug!("Requirement already satisfied (and up-to-date): {installed}");
                                                 continue;
                                             }
                                         } else {
                                             // Otherwise, assume the requirement is up-to-date.
-                                            debug!("Requirement already satisfied (assumed up-to-date): {distribution}");
+                                            debug!("Requirement already satisfied (assumed up-to-date): {installed}");
                                             continue;
                                         }
                                     }
@@ -320,9 +322,12 @@ impl<'a> Planner<'a> {
                                 )
                                 .entry(wheel.filename.stem());
 
-                            if not_modified_cache(&cache_entry, &wheel.path)? {
-                                match cache_entry.path().canonicalize() {
-                                    Ok(archive) => {
+                            match cache_entry.path().canonicalize() {
+                                Ok(archive) => {
+                                    if ArchiveTimestamp::up_to_date_with(
+                                        &wheel.path,
+                                        ArchiveTarget::Cache(&archive),
+                                    )? {
                                         let cached_dist = CachedDirectUrlDist::from_url(
                                             wheel.filename,
                                             wheel.url,
@@ -335,11 +340,11 @@ impl<'a> Planner<'a> {
                                         local.push(CachedDist::Url(cached_dist));
                                         continue;
                                     }
-                                    Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                                        // The cache entry doesn't exist, so it's not fresh.
-                                    }
-                                    Err(err) => return Err(err.into()),
                                 }
+                                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                                    // The cache entry doesn't exist, so it's not fresh.
+                                }
+                                Err(err) => return Err(err.into()),
                             }
                         }
                         Dist::Source(SourceDist::DirectUrl(sdist)) => {
@@ -416,44 +421,6 @@ enum Specifier<'a> {
     Editable(InstalledVersion<'a>),
     /// A non-editable requirement, marked by the version or URL specifier.
     NonEditable(Option<&'a VersionOrUrl>),
-}
-
-/// Returns `true` if the cache entry linked to the file at the given [`Path`] is not-modified.
-///
-/// A cache entry is not modified if it exists and is newer than the file at the given path.
-fn not_modified_cache(cache_entry: &CacheEntry, artifact: &Path) -> Result<bool, io::Error> {
-    match fs_err::metadata(cache_entry.path()).map(|metadata| Timestamp::from_metadata(&metadata)) {
-        Ok(cache_timestamp) => {
-            // Determine the modification time of the wheel.
-            if let Some(artifact_timestamp) = ArchiveTimestamp::from_path(artifact)? {
-                Ok(cache_timestamp >= artifact_timestamp.timestamp())
-            } else {
-                // The artifact doesn't exist, so it's not fresh.
-                Ok(false)
-            }
-        }
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            // The cache entry doesn't exist, so it's not fresh.
-            Ok(false)
-        }
-        Err(err) => Err(err),
-    }
-}
-
-/// Returns `true` if the installed distribution linked to the file at the given [`Path`] is
-/// not-modified based on the modification time of the installed distribution.
-fn not_modified_install(dist: &InstalledDirectUrlDist, artifact: &Path) -> Result<bool, io::Error> {
-    // Determine the modification time of the installed distribution.
-    let dist_metadata = fs_err::metadata(dist.path.join("METADATA"))?;
-    let dist_timestamp = Timestamp::from_metadata(&dist_metadata);
-
-    // Determine the modification time of the wheel.
-    let Some(artifact_timestamp) = ArchiveTimestamp::from_path(artifact)? else {
-        // The artifact doesn't exist, so it's not fresh.
-        return Ok(false);
-    };
-
-    Ok(dist_timestamp >= artifact_timestamp.timestamp())
 }
 
 #[derive(Debug, Default)]
