@@ -1,8 +1,8 @@
+use std::fmt::{Display, Formatter};
+use std::ops::Deref;
+
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
-use std::fmt::{Debug, Display, Formatter};
-use std::ops::Deref;
-use thiserror::Error;
 use url::Url;
 
 use distribution_filename::{WheelFilename, WheelFilenameError};
@@ -218,12 +218,9 @@ impl From<reqwest_middleware::Error> for ErrorKind {
     }
 }
 
-#[derive(Debug, Error)]
-#[error("Could not connect, are you offline?")]
-pub struct NoInternetError;
-
 /// Handle the case with no internet by explicitly telling the user instead of showing an obscure
 /// DNS error.
+#[derive(Debug)]
 pub struct BetterReqwestError(reqwest::Error);
 
 impl BetterReqwestError {
@@ -254,23 +251,22 @@ impl Deref for BetterReqwestError {
     }
 }
 
-impl Debug for BetterReqwestError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&self.0, f)
-    }
-}
 impl Display for BetterReqwestError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
+        if self.is_likely_offline() {
+            f.write_str("Could not connect, are you offline?")
+        } else {
+            Display::fmt(&self.0, f)
+        }
     }
 }
 
 impl std::error::Error for BetterReqwestError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         if self.is_likely_offline() {
-            Some(&NoInternetError)
+            Some(&self.0)
         } else {
-            self.source()
+            self.0.source()
         }
     }
 }
