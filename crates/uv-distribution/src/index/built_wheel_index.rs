@@ -48,7 +48,8 @@ impl BuiltWheelIndex {
         );
 
         // Determine the last-modified time of the source distribution.
-        let Some(modified) = ArchiveTimestamp::from_path(&source_dist.path).expect("archived")
+        let Some(modified) =
+            ArchiveTimestamp::from_path(&source_dist.path).map_err(Error::CacheRead)?
         else {
             return Err(Error::DirWithoutEntrypoint);
         };
