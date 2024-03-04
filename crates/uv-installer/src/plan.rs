@@ -175,9 +175,12 @@ impl<'a> Planner<'a> {
                     [distribution] => {
                         // Filter out already-installed packages.
                         match requirement.version_or_url.as_ref() {
+                            // Accept any version of the package.
+                            None => continue,
+
                             // If the requirement comes from a registry, check by name.
-                            None | Some(VersionOrUrl::VersionSpecifier(_)) => {
-                                if requirement.is_satisfied_by(distribution.version()) {
+                            Some(VersionOrUrl::VersionSpecifier(version_specifier)) => {
+                                if version_specifier.contains(distribution.version()) {
                                     debug!("Requirement already satisfied: {distribution}");
                                     continue;
                                 }
@@ -196,6 +199,7 @@ impl<'a> Planner<'a> {
                                                 debug!("Requirement already satisfied (and up-to-date): {installed}");
                                                 continue;
                                             }
+                                            debug!("Requirement already satisfied (but not up-to-date): {installed}");
                                         } else {
                                             // Otherwise, assume the requirement is up-to-date.
                                             debug!("Requirement already satisfied (assumed up-to-date): {installed}");
