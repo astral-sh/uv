@@ -1,9 +1,10 @@
 use std::env;
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
+use anstream::stream::AsLockedWrite;
 use anstream::{eprintln, println};
 use anyhow::Result;
 use clap::Parser;
@@ -12,6 +13,7 @@ use tracing::{debug, instrument};
 use tracing_durations_export::plot::PlotConfig;
 use tracing_durations_export::DurationsLayerBuilder;
 use tracing_indicatif::IndicatifLayer;
+use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
@@ -123,8 +125,10 @@ async fn main() -> ExitCode {
     };
 
     let indicatif_layer = IndicatifLayer::new();
+    let indicatif_writer: Box<dyn Write> = Box::new(indicatif_layer.get_stderr_writer());
+
     let indicatif_compatible_writer_layer = tracing_subscriber::fmt::layer()
-        .with_writer(indicatif_layer.get_stderr_writer())
+        .with_writer(|| Box::new(anstream::AutoStream::auto(indicatif_writer)))
         .with_ansi(std::io::stderr().is_terminal())
         .with_target(false);
     let filter_layer = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
