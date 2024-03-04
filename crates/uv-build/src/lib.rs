@@ -968,7 +968,7 @@ mod test {
             "pygraphviz-1.11",
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
-        insta::assert_display_snapshot!(err, @r###"
+        insta::assert_snapshot!(err, @r###"
         Failed building wheel through setup.py:
         --- stdout:
         running bdist_wheel
@@ -988,7 +988,7 @@ mod test {
         error: command '/usr/bin/gcc' failed with exit code 1
         ---
         "###);
-        insta::assert_display_snapshot!(
+        insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
             @r###"This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for pygraphviz-1.11"###
         );
@@ -1018,7 +1018,7 @@ mod test {
             "pygraphviz-1.11",
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
-        insta::assert_display_snapshot!(err, @r###"
+        insta::assert_snapshot!(err, @r###"
         Failed building wheel through setup.py:
         --- stdout:
 
@@ -1030,7 +1030,7 @@ mod test {
         error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
         ---
         "###);
-        insta::assert_display_snapshot!(
+        insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
             @"This error likely indicates that you need to install the library that provides a shared library for ncurses for pygraphviz-1.11 (e.g. libncurses-dev)"
         );

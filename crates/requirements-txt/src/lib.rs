@@ -1121,7 +1121,7 @@ mod test {
         insta::with_settings!({
             filters => filters,
         }, {
-            insta::assert_display_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @r###"
             Error parsing included file in `<REQUIREMENTS_TXT>` at position 0
             failed to open file `<MISSING_TXT>`
             "###);
@@ -1150,7 +1150,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_display_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @r###"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
             Expected an alphanumeric character starting the extra name, found 'ö'
             numpy[ö]==1.29
@@ -1181,7 +1181,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_display_snapshot!(errors, @"Unsupported URL (expected a `file://` scheme) in `<REQUIREMENTS_TXT>`: `http://localhost:8080/`");
+            insta::assert_snapshot!(errors, @"Unsupported URL (expected a `file://` scheme) in `<REQUIREMENTS_TXT>`: `http://localhost:8080/`");
         });
 
         Ok(())
@@ -1204,7 +1204,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_display_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @r###"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 6
             Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','
             black[,abcdef]
@@ -1235,7 +1235,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_display_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @r###"
             Invalid URL in `<REQUIREMENTS_TXT>` at position 0: `123`
             relative URL without a base
             "###);
@@ -1269,7 +1269,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_display_snapshot!(errors, @"Requirement `file.txt` in `<REQUIREMENTS_TXT>` looks like a requirements file but was passed as a package name. Did you mean `-r file.txt`?");
+            insta::assert_snapshot!(errors, @"Requirement `file.txt` in `<REQUIREMENTS_TXT>` looks like a requirements file but was passed as a package name. Did you mean `-r file.txt`?");
         });
 
         Ok(())
@@ -1369,7 +1369,7 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_display_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @r###"
             Unexpected '-', expected '-c', '-e', '-r' or the start of a requirement at <REQUIREMENTS_TXT>:2:3
             "###);
         });

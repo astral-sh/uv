@@ -41,4 +41,4 @@ tracing = { workspace = true }
 rustc-hash = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.35.1" }
+insta = { version = "1.36.1" }
