@@ -4603,7 +4603,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.1.13"
+version = "0.1.14"
 
 [[package]]
 name = "uv-virtualenv"
