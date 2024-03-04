@@ -2941,8 +2941,8 @@ fn compile() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + markupsafe==2.1.3
     Bytecode compiled 3 files in [TIME]
+     + markupsafe==2.1.3
     "###
     );
 
