@@ -2200,3 +2200,50 @@ requires-python = ">=3.8"
 
     Ok(())
 }
+
+/// Ignore a URL dependency with a non-matching marker.
+#[test]
+fn editable_url_with_marker() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let editable_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "example"
+version = "0.1.0"
+dependencies = [
+  "anyio==4.0.0; python_version >= '3.11'",
+  "anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz ; python_version < '3.11'"
+]
+requires-python = ">=3.11,<3.13"
+"#,
+    )?;
+
+    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, command(&context)
+        .arg("--editable")
+        .arg(editable_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 4 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + example==0.1.0 (from [WORKSPACE_DIR])
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    Ok(())
+}

@@ -56,6 +56,10 @@ impl Urls {
             }
 
             for requirement in &metadata.requires_dist {
+                if !requirement.evaluate_markers(markers, &[]) {
+                    continue;
+                }
+
                 if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
                     if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
                         if cache_key::CanonicalUrl::new(previous.raw())
