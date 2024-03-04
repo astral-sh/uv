@@ -58,12 +58,6 @@ pub fn create_bare_venv(
         // a virtual environment is a symlink to the base interpreter.
         uv_fs::canonicalize_executable(interpreter.sys_executable())?
     } else if cfg!(windows) {
-        println!("interpreter.is_virtualenv(): {:?}", interpreter.is_virtualenv());
-        println!("interpreter.base_executable(): {:?}", interpreter.base_executable());
-        println!("interpreter.base_prefix(): {:?}", interpreter.base_prefix());
-        println!("interpreter.sys_executable(): {:?}", interpreter.sys_executable());
-        println!("uv_fs::canonicalize_executable(interpreter.sys_executable()): {:?}", uv_fs::canonicalize_executable(interpreter.sys_executable()));
-
         // On Windows, follow `virtualenv`. If we're in a virtual environment, use
         // `sys._base_executable` if it exists; if not, use `sys.base_prefix`. For example, with
         // Python installed from the Windows Store, `sys.base_prefix` is slightly "incorrect".
@@ -80,9 +74,8 @@ pub fn create_bare_venv(
                 interpreter.base_prefix().join("python.exe")
             }
         } else {
-            interpreter.sys_executable().to_path_buf()
+            uv_fs::canonicalize_executable(interpreter.sys_executable())?
         }
-
     } else {
         unimplemented!("Only Windows and Unix are supported")
     };
@@ -170,14 +163,6 @@ pub fn create_bare_venv(
         )?;
     }
 
-    println!("interpreter.stdlib(): {:?}", interpreter.stdlib());
-    println!("uv_fs::canonicalize_executable(interpreter.sys_executable()): {:?}", uv_fs::canonicalize_executable(interpreter.stdlib()));
-
-    // Show the entire directory structure.
-    for x in walkdir::WalkDir::new(base_python.parent().unwrap()) {
-        println!("{:?}", x);
-    }
-
     #[cfg(windows)]
     {
         // https://github.com/python/cpython/blob/d457345bbc6414db0443819290b04a9a4333313d/Lib/venv/__init__.py#L261-L267
@@ -190,12 +175,27 @@ pub fn create_bare_venv(
                 .join("venv")
                 .join("scripts")
                 .join("nt")
-                .join(match python_exe {
-                    "python.exe" => "venvwlauncher.exe",
-                    "pythonw.exe" => "venvwlauncher.exe",
-                    _ => unreachable!(),
-                });
-            fs_err::copy(shim, scripts.join(python_exe))?;
+                .join(python_exe);
+            match fs_err::copy(shim, scripts.join(python_exe)) {
+                Ok(_) => {}
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                    // If `python.exe` doesn't exist, try the `venvlaucher.exe` shim.
+                    let shim = interpreter
+                        .stdlib()
+                        .join("venv")
+                        .join("scripts")
+                        .join("nt")
+                        .join(match python_exe {
+                            "python.exe" => "venvwlauncher.exe",
+                            "pythonw.exe" => "venvwlauncher.exe",
+                            _ => unreachable!(),
+                        });
+                    fs_err::copy(shim, scripts.join(python_exe))?;
+                }
+                Err(err) => {
+                    return Err(err.into());
+                }
+            }
         }
     }
     #[cfg(not(any(unix, windows)))]
