@@ -325,12 +325,17 @@ impl RequirementsTxt {
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
     ) -> Result<Self, RequirementsTxtFileError> {
-        let content = uv_fs::read_to_string(&requirements_txt)
-            .await
-            .map_err(|err| RequirementsTxtFileError {
-                file: requirements_txt.as_ref().to_path_buf(),
-                error: RequirementsTxtParserError::IO(err),
-            })?;
+        let content = if requirements_txt.as_ref().starts_with("http://")
+            | requirements_txt.as_ref().starts_with("https://")
+        {
+            read_url_to_string(&requirements_txt).await
+        } else {
+            uv_fs::read_to_string(&requirements_txt).await
+        }
+        .map_err(|err| RequirementsTxtFileError {
+            file: requirements_txt.as_ref().to_path_buf(),
+            error: RequirementsTxtParserError::IO(err),
+        })?;
 
         let working_dir = working_dir.as_ref();
         let requirements_dir = requirements_txt.as_ref().parent().unwrap_or(working_dir);
@@ -726,6 +731,23 @@ fn parse_value<'a, T>(
             location: s.cursor(),
         })
     }
+}
+
+async fn read_url_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
+    let path_utf8 = path.as_ref().to_str().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Path '{:?}' is not valid unicode.", path.as_ref()),
+        )
+    })?;
+
+    reqwest::get(path_utf8)
+        .await
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?
+        .error_for_status().map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?
+        .text()
+        .await
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
 }
 
 /// Error parsing requirements.txt, wrapper with filename
