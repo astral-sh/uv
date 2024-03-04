@@ -36,7 +36,7 @@ url = { workspace = true }
 
 [dev-dependencies]
 indoc = { version = "2.0.4" }
-log = { version = "0.4.20" }
+log = { version = "0.4.21" }
 serde_json = { version = "1.0.114" }
 testing_logger = { version = "0.1.1" }
 
