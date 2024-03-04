@@ -430,7 +430,7 @@ mod windows {
     mod tests {
         use std::fmt::Debug;
 
-        use insta::assert_display_snapshot;
+        use insta::assert_snapshot;
         use itertools::Itertools;
 
         use platform_host::Platform;
@@ -457,7 +457,7 @@ mod windows {
                     (r"Caused by: .* \(os error 3\)", "Caused by: The system cannot find the path specified. (os error 3)")
                 ]
             }, {
-                assert_display_snapshot!(
+                assert_snapshot!(
                     format_err(result), @r###"
         failed to canonicalize path `C:\does\not\exists\python3.12`
           Caused by: The system cannot find the path specified. (os error 3)
@@ -470,8 +470,6 @@ mod windows {
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
-    use insta::assert_display_snapshot;
-    #[cfg(unix)]
     use insta::assert_snapshot;
     use itertools::Itertools;
 
@@ -513,7 +511,7 @@ mod tests {
         )
         .unwrap()
         .ok_or(Error::NoSuchPython(request.to_string()));
-        assert_display_snapshot!(
+        assert_snapshot!(
             format_err(result),
             @"No Python python3.1000 In `PATH`. Is Python python3.1000 installed?"
         );
@@ -526,7 +524,7 @@ mod tests {
             &Platform::current().unwrap(),
             &Cache::temp().unwrap(),
         );
-        assert_display_snapshot!(
+        assert_snapshot!(
             format_err(result), @r###"
         failed to canonicalize path `/does/not/exists/python3.12`
           Caused by: No such file or directory (os error 2)
