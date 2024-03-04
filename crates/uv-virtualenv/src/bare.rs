@@ -176,7 +176,26 @@ pub fn create_bare_venv(
                 .join("scripts")
                 .join("nt")
                 .join(python_exe);
-            fs_err::copy(shim, scripts.join(python_exe))?;
+            match fs_err::copy(shim, scripts.join(python_exe)) {
+                Ok(_) => {}
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                    // If `python.exe` doesn't exist, try the `venvlaucher.exe` shim.
+                    let shim = interpreter
+                        .stdlib()
+                        .join("venv")
+                        .join("scripts")
+                        .join("nt")
+                        .join(match python_exe {
+                            "python.exe" => "venvwlauncher.exe",
+                            "pythonw.exe" => "venvwlauncher.exe",
+                            _ => unreachable!(),
+                        });
+                    fs_err::copy(shim, scripts.join(python_exe))?;
+                }
+                Err(err) => {
+                    return Err(err.into());
+                }
+            }
         }
     }
     #[cfg(not(any(unix, windows)))]

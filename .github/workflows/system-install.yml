@@ -61,8 +61,8 @@ jobs:
       - name: "Validate global Python install"
         run: python3.11 scripts/check_system_python.py --uv ./target/debug/uv
 
-  install-windows:
-    name: "Install Python on Windows"
+  install-windows-python-310:
+    name: "Install Python 3.10 on Windows"
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,8 +82,40 @@ jobs:
       - name: "Print Python path"
         run: echo $(which python)
 
+      - name: "Create virtual environment"
+        run: ./target/debug/uv venv
+
       - name: "Validate global Python install"
         run: py -3.10 ./scripts/check_system_python.py --uv ./target/debug/uv
+
+  install-windows-python-313:
+    name: "Install Python 3.13 on Windows"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          allow-prereleases: true
+          cache: pip
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Build"
+        run: cargo build
+
+      - name: "Print Python path"
+        run: echo $(which python)
+
+      - name: "Create virtual environment"
+        run: ./target/debug/uv venv
+
+      - name: "Validate global Python install"
+        run: py -3.13 ./scripts/check_system_python.py --uv ./target/debug/uv
 
   install-pyenv:
     name: "Install Python using pyenv"
