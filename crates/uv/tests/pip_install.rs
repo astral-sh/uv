@@ -1557,6 +1557,27 @@ fn install_constraints_inline_remote() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn install_constraints_respects_offline_mode() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+            .arg("--offline")
+            .arg("-r")
+            .arg("http://example.com/requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while accessing remote requirements file http://example.com/requirements.txt: Middleware error: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://example.com/requirements.txt`
+      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://example.com/requirements.txt`
+    "###
+    );
+
+    Ok(())
+}
+
 /// Tests that we can install `polars==0.14.0`, which has this odd dependency
 /// requirement in its wheel metadata: `pyarrow>=4.0.*; extra == 'pyarrow'`.
 ///
