@@ -35,7 +35,7 @@ use uv_resolver::{
 use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
-use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
+use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
@@ -55,6 +55,7 @@ pub(crate) async fn pip_install(
     index_locations: IndexLocations,
     reinstall: &Reinstall,
     link_mode: LinkMode,
+    compile: bool,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -293,6 +294,7 @@ pub(crate) async fn pip_install(
         reinstall,
         no_binary,
         link_mode,
+        compile,
         &index_locations,
         tags,
         &client,
@@ -506,6 +508,7 @@ async fn install(
     reinstall: &Reinstall,
     no_binary: &NoBinary,
     link_mode: LinkMode,
+    compile: bool,
     index_urls: &IndexLocations,
     tags: &Tags,
     client: &RegistryClient,
@@ -637,6 +640,10 @@ async fn install(
             )
             .dimmed()
         )?;
+    }
+
+    if compile {
+        compile_bytecode(venv, cache, printer).await?;
     }
 
     for event in reinstalls

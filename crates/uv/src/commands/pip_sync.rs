@@ -23,7 +23,7 @@ use uv_resolver::InMemoryIndex;
 use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
-use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
+use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
@@ -33,6 +33,7 @@ pub(crate) async fn pip_sync(
     sources: &[RequirementsSource],
     reinstall: &Reinstall,
     link_mode: LinkMode,
+    compile: bool,
     index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
@@ -304,6 +305,10 @@ pub(crate) async fn pip_sync(
             )
             .dimmed()
         )?;
+    }
+
+    if compile {
+        compile_bytecode(&venv, &cache, printer).await?;
     }
 
     // Report on any changes in the environment.
