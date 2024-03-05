@@ -15,13 +15,13 @@ use url::Url;
 use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim};
 use once_map::OnceMap;
 use pep440_rs::Version;
-use pep508_rs::VerbatimUrl;
 use pypi_types::{Hashes, Metadata21};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::editables::Editables;
 use crate::pins::FilePins;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority};
+use crate::redirect::apply_redirect;
 use crate::resolver::VersionsResponse;
 use crate::ResolveError;
 
@@ -106,7 +106,7 @@ impl ResolutionGraph {
                     } else {
                         let url = redirects.get(url).map_or_else(
                             || url.clone(),
-                            |url| VerbatimUrl::unknown(url.value().clone()),
+                            |precise| apply_redirect(url, precise.value()),
                         );
                         Dist::from_url(package_name.clone(), url)?
                     };
@@ -188,7 +188,7 @@ impl ResolutionGraph {
                         if !metadata.provides_extras.contains(extra) {
                             let url = redirects.get(url).map_or_else(
                                 || url.clone(),
-                                |url| VerbatimUrl::unknown(url.value().clone()),
+                                |precise| apply_redirect(url, precise.value()),
                             );
                             let pinned_package = Dist::from_url(package_name.clone(), url)?;
 

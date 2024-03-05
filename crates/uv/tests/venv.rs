@@ -3,6 +3,7 @@
 use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 
 use uv_fs::Simplified;
@@ -662,4 +663,71 @@ fn verify_pyvenv_cfg() {
     let version = env!("CARGO_PKG_VERSION").to_string();
     let search_string = format!("uv = {version}");
     pyvenv_cfg.assert(predicates::str::contains(search_string));
+}
+
+/// Ensure that a nested virtual environment uses the same `home` directory as the parent.
+#[test]
+fn verify_nested_pyvenv_cfg() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
+    let venv = temp_dir.child(".venv");
+
+    // Create a virtual environment at `.venv`.
+    Command::new(get_bin())
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("UV_TEST_PYTHON_PATH", bin.clone())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    let pyvenv_cfg = venv.child("pyvenv.cfg");
+
+    // Check pyvenv.cfg exists
+    pyvenv_cfg.assert(predicates::path::is_file());
+
+    // Extract the "home" line from the pyvenv.cfg file.
+    let contents = fs_err::read_to_string(pyvenv_cfg.path())?;
+    let venv_home = contents
+        .lines()
+        .find(|line| line.starts_with("home"))
+        .expect("home line not found");
+
+    // Now, create a virtual environment from within the virtual environment.
+    let subvenv = temp_dir.child(".subvenv");
+    Command::new(get_bin())
+        .arg("venv")
+        .arg(subvenv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("VIRTUAL_ENV", venv.as_os_str())
+        .env("UV_TEST_PYTHON_PATH", bin.clone())
+        .current_dir(&temp_dir)
+        .assert()
+        .success();
+
+    let sub_pyvenv_cfg = subvenv.child("pyvenv.cfg");
+
+    // Extract the "home" line from the pyvenv.cfg file.
+    let contents = fs_err::read_to_string(sub_pyvenv_cfg.path())?;
+    let sub_venv_home = contents
+        .lines()
+        .find(|line| line.starts_with("home"))
+        .expect("home line not found");
+
+    // Check that both directories point to the same home.
+    assert_eq!(sub_venv_home, venv_home);
+
+    Ok(())
 }

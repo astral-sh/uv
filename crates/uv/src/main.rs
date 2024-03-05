@@ -50,6 +50,7 @@ mod confirm;
 mod logging;
 mod printer;
 mod requirements;
+mod shell;
 mod version;
 
 const DEFAULT_VENV_NAME: &str = ".venv";
@@ -202,6 +203,35 @@ fn date_or_datetime(input: &str) -> Result<DateTime<Utc>, String> {
     ))
 }
 
+/// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
+/// [`parse_index_url`].
+#[derive(Debug, Clone)]
+enum Maybe<T> {
+    Some(T),
+    None,
+}
+
+impl<T> Maybe<T> {
+    fn into_option(self) -> Option<T> {
+        match self {
+            Maybe::Some(value) => Some(value),
+            Maybe::None => None,
+        }
+    }
+}
+
+/// Parse a string into an [`IndexUrl`], mapping the empty string to `None`.
+fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match IndexUrl::from_str(input) {
+            Ok(url) => Ok(Maybe::Some(url)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 struct PipCompileArgs {
@@ -292,8 +322,8 @@ struct PipCompileArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, short, env = "UV_INDEX_URL")]
-    index_url: Option<IndexUrl>,
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     ///
@@ -304,8 +334,8 @@ struct PipCompileArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
-    extra_index_url: Vec<IndexUrl>,
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    extra_index_url: Vec<Maybe<IndexUrl>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -376,7 +406,7 @@ struct PipCompileArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, value_parser = date_or_datetime, hide = true)]
+    #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
 
     /// Specify a package to omit from the output resolution. Its dependencies will still be
@@ -444,8 +474,8 @@ struct PipSyncArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, short, env = "UV_INDEX_URL")]
-    index_url: Option<IndexUrl>,
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     ///
@@ -456,8 +486,8 @@ struct PipSyncArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
-    extra_index_url: Vec<IndexUrl>,
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    extra_index_url: Vec<Maybe<IndexUrl>>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -534,6 +564,18 @@ struct PipSyncArgs {
     /// Clear previously specified packages with `:none:`.
     #[clap(long, conflicts_with = "no_build")]
     only_binary: Vec<PackageNameSpecifier>,
+
+    /// Compile Python files to bytecode.
+    ///
+    /// By default, does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`), instead
+    /// Python lazily does the compilation the first time a module is imported. In cases where the
+    /// first start time matters, such as CLI applications and docker containers, this option can
+    /// trade longer install time for faster startup.
+    ///
+    /// The compile option will process the entire site-packages directory for consistency and
+    /// (like pip) ignore all errors.
+    #[clap(long)]
+    compile: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[clap(long, short = 'C', alias = "config-settings")]
@@ -657,8 +699,8 @@ struct PipInstallArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, short, env = "UV_INDEX_URL")]
-    index_url: Option<IndexUrl>,
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     ///
@@ -669,8 +711,8 @@ struct PipInstallArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
-    extra_index_url: Vec<IndexUrl>,
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    extra_index_url: Vec<Maybe<IndexUrl>>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -748,6 +790,18 @@ struct PipInstallArgs {
     #[clap(long, conflicts_with = "no_build")]
     only_binary: Vec<PackageNameSpecifier>,
 
+    /// Compile Python files to bytecode.
+    ///
+    /// By default, does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`), instead
+    /// Python lazily does the compilation the first time a module is imported. In cases where the
+    /// first start time matters, such as CLI applications and docker containers, this option can
+    /// trade longer install time for faster startup.
+    ///
+    /// The compile option will process the entire site-packages directory for consistency and
+    /// (like pip) ignore all errors.
+    #[clap(long)]
+    compile: bool,
+
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[clap(long, short = 'C', alias = "config-settings")]
     config_setting: Vec<ConfigSettingEntry>,
@@ -761,7 +815,7 @@ struct PipInstallArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, value_parser = date_or_datetime, hide = true)]
+    #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
 }
 
@@ -992,8 +1046,8 @@ struct VenvArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, short, env = "UV_INDEX_URL")]
-    index_url: Option<IndexUrl>,
+    #[clap(long, short, env = "UV_INDEX_URL", value_parser = parse_index_url)]
+    index_url: Option<Maybe<IndexUrl>>,
 
     /// Extra URLs of package indexes to use, in addition to `--index-url`.
     ///
@@ -1004,8 +1058,8 @@ struct VenvArgs {
     /// Unlike `pip`, `uv` will stop looking for versions of a package as soon
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
-    #[clap(long, env = "UV_EXTRA_INDEX_URL")]
-    extra_index_url: Vec<IndexUrl>,
+    #[clap(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
+    extra_index_url: Vec<Maybe<IndexUrl>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -1020,7 +1074,7 @@ struct VenvArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, value_parser = date_or_datetime, hide = true)]
+    #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
 
     #[command(flatten)]
@@ -1168,8 +1222,11 @@ async fn run() -> Result<ExitStatus> {
                 .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let index_urls = IndexLocations::new(
-                args.index_url,
-                args.extra_index_url,
+                args.index_url.and_then(Maybe::into_option),
+                args.extra_index_url
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect(),
                 args.find_links,
                 args.no_index,
             );
@@ -1239,8 +1296,11 @@ async fn run() -> Result<ExitStatus> {
 
             let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
             let index_urls = IndexLocations::new(
-                args.index_url,
-                args.extra_index_url,
+                args.index_url.and_then(Maybe::into_option),
+                args.extra_index_url
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect(),
                 args.find_links,
                 args.no_index,
             );
@@ -1263,6 +1323,7 @@ async fn run() -> Result<ExitStatus> {
                 &sources,
                 &reinstall,
                 args.link_mode,
+                args.compile,
                 index_urls,
                 setup_py,
                 if args.offline {
@@ -1307,8 +1368,11 @@ async fn run() -> Result<ExitStatus> {
                 .map(RequirementsSource::from_path)
                 .collect::<Vec<_>>();
             let index_urls = IndexLocations::new(
-                args.index_url,
-                args.extra_index_url,
+                args.index_url.and_then(Maybe::into_option),
+                args.extra_index_url
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect(),
                 args.find_links,
                 args.no_index,
             );
@@ -1352,6 +1416,7 @@ async fn run() -> Result<ExitStatus> {
                 index_urls,
                 &reinstall,
                 args.link_mode,
+                args.compile,
                 setup_py,
                 if args.offline {
                     Connectivity::Offline
@@ -1438,8 +1503,11 @@ async fn run() -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             let index_locations = IndexLocations::new(
-                args.index_url,
-                args.extra_index_url,
+                args.index_url.and_then(Maybe::into_option),
+                args.extra_index_url
+                    .into_iter()
+                    .filter_map(Maybe::into_option)
+                    .collect(),
                 // No find links for the venv subcommand, to keep things simple
                 Vec::new(),
                 args.no_index,
@@ -1458,7 +1526,7 @@ async fn run() -> Result<ExitStatus> {
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
-                gourgeist::Prompt::from_args(prompt),
+                uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 if args.offline {
                     Connectivity::Offline

@@ -22,12 +22,12 @@ impl PythonRequirement {
     }
 
     /// Return the installed version of Python.
-    pub(crate) fn installed(&self) -> &Version {
+    pub fn installed(&self) -> &Version {
         &self.installed
     }
 
     /// Return the target version of Python.
-    pub(crate) fn target(&self) -> &Version {
+    pub fn target(&self) -> &Version {
         &self.target
     }
 

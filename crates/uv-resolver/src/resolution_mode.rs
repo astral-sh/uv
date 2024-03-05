@@ -1,7 +1,9 @@
 use rustc_hash::FxHashSet;
 
-use pep508_rs::Requirement;
+use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
+
+use crate::Manifest;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
@@ -30,13 +32,25 @@ pub(crate) enum ResolutionStrategy {
 }
 
 impl ResolutionStrategy {
-    pub(crate) fn from_mode(mode: ResolutionMode, direct_dependencies: &[Requirement]) -> Self {
+    pub(crate) fn from_mode(
+        mode: ResolutionMode,
+        manifest: &Manifest,
+        markers: &MarkerEnvironment,
+    ) -> Self {
         match mode {
             ResolutionMode::Highest => Self::Highest,
             ResolutionMode::Lowest => Self::Lowest,
             ResolutionMode::LowestDirect => Self::LowestDirect(
-                direct_dependencies
+                // Consider `requirements` and dependencies of `editables` to be "direct" dependencies.
+                manifest
+                    .requirements
                     .iter()
+                    .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+                    .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
+                        metadata.requires_dist.iter().filter(|requirement| {
+                            requirement.evaluate_markers(markers, &editable.extras)
+                        })
+                    }))
                     .map(|requirement| requirement.name.clone())
                     .collect(),
             ),

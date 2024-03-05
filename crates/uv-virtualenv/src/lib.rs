@@ -1,7 +1,6 @@
 use std::io;
 use std::path::Path;
 
-use camino::{FromPathError, Utf8Path};
 use thiserror::Error;
 
 use platform_host::PlatformError;
@@ -54,18 +53,17 @@ pub fn create_venv(
     system_site_packages: bool,
     extra_cfg: Vec<(String, String)>,
 ) -> Result<PythonEnvironment, Error> {
-    let location: &Utf8Path = location
-        .try_into()
-        .map_err(|err: FromPathError| err.into_io_error())?;
-    let paths = create_bare_venv(
+    // Create the virtualenv at the given location.
+    let virtualenv = create_bare_venv(
         location,
         &interpreter,
         prompt,
         system_site_packages,
         extra_cfg,
     )?;
-    Ok(PythonEnvironment::from_interpreter(
-        interpreter,
-        paths.root.as_std_path(),
-    ))
+
+    // Create the corresponding `PythonEnvironment`.
+    let interpreter = interpreter.with_virtualenv(virtualenv);
+    let root = interpreter.prefix().to_path_buf();
+    Ok(PythonEnvironment::from_interpreter(interpreter, root))
 }
