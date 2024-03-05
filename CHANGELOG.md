@@ -18,7 +18,7 @@
 - Expand Windows shim detection to include `python3.12.exe` ([#2209](https://github.com/astral-sh/uv/pull/2209))
 - HTML-decode URLs in HTML indexes ([#2215](https://github.com/astral-sh/uv/pull/2215))
 - Make direct dependency detection respect markers ([#2207](https://github.com/astral-sh/uv/pull/2207))
-- Respect `py --list-paths` fallback in `--python python3` invocations ([#2214](https://github.com/astral-sh/uv/pull/2214))
+- Respect `py --list-paths` fallback in `--python python3` invocations on Windows ([#2214](https://github.com/astral-sh/uv/pull/2214))
 - Respect local freshness when auditing installed environment ([#2169](https://github.com/astral-sh/uv/pull/2169))
 - Respect markers on URL dependencies in editables ([#2176](https://github.com/astral-sh/uv/pull/2176))
 - Respect nested editable requirements in parser ([#2204](https://github.com/astral-sh/uv/pull/2204))
