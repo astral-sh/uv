@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::env;
+use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 
 use tracing::{debug, instrument};
@@ -58,7 +59,7 @@ pub fn find_requested_python(
         }
     } else if !request.contains(std::path::MAIN_SEPARATOR) {
         // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
-        let Some(executable) = Interpreter::find_executable(request)? else {
+        let Some(executable) = find_executable(request)? else {
             return Ok(None);
         };
         Interpreter::query(&executable, platform.clone(), cache).map(Some)
@@ -198,6 +199,41 @@ fn find_python(
     Ok(None)
 }
 
+/// Find the Python interpreter in `PATH` matching the given name (e.g., `python3`, respecting
+/// `UV_PYTHON_PATH`.
+///
+/// Returns `Ok(None)` if not found.
+fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
+    requested: R,
+) -> Result<Option<PathBuf>, Error> {
+    #[allow(non_snake_case)]
+    let UV_TEST_PYTHON_PATH = env::var_os("UV_TEST_PYTHON_PATH");
+
+    #[allow(non_snake_case)]
+    let PATH = UV_TEST_PYTHON_PATH
+        .or(env::var_os("PATH"))
+        .unwrap_or_default();
+
+    // We use `which` here instead of joining the paths ourselves because `which` checks for us if the python
+    // binary is executable and exists. It also has some extra logic that handles inconsistent casing on Windows
+    // and expands `~`.
+    for path in env::split_paths(&PATH) {
+        let paths = match which::which_in_global(requested, Some(&path)) {
+            Ok(paths) => paths,
+            Err(which::Error::CannotFindBinaryPath) => continue,
+            Err(err) => return Err(Error::WhichError(requested.into(), err)),
+        };
+        for path in paths {
+            if cfg!(windows) && windows::is_windows_store_shim(&path) {
+                continue;
+            }
+            return Ok(Some(path));
+        }
+    }
+
+    Ok(None)
+}
+
 #[derive(Debug, Clone)]
 enum PythonInstallation {
     PyListPath {
@@ -330,7 +366,7 @@ impl PythonVersionSelector {
 }
 
 mod windows {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::process::Command;
 
     use once_cell::sync::Lazy;
@@ -412,17 +448,56 @@ mod windows {
     /// does not want us to do this as the format is unstable.  So this is a best effort way.
     /// we just hope that the reparse point has the python redirector in it, when it's not
     /// pointing to a valid Python.
-    pub(super) fn is_windows_store_shim(path: &std::path::Path) -> bool {
+    ///
+    /// Matches against paths like:
+    ///     `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python.exe`
+    pub(super) fn is_windows_store_shim(path: &Path) -> bool {
         // Rye uses a more sophisticated test to identify the windows store shim.
         // Unfortunately, it only works with the `python.exe` shim but not `python3.exe`.
         // What we do here is a very naive implementation but probably sufficient for all we need.
         // There's the risk of false positives but I consider it rare, considering how specific
         // the path is.
-        // Rye Shim detection: https://github.com/mitsuhiko/rye/blob/78bf4d010d5e2e88ebce1ba636c7acec97fd454d/rye/src/cli/shim.rs#L100-L172
-        path.to_str().map_or(false, |path| {
-            path.ends_with("Local\\Microsoft\\WindowsApps\\python.exe")
-                || path.ends_with("Local\\Microsoft\\WindowsApps\\python3.exe")
-        })
+        if !path.is_absolute() {
+            return false;
+        }
+
+        let mut components = path.components().rev();
+
+        // Ex) `python.exe` or `python3.exe` or `python3.12.exe`
+        if !components
+            .next()
+            .and_then(|component| component.as_os_str().to_str())
+            .and_then(|component| component.rsplit_once('.'))
+            .is_some_and(|(name, extension)| name.starts_with("python") && extension == "exe")
+        {
+            return false;
+        }
+
+        // Ex) `WindowsApps`
+        if !components
+            .next()
+            .is_some_and(|component| component.as_os_str() == "WindowsApps")
+        {
+            return false;
+        }
+
+        // Ex) `Microsoft`
+        if !components
+            .next()
+            .is_some_and(|component| component.as_os_str() == "Microsoft")
+        {
+            return false;
+        }
+
+        // Ex) `Local`
+        if !components
+            .next()
+            .is_some_and(|component| component.as_os_str() == "Local")
+        {
+            return false;
+        }
+
+        true
     }
 
     #[cfg(test)]
@@ -463,6 +538,22 @@ mod windows {
           Caused by: The system cannot find the path specified. (os error 3)
         "###);
             });
+        }
+
+        #[test]
+        fn detect_shim() {
+            assert!(super::is_windows_store_shim(
+                r"C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python.exe".as_ref()
+            ));
+            assert!(super::is_windows_store_shim(
+                r"C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.exe".as_ref()
+            ));
+            assert!(super::is_windows_store_shim(
+                r"C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.12.exe".as_ref()
+            ));
+            assert!(!super::is_windows_store_shim(
+                r"C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0\python.exe".as_ref()
+            ));
         }
     }
 }

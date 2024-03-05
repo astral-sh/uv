@@ -17,7 +17,8 @@ use uv_fs::Simplified;
 use uv_warnings::warn_user;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
-const MAIN_TIMEOUT: Duration = Duration::from_secs(10);
+/// This is longer than any compilation should ever take.
+const COMPILE_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Error)]
 pub enum CompileError {
@@ -52,10 +53,8 @@ pub enum CompileError {
 /// Bytecode compile all file in `dir` using a pool of work-stealing Python interpreters running a
 /// Python script that calls `compileall.compile_file`.
 ///
-/// All compilation errors are muted (like pip). There is a 10s timeout to handle the case that
-/// the workers have gotten stuck. This happens way too easily with channels and subprocesses, e.g.,
-/// because some pipe is full, we're waiting when it's buffered, or we didn't handle channel closing
-/// properly.
+/// All compilation errors are muted (like pip). There is a 60s timeout for each file to handle
+/// a broken `python`.
 ///
 /// We only compile all files, but we don't update the RECORD, relying on PEP 491:
 /// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
@@ -76,9 +75,10 @@ pub async fn compile_tree(
         NonZeroUsize::MIN
     });
 
+    // A larger buffer is significantly faster than just 1 or the worker count.
     let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count.get() * 10);
 
-    // Running Python with an actual file will produce better error messages..
+    // Running Python with an actual file will produce better error messages.
     let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
     let pip_compileall_py = tempdir.path().join("pip_compileall.py");
 
@@ -105,18 +105,13 @@ pub async fn compile_tree(
         // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
         if entry.metadata()?.is_file() && entry.path().extension().is_some_and(|ext| ext == "py") {
             source_files += 1;
-            match tokio::time::timeout(MAIN_TIMEOUT, sender.send(entry.path().to_owned())).await {
-                // The workers are stuck.
-                // If we hit this condition, none of the workers made progress in the last 10s.
-                // For reference, on my desktop compiling a venv with "jupyter plotly django" while
-                // a cargo build was also running the slowest file took 100ms.
-                Err(_) => return Err(CompileError::Timeout(MAIN_TIMEOUT)),
+            if let Err(err) = sender.send(entry.path().to_owned()).await {
                 // The workers exited.
                 // If e.g. something with the Python interpreter is wrong, the workers have exited
                 // with an error. We try to report this informative error and only if that fails,
                 // report the send error.
-                Ok(Err(err)) => send_error = Some(err),
-                Ok(Ok(())) => {}
+                send_error = Some(err);
+                break;
             }
         }
     }
@@ -126,19 +121,7 @@ pub async fn compile_tree(
     drop(sender);
 
     // Make sure all workers exit regularly, avoid hiding errors.
-    let results =
-        match tokio::time::timeout(MAIN_TIMEOUT, futures::future::join_all(worker_handles)).await {
-            Err(_) => {
-                // If this happens, we waited more than 10s for n * 10 files on n workers. It
-                // could happen when the user's io is bad (e.g. an overloaded misconfigured
-                // network storage), there are unreasonably sized source files, but more likely
-                // there is a bug in uv (including strange python configurations we need to work
-                // around), which we'd like to know.
-                return Err(CompileError::Timeout(MAIN_TIMEOUT));
-            }
-            Ok(results) => results,
-        };
-    for result in results {
+    for result in futures::future::join_all(worker_handles).await {
         match result {
             // There spawning earlier errored due to a panic in a task.
             Err(join_err) => return Err(CompileError::Join(join_err)),
@@ -256,22 +239,30 @@ async fn worker_main_loop(
         // Luckily, LF alone works on windows too
         let bytes = format!("{source_file}\n").into_bytes();
 
-        child_stdin
-            .write_all(&bytes)
-            .await
-            .map_err(|err| CompileError::ChildStdio {
-                device: "stdin",
-                err,
-            })?;
+        let python_handle = async {
+            child_stdin
+                .write_all(&bytes)
+                .await
+                .map_err(|err| CompileError::ChildStdio {
+                    device: "stdin",
+                    err,
+                })?;
 
-        out_line.clear();
-        child_stdout
-            .read_line(&mut out_line)
-            .await
-            .map_err(|err| CompileError::ChildStdio {
-                device: "stdout",
-                err,
+            out_line.clear();
+            child_stdout.read_line(&mut out_line).await.map_err(|err| {
+                CompileError::ChildStdio {
+                    device: "stdout",
+                    err,
+                }
             })?;
+            Ok::<(), CompileError>(())
+        };
+
+        // Handle a broken `python` by using a timeout, one that's higher than any compilation
+        // should ever take.
+        tokio::time::timeout(COMPILE_TIMEOUT, python_handle)
+            .await
+            .map_err(|_| CompileError::Timeout(COMPILE_TIMEOUT))??;
 
         // This is a sanity check, if we don't get the path back something has gone wrong, e.g.
         // we're not actually running a python interpreter.

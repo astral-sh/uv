@@ -1,4 +1,3 @@
-use std::ffi::{OsStr, OsString};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -197,25 +196,6 @@ impl Interpreter {
             Ok(Some(interpreter))
         } else {
             Ok(None)
-        }
-    }
-
-    /// Find the Python interpreter in `PATH`, respecting `UV_PYTHON_PATH`.
-    ///
-    /// Returns `Ok(None)` if not found.
-    pub(crate) fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
-        requested: R,
-    ) -> Result<Option<PathBuf>, Error> {
-        let result = if let Some(isolated) = std::env::var_os("UV_TEST_PYTHON_PATH") {
-            which::which_in(requested, Some(isolated), std::env::current_dir()?)
-        } else {
-            which::which(requested)
-        };
-
-        match result {
-            Err(which::Error::CannotFindBinaryPath) => Ok(None),
-            Err(err) => Err(Error::WhichError(requested.into(), err)),
-            Ok(path) => Ok(Some(path)),
         }
     }
 
