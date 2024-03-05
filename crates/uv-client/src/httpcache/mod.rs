@@ -412,9 +412,6 @@ impl ArchivedCachePolicy {
     }
 
     fn is_modified(&self, new_policy: &CachePolicy) -> bool {
-        tracing::debug!("checking if cached response is modified");
-        tracing::debug!("new_policy: {:?}", new_policy);
-        tracing::debug!("self.response: {:?}", self.response);
         // From [RFC 9111 S4.3.3],
         //
         // "A 304 (Not Modified) response status code indicates that the stored
@@ -425,6 +422,10 @@ impl ArchivedCachePolicy {
         //
         // [RFC 9111 S4.3.3]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.3.3
         if new_policy.response.status != 304 {
+            tracing::trace!(
+                "is modified because status is {:?} and not 304",
+                new_policy.response.status
+            );
             return true;
         }
         // As per [RFC 9111 S4.3.4], we need to confirm that our validators match. Here,
@@ -436,6 +437,10 @@ impl ArchivedCachePolicy {
                 // We don't support weak validators, so only match if they're
                 // both strong.
                 if !old_etag.weak && !new_etag.weak && old_etag.value == new_etag.value {
+                    tracing::trace!(
+                        "not modified because old and new etag values ({:?}) match",
+                        new_etag.value,
+                    );
                     return false;
                 }
             }
@@ -453,6 +458,9 @@ impl ArchivedCachePolicy {
                 .as_ref()
             {
                 if old_last_modified == new_last_modified {
+                    tracing::trace!(
+                        "not modified because modified times ({new_last_modified:?}) match",
+                    );
                     return false;
                 }
             }
@@ -471,6 +479,10 @@ impl ArchivedCachePolicy {
                 .last_modified_unix_timestamp
                 .is_none()
         {
+            tracing::trace!(
+                "not modified because there are no etags or last modified \
+                 timestamps, so we assume the 304 status is correct",
+            );
             return false;
         }
         true
