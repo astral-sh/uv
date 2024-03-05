@@ -42,9 +42,6 @@ jobs:
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./target/debug/uv
 
-      - name: "Create virtual environment"
-        run: ./target/debug/uv venv
-
   install-pypy:
     name: "Install PyPy on Ubuntu"
     runs-on: ubuntu-latest
@@ -69,9 +66,6 @@ jobs:
       - name: "Validate global Python install"
         run: pypy scripts/check_system_python.py --uv ./target/debug/uv
 
-      - name: "Create virtual environment"
-        run: ./target/debug/uv venv
-
   install-macos:
     name: "Install Python on macOS"
     runs-on: macos-14
@@ -94,9 +88,6 @@ jobs:
 
       - name: "Validate global Python install"
         run: python3.11 scripts/check_system_python.py --uv ./target/debug/uv
-
-      - name: "Create virtual environment"
-        run: ./target/debug/uv venv
 
   install-windows-python-310:
     name: "Install Python 3.10 on Windows"
@@ -121,9 +112,6 @@ jobs:
 
       - name: "Validate global Python install"
         run: py -3.10 ./scripts/check_system_python.py --uv ./target/debug/uv
-
-      - name: "Create virtual environment"
-        run: ./target/debug/uv venv
 
   install-windows-python-313:
     name: "Install Python 3.13 on Windows"
@@ -151,9 +139,6 @@ jobs:
       - name: "Validate global Python install"
         run: py -3.13 ./scripts/check_system_python.py --uv ./target/debug/uv
 
-      - name: "Create virtual environment"
-        run: ./target/debug/uv venv
-
   install-choco:
     name: "Install Python 3.12 via Chocolatey"
     runs-on: windows-latest
@@ -176,9 +161,6 @@ jobs:
 
       - name: "Validate global Python install"
         run: py -3.9 ./scripts/check_system_python.py --uv ./target/debug/uv
-
-      - name: "Create virtual environment"
-        run: ./target/debug/uv venv
 
   install-pyenv:
     name: "Install Python via pyenv"
@@ -204,6 +186,3 @@ jobs:
 
       - name: "Validate global Python install"
         run: python3.9 scripts/check_system_python.py --uv ./target/debug/uv
-
-      - name: "Create virtual environment"
-        run: ./target/debug/uv venv

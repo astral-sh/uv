@@ -12,8 +12,6 @@ import tempfile
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    print("sys.executable:: %s" % sys.executable)
-
     parser = argparse.ArgumentParser(description="Check a Python interpreter.")
     parser.add_argument("--uv", help="Path to a uv binary.")
     args = parser.parse_args()
@@ -29,24 +27,24 @@ if __name__ == "__main__":
             cwd=temp_dir,
         )
         if code.returncode == 0:
-            raise Exception("The package `pylint` is installed.")
+            raise Exception("The package `pylint` is installed (but shouldn't be).")
 
         # Install the package (`pylint`).
         logging.info("Installing the package `pylint`.")
         subprocess.run(
-            [uv, "pip", "install", "pylint", "--system", "--verbose"],
+            [uv, "pip", "install", "pylint", "--system"],
             cwd=temp_dir,
             check=True,
         )
 
-        # Ensure that the package (`pylint`) isn't installed.
+        # Ensure that the package (`pylint`) is installed.
         logging.info("Checking that `pylint` is installed.")
         code = subprocess.run(
             [sys.executable, "-m", "pip", "show", "pylint"],
             cwd=temp_dir,
         )
         if code.returncode != 0:
-            raise Exception("The package `pylint` isn't installed.")
+            raise Exception("The package `pylint` isn't installed (but should be).")
 
         # TODO(charlie): Windows is failing to find the `pylint` binary, despite
         # confirmation that it's being written to the intended location.
@@ -59,7 +57,7 @@ if __name__ == "__main__":
         # Uninstall the package (`pylint`).
         logging.info("Uninstalling the package `pylint`.")
         subprocess.run(
-            [uv, "pip", "uninstall", "pylint", "--system", "--verbose"],
+            [uv, "pip", "uninstall", "pylint", "--system"],
             cwd=temp_dir,
             check=True,
         )
@@ -71,4 +69,53 @@ if __name__ == "__main__":
             cwd=temp_dir,
         )
         if code.returncode == 0:
-            raise Exception("The package `pylint` is installed.")
+            raise Exception("The package `pylint` is installed (but shouldn't be).")
+
+        # Create a virtual environment with `uv`.
+        logging.info("Creating virtual environment...")
+        subprocess.run(
+            [uv, "venv", ".venv", "--seed", "--python", sys.executable],
+            cwd=temp_dir,
+            check=True,
+        )
+
+        if os.name == "nt":
+            executable = os.path.join(temp_dir, ".venv", "Scripts", "python.exe")
+        else:
+            executable = os.path.join(temp_dir, ".venv", "bin", "python")
+
+        logging.info("Querying virtual environment...")
+        subprocess.run(
+            [executable, "--version"],
+            cwd=temp_dir,
+            check=True,
+        )
+
+        logging.info("Installing into virtual environment...")
+        subprocess.run(
+            [uv, "pip", "install", "pylint"],
+            cwd=temp_dir,
+            check=True,
+        )
+
+        # Ensure that the package (`pylint`) isn't installed globally.
+        logging.info("Checking that `pylint` isn't installed.")
+        code = subprocess.run(
+            [sys.executable, "-m", "pip", "show", "pylint"],
+            cwd=temp_dir,
+        )
+        if code.returncode == 0:
+            raise Exception(
+                "The package `pylint` is installed globally (but shouldn't be)."
+            )
+
+        # Ensure that the package (`pylint`) is installed in the virtual environment.
+        logging.info("Checking that `pylint` is installed.")
+        code = subprocess.run(
+            [executable, "-m", "pip", "show", "pylint"],
+            cwd=temp_dir,
+        )
+        if code.returncode != 0:
+            raise Exception(
+                "The package `pylint` isn't installed in the virtual environment."
+            )
