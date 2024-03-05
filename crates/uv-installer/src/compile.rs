@@ -5,15 +5,15 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use async_channel::{Receiver, SendError};
-use tempfile::tempdir;
+use tempfile::tempdir_in;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout, Command};
 use tokio::task::JoinError;
 use tracing::{debug, instrument};
-use uv_fs::Simplified;
 use walkdir::WalkDir;
 
+use uv_fs::Simplified;
 use uv_warnings::warn_user;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
@@ -21,7 +21,7 @@ const MAIN_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Error)]
 pub enum CompileError {
-    #[error("Failed to list files in site-packages")]
+    #[error("Failed to list files in `site-packages`")]
     Walkdir(#[from] walkdir::Error),
     #[error("Failed to send task to worker")]
     WorkerDisappeared(SendError<PathBuf>),
@@ -31,7 +31,7 @@ pub enum CompileError {
     PythonSubcommand(#[source] io::Error),
     #[error("Failed to create temporary script file")]
     TempFile(#[source] io::Error),
-    #[error("Bytecode compilation failed, expected {0:?}, got: {1:?}")]
+    #[error("Bytecode compilation failed, expected {0:?}, received: {1:?}")]
     WrongPath(String, String),
     #[error("Failed to write to Python {device}")]
     ChildStdio {
@@ -53,15 +53,20 @@ pub enum CompileError {
 /// Python script that calls `compileall.compile_file`.
 ///
 /// All compilation errors are muted (like pip). There is a 10s timeout to handle the case that
-/// the workers have gotten stuck. This happens way too easily with channels and subprocesses, e.g.
+/// the workers have gotten stuck. This happens way too easily with channels and subprocesses, e.g.,
 /// because some pipe is full, we're waiting when it's buffered, or we didn't handle channel closing
 /// properly.
 ///
 /// We only compile all files, but we don't update the RECORD, relying on PEP 491:
 /// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
-/// I've checked that pip 24.0 does remove the `__pycache__` directory.
+///
+/// We've confirmed that both `uv` and `pip` (as of 24.0.0) remove the `__pycache__` directory.
 #[instrument(skip(python_executable))]
-pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize, CompileError> {
+pub async fn compile_tree(
+    dir: &Path,
+    python_executable: &Path,
+    cache: &Path,
+) -> Result<usize, CompileError> {
     debug_assert!(
         dir.is_absolute(),
         "compileall doesn't work with relative paths"
@@ -73,8 +78,8 @@ pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize,
 
     let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count.get() * 10);
 
-    // Running python with an actual file will produce better error messages.
-    let tempdir = tempdir().map_err(CompileError::TempFile)?;
+    // Running Python with an actual file will produce better error messages..
+    let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
     let pip_compileall_py = tempdir.path().join("pip_compileall.py");
 
     // Start the workers.
@@ -93,7 +98,7 @@ pub async fn compile_tree(dir: &Path, python_executable: &Path) -> Result<usize,
     let mut send_error = None;
     let walker = WalkDir::new(dir)
         .into_iter()
-        // Otherwise we stumble over temporary files from `compileall`
+        // Otherwise we stumble over temporary files from `compileall`.
         .filter_entry(|dir| dir.file_name() != "__pycache__");
     for entry in walker {
         let entry = entry?;

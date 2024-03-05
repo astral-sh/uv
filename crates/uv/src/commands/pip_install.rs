@@ -35,7 +35,7 @@ use uv_resolver::{
 use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
-use crate::commands::{compile_venv, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
+use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
@@ -643,7 +643,7 @@ async fn install(
     }
 
     if compile {
-        compile_venv(&mut printer, venv).await?;
+        compile_bytecode(venv, cache, printer).await?;
     }
 
     for event in reinstalls

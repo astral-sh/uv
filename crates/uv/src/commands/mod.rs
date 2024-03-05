@@ -14,6 +14,8 @@ pub(crate) use pip_install::pip_install;
 pub(crate) use pip_list::pip_list;
 pub(crate) use pip_sync::pip_sync;
 pub(crate) use pip_uninstall::pip_uninstall;
+use uv_cache::Cache;
+use uv_fs::Simplified;
 use uv_installer::compile_tree;
 use uv_interpreter::PythonEnvironment;
 pub(crate) use venv::venv;
@@ -91,19 +93,22 @@ pub(crate) enum VersionFormat {
     Json,
 }
 
-/// Compile all Python source files in the site-packages of the venv to bytecode, to speed up the
-/// first run. See the `--compile` option on `pip sync` and `pip install`.
-pub(super) async fn compile_venv(
-    printer: &mut Printer,
+/// Compile all Python source files in site-packages to bytecode, to speed up the
+/// initial run of any subsequent executions.
+///
+/// See the `--compile` option on `pip sync` and `pip install`.
+pub(super) async fn compile_bytecode(
     venv: &PythonEnvironment,
+    cache: &Cache,
+    mut printer: Printer,
 ) -> anyhow::Result<()> {
     let start = std::time::Instant::now();
-    let files = compile_tree(venv.site_packages(), venv.python_executable())
+    let files = compile_tree(venv.site_packages(), venv.python_executable(), cache.root())
         .await
         .with_context(|| {
             format!(
                 "Failed to bytecode compile {}",
-                venv.site_packages().display()
+                venv.site_packages().simplified_display()
             )
         })?;
     let s = if files == 1 { "" } else { "s" };
