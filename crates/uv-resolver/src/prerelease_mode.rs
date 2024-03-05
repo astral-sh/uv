@@ -1,6 +1,6 @@
 use rustc_hash::FxHashSet;
 
-use pep508_rs::VersionOrUrl;
+use pep508_rs::{MarkerEnvironment, VersionOrUrl};
 use uv_normalize::PackageName;
 
 use crate::Manifest;
@@ -50,7 +50,11 @@ pub(crate) enum PreReleaseStrategy {
 }
 
 impl PreReleaseStrategy {
-    pub(crate) fn from_mode(mode: PreReleaseMode, manifest: &Manifest) -> Self {
+    pub(crate) fn from_mode(
+        mode: PreReleaseMode,
+        manifest: &Manifest,
+        markers: &MarkerEnvironment,
+    ) -> Self {
         match mode {
             PreReleaseMode::Disallow => Self::Disallow,
             PreReleaseMode::Allow => Self::Allow,
@@ -61,12 +65,12 @@ impl PreReleaseStrategy {
                     .iter()
                     .chain(manifest.constraints.iter())
                     .chain(manifest.overrides.iter())
-                    .chain(
-                        manifest
-                            .editables
-                            .iter()
-                            .flat_map(|(_editable, metadata)| metadata.requires_dist.iter()),
-                    )
+                    .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+                    .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
+                        metadata.requires_dist.iter().filter(|requirement| {
+                            requirement.evaluate_markers(markers, &editable.extras)
+                        })
+                    }))
                     .filter(|requirement| {
                         let Some(version_or_url) = &requirement.version_or_url else {
                             return false;
@@ -90,12 +94,12 @@ impl PreReleaseStrategy {
                     .iter()
                     .chain(manifest.constraints.iter())
                     .chain(manifest.overrides.iter())
-                    .chain(
-                        manifest
-                            .editables
-                            .iter()
-                            .flat_map(|(_editable, metadata)| metadata.requires_dist.iter()),
-                    )
+                    .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+                    .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
+                        metadata.requires_dist.iter().filter(|requirement| {
+                            requirement.evaluate_markers(markers, &editable.extras)
+                        })
+                    }))
                     .filter(|requirement| {
                         let Some(version_or_url) = &requirement.version_or_url else {
                             return false;
