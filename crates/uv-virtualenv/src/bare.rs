@@ -8,9 +8,9 @@ use std::path::Path;
 
 use fs_err as fs;
 use fs_err::File;
+use pypi_types::Scheme;
 use tracing::info;
 
-use pypi_types::Scheme;
 use uv_fs::Simplified;
 use uv_interpreter::{Interpreter, Virtualenv};
 
@@ -124,7 +124,7 @@ pub fn create_bare_venv(
     } else {
         unimplemented!("Only Windows and Unix are supported")
     };
-    let scripts = location.join(bin_name);
+    let scripts = location.join(&interpreter.virtualenv().scripts);
     let prompt = match prompt {
         Prompt::CurrentDirectoryName => env::current_dir()?
             .file_name()
@@ -143,7 +143,6 @@ pub fn create_bare_venv(
     fs::create_dir(&scripts)?;
     let executable = scripts.join(format!("python{EXE_SUFFIX}"));
 
-    // No symlinking on Windows, at least not on a regular non-dev non-admin Windows install.
     #[cfg(unix)]
     {
         use fs_err::os::unix::fs::symlink;
@@ -163,6 +162,7 @@ pub fn create_bare_venv(
         )?;
     }
 
+    // No symlinking on Windows, at least not on a regular non-dev non-admin Windows install.
     #[cfg(windows)]
     {
         // https://github.com/python/cpython/blob/d457345bbc6414db0443819290b04a9a4333313d/Lib/venv/__init__.py#L261-L267
@@ -205,18 +205,11 @@ pub fn create_bare_venv(
 
     // Add all the activate scripts for different shells
     for (name, template) in ACTIVATE_TEMPLATES {
-        let relative_site_packages = if cfg!(unix) {
-            format!(
-                "../lib/{}{}.{}/site-packages",
-                interpreter.site_packages_python(),
-                interpreter.python_major(),
-                interpreter.python_minor(),
-            )
-        } else if cfg!(windows) {
-            "../Lib/site-packages".to_string()
-        } else {
-            unimplemented!("Only Windows and Unix are supported")
-        };
+        let relative_site_packages = pathdiff::diff_paths(
+            &interpreter.virtualenv().purelib,
+            &interpreter.virtualenv().scripts,
+        )
+        .expect("Failed to calculate relative path to site-packages");
         let activator = template
             .replace(
                 "{{ VIRTUAL_ENV_DIR }}",
@@ -230,7 +223,7 @@ pub fn create_bare_venv(
             )
             .replace(
                 "{{ RELATIVE_SITE_PACKAGES }}",
-                relative_site_packages.as_str(),
+                relative_site_packages.simplified().to_str().unwrap(),
             );
         fs::write(scripts.join(name), activator)?;
     }
@@ -296,21 +289,7 @@ pub fn create_bare_venv(
     drop(pyvenv_cfg);
 
     // Construct the path to the `site-packages` directory.
-    let site_packages = if cfg!(unix) {
-        location
-            .join("lib")
-            .join(format!(
-                "{}{}.{}",
-                interpreter.site_packages_python(),
-                interpreter.python_major(),
-                interpreter.python_minor(),
-            ))
-            .join("site-packages")
-    } else if cfg!(windows) {
-        location.join("Lib").join("site-packages")
-    } else {
-        unimplemented!("Only Windows and Unix are supported")
-    };
+    let site_packages = location.join(&interpreter.virtualenv().purelib);
 
     // Populate `site-packages` with a `_virtualenv.py` file.
     fs::create_dir_all(&site_packages)?;
@@ -319,15 +298,11 @@ pub fn create_bare_venv(
 
     Ok(Virtualenv {
         scheme: Scheme {
-            // Paths that were already constructed above.
-            scripts,
-            // Set `purelib` and `platlib` to the same value.
-            purelib: site_packages.clone(),
-            platlib: site_packages,
-            // Inherited from the interpreter.
-            stdlib: interpreter.stdlib().to_path_buf(),
-            include: interpreter.include().to_path_buf(),
-            data: location.clone(),
+            purelib: location.join(&interpreter.virtualenv().purelib),
+            platlib: location.join(&interpreter.virtualenv().platlib),
+            scripts: location.join(&interpreter.virtualenv().scripts),
+            data: location.join(&interpreter.virtualenv().data),
+            include: location.join(&interpreter.virtualenv().include),
         },
         root: location,
         executable,
