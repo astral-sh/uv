@@ -330,11 +330,13 @@ impl RequirementsTxt {
         {
             read_url_to_string(&requirements_txt).await
         } else {
-            uv_fs::read_to_string(&requirements_txt).await
+            uv_fs::read_to_string(&requirements_txt)
+                .await
+                .map_err(RequirementsTxtParserError::IO)
         }
         .map_err(|err| RequirementsTxtFileError {
             file: requirements_txt.as_ref().to_path_buf(),
-            error: RequirementsTxtParserError::IO(err),
+            error: err,
         })?;
 
         let working_dir = working_dir.as_ref();
@@ -733,46 +735,31 @@ fn parse_value<'a, T>(
     }
 }
 
-async fn read_url_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
+async fn read_url_to_string(path: impl AsRef<Path>) -> Result<String, RequirementsTxtParserError> {
     let path_utf8 = path.as_ref().to_str().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("Path '{:?}' is not valid unicode.", path.as_ref()),
-        )
+        RequirementsTxtParserError::NonUnicodeRemoteRequirementsUrl {
+            url: path.as_ref().to_owned(),
+        }
     })?;
 
-    let mut response = reqwest::get(path_utf8)
-        .await
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+    let mut response = reqwest::get(path_utf8).await?;
 
     if response.status() == 401 {
         let basic_auth_user: String = dialoguer::Input::with_theme(&dialoguer::theme::SimpleTheme)
             .with_prompt(format!("User for {path_utf8}"))
-            .interact_text()
-            .map_err(|err| match err {
-                dialoguer::Error::IO(io_err) => io_err,
-            })?;
+            .interact_text()?;
         let basic_auth_password = dialoguer::Password::with_theme(&dialoguer::theme::SimpleTheme)
             .with_prompt("Password")
-            .interact()
-            .map_err(|err| match err {
-                dialoguer::Error::IO(io_err) => io_err,
-            })?;
+            .interact()?;
 
         response = reqwest::Client::new()
             .get(path_utf8)
             .basic_auth(basic_auth_user, Some(basic_auth_password))
             .send()
-            .await
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+            .await?;
     }
 
-    response
-        .error_for_status()
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?
-        .text()
-        .await
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+    Ok(response.error_for_status()?.text().await?)
 }
 
 /// Error parsing requirements.txt, wrapper with filename
@@ -815,6 +802,11 @@ pub enum RequirementsTxtParserError {
         start: usize,
         end: usize,
     },
+    Reqwest(reqwest::Error),
+    NonUnicodeRemoteRequirementsUrl {
+        url: PathBuf,
+    },
+    InteractivePrompt(dialoguer::Error),
 }
 
 impl RequirementsTxtParserError {
@@ -857,6 +849,11 @@ impl RequirementsTxtParserError {
                 start: start + offset,
                 end: end + offset,
             },
+            Self::Reqwest(err) => Self::Reqwest(err),
+            Self::NonUnicodeRemoteRequirementsUrl { url } => {
+                Self::NonUnicodeRemoteRequirementsUrl { url }
+            }
+            Self::InteractivePrompt(err) => Self::InteractivePrompt(err),
         }
     }
 }
@@ -895,6 +892,17 @@ impl Display for RequirementsTxtParserError {
             Self::Subfile { start, .. } => {
                 write!(f, "Error parsing included file at position {start}")
             }
+            Self::Reqwest(err) => {
+                write!(f, "Error while accessing remote requirements file {err}")
+            }
+            Self::NonUnicodeRemoteRequirementsUrl { url } => {
+                write!(
+                    f,
+                    "Remote requirements URL contains non-unicode characters: {}",
+                    url.display(),
+                )
+            }
+            Self::InteractivePrompt(err) => err.fmt(f),
         }
     }
 }
@@ -912,6 +920,9 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::Pep508 { source, .. } => Some(source),
             Self::Subfile { source, .. } => Some(source.as_ref()),
             Self::Parser { .. } => None,
+            Self::Reqwest(err) => err.source(),
+            Self::NonUnicodeRemoteRequirementsUrl { .. } => None,
+            Self::InteractivePrompt(err) => err.source(),
         }
     }
 }
@@ -983,6 +994,28 @@ impl Display for RequirementsTxtFileError {
                     self.file.simplified_display(),
                 )
             }
+            RequirementsTxtParserError::Reqwest(err) => {
+                write!(
+                    f,
+                    "Error while accessing remote requirements file {}: {err}",
+                    self.file.simplified_display(),
+                )
+            }
+
+            RequirementsTxtParserError::NonUnicodeRemoteRequirementsUrl { url } => {
+                write!(
+                    f,
+                    "Remote requirements URL contains non-unicode characters: {}",
+                    url.display(),
+                )
+            }
+            RequirementsTxtParserError::InteractivePrompt(err) => {
+                write!(
+                    f,
+                    "Error while getting user input for authentication with file {}: {err}",
+                    self.file.simplified_display(),
+                )
+            }
         }
     }
 }
@@ -996,6 +1029,18 @@ impl std::error::Error for RequirementsTxtFileError {
 impl From<io::Error> for RequirementsTxtParserError {
     fn from(err: io::Error) -> Self {
         Self::IO(err)
+    }
+}
+
+impl From<reqwest::Error> for RequirementsTxtParserError {
+    fn from(err: reqwest::Error) -> Self {
+        Self::Reqwest(err)
+    }
+}
+
+impl From<dialoguer::Error> for RequirementsTxtParserError {
+    fn from(err: dialoguer::Error) -> Self {
+        Self::InteractivePrompt(err)
     }
 }
 
