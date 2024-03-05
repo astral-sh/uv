@@ -114,8 +114,33 @@ fn copy_and_hash(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<
     ))
 }
 
-fn get_shebang(python_executable: impl AsRef<Path>) -> String {
-    format!("#!{}", python_executable.as_ref().simplified().display())
+/// Format the shebang for a given Python executable.
+///
+/// Like pip, if a shebang is non-simple (too long or contains spaces), we use `/bin/sh` as the
+/// executable.
+///
+/// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_vendor/distlib/scripts.py#L136-L165>
+fn format_shebang(executable: impl AsRef<Path>, os_name: &str) -> String {
+    // Convert the executable to a simplified path.
+    let executable = executable.as_ref().simplified_display().to_string();
+
+    // Validate the shebang.
+    if os_name == "posix" {
+        // The length of the full line: the shebang, plus the leading `#` and `!`, and a trailing
+        // newline.
+        let shebang_length = 2 + executable.len() + 1;
+
+        // If the shebang is too long, or contains spaces, wrap it in `/bin/sh`.
+        if shebang_length > 127 || executable.contains(' ') {
+            // Like Python's `shlex.quote`:
+            // > Use single quotes, and put single quotes into double quotes
+            // > The string $'b is then quoted as '$'"'"'b'
+            let executable = format!("'{}'", executable.replace('\'', r#"'"'"'"#));
+            return format!("#!/bin/sh\n'''exec' {executable} \"$0\" \"$@\"\n' '''");
+        }
+    }
+
+    format!("#!{executable}")
 }
 
 /// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
@@ -211,9 +236,9 @@ pub(crate) fn write_script_entrypoints(
                 .to_string()
                 + ".exe";
 
-            layout.scripts.join(script_name)
+            layout.scheme.scripts.join(script_name)
         } else {
-            layout.scripts.join(&entrypoint.name)
+            layout.scheme.scripts.join(&entrypoint.name)
         };
 
         let entrypoint_relative = pathdiff::diff_paths(&entrypoint_absolute, site_packages)
@@ -228,8 +253,10 @@ pub(crate) fn write_script_entrypoints(
             })?;
 
         // Generate the launcher script.
-        let launcher_python_script =
-            get_script_launcher(entrypoint, &get_shebang(&layout.sys_executable));
+        let launcher_python_script = get_script_launcher(
+            entrypoint,
+            &format_shebang(&layout.sys_executable, &layout.os_name),
+        );
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
         if cfg!(windows) {
@@ -413,7 +440,7 @@ fn install_script(
         )));
     }
 
-    let target_path = layout.scripts.join(file.file_name());
+    let target_path = layout.scheme.scripts.join(file.file_name());
 
     let path = file.path();
     let mut script = File::open(&path)?;
@@ -431,7 +458,9 @@ fn install_script(
     let mut start = vec![0; placeholder_python.len()];
     script.read_exact(&mut start)?;
     let size_and_encoded_hash = if start == placeholder_python {
-        let start = get_shebang(&layout.sys_executable).as_bytes().to_vec();
+        let start = format_shebang(&layout.sys_executable, &layout.os_name)
+            .as_bytes()
+            .to_vec();
         let mut target = File::create(&target_path)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
         fs::remove_file(&path)?;
@@ -491,7 +520,7 @@ pub(crate) fn install_data(
         match path.file_name().and_then(|name| name.to_str()) {
             Some("data") => {
                 // Move the content of the folder to the root of the venv
-                move_folder_recorded(&path, &layout.data, site_packages, record)?;
+                move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
             }
             Some("scripts") => {
                 for file in fs::read_dir(path)? {
@@ -517,14 +546,14 @@ pub(crate) fn install_data(
                 }
             }
             Some("headers") => {
-                let target_path = layout.include.join(dist_name);
+                let target_path = layout.scheme.include.join(dist_name);
                 move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
             Some("purelib") => {
-                move_folder_recorded(&path, &layout.purelib, site_packages, record)?;
+                move_folder_recorded(&path, &layout.scheme.purelib, site_packages, record)?;
             }
             Some("platlib") => {
-                move_folder_recorded(&path, &layout.platlib, site_packages, record)?;
+                move_folder_recorded(&path, &layout.scheme.platlib, site_packages, record)?;
             }
             _ => {
                 return Err(Error::InvalidWheel(format!(
@@ -623,7 +652,7 @@ pub(crate) fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry
 
 /// Parse a file with `Key: value` entries such as WHEEL and METADATA
 fn parse_key_value_file(
-    file: &mut impl Read,
+    file: impl Read,
     debug_filename: &str,
 ) -> Result<FxHashMap<String, Vec<String>>, Error> {
     let mut data: FxHashMap<String, Vec<String>> = FxHashMap::default();
@@ -634,14 +663,15 @@ fn parse_key_value_file(
         if line.is_empty() {
             continue;
         }
-        let (key, value) = line.split_once(": ").ok_or_else(|| {
+        let (key, value) = line.split_once(':').ok_or_else(|| {
             Error::InvalidWheel(format!(
-                "Line {line_no} of the {debug_filename} file is invalid"
+                "Line {} of the {debug_filename} file is invalid",
+                line_no + 1
             ))
         })?;
-        data.entry(key.to_string())
+        data.entry(key.trim().to_string())
             .or_default()
-            .push(value.to_string());
+            .push(value.trim().to_string());
     }
     Ok(data)
 }
@@ -691,9 +721,13 @@ pub(crate) fn parse_metadata(
 
 #[cfg(test)]
 mod test {
+    use std::io::Cursor;
     use std::path::Path;
 
+    use crate::Error;
     use indoc::{formatdoc, indoc};
+
+    use crate::wheel::format_shebang;
 
     use super::{parse_key_value_file, parse_wheel_file, read_record_file, relative_to, Script};
 
@@ -820,6 +854,71 @@ mod test {
                 function: "main_bar".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn test_shebang() {
+        // By default, use a simple shebang.
+        let executable = Path::new("/usr/bin/python3");
+        let os_name = "posix";
+        assert_eq!(format_shebang(executable, os_name), "#!/usr/bin/python3");
+
+        // If the path contains spaces, we should use the `exec` trick.
+        let executable = Path::new("/usr/bin/path to python3");
+        let os_name = "posix";
+        assert_eq!(
+            format_shebang(executable, os_name),
+            "#!/bin/sh\n'''exec' '/usr/bin/path to python3' \"$0\" \"$@\"\n' '''"
+        );
+
+        // Except on Windows...
+        let executable = Path::new("/usr/bin/path to python3");
+        let os_name = "nt";
+        assert_eq!(
+            format_shebang(executable, os_name),
+            "#!/usr/bin/path to python3"
+        );
+
+        // Quotes, however, are ok.
+        let executable = Path::new("/usr/bin/'python3'");
+        let os_name = "posix";
+        assert_eq!(format_shebang(executable, os_name), "#!/usr/bin/'python3'");
+
+        // If the path is too long, we should not use the `exec` trick.
+        let executable = Path::new("/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3");
+        let os_name = "posix";
+        assert_eq!(format_shebang(executable, os_name), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
+    }
+
+    #[test]
+    fn test_empty_value() -> Result<(), Error> {
+        let wheel = indoc! {r"
+        Wheel-Version: 1.0
+        Generator: custom
+        Root-Is-Purelib: false
+        Tag:
+        Tag: -manylinux_2_17_x86_64
+        Tag: -manylinux2014_x86_64
+        "
+        };
+        let reader = Cursor::new(wheel.to_string().into_bytes());
+        let wheel_file = parse_key_value_file(reader, "WHEEL")?;
+        assert_eq!(
+            wheel_file.get("Wheel-Version"),
+            Some(&["1.0".to_string()].to_vec())
+        );
+        assert_eq!(
+            wheel_file.get("Tag"),
+            Some(
+                &[
+                    String::new(),
+                    "-manylinux_2_17_x86_64".to_string(),
+                    "-manylinux2014_x86_64".to_string()
+                ]
+                .to_vec()
+            )
+        );
+        Ok(())
     }
 
     #[test]

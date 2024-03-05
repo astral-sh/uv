@@ -1,5 +1,4 @@
 use pubgrub::range::Range;
-
 use rustc_hash::FxHashMap;
 
 use distribution_types::CompatibleDist;
@@ -9,7 +8,6 @@ use pep508_rs::{Requirement, VersionOrUrl};
 use uv_normalize::PackageName;
 
 use crate::prerelease_mode::PreReleaseStrategy;
-
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Manifest, Options};
@@ -25,16 +23,8 @@ impl CandidateSelector {
     /// Return a [`CandidateSelector`] for the given [`Manifest`].
     pub(crate) fn for_resolution(manifest: &Manifest, options: Options) -> Self {
         Self {
-            resolution_strategy: ResolutionStrategy::from_mode(
-                options.resolution_mode,
-                manifest.requirements.as_slice(),
-            ),
-            prerelease_strategy: PreReleaseStrategy::from_mode(
-                options.prerelease_mode,
-                manifest.requirements.as_slice(),
-                manifest.constraints.as_slice(),
-                manifest.overrides.as_slice(),
-            ),
+            resolution_strategy: ResolutionStrategy::from_mode(options.resolution_mode, manifest),
+            prerelease_strategy: PreReleaseStrategy::from_mode(options.prerelease_mode, manifest),
             preferences: Preferences::from(manifest.preferences.as_slice()),
         }
     }

@@ -1,3 +1,6 @@
+use std::fmt::{Display, Formatter};
+use std::ops::Deref;
+
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
 use url::Url;
@@ -74,17 +77,17 @@ pub enum ErrorKind {
 
     /// The metadata file was not found in the registry.
     #[error("File `{0}` was not found in the registry at {1}.")]
-    FileNotFound(String, #[source] reqwest::Error),
+    FileNotFound(String, #[source] BetterReqwestError),
 
     /// A generic request error happened while making a request. Refer to the
     /// error message for more details.
     #[error(transparent)]
-    RequestError(#[from] reqwest::Error),
+    ReqwestError(#[from] BetterReqwestError),
 
     /// A generic request middleware error happened while making a request.
     /// Refer to the error message for more details.
     #[error(transparent)]
-    RequestMiddlewareError(#[from] reqwest_middleware::Error),
+    ReqwestMiddlewareError(#[from] anyhow::Error),
 
     #[error("Received some unexpected JSON from {url}")]
     BadJson { source: serde_json::Error, url: Url },
@@ -155,20 +158,6 @@ impl ErrorKind {
         matches!(err.kind(), std::io::ErrorKind::NotFound)
     }
 
-    pub(crate) fn from_middleware(err: reqwest_middleware::Error) -> Self {
-        if let reqwest_middleware::Error::Middleware(ref underlying) = err {
-            if let Some(err) = underlying.downcast_ref::<OfflineError>() {
-                return Self::Offline(err.url().to_string());
-            }
-        }
-
-        if let reqwest_middleware::Error::Reqwest(err) = err {
-            return Self::RequestError(err);
-        }
-
-        Self::RequestMiddlewareError(err)
-    }
-
     /// Returns `true` if the error is due to the server not supporting HTTP range requests.
     pub(crate) fn is_http_range_requests_unsupported(&self) -> bool {
         match self {
@@ -179,9 +168,18 @@ impl ErrorKind {
 
             // The server returned a "Method Not Allowed" error, indicating it doesn't support
             // HEAD requests, so we can't check for range requests.
-            Self::RequestError(err) => {
+            Self::ReqwestError(err) => {
                 if let Some(status) = err.status() {
+                    // If the server doesn't support HEAD requests, we can't check for range
+                    // requests.
                     if status == reqwest::StatusCode::METHOD_NOT_ALLOWED {
+                        return true;
+                    }
+
+                    // In some cases, registries return a 404 for HEAD requests when they're not
+                    // supported. In the worst case, we'll now just proceed to attempt to stream the
+                    // entire file, so it's fine to be somewhat lenient here.
+                    if status == reqwest::StatusCode::NOT_FOUND {
                         return true;
                     }
                 }
@@ -206,5 +204,78 @@ impl ErrorKind {
         }
 
         false
+    }
+}
+
+impl From<reqwest::Error> for ErrorKind {
+    fn from(error: reqwest::Error) -> Self {
+        Self::ReqwestError(BetterReqwestError::from(error))
+    }
+}
+impl From<reqwest_middleware::Error> for ErrorKind {
+    fn from(error: reqwest_middleware::Error) -> Self {
+        if let reqwest_middleware::Error::Middleware(ref underlying) = error {
+            if let Some(err) = underlying.downcast_ref::<OfflineError>() {
+                return Self::Offline(err.url().to_string());
+            }
+        }
+
+        match error {
+            reqwest_middleware::Error::Middleware(err) => Self::ReqwestMiddlewareError(err),
+            reqwest_middleware::Error::Reqwest(err) => Self::from(err),
+        }
+    }
+}
+
+/// Handle the case with no internet by explicitly telling the user instead of showing an obscure
+/// DNS error.
+#[derive(Debug)]
+pub struct BetterReqwestError(reqwest::Error);
+
+impl BetterReqwestError {
+    fn is_likely_offline(&self) -> bool {
+        if !self.0.is_connect() {
+            return false;
+        }
+        // Self is "error sending request for url", the first source is "error trying to connect",
+        // the second source is "dns error". We have to check for the string because hyper errors
+        // are opaque.
+        std::error::Error::source(&self.0)
+            .and_then(|err| err.source())
+            .is_some_and(|err| err.to_string().starts_with("dns error: "))
+    }
+}
+
+impl From<reqwest::Error> for BetterReqwestError {
+    fn from(error: reqwest::Error) -> Self {
+        Self(error)
+    }
+}
+
+impl Deref for BetterReqwestError {
+    type Target = reqwest::Error;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Display for BetterReqwestError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.is_likely_offline() {
+            f.write_str("Could not connect, are you offline?")
+        } else {
+            Display::fmt(&self.0, f)
+        }
+    }
+}
+
+impl std::error::Error for BetterReqwestError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        if self.is_likely_offline() {
+            Some(&self.0)
+        } else {
+            self.0.source()
+        }
     }
 }

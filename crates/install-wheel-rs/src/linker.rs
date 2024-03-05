@@ -69,8 +69,8 @@ pub fn install_wheel(
     // > 1.d Else unpack archive into platlib (site-packages).
     debug!(name, "Extracting file");
     let site_packages = match lib_kind {
-        LibKind::Pure => &layout.purelib,
-        LibKind::Plat => &layout.platlib,
+        LibKind::Pure => &layout.scheme.purelib,
+        LibKind::Plat => &layout.scheme.platlib,
     };
     let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel)?;
     debug!(name, "Extracted {num_unpacked} files");
@@ -125,11 +125,7 @@ pub fn install_wheel(
     let mut record_writer = csv::WriterBuilder::new()
         .has_headers(false)
         .escape(b'"')
-        .from_path(
-            layout
-                .platlib
-                .join(format!("{dist_info_prefix}.dist-info/RECORD")),
-        )?;
+        .from_path(site_packages.join(format!("{dist_info_prefix}.dist-info/RECORD")))?;
     record.sort();
     for entry in record {
         record_writer.serialize(entry)?;

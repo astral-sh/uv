@@ -1,6 +1,10 @@
 name: System Install
 
 on:
+  pull_request:
+    paths:
+      # When we change this workflow itself...
+      - .github/workflows/system-install.yml
   workflow_dispatch:
 
 concurrency:
@@ -38,6 +42,30 @@ jobs:
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./target/debug/uv
 
+  install-pypy:
+    name: "Install PyPy on Ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 'pypy3.9'
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Build"
+        run: cargo build
+
+      - name: "Print Python path"
+        run: echo $(which pypy)
+
+      - name: "Validate global Python install"
+        run: pypy scripts/check_system_python.py --uv ./target/debug/uv
+
   install-macos:
     name: "Install Python on macOS"
     runs-on: macos-14
@@ -61,14 +89,15 @@ jobs:
       - name: "Validate global Python install"
         run: python3.11 scripts/check_system_python.py --uv ./target/debug/uv
 
-  install-windows:
-    name: "Install Python on Windows"
+  install-windows-python-310:
+    name: "Install Python 3.10 on Windows"
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-#      - name: "Install Python"
-#        run: choco install python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -82,10 +111,59 @@ jobs:
         run: echo $(which python)
 
       - name: "Validate global Python install"
-        run: py -3.12 ./scripts/check_system_python.py --uv ./target/debug/uv
+        run: py -3.10 ./scripts/check_system_python.py --uv ./target/debug/uv
+
+  install-windows-python-313:
+    name: "Install Python 3.13 on Windows"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          allow-prereleases: true
+          cache: pip
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Build"
+        run: cargo build
+
+      - name: "Print Python path"
+        run: echo $(which python)
+
+      - name: "Validate global Python install"
+        run: py -3.13 ./scripts/check_system_python.py --uv ./target/debug/uv
+
+  install-choco:
+    name: "Install Python 3.12 via Chocolatey"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: choco install python3 --verbose --version=3.9.13
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Build"
+        run: cargo build
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: py -3.9 ./scripts/check_system_python.py --uv ./target/debug/uv
 
   install-pyenv:
-    name: "Install Python using pyenv"
+    name: "Install Python via pyenv"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

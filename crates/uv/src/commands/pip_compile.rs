@@ -30,7 +30,7 @@ use uv_interpreter::{Interpreter, PythonVersion};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
-    OptionsBuilder, PreReleaseMode, ResolutionMode, Resolver,
+    OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
 use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 use uv_warnings::warn_user;
@@ -260,8 +260,9 @@ pub(crate) async fn pip_compile(
         let downloader = Downloader::new(&cache, &tags, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
+        // Build all editables.
         let editable_wheel_dir = tempdir_in(cache.root())?;
-        let editable_metadata: Vec<_> = downloader
+        let editables: Vec<_> = downloader
             .build_editables(editables, editable_wheel_dir.path())
             .await
             .context("Failed to build editables")?
@@ -269,22 +270,33 @@ pub(crate) async fn pip_compile(
             .map(|built_editable| (built_editable.editable, built_editable.metadata))
             .collect();
 
-        let s = if editable_metadata.len() == 1 {
-            ""
-        } else {
-            "s"
-        };
+        // Validate that the editables are compatible with the target Python version.
+        let requirement = PythonRequirement::new(&interpreter, &markers);
+        for (.., metadata) in &editables {
+            if let Some(python_requires) = metadata.requires_python.as_ref() {
+                if !python_requires.contains(requirement.target()) {
+                    return Err(anyhow!(
+                        "Editable `{}` requires Python {}, but resolution targets Python {}",
+                        metadata.name,
+                        python_requires,
+                        requirement.target()
+                    ));
+                }
+            }
+        }
+
+        let s = if editables.len() == 1 { "" } else { "s" };
         writeln!(
             printer,
             "{}",
             format!(
                 "Built {} in {}",
-                format!("{} editable{}", editable_metadata.len(), s).bold(),
+                format!("{} editable{}", editables.len(), s).bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()
         )?;
-        editable_metadata
+        editables
     };
 
     // Create a manifest of the requirements.

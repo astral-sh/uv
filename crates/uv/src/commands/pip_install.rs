@@ -35,7 +35,7 @@ use uv_resolver::{
 use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
-use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
+use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
 
@@ -55,6 +55,7 @@ pub(crate) async fn pip_install(
     index_locations: IndexLocations,
     reinstall: &Reinstall,
     link_mode: LinkMode,
+    compile: bool,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -224,6 +225,7 @@ pub(crate) async fn pip_install(
             &editables,
             editable_wheel_dir.path(),
             &cache,
+            &interpreter,
             tags,
             &client,
             &resolve_dispatch,
@@ -303,6 +305,7 @@ pub(crate) async fn pip_install(
         reinstall,
         no_binary,
         link_mode,
+        compile,
         &index_locations,
         tags,
         &client,
@@ -371,10 +374,12 @@ async fn specification(
 }
 
 /// Build a set of editable distributions.
+#[allow(clippy::too_many_arguments)]
 async fn build_editables(
     editables: &[EditableRequirement],
     editable_wheel_dir: &Path,
     cache: &Cache,
+    interpreter: &Interpreter,
     tags: &Tags,
     client: &RegistryClient,
     build_dispatch: &BuildDispatch<'_>,
@@ -403,6 +408,21 @@ async fn build_editables(
         .context("Failed to build editables")?
         .into_iter()
         .collect();
+
+    // Validate that the editables are compatible with the target Python version.
+    for editable in &editables {
+        if let Some(python_requires) = editable.metadata.requires_python.as_ref() {
+            if !python_requires.contains(interpreter.python_version()) {
+                return Err(anyhow!(
+                    "Editable `{}` requires Python {}, but {} is installed",
+                    editable.metadata.name,
+                    python_requires,
+                    interpreter.python_version()
+                )
+                .into());
+            }
+        }
+    }
 
     let s = if editables.len() == 1 { "" } else { "s" };
     writeln!(
@@ -523,6 +543,7 @@ async fn install(
     reinstall: &Reinstall,
     no_binary: &NoBinary,
     link_mode: LinkMode,
+    compile: bool,
     index_urls: &IndexLocations,
     tags: &Tags,
     client: &RegistryClient,
@@ -654,6 +675,10 @@ async fn install(
             )
             .dimmed()
         )?;
+    }
+
+    if compile {
+        compile_bytecode(venv, cache, printer).await?;
     }
 
     for event in reinstalls

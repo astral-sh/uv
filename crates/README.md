@@ -18,10 +18,6 @@ metadata.
 Abstractions for representing built distributions (wheels) and source distributions (sdists), and
 the sources from which they can be downloaded.
 
-## [gourgeist](./gourgeist)
-
-A `venv` replacement to create virtual environments in Rust.
-
 ## [install-wheel-rs](./install-wheel-rs)
 
 Install built distributions (wheels) into a virtual environment.]
@@ -116,6 +112,10 @@ Shared traits for uv, to avoid circular dependencies.
 ## [pypi-types](./pypi-types)
 
 General-purpose type definitions for types used in PyPI-compatible APIs.
+
+## [uv-virtualenv](./uv-virtualenv)
+
+A `venv` replacement to create virtual environments in Rust.
 
 ## [uv-warnings](./uv-warnings)
 
