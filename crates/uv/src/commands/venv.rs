@@ -216,29 +216,21 @@ async fn venv_impl(
         None => None,
         Some(Shell::Bash | Shell::Zsh) => Some(format!(
             "source {}",
-            shlex(path.join("bin").join("activate"))
+            shlex_posix(path.join("bin").join("activate"))
         )),
         Some(Shell::Fish) => Some(format!(
             "source {}",
-            shlex(path.join("bin").join("activate.fish"))
+            shlex_posix(path.join("bin").join("activate.fish"))
         )),
         Some(Shell::Nushell) => Some(format!(
             "overlay use {}",
-            shlex(path.join("bin").join("activate.nu"))
+            shlex_posix(path.join("bin").join("activate.nu"))
         )),
         Some(Shell::Csh) => Some(format!(
             "source {}",
-            shlex(path.join("bin").join("activate.csh"))
+            shlex_posix(path.join("bin").join("activate.csh"))
         )),
-        Some(Shell::Powershell) => {
-            // No need to quote the path for PowerShell.
-            Some(
-                path.join("Scripts")
-                    .join("activate")
-                    .simplified_display()
-                    .to_string(),
-            )
-        }
+        Some(Shell::Powershell) => Some(shlex_windows(path.join("Scripts").join("activate"))),
     };
     if let Some(act) = activation {
         writeln!(printer, "Activate with: {}", act.green()).into_diagnostic()?;
@@ -247,8 +239,8 @@ async fn venv_impl(
     Ok(ExitStatus::Success)
 }
 
-/// Quote a path, if necessary, for safe use in a shell command.
-fn shlex(executable: impl AsRef<Path>) -> String {
+/// Quote a path, if necessary, for safe use in a POSIX-compatible shell command.
+fn shlex_posix(executable: impl AsRef<Path>) -> String {
     // Convert to a display path.
     let executable = executable.as_ref().simplified_display().to_string();
 
@@ -257,6 +249,20 @@ fn shlex(executable: impl AsRef<Path>) -> String {
     // > The string $'b is then quoted as '$'"'"'b'
     if executable.contains(' ') {
         format!("'{}'", executable.replace('\'', r#"'"'"'"#))
+    } else {
+        executable
+    }
+}
+
+/// Quote a path, if necessary, for safe use in `PowerShell`.
+fn shlex_windows(executable: impl AsRef<Path>) -> String {
+    // Convert to a display path.
+    let executable = executable.as_ref().simplified_display().to_string();
+
+    // Wrap the executable in quotes (and a `&` invocation) if it contains spaces.
+    // TODO(charlie): This won't work in `cmd.exe`.
+    if executable.contains(' ') {
+        format!("& \"{executable}\"")
     } else {
         executable
     }
