@@ -50,6 +50,7 @@ mod confirm;
 mod logging;
 mod printer;
 mod requirements;
+mod shell;
 mod version;
 
 const DEFAULT_VENV_NAME: &str = ".venv";
