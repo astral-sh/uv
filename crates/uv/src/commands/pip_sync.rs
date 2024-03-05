@@ -48,6 +48,12 @@ pub(crate) async fn pip_sync(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
+    // initialize http client early to allow fetching remote requirements/constraints.txt files
+    let preliminary_client = RegistryClientBuilder::new(cache.clone())
+        .index_urls(index_locations.index_urls())
+        .connectivity(connectivity)
+        .build();
+
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project: _project,
@@ -60,17 +66,13 @@ pub(crate) async fn pip_sync(
         no_index,
         find_links,
         extras: _extras,
-    } = RequirementsSpecification::from_simple_sources(sources).await?;
+    } = RequirementsSpecification::from_simple_sources(sources, &preliminary_client).await?;
 
     let num_requirements = requirements.len() + editables.len();
     if num_requirements == 0 {
         writeln!(printer, "No requirements found")?;
         return Ok(ExitStatus::Success);
     }
-
-    // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -108,11 +110,12 @@ pub(crate) async fn pip_sync(
     // Determine the current environment markers.
     let tags = venv.interpreter().tags()?;
 
-    // Prep the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_locations.index_urls())
-        .connectivity(connectivity)
-        .build();
+    // Incorporate any index locations from the provided sources.
+    let index_locations =
+        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+
+    // Reuse existing client setup with updated indexes we parsed out of the requirements files
+    let client = preliminary_client.update_index_urls(index_locations.index_urls());
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

@@ -18,6 +18,8 @@ pep508_rs = { path = "../pep508-rs", features = ["rkyv", "serde", "non-pep508-ex
 uv-fs = { path = "../uv-fs" }
 uv-normalize = { path = "../uv-normalize" }
 uv-warnings = { path = "../uv-warnings" }
+uv-client = { path = "../uv-client" }
+uv-cache = { path = "../uv-cache" }
 
 fs-err = { workspace = true }
 once_cell = { workspace = true }
@@ -30,6 +32,7 @@ url = { workspace = true }
 async-recursion = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
 dialoguer = { workspace = true }
 
 [dev-dependencies]

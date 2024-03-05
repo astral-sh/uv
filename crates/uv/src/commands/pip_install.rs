@@ -69,6 +69,12 @@ pub(crate) async fn pip_install(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
+    // initialize http client early to allow fetching remote requirements/constraints.txt files
+    let preliminary_client = RegistryClientBuilder::new(cache.clone())
+        .index_urls(index_locations.index_urls())
+        .connectivity(connectivity)
+        .build();
+
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project,
@@ -81,11 +87,14 @@ pub(crate) async fn pip_install(
         no_index,
         find_links,
         extras: used_extras,
-    } = specification(requirements, constraints, overrides, extras).await?;
-
-    // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+    } = specification(
+        requirements,
+        constraints,
+        overrides,
+        extras,
+        &preliminary_client,
+    )
+    .await?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {
@@ -168,11 +177,12 @@ pub(crate) async fn pip_install(
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
 
-    // Instantiate a client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_locations.index_urls())
-        .connectivity(connectivity)
-        .build();
+    // Incorporate any index locations from the provided sources.
+    let index_locations =
+        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+
+    // Reuse existing client setup with updated indexes we parsed out of the requirements files
+    let client = preliminary_client.update_index_urls(index_locations.index_urls());
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -318,6 +328,7 @@ async fn specification(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification<'_>,
+    client: &RegistryClient,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a pyproject toml source
     if !matches!(extras, ExtrasSpecification::None)
@@ -329,9 +340,14 @@ async fn specification(
     }
 
     // Read all requirements from the provided sources.
-    let spec =
-        RequirementsSpecification::from_sources(requirements, constraints, overrides, extras)
-            .await?;
+    let spec = RequirementsSpecification::from_sources(
+        requirements,
+        constraints,
+        overrides,
+        extras,
+        client,
+    )
+    .await?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {

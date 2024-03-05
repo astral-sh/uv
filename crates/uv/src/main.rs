@@ -760,6 +760,10 @@ struct PipUninstallArgs {
     /// should be used with caution, as it can modify the system Python installation.
     #[clap(long, conflicts_with = "python")]
     system: bool,
+
+    /// Run offline, i.e., without accessing the network.
+    #[arg(global = true, long)]
+    offline: bool,
 }
 
 #[derive(Args)]
@@ -1270,7 +1274,19 @@ async fn run() -> Result<ExitStatus> {
                         .map(RequirementsSource::from_path),
                 )
                 .collect::<Vec<_>>();
-            commands::pip_uninstall(&sources, args.python, args.system, cache, printer).await
+            commands::pip_uninstall(
+                &sources,
+                args.python,
+                args.system,
+                cache,
+                if args.offline {
+                    Connectivity::Offline
+                } else {
+                    Connectivity::Online
+                },
+                printer,
+            )
+            .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),

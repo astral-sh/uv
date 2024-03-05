@@ -7,6 +7,7 @@ use tracing::debug;
 use distribution_types::{InstalledMetadata, Name};
 use platform_host::Platform;
 use uv_cache::Cache;
+use uv_client::{Connectivity, RegistryClientBuilder};
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
 
@@ -20,9 +21,15 @@ pub(crate) async fn pip_uninstall(
     python: Option<String>,
     system: bool,
     cache: Cache,
+    connectivity: Connectivity,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+
+    // initialize http client early to allow fetching remote requirements/constraints.txt files
+    let client: uv_client::RegistryClient = RegistryClientBuilder::new(cache.clone())
+        .connectivity(connectivity)
+        .build();
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -36,7 +43,7 @@ pub(crate) async fn pip_uninstall(
         no_index: _no_index,
         find_links: _find_links,
         extras: _extras,
-    } = RequirementsSpecification::from_simple_sources(sources).await?;
+    } = RequirementsSpecification::from_simple_sources(sources, &client).await?;
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
