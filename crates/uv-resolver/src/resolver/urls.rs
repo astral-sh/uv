@@ -42,21 +42,21 @@ impl Urls {
         }
 
         // Add any editable requirements. If there are any conflicts, return an error.
-        for (requirement, metadata) in &manifest.editables {
-            if let Some(previous) = urls.insert(metadata.name.clone(), requirement.url.clone()) {
+        for (editable, metadata) in &manifest.editables {
+            if let Some(previous) = urls.insert(metadata.name.clone(), editable.url.clone()) {
                 if cache_key::CanonicalUrl::new(previous.raw())
-                    != cache_key::CanonicalUrl::new(requirement.raw())
+                    != cache_key::CanonicalUrl::new(editable.raw())
                 {
                     return Err(ResolveError::ConflictingUrlsDirect(
                         metadata.name.clone(),
                         previous.verbatim().to_string(),
-                        requirement.verbatim().to_string(),
+                        editable.verbatim().to_string(),
                     ));
                 }
             }
 
             for requirement in &metadata.requires_dist {
-                if !requirement.evaluate_markers(markers, &[]) {
+                if !requirement.evaluate_markers(markers, &editable.extras) {
                     continue;
                 }
 
