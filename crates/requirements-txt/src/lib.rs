@@ -1508,9 +1508,9 @@ mod test {
         Ok(())
     }
 
-    #[test]
+    #[tokio::test]
     #[cfg(not(windows))]
-    fn nested_editable() -> Result<()> {
+    async fn nested_editable() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
 
         let requirements_txt = temp_dir.child("requirements.txt");
@@ -1530,7 +1530,9 @@ mod test {
         "})?;
 
         let requirements =
-            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap();
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap();
 
         insta::assert_debug_snapshot!(requirements, @r###"
             RequirementsTxt {
@@ -1568,8 +1570,8 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn nested_conflicting_index_url() -> Result<()> {
+    #[tokio::test]
+    async fn nested_conflicting_index_url() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
 
         let requirements_txt = temp_dir.child("requirements.txt");
@@ -1588,7 +1590,10 @@ mod test {
             --index-url https://fake.pypi.org/simple
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let error =
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
