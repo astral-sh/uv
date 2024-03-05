@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::sysconfig::SysconfigPaths;
+use pypi_types::Scheme;
 
 /// The layout of a virtual environment.
 #[derive(Debug)]
@@ -12,6 +12,6 @@ pub struct Virtualenv {
     /// (Unix, Python 3.11).
     pub executable: PathBuf,
 
-    /// The `sysconfig` paths for the virtualenv, as returned by `sysconfig.get_paths()`.
-    pub sysconfig_paths: SysconfigPaths,
+    /// The [`Scheme`] paths for the virtualenv, as returned by (e.g.) `sysconfig.get_paths()`.
+    pub scheme: Scheme,
 }

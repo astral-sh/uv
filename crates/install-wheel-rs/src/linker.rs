@@ -69,8 +69,8 @@ pub fn install_wheel(
     // > 1.d Else unpack archive into platlib (site-packages).
     debug!(name, "Extracting file");
     let site_packages = match lib_kind {
-        LibKind::Pure => &layout.purelib,
-        LibKind::Plat => &layout.platlib,
+        LibKind::Pure => &layout.scheme.purelib,
+        LibKind::Plat => &layout.scheme.platlib,
     };
     let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel)?;
     debug!(name, "Extracted {num_unpacked} files");

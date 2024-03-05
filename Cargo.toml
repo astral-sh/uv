@@ -17,7 +17,7 @@ authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-anstream = { version = "0.6.12" }
+anstream = { version = "0.6.13" }
 anyhow = { version = "1.0.80" }
 async-compression = { version = "0.4.6" }
 async-channel = { version = "2.2.0" }
@@ -26,7 +26,6 @@ async_http_range_reader = { version = "0.7.0" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "d76801da0943de985254fc6255c0e476b57c5836", features = ["deflate"] }
 base64 = { version = "0.21.7" }
 cachedir = { version = "0.3.1" }
-camino = { version = "1.1.6", features = ["serde1"] }
 cargo-util = { version = "0.2.8" }
 chrono = { version = "0.4.31" }
 clap = { version = "4.4.13" }
@@ -52,7 +51,7 @@ hex = { version = "0.4.3" }
 hmac = { version = "0.12.1" }
 home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
-http = { version = "0.2.11" }
+http = { version = "0.2.12" }
 indexmap = { version = "2.1.0" }
 indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }

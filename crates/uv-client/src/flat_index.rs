@@ -152,14 +152,14 @@ impl<'a> FlatIndexClient<'a> {
             .header("Accept-Encoding", "gzip")
             .header("Accept", "text/html")
             .build()
-            .map_err(ErrorKind::RequestError)?;
+            .map_err(ErrorKind::from)?;
         let parse_simple_response = |response: Response| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
                 let url = safe_copy_url_auth(url, response.url().clone());
 
-                let text = response.text().await.map_err(ErrorKind::RequestError)?;
+                let text = response.text().await.map_err(ErrorKind::from)?;
                 let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 

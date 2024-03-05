@@ -4,14 +4,15 @@ use std::env;
 use std::env::consts::EXE_SUFFIX;
 use std::io;
 use std::io::{BufWriter, Write};
+use std::path::Path;
 
-use camino::{FromPathBufError, Utf8Path, Utf8PathBuf};
 use fs_err as fs;
 use fs_err::File;
 use tracing::info;
-use uv_fs::Simplified;
 
-use uv_interpreter::{Interpreter, SysconfigPaths, Virtualenv};
+use pypi_types::Scheme;
+use uv_fs::Simplified;
+use uv_interpreter::{Interpreter, Virtualenv};
 
 use crate::{Error, Prompt};
 
@@ -42,17 +43,42 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
 
 /// Write all the files that belong to a venv without any packages installed.
 pub fn create_bare_venv(
-    location: &Utf8Path,
+    location: &Path,
     interpreter: &Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
     extra_cfg: Vec<(String, String)>,
 ) -> Result<Virtualenv, Error> {
-    // We have to canonicalize the interpreter path, otherwise the home is set to the venv dir instead of the real root.
-    // This would make python-build-standalone fail with the encodings module not being found because its home is wrong.
-    let base_python: Utf8PathBuf = fs_err::canonicalize(interpreter.sys_executable())?
-        .try_into()
-        .map_err(|err: FromPathBufError| err.into_io_error())?;
+    // Determine the base Python executable; that is, the Python executable that should be
+    // considered the "base" for the virtual environment. This is typically the Python executable
+    // from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
+    // the base Python executable is the Python executable of the interpreter's base interpreter.
+    let base_python = if cfg!(unix) {
+        // On Unix, follow symlinks to resolve the base interpreter, since the Python executable in
+        // a virtual environment is a symlink to the base interpreter.
+        uv_fs::canonicalize_executable(interpreter.sys_executable())?
+    } else if cfg!(windows) {
+        // On Windows, follow `virtualenv`. If we're in a virtual environment, use
+        // `sys._base_executable` if it exists; if not, use `sys.base_prefix`. For example, with
+        // Python installed from the Windows Store, `sys.base_prefix` is slightly "incorrect".
+        //
+        // If we're _not_ in a virtual environment, use the interpreter's executable, since it's
+        // already a "system Python". We canonicalize the path to ensure that it's real and
+        // consistent, though we don't expect any symlinks on Windows.
+        if interpreter.is_virtualenv() {
+            if let Some(base_executable) = interpreter.base_executable() {
+                base_executable.to_path_buf()
+            } else {
+                // Assume `python.exe`, though the exact executable name is never used (below) on
+                // Windows, only its parent directory.
+                interpreter.base_prefix().join("python.exe")
+            }
+        } else {
+            uv_fs::canonicalize_executable(interpreter.sys_executable())?
+        }
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    };
 
     // Validate the existing location.
     match location.metadata() {
@@ -60,7 +86,7 @@ pub fn create_bare_venv(
             if metadata.is_file() {
                 return Err(Error::IO(io::Error::new(
                     io::ErrorKind::AlreadyExists,
-                    format!("File exists at `{location}`"),
+                    format!("File exists at `{}`", location.simplified_display()),
                 )));
             } else if metadata.is_dir() {
                 if location.join("pyvenv.cfg").is_file() {
@@ -75,7 +101,10 @@ pub fn create_bare_venv(
                 } else {
                     return Err(Error::IO(io::Error::new(
                         io::ErrorKind::AlreadyExists,
-                        format!("The directory `{location}` exists, but it's not a virtualenv"),
+                        format!(
+                            "The directory `{}` exists, but it's not a virtualenv",
+                            location.simplified_display()
+                        ),
                     )));
                 }
             }
@@ -86,7 +115,7 @@ pub fn create_bare_venv(
         Err(err) => return Err(Error::IO(err)),
     }
 
-    let location = location.canonicalize_utf8()?;
+    let location = location.canonicalize()?;
 
     let bin_name = if cfg!(unix) {
         "bin"
@@ -147,7 +176,26 @@ pub fn create_bare_venv(
                 .join("scripts")
                 .join("nt")
                 .join(python_exe);
-            fs_err::copy(shim, scripts.join(python_exe))?;
+            match fs_err::copy(shim, scripts.join(python_exe)) {
+                Ok(_) => {}
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                    // If `python.exe` doesn't exist, try the `venvlaucher.exe` shim.
+                    let shim = interpreter
+                        .stdlib()
+                        .join("venv")
+                        .join("scripts")
+                        .join("nt")
+                        .join(match python_exe {
+                            "python.exe" => "venvwlauncher.exe",
+                            "pythonw.exe" => "venvwlauncher.exe",
+                            _ => unreachable!(),
+                        });
+                    fs_err::copy(shim, scripts.join(python_exe))?;
+                }
+                Err(err) => {
+                    return Err(err.into());
+                }
+            }
         }
     }
     #[cfg(not(any(unix, windows)))]
@@ -187,27 +235,17 @@ pub fn create_bare_venv(
         fs::write(scripts.join(name), activator)?;
     }
 
-    // pyvenv.cfg
-    let python_home = if cfg!(unix) {
-        // On Linux and Mac, Python is symlinked so the base home is the parent of the resolved-by-canonicalize path.
-        base_python
-            .parent()
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "The python interpreter needs to have a parent directory",
-                )
-            })?
-            .to_string()
-    } else if cfg!(windows) {
-        // `virtualenv` seems to rely on the undocumented, private `sys._base_executable`. When I tried,
-        // `sys.base_prefix` was the same as the parent of `sys._base_executable`, but a much simpler logic and
-        // documented.
-        // https://github.com/pypa/virtualenv/blob/d9fdf48d69f0d0ca56140cf0381edbb5d6fe09f5/src/virtualenv/discovery/py_info.py#L136-L156
-        interpreter.base_prefix().display().to_string()
-    } else {
-        unimplemented!("Only Windows and Unix are supported")
-    };
+    // Per PEP 405, the Python `home` is the parent directory of the interpreter.
+    let python_home = base_python
+        .parent()
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "The Python interpreter needs to have a parent directory",
+            )
+        })?
+        .simplified_display()
+        .to_string();
 
     // Validate extra_cfg
     let reserved_keys = [
@@ -244,15 +282,6 @@ pub fn create_bare_venv(
                 "false".to_string()
             },
         ),
-        (
-            "base-prefix".to_string(),
-            interpreter.base_prefix().to_string_lossy().to_string(),
-        ),
-        (
-            "base-exec-prefix".to_string(),
-            interpreter.base_exec_prefix().to_string_lossy().to_string(),
-        ),
-        ("base-executable".to_string(), base_python.to_string()),
     ]
     .into_iter()
     .chain(extra_cfg)
@@ -283,41 +312,24 @@ pub fn create_bare_venv(
         unimplemented!("Only Windows and Unix are supported")
     };
 
-    // Construct the path to the `platstdlib` directory.
-    let platstdlib = if cfg!(windows) {
-        location.join("Lib")
-    } else {
-        location
-            .join("lib")
-            .join(format!(
-                "{}{}.{}",
-                interpreter.site_packages_python(),
-                interpreter.python_major(),
-                interpreter.python_minor()
-            ))
-            .join("site-packages")
-    };
-
     // Populate `site-packages` with a `_virtualenv.py` file.
     fs::create_dir_all(&site_packages)?;
     fs::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
     fs::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
 
     Ok(Virtualenv {
-        root: location.clone().into_std_path_buf(),
-        executable: executable.into_std_path_buf(),
-        sysconfig_paths: SysconfigPaths {
+        scheme: Scheme {
             // Paths that were already constructed above.
-            scripts: scripts.into_std_path_buf(),
-            platstdlib: platstdlib.into_std_path_buf(),
+            scripts,
             // Set `purelib` and `platlib` to the same value.
-            purelib: site_packages.clone().into_std_path_buf(),
-            platlib: site_packages.into_std_path_buf(),
+            purelib: site_packages.clone(),
+            platlib: site_packages,
             // Inherited from the interpreter.
             stdlib: interpreter.stdlib().to_path_buf(),
             include: interpreter.include().to_path_buf(),
-            platinclude: interpreter.platinclude().to_path_buf(),
-            data: location.into_std_path_buf(),
+            data: location.clone(),
         },
+        root: location,
+        executable,
     })
 }

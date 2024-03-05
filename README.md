@@ -169,18 +169,27 @@ search for a Python interpreter matching that version in the following order:
 - On Windows, the Python interpreter returned by `py --list-paths` that matches the requested
   version.
 
+### Installing into arbitrary Python environments
+
 Since uv has no dependency on Python, it can even install into virtual environments other than
 its own. For example, setting `VIRTUAL_ENV=/path/to/venv` will cause uv to install into
 `/path/to/venv`, no matter where uv is installed.
 
-Finally, uv can also install into non-virtual environments by providing a `--python` argument to
-`uv pip sync` or `uv pip install`. For example, `uv pip install --python=/path/to/python` will
+uv can also install into arbitrary, even non-virtual environments by providing a `--python` argument
+to `uv pip sync` or `uv pip install`. For example, `uv pip install --python=/path/to/python` will
 install into the environment linked to the `/path/to/python` interpreter.
 
 For convenience, `uv pip install --system` will install into the system Python environment, as an
 approximate shorthand for, e.g., `uv pip install --python=$(which python3)`. Though we generally
 recommend the use of virtual environments for dependency management, `--system` is intended to
 enable the use of `uv` in continuous integration and containerized environments.
+
+Installing into system Python across platforms and distributions is notoriously difficult. `uv`
+supports the common cases, but will not work in all cases. For example, installing into system
+Python on Debian prior to Python 3.10 is unsupported due to the [distribution's patching
+of `distutils` (but not `sysconfig`)](https://ffy00.github.io/blog/02-python-debian-and-the-install-locations/).
+While we always recommend the use of virtual environments, `uv` considers them to be required in
+these non-standard environments.
 
 ### Git authentication
 
@@ -339,6 +348,18 @@ command line argument. For example, if you're running uv on Python 3.9, but want
 Python 3.8, you can run `uv pip compile --python-version=3.8 requirements.in` to produce a
 Python 3.8-compatible resolution.
 
+### Reproducible resolution
+
+uv supports an `--exclude-newer` option to limit resolution to distributions published before a specific
+date, allowing reproduction of installations regardless of new package releases. The date may be specified
+as a RFC 3339 timestamp (e.g., `2006-12-02T02:07:43Z`) or UTC date in the same format (e.g., `2006-12-02`).
+
+Note the package index must support the `upload-time` field as specified in [`PEP 700`](https://peps.python.org/pep-0700/).
+If the field is not present for a given distribution, the distribution will be treated as unavailable.
+
+To ensure reproducibility, messages for unsatisfiable resolutions will not mention that distributions were excluded
+due to the `--exclude-newer` flag — newer distributions will be treated as if they do not exist.
+
 ## Platform support
 
 uv has Tier 1 support for the following platforms:
@@ -368,6 +389,16 @@ Beyond the Tier 1 and Tier 2 platforms, uv is known to build on i686 Windows, an
 to build on aarch64 Windows, but does not consider either platform to be supported at this time.
 
 uv supports and is tested against Python 3.8, 3.9, 3.10, 3.11, and 3.12.
+
+## Custom CA Certificates
+
+`uv` supports custom CA certificates (such as those needed by corporate proxies) by utilizing the
+system's trust store. To ensure this works out of the box, ensure your certificates are added to the
+system's trust store.
+
+If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT_FILE` environment
+variable to the path of the certificate bundle, to instruct `uv` to use that file instead of the
+system's trust store.
 
 ## Acknowledgements
 

@@ -15,12 +15,12 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_host::Platform;
 use platform_tags::{Tags, TagsError};
+use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::write_atomic_sync;
 
 use crate::python_environment::{detect_python_executable, detect_virtual_env};
 use crate::python_query::try_find_default_python;
-use crate::sysconfig::SysconfigPaths;
 use crate::{find_requested_python, Error, PythonVersion, Virtualenv};
 
 /// A Python executable and its associated platform markers.
@@ -28,10 +28,11 @@ use crate::{find_requested_python, Error, PythonVersion, Virtualenv};
 pub struct Interpreter {
     platform: Platform,
     markers: Box<MarkerEnvironment>,
-    sysconfig_paths: SysconfigPaths,
+    scheme: Scheme,
     prefix: PathBuf,
     base_exec_prefix: PathBuf,
     base_prefix: PathBuf,
+    base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     tags: OnceCell<Tags>,
 }
@@ -50,10 +51,11 @@ impl Interpreter {
         Ok(Self {
             platform,
             markers: Box::new(info.markers),
-            sysconfig_paths: info.sysconfig_paths,
+            scheme: info.scheme,
             prefix: info.prefix,
             base_exec_prefix: info.base_exec_prefix,
             base_prefix: info.base_prefix,
+            base_executable: info.base_executable,
             sys_executable: info.sys_executable,
             tags: OnceCell::new(),
         })
@@ -64,19 +66,18 @@ impl Interpreter {
         Self {
             platform,
             markers: Box::new(markers),
-            sysconfig_paths: SysconfigPaths {
+            scheme: Scheme {
                 stdlib: PathBuf::from("/dev/null"),
-                platstdlib: PathBuf::from("/dev/null"),
                 purelib: PathBuf::from("/dev/null"),
                 platlib: PathBuf::from("/dev/null"),
                 include: PathBuf::from("/dev/null"),
-                platinclude: PathBuf::from("/dev/null"),
                 scripts: PathBuf::from("/dev/null"),
                 data: PathBuf::from("/dev/null"),
             },
             prefix: PathBuf::from("/dev/null"),
             base_exec_prefix: PathBuf::from("/dev/null"),
             base_prefix: PathBuf::from("/dev/null"),
+            base_executable: None,
             sys_executable: PathBuf::from("/dev/null"),
             tags: OnceCell::new(),
         }
@@ -86,7 +87,7 @@ impl Interpreter {
     #[must_use]
     pub fn with_virtualenv(self, virtualenv: Virtualenv) -> Self {
         Self {
-            sysconfig_paths: virtualenv.sysconfig_paths,
+            scheme: virtualenv.scheme,
             sys_executable: virtualenv.executable,
             prefix: virtualenv.root,
             ..self
@@ -259,9 +260,7 @@ impl Interpreter {
             return None;
         }
 
-        let Ok(contents) =
-            fs::read_to_string(self.sysconfig_paths.stdlib.join("EXTERNALLY-MANAGED"))
-        else {
+        let Ok(contents) = fs::read_to_string(self.scheme.stdlib.join("EXTERNALLY-MANAGED")) else {
             return None;
         };
 
@@ -355,6 +354,12 @@ impl Interpreter {
         &self.prefix
     }
 
+    /// Return the `sys._base_executable` path for this Python interpreter. Some platforms do not
+    /// have this attribute, so it may be `None`.
+    pub fn base_executable(&self) -> Option<&Path> {
+        self.base_executable.as_deref()
+    }
+
     /// Return the `sys.executable` path for this Python interpreter.
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
@@ -362,37 +367,32 @@ impl Interpreter {
 
     /// Return the `purelib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn purelib(&self) -> &Path {
-        &self.sysconfig_paths.purelib
+        &self.scheme.purelib
     }
 
     /// Return the `platlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn platlib(&self) -> &Path {
-        &self.sysconfig_paths.platlib
+        &self.scheme.platlib
     }
 
     /// Return the `scripts` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn scripts(&self) -> &Path {
-        &self.sysconfig_paths.scripts
+        &self.scheme.scripts
     }
 
     /// Return the `data` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn data(&self) -> &Path {
-        &self.sysconfig_paths.data
+        &self.scheme.data
     }
 
     /// Return the `include` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn include(&self) -> &Path {
-        &self.sysconfig_paths.include
-    }
-
-    /// Return the `platinclude` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn platinclude(&self) -> &Path {
-        &self.sysconfig_paths.platinclude
+        &self.scheme.include
     }
 
     /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn stdlib(&self) -> &Path {
-        &self.sysconfig_paths.stdlib
+        &self.scheme.stdlib
     }
 
     /// Return the name of the Python directory used to build the path to the
@@ -412,23 +412,26 @@ impl Interpreter {
         Layout {
             python_version: self.python_tuple(),
             sys_executable: self.sys_executable().to_path_buf(),
-            purelib: self.purelib().to_path_buf(),
-            platlib: self.platlib().to_path_buf(),
-            scripts: self.scripts().to_path_buf(),
-            data: self.data().to_path_buf(),
-            include: if self.is_virtualenv() {
-                // If the interpreter is a venv, then the `include` directory has a different structure.
-                // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/locations/_sysconfig.py#L172
-                self.prefix.join("include").join("site").join(format!(
-                    "{}{}.{}",
-                    self.site_packages_python(),
-                    self.python_major(),
-                    self.python_minor()
-                ))
-            } else {
-                self.include().to_path_buf()
-            },
             os_name: self.markers.os_name.clone(),
+            scheme: Scheme {
+                stdlib: self.stdlib().to_path_buf(),
+                purelib: self.purelib().to_path_buf(),
+                platlib: self.platlib().to_path_buf(),
+                scripts: self.scripts().to_path_buf(),
+                data: self.data().to_path_buf(),
+                include: if self.is_virtualenv() {
+                    // If the interpreter is a venv, then the `include` directory has a different structure.
+                    // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/locations/_sysconfig.py#L172
+                    self.prefix.join("include").join("site").join(format!(
+                        "{}{}.{}",
+                        self.site_packages_python(),
+                        self.python_major(),
+                        self.python_minor()
+                    ))
+                } else {
+                    self.include().to_path_buf()
+                },
+            },
         }
     }
 }
@@ -451,10 +454,11 @@ impl ExternallyManaged {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     markers: MarkerEnvironment,
-    sysconfig_paths: SysconfigPaths,
+    scheme: Scheme,
     prefix: PathBuf,
     base_exec_prefix: PathBuf,
     base_prefix: PathBuf,
+    base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
 }
 
@@ -552,7 +556,7 @@ impl InterpreterInfo {
             format!("{}.msgpack", digest(&executable_bytes)),
         );
 
-        let modified = Timestamp::from_path(fs_err::canonicalize(executable)?)?;
+        let modified = Timestamp::from_path(uv_fs::canonicalize_executable(executable)?)?;
 
         // Read from the cache.
         if cache
@@ -651,15 +655,13 @@ mod tests {
                 "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "prefix": "/home/ferris/projects/uv/.venv",
                 "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
-                "sysconfig_paths": {
+                "scheme": {
                     "data": "/home/ferris/.pyenv/versions/3.12.0",
                     "include": "/home/ferris/.pyenv/versions/3.12.0/include",
-                    "platinclude": "/home/ferris/.pyenv/versions/3.12.0/include",
                     "platlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages",
                     "purelib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages",
                     "scripts": "/home/ferris/.pyenv/versions/3.12.0/bin",
-                    "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
-                    "platstdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12"
+                    "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12"
                 }
             }
         "##};

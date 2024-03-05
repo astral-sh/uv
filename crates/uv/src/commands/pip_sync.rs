@@ -11,13 +11,12 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
-use uv_cache::Cache;
+use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{
-    is_dynamic, not_modified, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable,
-    SitePackages,
+    is_dynamic, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::InMemoryIndex;
@@ -431,7 +430,11 @@ async fn resolve_editables(
                 match existing.as_slice() {
                     [] => uninstalled.push(editable),
                     [dist] => {
-                        if not_modified(&editable, dist) && !is_dynamic(&editable) {
+                        if ArchiveTimestamp::up_to_date_with(
+                            &editable.path,
+                            ArchiveTarget::Install(dist),
+                        )? && !is_dynamic(&editable)
+                        {
                             installed.push((*dist).clone());
                         } else {
                             uninstalled.push(editable);
@@ -452,7 +455,11 @@ async fn resolve_editables(
                     [dist] => {
                         if packages.contains(dist.name()) {
                             uninstalled.push(editable);
-                        } else if not_modified(&editable, dist) && !is_dynamic(&editable) {
+                        } else if ArchiveTimestamp::up_to_date_with(
+                            &editable.path,
+                            ArchiveTarget::Install(dist),
+                        )? && !is_dynamic(&editable)
+                        {
                             installed.push((*dist).clone());
                         } else {
                             uninstalled.push(editable);

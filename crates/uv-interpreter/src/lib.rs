@@ -9,7 +9,6 @@ pub use crate::interpreter::Interpreter;
 pub use crate::python_environment::PythonEnvironment;
 pub use crate::python_query::{find_default_python, find_requested_python};
 pub use crate::python_version::PythonVersion;
-pub use crate::sysconfig::SysconfigPaths;
 pub use crate::virtualenv::Virtualenv;
 
 mod cfg;
@@ -17,7 +16,6 @@ mod interpreter;
 mod python_environment;
 mod python_query;
 mod python_version;
-mod sysconfig;
 mod virtualenv;
 
 #[derive(Debug, Error)]

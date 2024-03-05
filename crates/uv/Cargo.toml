@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.1.13"
+version = "0.1.14"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -34,6 +34,7 @@ uv-interpreter = { path = "../uv-interpreter" }
 uv-normalize = { path = "../uv-normalize" }
 uv-resolver = { path = "../uv-resolver", features = ["clap"] }
 uv-traits = { path = "../uv-traits" }
+uv-version = { path = "../uv-version" }
 uv-virtualenv = { path = "../uv-virtualenv" }
 uv-warnings = { path = "../uv-warnings" }
 
@@ -83,7 +84,7 @@ assert_cmd = { version = "2.0.14" }
 assert_fs = { version = "1.1.0" }
 filetime = { version = "0.2.23" }
 indoc = { version = "2.0.4" }
-insta = { version = "1.35.1", features = ["filters", "json"] }
+insta = { version = "1.36.1", features = ["filters", "json"] }
 predicates = { version = "3.0.4" }
 regex = { version = "1.10.3" }
 reqwest = { version = "0.11.23", features = ["blocking"], default-features = false }
