@@ -1,3 +1,4 @@
+use pep508_rs::MarkerEnvironment;
 use reqwest::{Client, ClientBuilder};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
@@ -12,6 +13,7 @@ use uv_fs::Simplified;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
+use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::Roots;
 use crate::{tls, Connectivity};
@@ -24,6 +26,7 @@ pub struct BaseClientBuilder {
     retries: u32,
     connectivity: Connectivity,
     client: Option<Client>,
+    markers: Option<MarkerEnvironment>,
 }
 
 impl BaseClientBuilder {
@@ -34,6 +37,7 @@ impl BaseClientBuilder {
             connectivity: Connectivity::Online,
             retries: 3,
             client: None,
+            markers: None,
         }
     }
 }
@@ -69,9 +73,23 @@ impl BaseClientBuilder {
         self
     }
 
+    #[must_use]
+    pub fn markers(mut self, markers: MarkerEnvironment) -> Self {
+        self.markers = Some(markers);
+        self
+    }
+
     pub fn build(self) -> BaseClient {
         // Create user agent.
-        let user_agent_string = format!("uv/{}", version());
+        let mut user_agent_string = format!("uv/{}", version());
+
+        // Add linehaul metadata.
+        if let Some(markers) = self.markers {
+            let linehaul = LineHaul::new(markers);
+            if let Ok(output) = serde_json::to_string(&linehaul) {
+                user_agent_string += &format!(" {}", output);
+            }
+        }
 
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6

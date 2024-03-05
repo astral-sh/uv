@@ -14,6 +14,7 @@ platform-tags = { path = "../platform-tags" }
 uv-auth = { path = "../uv-auth" }
 uv-cache = { path = "../uv-cache" }
 uv-fs = { path = "../uv-fs", features = ["tokio"] }
+uv-interpreter = { path = "../uv-interpreter" }
 uv-normalize = { path = "../uv-normalize" }
 uv-version = { path = "../uv-version" }
 uv-warnings = { path = "../uv-warnings" }
@@ -28,6 +29,7 @@ fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 html-escape = { workspace = true }
 http = { workspace = true }
+plist = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
@@ -37,6 +39,7 @@ rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+sys-info = { workspace = true }
 task-local-extensions = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
@@ -56,4 +59,5 @@ webpki-roots = { version = "0.25.4" }
 anyhow = { workspace = true }
 hyper = { version = "0.14.28", features = ["server", "http1"] }
 insta = { version = "1.36.1" }
+os_info = { version = "3.7.0", default-features = false }
 tokio = { workspace = true, features = ["fs", "macros"] }

@@ -17,6 +17,7 @@ use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
 use install_wheel_rs::metadata::{find_archive_dist_info, is_metadata_entry};
 use pep440_rs::Version;
+use pep508_rs::MarkerEnvironment;
 use pypi_types::{Metadata23, SimpleJson};
 use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheBucket, WheelCache};
@@ -39,6 +40,7 @@ pub struct RegistryClientBuilder {
     connectivity: Connectivity,
     cache: Cache,
     client: Option<Client>,
+    markers: Option<MarkerEnvironment>,
 }
 
 impl RegistryClientBuilder {
@@ -51,6 +53,7 @@ impl RegistryClientBuilder {
             connectivity: Connectivity::Online,
             retries: 3,
             client: None,
+            markers: None,
         }
     }
 }
@@ -98,12 +101,22 @@ impl RegistryClientBuilder {
         self
     }
 
+    #[must_use]
+    pub fn markers(mut self, markers: MarkerEnvironment) -> Self {
+        self.markers = Some(markers);
+        self
+    }
+
     pub fn build(self) -> RegistryClient {
         // Build a base client
         let mut builder = BaseClientBuilder::new();
 
         if let Some(client) = self.client {
             builder = builder.client(client)
+        }
+
+        if let Some(markers) = self.markers {
+            builder = builder.markers(markers)
         }
 
         let client = builder
