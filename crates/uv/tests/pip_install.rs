@@ -1558,7 +1558,7 @@ fn install_constraints_inline_remote() -> Result<()> {
 }
 
 #[test]
-fn install_constraints_respects_offline_mode() -> Result<()> {
+fn install_constraints_respects_offline_mode() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(command(&context)
@@ -1574,8 +1574,6 @@ fn install_constraints_respects_offline_mode() -> Result<()> {
       Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://example.com/requirements.txt`
     "###
     );
-
-    Ok(())
 }
 
 /// Tests that we can install `polars==0.14.0`, which has this odd dependency
