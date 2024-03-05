@@ -45,6 +45,33 @@ jobs:
       - name: "Create virtual environment"
         run: ./target/debug/uv venv
 
+  install-pypy:
+    name: "Install PyPy on Ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 'pypy3.9'
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Build"
+        run: cargo build
+
+      - name: "Print Python path"
+        run: echo $(which pypy)
+
+      - name: "Validate global Python install"
+        run: pypy scripts/check_system_python.py --uv ./target/debug/uv
+
+      - name: "Create virtual environment"
+        run: ./target/debug/uv venv
+
   install-macos:
     name: "Install Python on macOS"
     runs-on: macos-14
