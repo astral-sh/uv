@@ -387,7 +387,6 @@ impl RequirementsTxt {
                     let sub_requirements = Self::parse(&sub_file, working_dir, client)
                         .await
                         .map_err(|err| RequirementsTxtParserError::Subfile {
-
                             source: Box::new(err),
                             start,
                             end,
@@ -404,7 +403,6 @@ impl RequirementsTxt {
                     let sub_constraints = Self::parse(&sub_file, working_dir, client)
                         .await
                         .map_err(|err| RequirementsTxtParserError::Subfile {
-
                             source: Box::new(err),
                             start,
                             end,
@@ -1088,6 +1086,7 @@ impl From<dialoguer::Error> for RequirementsTxtParserError {
     fn from(err: dialoguer::Error) -> Self {
         Self::InteractivePrompt(err)
     }
+}
 
 /// Calculates the column and line offset of a given cursor based on the
 /// number of Unicode codepoints.
@@ -1140,8 +1139,8 @@ mod test {
     use itertools::Itertools;
     use tempfile::tempdir;
     use test_case::test_case;
-    use uv_client::{RegistryClient, RegistryClientBuilder};
     use unscanny::Scanner;
+    use uv_client::{RegistryClient, RegistryClientBuilder};
     use uv_fs::Simplified;
 
     use crate::{calculate_row_column, EditableRequirement, RequirementsTxt};
@@ -1497,8 +1496,8 @@ mod test {
         );
     }
 
-    #[test]
-    fn parser_error_line_and_column() -> Result<()> {
+    #[tokio::test]
+    async fn parser_error_line_and_column() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
         let requirements_txt = temp_dir.child("requirements.txt");
         requirements_txt.write_str(indoc! {"
@@ -1507,7 +1506,10 @@ mod test {
             tqdm
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let error =
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
