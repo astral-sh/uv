@@ -90,6 +90,27 @@ jobs:
       - name: "Validate global Python install"
         run: pypy scripts/check_system_python.py --uv ./target/debug/uv
 
+  install-pyston:
+    name: "Install Pyston"
+    runs-on: ubuntu-latest
+    container: pyston/pyston:2.3.5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Rust toolchain"
+        run: apt-get update && apt-get install -y curl build-essential && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Build"
+        run: $HOME/.cargo/bin/cargo build --no-default-features
+
+      - name: "Print Python path"
+        run: echo $(which pyston)
+
+      - name: "Validate global Python install"
+        run: pyston scripts/check_system_python.py --uv ./target/debug/uv
+
   install-macos:
     name: "Install Python on macOS"
     runs-on: macos-14
