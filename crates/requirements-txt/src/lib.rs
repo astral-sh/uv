@@ -736,6 +736,8 @@ fn parse_value<'a, T>(
 }
 
 async fn read_url_to_string(path: impl AsRef<Path>) -> Result<String, RequirementsTxtParserError> {
+    // here, pip would url-encode the non-utf8 bytes of the string instead of crashing
+    // this behavior is probably not worth recreating
     let path_utf8 = path.as_ref().to_str().ok_or_else(|| {
         RequirementsTxtParserError::NonUnicodeRemoteRequirementsUrl {
             url: path.as_ref().to_owned(),
