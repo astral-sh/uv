@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::env;
+use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 
 use tracing::{debug, instrument};
@@ -58,7 +59,7 @@ pub fn find_requested_python(
         }
     } else if !request.contains(std::path::MAIN_SEPARATOR) {
         // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
-        let Some(executable) = Interpreter::find_executable(request)? else {
+        let Some(executable) = find_executable(request)? else {
             return Ok(None);
         };
         Interpreter::query(&executable, platform.clone(), cache).map(Some)
@@ -192,6 +193,41 @@ fn find_python(
                 }
             }
             Err(error) => return Err(error),
+        }
+    }
+
+    Ok(None)
+}
+
+/// Find the Python interpreter in `PATH` matching the given name (e.g., `python3`, respecting
+/// `UV_PYTHON_PATH`.
+///
+/// Returns `Ok(None)` if not found.
+fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
+    requested: R,
+) -> Result<Option<PathBuf>, Error> {
+    #[allow(non_snake_case)]
+    let UV_TEST_PYTHON_PATH = env::var_os("UV_TEST_PYTHON_PATH");
+
+    #[allow(non_snake_case)]
+    let PATH = UV_TEST_PYTHON_PATH
+        .or(env::var_os("PATH"))
+        .unwrap_or_default();
+
+    // We use `which` here instead of joining the paths ourselves because `which` checks for us if the python
+    // binary is executable and exists. It also has some extra logic that handles inconsistent casing on Windows
+    // and expands `~`.
+    for path in env::split_paths(&PATH) {
+        let paths = match which::which_in_global(requested, Some(&path)) {
+            Ok(paths) => paths,
+            Err(which::Error::CannotFindBinaryPath) => continue,
+            Err(err) => return Err(Error::WhichError(requested.into(), err)),
+        };
+        for path in paths {
+            if cfg!(windows) && windows::is_windows_store_shim(&path) {
+                continue;
+            }
+            return Ok(Some(path));
         }
     }
 
