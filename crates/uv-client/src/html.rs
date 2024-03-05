@@ -188,7 +188,7 @@ impl SimpleHtml {
             requires_python,
             hashes,
             filename: filename.to_string(),
-            url: href.to_string(),
+            url: decoded.to_string(),
             size: None,
             upload_time: None,
         })
@@ -443,7 +443,7 @@ mod tests {
                     requires_python: None,
                     size: None,
                     upload_time: None,
-                    url: "/whl/Jinja2-3.1.2&#43;233fca715f49-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                    url: "/whl/Jinja2-3.1.2+233fca715f49-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
                     yanked: None,
                 },
             ],
