@@ -412,6 +412,9 @@ impl ArchivedCachePolicy {
     }
 
     fn is_modified(&self, new_policy: &CachePolicy) -> bool {
+        tracing::debug!("checking if cached response is modified");
+        tracing::debug!("new_policy: {:?}", new_policy);
+        tracing::debug!("self.response: {:?}", self.response);
         // From [RFC 9111 S4.3.3],
         //
         // "A 304 (Not Modified) response status code indicates that the stored

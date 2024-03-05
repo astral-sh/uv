@@ -280,8 +280,21 @@ impl CachedClient {
                 response,
                 cache_policy,
             } => {
-                self.run_response_callback(cache_entry, cache_policy, response, response_callback)
+                // If we got a modified response, but it's a 304, then a validator failed (e.g., the
+                // ETag didn't match). We need to make a fresh request.
+                if response.status() == http::StatusCode::NOT_MODIFIED {
+                    debug!("Server returned invalid 304 for: {}", fresh_req.url());
+                    self.resend_and_heal_cache(fresh_req, cache_entry, response_callback)
+                        .await
+                } else {
+                    self.run_response_callback(
+                        cache_entry,
+                        cache_policy,
+                        response,
+                        response_callback,
+                    )
                     .await
+                }
             }
         }
     }
