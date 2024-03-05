@@ -40,6 +40,7 @@ pub(crate) async fn venv(
     exclude_newer: Option<DateTime<Utc>>,
     cache: &Cache,
     printer: Printer,
+    clear: bool,
 ) -> Result<ExitStatus> {
     match venv_impl(
         path,
@@ -52,6 +53,7 @@ pub(crate) async fn venv(
         exclude_newer,
         cache,
         printer,
+        clear,
     )
     .await
     {
@@ -95,6 +97,7 @@ async fn venv_impl(
     exclude_newer: Option<DateTime<Utc>>,
     cache: &Cache,
     mut printer: Printer,
+    clear: bool,
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter.
     let platform = Platform::current().into_diagnostic()?;
@@ -114,6 +117,16 @@ async fn venv_impl(
         interpreter.sys_executable().simplified_display().cyan()
     )
     .into_diagnostic()?;
+
+    if path.exists() && !clear {
+        writeln!(
+            printer,
+            "Virtualenv already exists at {}. Use --clear option to recreate",
+            path.normalized_display().cyan()
+        )
+        .into_diagnostic()?;
+        return Ok(ExitStatus::Success);
+    }
 
     writeln!(
         printer,
