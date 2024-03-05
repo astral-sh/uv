@@ -4670,3 +4670,89 @@ fn expand_env_var_requirements_txt() -> Result<()> {
 
     Ok(())
 }
+
+/// Raise an error when an editable's `Requires-Python` constraint is not met.
+#[test]
+fn requires_python_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with a `Requires-Python` constraint that is not met.
+    let editable_dir = TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = "<=3.8"
+"#,
+    )?;
+
+    // Write to a requirements file.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
+
+    uv_snapshot!(context.compile()
+        .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Editable `example` requires Python <=3.8, but resolution targets Python 3.12.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// Raise an error when an editable's `Requires-Python` constraint is not met.
+#[test]
+fn requires_python_editable_target_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with a `Requires-Python` constraint that is not met.
+    let editable_dir = TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = "<=3.8"
+"#,
+    )?;
+
+    // Write to a requirements file.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
+
+    let filters: Vec<_> = [
+        // 3.11 may not be installed
+        (
+            "warning: The requested Python version 3.11 is not available; .* will be used to build dependencies instead.\n",
+            "",
+        ),
+    ]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    uv_snapshot!(filters, context.compile()
+        .arg("requirements.in")
+        .arg("--python-version=3.11"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Editable `example` requires Python <=3.8, but resolution targets Python 3.11
+    "###
+    );
+
+    Ok(())
+}
