@@ -378,7 +378,23 @@ impl RequirementsTxt {
                             end,
                         }
                     })?;
-                    // Add each to the correct category
+
+                    // Disallow conflicting `--index-url` in nested `requirements` files.
+                    if sub_requirements.index_url.is_some()
+                        && data.index_url.is_some()
+                        && sub_requirements.index_url != data.index_url
+                    {
+                        let (line, column) = calculate_row_column(content, s.cursor());
+                        return Err(RequirementsTxtParserError::Parser {
+                            message:
+                                "Nested `requirements` file contains conflicting `--index-url`"
+                                    .to_string(),
+                            line,
+                            column,
+                        });
+                    }
+
+                    // Add each to the correct category.
                     data.update_from(sub_requirements);
                 }
                 RequirementsTxtStatement::Constraint {
@@ -436,10 +452,26 @@ impl RequirementsTxt {
         Ok(data)
     }
 
-    /// Merges other into self
+    /// Merge the data from a nested `requirements` file (`other`) into this one.
     pub fn update_from(&mut self, other: Self) {
-        self.requirements.extend(other.requirements);
-        self.constraints.extend(other.constraints);
+        let RequirementsTxt {
+            requirements,
+            constraints,
+            editables,
+            index_url,
+            extra_index_urls,
+            find_links,
+            no_index,
+        } = other;
+        self.requirements.extend(requirements);
+        self.constraints.extend(constraints);
+        self.editables.extend(editables);
+        if self.index_url.is_none() {
+            self.index_url = index_url;
+        }
+        self.extra_index_urls.extend(extra_index_urls);
+        self.find_links.extend(find_links);
+        self.no_index = self.no_index || no_index;
     }
 }
 
@@ -1323,6 +1355,104 @@ mod test {
             no_index: false,
         }
         "###);
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn nested_editable() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            -r child.txt
+        "})?;
+
+        let child = temp_dir.child("child.txt");
+        child.write_str(indoc! {"
+            -r grandchild.txt
+        "})?;
+
+        let grandchild = temp_dir.child("grandchild.txt");
+        grandchild.write_str(indoc! {"
+            -e /foo/bar
+            --no-index
+        "})?;
+
+        let requirements =
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap();
+
+        insta::assert_debug_snapshot!(requirements, @r###"
+            RequirementsTxt {
+                requirements: [],
+                constraints: [],
+                editables: [
+                    EditableRequirement {
+                        url: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/foo/bar",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "/foo/bar",
+                            ),
+                        },
+                        extras: [],
+                        path: "/foo/bar",
+                    },
+                ],
+                index_url: None,
+                extra_index_urls: [],
+                find_links: [],
+                no_index: true,
+            }
+            "###);
+
+        Ok(())
+    }
+
+    #[test]
+    fn nested_conflicting_index_url() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            --index-url https://test.pypi.org/simple
+            -r child.txt
+        "})?;
+
+        let child = temp_dir.child("child.txt");
+        child.write_str(indoc! {"
+            -r grandchild.txt
+        "})?;
+
+        let grandchild = temp_dir.child("grandchild.txt");
+        grandchild.write_str(indoc! {"
+            --index-url https://fake.pypi.org/simple
+        "})?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt =
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let filters = vec![
+            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
+            (r"\\", "/"),
+        ];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_snapshot!(errors, @"Nested `requirements` file contains conflicting `--index-url` at <REQUIREMENTS_TXT>:3:1");
+        });
 
         Ok(())
     }
