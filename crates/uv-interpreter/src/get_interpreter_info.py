@@ -1,4 +1,4 @@
-""""
+"""
 Queries information about the current Python interpreter and prints it as JSON.
 
 Exit Codes:
@@ -70,6 +70,36 @@ if len(python_full_version) > 0 and python_full_version[-1] == "+":
     python_full_version = python_full_version[:-1]
 
 
+def _running_under_venv() -> bool:
+    """Checks if sys.base_prefix and sys.prefix match.
+
+    This handles PEP 405 compliant virtual environments.
+    """
+    return sys.prefix != getattr(sys, "base_prefix", sys.prefix)
+
+
+def _running_under_legacy_virtualenv() -> bool:
+    """Checks if sys.real_prefix is set.
+
+    This handles virtual environments created with pypa's virtualenv.
+    """
+    # pypa/virtualenv case
+    return hasattr(sys, "real_prefix")
+
+
+def running_under_virtualenv() -> bool:
+    """True if we're running inside a virtual environment, False otherwise."""
+    return _running_under_venv() or _running_under_legacy_virtualenv()
+
+
+def get_major_minor_version() -> str:
+    """
+    Return the major-minor version of the current Python as a string, e.g.
+    "3.7" or "3.10".
+    """
+    return "{}.{}".format(*sys.version_info)
+
+
 def get_virtualenv():
     """Return the expected Scheme for virtualenvs created by this interpreter.
 
@@ -132,7 +162,9 @@ def get_virtualenv():
         return {
             "purelib": expand_path(sysconfig_paths["purelib"]),
             "platlib": expand_path(sysconfig_paths["platlib"]),
-            "include": expand_path(sysconfig_paths["include"]),
+            "include": os.path.join(
+                "include", "site", f"python{get_major_minor_version()}"
+            ),
             "scripts": expand_path(sysconfig_paths["scripts"]),
             "data": expand_path(sysconfig_paths["data"]),
         }
@@ -164,7 +196,9 @@ def get_virtualenv():
         return {
             "purelib": distutils_paths["purelib"],
             "platlib": distutils_paths["platlib"],
-            "include": os.path.dirname(distutils_paths["headers"]),
+            "include": os.path.join(
+                "include", "site", f"python{get_major_minor_version()}"
+            ),
             "scripts": distutils_paths["scripts"],
             "data": distutils_paths["data"],
         }
@@ -174,16 +208,176 @@ def get_scheme():
     """Return the Scheme for the current interpreter.
 
     The paths returned should be absolute.
+
+    This is based on pip's path discovery logic:
+        https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/locations/__init__.py#L230
     """
-    # TODO(charlie): Use distutils on required Python distributions.
-    paths = sysconfig.get_paths()
-    return {
-        "purelib": paths["purelib"],
-        "platlib": paths["platlib"],
-        "include": paths["include"],
-        "scripts": paths["scripts"],
-        "data": paths["data"],
-    }
+
+    def get_sysconfig_scheme():
+        """Get the "scheme" corresponding to the input parameters.
+
+        Uses the `sysconfig` module to get the scheme.
+
+        Based on (with default arguments):
+            https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/locations/_sysconfig.py#L124
+        """
+
+        def is_osx_framework() -> bool:
+            return bool(sysconfig.get_config_var("PYTHONFRAMEWORK"))
+
+        # Notes on _infer_* functions.
+        # Unfortunately ``get_default_scheme()`` didn't exist before 3.10, so there's no
+        # way to ask things like "what is the '_prefix' scheme on this platform". These
+        # functions try to answer that with some heuristics while accounting for ad-hoc
+        # platforms not covered by CPython's default sysconfig implementation. If the
+        # ad-hoc implementation does not fully implement sysconfig, we'll fall back to
+        # a POSIX scheme.
+
+        _AVAILABLE_SCHEMES = set(sysconfig.get_scheme_names())
+
+        _PREFERRED_SCHEME_API = getattr(sysconfig, "get_preferred_scheme", None)
+
+        def _should_use_osx_framework_prefix() -> bool:
+            """Check for Apple's ``osx_framework_library`` scheme.
+
+            Python distributed by Apple's Command Line Tools has this special scheme
+            that's used when:
+
+            * This is a framework build.
+            * We are installing into the system prefix.
+
+            This does not account for ``pip install --prefix`` (also means we're not
+            installing to the system prefix), which should use ``posix_prefix``, but
+            logic here means ``_infer_prefix()`` outputs ``osx_framework_library``. But
+            since ``prefix`` is not available for ``sysconfig.get_default_scheme()``,
+            which is the stdlib replacement for ``_infer_prefix()``, presumably Apple
+            wouldn't be able to magically switch between ``osx_framework_library`` and
+            ``posix_prefix``. ``_infer_prefix()`` returning ``osx_framework_library``
+            means its behavior is consistent whether we use the stdlib implementation
+            or our own, and we deal with this special case in ``get_scheme()`` instead.
+            """
+            return (
+                "osx_framework_library" in _AVAILABLE_SCHEMES
+                and not running_under_virtualenv()
+                and is_osx_framework()
+            )
+
+        def _infer_prefix() -> str:
+            """Try to find a prefix scheme for the current platform.
+
+            This tries:
+
+            * A special ``osx_framework_library`` for Python distributed by Apple's
+              Command Line Tools, when not running in a virtual environment.
+            * Implementation + OS, used by PyPy on Windows (``pypy_nt``).
+            * Implementation without OS, used by PyPy on POSIX (``pypy``).
+            * OS + "prefix", used by CPython on POSIX (``posix_prefix``).
+            * Just the OS name, used by CPython on Windows (``nt``).
+
+            If none of the above works, fall back to ``posix_prefix``.
+            """
+            if _PREFERRED_SCHEME_API:
+                return _PREFERRED_SCHEME_API("prefix")
+            if _should_use_osx_framework_prefix():
+                return "osx_framework_library"
+            implementation_suffixed = f"{sys.implementation.name}_{os.name}"
+            if implementation_suffixed in _AVAILABLE_SCHEMES:
+                return implementation_suffixed
+            if sys.implementation.name in _AVAILABLE_SCHEMES:
+                return sys.implementation.name
+            suffixed = f"{os.name}_prefix"
+            if suffixed in _AVAILABLE_SCHEMES:
+                return suffixed
+            if os.name in _AVAILABLE_SCHEMES:  # On Windows, prefx is just called "nt".
+                return os.name
+            return "posix_prefix"
+
+        scheme_name = _infer_prefix()
+        paths = sysconfig.get_paths(scheme=scheme_name)
+
+        # Logic here is very arbitrary, we're doing it for compatibility, don't ask.
+        # 1. Pip historically uses a special header path in virtual environments.
+        if running_under_virtualenv():
+            python_xy = f"python{get_major_minor_version()}"
+            paths["include"] = os.path.join(sys.prefix, "include", "site", python_xy)
+
+        return {
+            "platlib": paths["platlib"],
+            "purelib": paths["purelib"],
+            "include": paths["include"],
+            "scripts": paths["scripts"],
+            "data": paths["data"],
+        }
+
+    def get_distutils_scheme():
+        """Get the "scheme" corresponding to the input parameters.
+
+        Uses the deprecated `distutils` module to get the scheme.
+
+        Based on (with default arguments):
+            https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/locations/_distutils.py#L115
+        """
+        import warnings
+
+        with warnings.catch_warnings():  # disable warning for PEP-632
+            warnings.simplefilter("ignore")
+            from distutils.dist import Distribution
+
+        dist_args = {}
+
+        d = Distribution(dist_args)
+        try:
+            d.parse_config_files()
+        except UnicodeDecodeError:
+            pass
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            i = d.get_command_obj("install", create=True)
+
+        i.finalize_options()
+
+        scheme = {}
+        for key in ("purelib", "platlib", "headers", "scripts", "data"):
+            scheme[key] = getattr(i, "install_" + key)
+
+        # install_lib specified in setup.cfg should install *everything*
+        # into there (i.e. it takes precedence over both purelib and
+        # platlib).  Note, i.install_lib is *always* set after
+        # finalize_options(); we only want to override here if the user
+        # has explicitly requested it hence going back to the config
+        if "install_lib" in d.get_option_dict("install"):
+            scheme.update({"purelib": i.install_lib, "platlib": i.install_lib})
+
+        if running_under_virtualenv():
+            scheme["headers"] = os.path.join(
+                i.prefix,
+                "include",
+                "site",
+                f"python{get_major_minor_version()}",
+                "UNKNOWN",
+            )
+
+        return {
+            "platlib": scheme["platlib"],
+            "purelib": scheme["purelib"],
+            "include": os.path.dirname(scheme["headers"]),
+            "scripts": scheme["scripts"],
+            "data": scheme["data"],
+        }
+
+    # By default, pip uses sysconfig on Python 3.10+.
+    # But Python distributors can override this decision by setting:
+    #     sysconfig._PIP_USE_SYSCONFIG = True / False
+    # Rationale in https://github.com/pypa/pip/issues/10647
+    use_sysconfig = bool(
+        getattr(sysconfig, "_PIP_USE_SYSCONFIG", sys.version_info >= (3, 10))
+    )
+
+    if use_sysconfig:
+        return get_sysconfig_scheme()
+    else:
+        return get_distutils_scheme()
 
 
 markers = {
