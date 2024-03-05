@@ -215,6 +215,7 @@ pub(crate) async fn pip_install(
             &editables,
             editable_wheel_dir.path(),
             &cache,
+            &interpreter,
             tags,
             &client,
             &resolve_dispatch,
@@ -356,10 +357,12 @@ fn specification(
 }
 
 /// Build a set of editable distributions.
+#[allow(clippy::too_many_arguments)]
 async fn build_editables(
     editables: &[EditableRequirement],
     editable_wheel_dir: &Path,
     cache: &Cache,
+    interpreter: &Interpreter,
     tags: &Tags,
     client: &RegistryClient,
     build_dispatch: &BuildDispatch<'_>,
@@ -388,6 +391,21 @@ async fn build_editables(
         .context("Failed to build editables")?
         .into_iter()
         .collect();
+
+    // Validate that the editables are compatible with the target Python version.
+    for editable in &editables {
+        if let Some(python_requires) = editable.metadata.requires_python.as_ref() {
+            if !python_requires.contains(interpreter.python_version()) {
+                return Err(anyhow!(
+                    "Editable `{}` requires Python {}, but {} is installed",
+                    editable.metadata.name,
+                    python_requires,
+                    interpreter.python_version()
+                )
+                .into());
+            }
+        }
+    }
 
     let s = if editables.len() == 1 { "" } else { "s" };
     writeln!(

@@ -2247,3 +2247,37 @@ requires-python = ">=3.11,<3.13"
 
     Ok(())
 }
+
+/// Raise an error when an editable's `Requires-Python` constraint is not met.
+#[test]
+fn requires_python_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with a `Requires-Python` constraint that is not met.
+    let editable_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = "<=3.8"
+"#,
+    )?;
+
+    uv_snapshot!(command(&context)
+        .arg("--editable")
+        .arg(editable_dir.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Editable `example` requires Python <=3.8, but 3.12.1 is installed
+    "###
+    );
+
+    Ok(())
+}
