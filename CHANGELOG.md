@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.15
+
+### Enhancements
+
+- Add a `--compile` option to `install` to enable bytecode compilation ([#2086](https://github.com/astral-sh/uv/pull/2086))
+- Expose the `--exclude-newer` flag to limit candidate packages based on date ([#2166](https://github.com/astral-sh/uv/pull/2166))
+- Add `uv` version to user agent ([#2136](https://github.com/astral-sh/uv/pull/2136))
+
+### Bug fixes
+
+- Set `.metadata` suffix on URL path ([#2123](https://github.com/astral-sh/uv/pull/2123))
+- Fallback to non-range requests when HEAD returns 404 ([#2186](https://github.com/astral-sh/uv/pull/2186))
+- Allow direct URLs in optional dependencies in editables ([#2206](https://github.com/astral-sh/uv/pull/2206))
+- Allow empty values in WHEEL files ([#2170](https://github.com/astral-sh/uv/pull/2170))
+- Avoid Windows Store shims in `--python python3`-like invocations ([#2212](https://github.com/astral-sh/uv/pull/2212))
+- Expand Windows shim detection to include `python3.12.exe` ([#2209](https://github.com/astral-sh/uv/pull/2209))
+- HTML-decode URLs in HTML indexes ([#2215](https://github.com/astral-sh/uv/pull/2215))
+- Make direct dependency detection respect markers ([#2207](https://github.com/astral-sh/uv/pull/2207))
+- Respect `py --list-paths` fallback in `--python python3` invocations ([#2214](https://github.com/astral-sh/uv/pull/2214))
+- Respect local freshness when auditing installed environment ([#2169](https://github.com/astral-sh/uv/pull/2169))
+- Respect markers on URL dependencies in editables ([#2176](https://github.com/astral-sh/uv/pull/2176))
+- Respect nested editable requirements in parser ([#2204](https://github.com/astral-sh/uv/pull/2204))
+- Run Windows against Python 3.13 ([#2171](https://github.com/astral-sh/uv/pull/2171))
+- Error when editables don't match `Requires-Python` ([#2194](https://github.com/astral-sh/uv/pull/2194))
+
 ## 0.1.14
 
 ### Enhancements
@@ -33,12 +58,8 @@
 
 ### Bug fixes
 
-- Prioritize `PATH` over `py --list-paths` in Windows selection ([#2057](https://github.com/astral-sh/uv/pull/2057)).
-  This fixes an issue in which the `--system` flag would not work correctly on Windows in GitHub
-  Actions.
-- Avoid canonicalizing user-provided interpreters ([#2072](https://github.com/astral-sh/uv/pull/2072)).
-  This fixes an issue in which the `--python` flag would not work correctly with pyenv and other
-  interpreters.
+- Prioritize `PATH` over `py --list-paths` in Windows selection ([#2057](https://github.com/astral-sh/uv/pull/2057)). This fixes an issue in which the `--system` flag would not work correctly on Windows in GitHub Actions.
+- Avoid canonicalizing user-provided interpreters ([#2072](https://github.com/astral-sh/uv/pull/2072)). This fixes an issue in which the `--python` flag would not work correctly with pyenv and other interpreters.
 - Allow pre-releases for requirements in constraints files ([#2069](https://github.com/astral-sh/uv/pull/2069))
 - Avoid truncating EXTERNALLY-MANAGED error message ([#2073](https://github.com/astral-sh/uv/pull/2073))
 - Extend activation highlighting to entire `venv` command ([#2070](https://github.com/astral-sh/uv/pull/2070))
