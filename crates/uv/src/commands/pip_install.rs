@@ -44,7 +44,7 @@ use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsS
 use super::{DryRunEvent, Upgrade};
 
 /// Install packages into the current environment.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
