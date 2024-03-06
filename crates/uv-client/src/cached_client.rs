@@ -421,9 +421,9 @@ impl CachedClient {
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
-            .map_err(ErrorKind::from_middleware)?
+            .map_err(ErrorKind::from)?
             .error_for_status()
-            .map_err(ErrorKind::RequestError)?;
+            .map_err(ErrorKind::from)?;
         match cached
             .cache_policy
             .after_response(new_cache_policy_builder, &response)
@@ -459,9 +459,9 @@ impl CachedClient {
             .0
             .execute(req)
             .await
-            .map_err(ErrorKind::from_middleware)?
+            .map_err(ErrorKind::from)?
             .error_for_status()
-            .map_err(ErrorKind::RequestError)?;
+            .map_err(ErrorKind::from)?;
         let cache_policy = cache_policy_builder.build(&response);
         let cache_policy = if cache_policy.to_archived().is_storable() {
             Some(Box::new(cache_policy))

@@ -75,9 +75,9 @@ checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
 name = "anstream"
-version = "0.6.12"
+version = "0.6.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96b09b5178381e0874812a9b157f7fe84982617e48f71f4e3235482775e5b540"
+checksum = "d96bd03f33fe50a863e394ee9718a706f988b9079b20c3784fb726e7678b62fb"
 dependencies = [
  "anstyle",
  "anstyle-parse",
@@ -173,6 +173,19 @@ dependencies = [
  "predicates-core",
  "predicates-tree",
  "tempfile",
+]
+
+[[package]]
+name = "async-channel"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f28243a43d821d11341ab73c80bed182dc015c514b951616cf79bd4af39af0c3"
+dependencies = [
+ "concurrent-queue",
+ "event-listener",
+ "event-listener-strategy",
+ "futures-core",
+ "pin-project-lite",
 ]
 
 [[package]]
@@ -422,15 +435,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "camino"
-version = "1.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c59e92b5a388f549b863a7bea62612c09f24c8393560709a54558a9abdfb3b9c"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "cargo-util"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -628,6 +632,15 @@ name = "colorchoice"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
+
+[[package]]
+name = "concurrent-queue"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d16048cd947b08fa32c24458a22f5dc5e835264f689f4f5653210c69fd107363"
+dependencies = [
+ "crossbeam-utils",
+]
 
 [[package]]
 name = "configparser"
@@ -965,6 +978,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "event-listener"
+version = "5.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b5fb89194fa3cad959b833185b3063ba881dbfc7030680b314250779fb4cc91"
+dependencies = [
+ "concurrent-queue",
+ "parking",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "event-listener-strategy"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "feedafcaa9b749175d5ac357452a9d41ea2911da598fde46ce1fe02c37751291"
+dependencies = [
+ "event-listener",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1277,29 +1311,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gourgeist"
-version = "0.0.4"
-dependencies = [
- "anstream",
- "cachedir",
- "camino",
- "clap",
- "directories",
- "fs-err",
- "platform-host",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tracing",
- "tracing-subscriber",
- "uv-cache",
- "uv-fs",
- "uv-interpreter",
- "which",
-]
-
-[[package]]
 name = "h2"
 version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1390,9 +1401,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "0.2.11"
+version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8947b1a6fad4393052c7ba1f4cd97bed3e953a95c79c92ad9b051a04611d9fbb"
+checksum = "601cbb57e577e2f5ef5be8e7b83f0f63994f25aa94d673e54a92d5c516d101f1"
 dependencies = [
  "bytes",
  "fnv",
@@ -1564,9 +1575,9 @@ checksum = "1e186cfbae8084e513daff4240b4797e342f988cecda4fb6c939150f96315fd8"
 
 [[package]]
 name = "insta"
-version = "1.35.1"
+version = "1.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c985c1bef99cf13c58fade470483d81a2bfe846ebde60ed28cc2dddec2df9e2"
+checksum = "0a7c22c4d34ef4788c351e971c52bfdfe7ea2766f8c5466bc175dd46e52ac22e"
 dependencies = [
  "console",
  "lazy_static",
@@ -1840,9 +1851,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.20"
+version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
+checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
 
 [[package]]
 name = "mailparse"
@@ -4133,7 +4144,7 @@ checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
 
 [[package]]
 name = "uv"
-version = "0.1.13"
+version = "0.1.15"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4152,7 +4163,6 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
- "gourgeist",
  "indexmap 2.2.3",
  "indicatif",
  "indoc",
@@ -4199,6 +4209,8 @@ dependencies = [
  "uv-normalize",
  "uv-resolver",
  "uv-traits",
+ "uv-version",
+ "uv-virtualenv",
  "uv-warnings",
  "which",
 ]
@@ -4218,7 +4230,6 @@ dependencies = [
  "anyhow",
  "distribution-types",
  "fs-err",
- "gourgeist",
  "indoc",
  "insta",
  "itertools 0.12.1",
@@ -4240,6 +4251,7 @@ dependencies = [
  "uv-fs",
  "uv-interpreter",
  "uv-traits",
+ "uv-virtualenv",
 ]
 
 [[package]]
@@ -4279,6 +4291,7 @@ dependencies = [
  "futures",
  "html-escape",
  "http",
+ "hyper",
  "insta",
  "install-wheel-rs",
  "pep440_rs",
@@ -4307,6 +4320,7 @@ dependencies = [
  "uv-cache",
  "uv-fs",
  "uv-normalize",
+ "uv-version",
  "uv-warnings",
 ]
 
@@ -4322,7 +4336,6 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
- "gourgeist",
  "indicatif",
  "install-wheel-rs",
  "itertools 0.12.1",
@@ -4358,6 +4371,8 @@ dependencies = [
  "uv-normalize",
  "uv-resolver",
  "uv-traits",
+ "uv-virtualenv",
+ "walkdir",
  "which",
 ]
 
@@ -4369,7 +4384,6 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
- "gourgeist",
  "itertools 0.12.1",
  "pep508_rs",
  "platform-host",
@@ -4387,6 +4401,7 @@ dependencies = [
  "uv-interpreter",
  "uv-resolver",
  "uv-traits",
+ "uv-virtualenv",
 ]
 
 [[package]]
@@ -4488,6 +4503,7 @@ name = "uv-installer"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "async-channel",
  "distribution-filename",
  "distribution-types",
  "fs-err",
@@ -4518,6 +4534,8 @@ dependencies = [
  "uv-interpreter",
  "uv-normalize",
  "uv-traits",
+ "uv-warnings",
+ "walkdir",
 ]
 
 [[package]]
@@ -4537,6 +4555,7 @@ dependencies = [
  "pep508_rs",
  "platform-host",
  "platform-tags",
+ "pypi-types",
  "regex",
  "rmp-serde",
  "same-file",
@@ -4575,7 +4594,6 @@ dependencies = [
  "either",
  "fs-err",
  "futures",
- "gourgeist",
  "indexmap 2.2.3",
  "insta",
  "install-wheel-rs",
@@ -4609,6 +4627,7 @@ dependencies = [
  "uv-interpreter",
  "uv-normalize",
  "uv-traits",
+ "uv-virtualenv",
  "uv-warnings",
  "zip",
 ]
@@ -4628,6 +4647,34 @@ dependencies = [
  "uv-cache",
  "uv-interpreter",
  "uv-normalize",
+]
+
+[[package]]
+name = "uv-version"
+version = "0.1.15"
+
+[[package]]
+name = "uv-virtualenv"
+version = "0.0.4"
+dependencies = [
+ "anstream",
+ "cachedir",
+ "clap",
+ "directories",
+ "fs-err",
+ "pathdiff",
+ "platform-host",
+ "pypi-types",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+ "uv-cache",
+ "uv-fs",
+ "uv-interpreter",
+ "which",
 ]
 
 [[package]]

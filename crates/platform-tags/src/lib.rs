@@ -256,6 +256,7 @@ impl TryFrom<usize> for TagPriority {
 pub enum Implementation {
     CPython,
     PyPy,
+    Pyston,
 }
 
 impl Implementation {
@@ -267,6 +268,8 @@ impl Implementation {
             Self::CPython => format!("cp{}{}", python_version.0, python_version.1),
             // Ex) `pp39`
             Self::PyPy => format!("pp{}{}", python_version.0, python_version.1),
+            // Ex) `pt38``
+            Self::Pyston => format!("pt{}{}", python_version.0, python_version.1),
         }
     }
 
@@ -288,6 +291,14 @@ impl Implementation {
                 implementation_version.0,
                 implementation_version.1
             ),
+            // Ex) `pyston38-pyston_23`
+            Self::Pyston => format!(
+                "pyston{}{}-pyston_{}{}",
+                python_version.0,
+                python_version.1,
+                implementation_version.0,
+                implementation_version.1
+            ),
         }
     }
 }
@@ -300,6 +311,7 @@ impl FromStr for Implementation {
             // Known and supported implementations.
             "cpython" => Ok(Self::CPython),
             "pypy" => Ok(Self::PyPy),
+            "pyston" => Ok(Self::Pyston),
             // Known but unsupported implementations.
             "python" => Err(TagsError::UnsupportedImplementation(s.to_string())),
             "ironpython" => Err(TagsError::UnsupportedImplementation(s.to_string())),

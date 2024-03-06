@@ -2,6 +2,7 @@ use tokio::task::JoinError;
 use zip::result::ZipError;
 
 use distribution_filename::WheelFilenameError;
+use uv_client::BetterReqwestError;
 use uv_normalize::PackageName;
 
 #[derive(Debug, thiserror::Error)]
@@ -19,7 +20,7 @@ pub enum Error {
     #[error("Git operation failed")]
     Git(#[source] anyhow::Error),
     #[error(transparent)]
-    Request(#[from] reqwest::Error),
+    Reqwest(#[from] BetterReqwestError),
     #[error(transparent)]
     Client(#[from] uv_client::Error),
 
@@ -59,4 +60,10 @@ pub enum Error {
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
     Join(#[from] JoinError),
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(error: reqwest::Error) -> Self {
+        Self::Reqwest(BetterReqwestError::from(error))
+    }
 }

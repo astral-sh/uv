@@ -45,6 +45,7 @@ pub struct TestContext {
     pub temp_dir: assert_fs::TempDir,
     pub cache_dir: assert_fs::TempDir,
     pub venv: PathBuf,
+    pub python_version: String,
 
     // Standard filters for this test context
     filters: Vec<(String, String)>,
@@ -77,6 +78,7 @@ impl TestContext {
             temp_dir,
             cache_dir,
             venv,
+            python_version: python_version.to_string(),
             filters,
         }
     }
@@ -165,6 +167,12 @@ impl TestContext {
             .map(|(p, r)| (p.as_str(), r.as_str()))
             .chain(INSTA_FILTERS.iter().copied())
             .collect()
+    }
+
+    /// For when we add pypy to the test suite.
+    #[allow(clippy::unused_self)]
+    pub fn python_kind(&self) -> &str {
+        "python"
     }
 }
 

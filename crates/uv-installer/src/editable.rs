@@ -6,7 +6,7 @@ use distribution_types::{
 };
 use pypi_types::Metadata21;
 use requirements_txt::EditableRequirement;
-use uv_cache::ArchiveTimestamp;
+
 use uv_normalize::PackageName;
 
 /// An editable distribution that has been built.
@@ -67,18 +67,6 @@ impl std::fmt::Display for ResolvedEditable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.installed_version())
     }
-}
-
-/// Returns `true` if the installed distribution is up-to-date with the [`EditableRequirement`].
-pub fn not_modified(editable: &EditableRequirement, installed: &InstalledDist) -> bool {
-    let Ok(Some(installed_at)) = ArchiveTimestamp::from_path(installed.path().join("METADATA"))
-    else {
-        return false;
-    };
-    let Ok(Some(modified_at)) = ArchiveTimestamp::from_path(&editable.path) else {
-        return false;
-    };
-    installed_at > modified_at
 }
 
 /// Returns `true` if the [`EditableRequirement`] contains dynamic metadata.

@@ -14,13 +14,14 @@ workspace = true
 
 [dependencies]
 cache-key = { path = "../cache-key" }
+install-wheel-rs = { path = "../install-wheel-rs" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
+pypi-types = { path = "../pypi-types" }
 uv-cache = { path = "../uv-cache" }
 uv-fs = { path = "../uv-fs" }
-install-wheel-rs = { path = "../install-wheel-rs" }
 
 configparser = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
@@ -38,6 +39,6 @@ which = { workspace = true}
 [dev-dependencies]
 anyhow = { version = "1.0.80" }
 indoc = { version = "2.0.4" }
-insta = { version = "1.35.1" }
+insta = { version = "1.36.1" }
 itertools = { version = "0.12.1" }
 tempfile = { version = "3.9.0" }

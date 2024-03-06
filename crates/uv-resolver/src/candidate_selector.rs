@@ -1,15 +1,13 @@
 use pubgrub::range::Range;
-
 use rustc_hash::FxHashMap;
 
 use distribution_types::CompatibleDist;
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;
-use pep508_rs::{Requirement, VersionOrUrl};
+use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use uv_normalize::PackageName;
 
 use crate::prerelease_mode::PreReleaseStrategy;
-
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Manifest, Options};
@@ -23,19 +21,23 @@ pub(crate) struct CandidateSelector {
 
 impl CandidateSelector {
     /// Return a [`CandidateSelector`] for the given [`Manifest`].
-    pub(crate) fn for_resolution(manifest: &Manifest, options: Options) -> Self {
+    pub(crate) fn for_resolution(
+        options: Options,
+        manifest: &Manifest,
+        markers: &MarkerEnvironment,
+    ) -> Self {
         Self {
             resolution_strategy: ResolutionStrategy::from_mode(
                 options.resolution_mode,
-                manifest.requirements.as_slice(),
+                manifest,
+                markers,
             ),
             prerelease_strategy: PreReleaseStrategy::from_mode(
                 options.prerelease_mode,
-                manifest.requirements.as_slice(),
-                manifest.constraints.as_slice(),
-                manifest.overrides.as_slice(),
+                manifest,
+                markers,
             ),
-            preferences: Preferences::from(manifest.preferences.as_slice()),
+            preferences: Preferences::from_requirements(manifest.preferences.as_slice(), markers),
         }
     }
 
@@ -57,17 +59,15 @@ impl CandidateSelector {
 struct Preferences(FxHashMap<PackageName, Version>);
 
 impl Preferences {
-    fn get(&self, package_name: &PackageName) -> Option<&Version> {
-        self.0.get(package_name)
-    }
-}
-
-impl From<&[Requirement]> for Preferences {
-    fn from(requirements: &[Requirement]) -> Self {
+    /// Create a set of [`Preferences`] from a set of requirements.
+    fn from_requirements(requirements: &[Requirement], markers: &MarkerEnvironment) -> Self {
         Self(
             requirements
                 .iter()
                 .filter_map(|requirement| {
+                    if !requirement.evaluate_markers(markers, &[]) {
+                        return None;
+                    }
                     let Some(VersionOrUrl::VersionSpecifier(version_specifiers)) =
                         requirement.version_or_url.as_ref()
                     else {
@@ -83,6 +83,11 @@ impl From<&[Requirement]> for Preferences {
                 })
                 .collect(),
         )
+    }
+
+    /// Return the pinned version for a package, if any.
+    fn get(&self, package_name: &PackageName) -> Option<&Version> {
+        self.0.get(package_name)
     }
 }
 

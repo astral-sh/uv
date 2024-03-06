@@ -15,9 +15,11 @@ uv-auth = { path = "../uv-auth" }
 uv-cache = { path = "../uv-cache" }
 uv-fs = { path = "../uv-fs", features = ["tokio"] }
 uv-normalize = { path = "../uv-normalize" }
+uv-version = { path = "../uv-version" }
 uv-warnings = { path = "../uv-warnings" }
 pypi-types = { path = "../pypi-types" }
 
+anyhow = { workspace = true }
 async-trait = { workspace = true }
 async_http_range_reader = { workspace = true }
 async_zip = { workspace = true, features = ["tokio"] }
@@ -47,5 +49,6 @@ urlencoding = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-insta = { version = "1.35.1" }
+hyper = { version = "0.14.28", features = ["server", "http1"] }
+insta = { version = "1.36.1" }
 tokio = { workspace = true, features = ["fs", "macros"] }

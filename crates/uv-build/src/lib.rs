@@ -75,7 +75,7 @@ pub enum Error {
     #[error("Source distribution not found at: {0}")]
     NotFound(PathBuf),
     #[error("Failed to create temporary virtualenv")]
-    Gourgeist(#[from] gourgeist::Error),
+    Virtualenv(#[from] uv_virtualenv::Error),
     #[error("Failed to run {0}")]
     CommandFailed(PathBuf, #[source] io::Error),
     #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
@@ -402,10 +402,11 @@ impl SourceBuild {
         let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)
             .map_err(|err| *err)?;
 
-        let venv = gourgeist::create_venv(
+        let venv = uv_virtualenv::create_venv(
             &temp_dir.path().join(".venv"),
             interpreter.clone(),
-            gourgeist::Prompt::None,
+            uv_virtualenv::Prompt::None,
+            false,
             Vec::new(),
         )?;
 
@@ -973,8 +974,9 @@ mod test {
         assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
-        insta::assert_display_snapshot!(formatted, @r###"
+        insta::assert_snapshot!(formatted, @r###"
         Failed building wheel through setup.py with exit code: 0
+        Failed building wheel through setup.py:
         --- stdout:
         running bdist_wheel
         running build
@@ -993,7 +995,7 @@ mod test {
         error: command '/usr/bin/gcc' failed with exit code 1
         ---
         "###);
-        insta::assert_display_snapshot!(
+        insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
             @r###"This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for pygraphviz-1.11"###
         );
@@ -1025,7 +1027,7 @@ mod test {
         assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
-        insta::assert_display_snapshot!(formatted, @r###"
+        insta::assert_snapshot!(formatted, @r###"
         Failed building wheel through setup.py with exit code: 0
         --- stdout:
 
@@ -1037,7 +1039,7 @@ mod test {
         error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
         ---
         "###);
-        insta::assert_display_snapshot!(
+        insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
             @"This error likely indicates that you need to install the library that provides a shared library for ncurses for pygraphviz-1.11 (e.g. libncurses-dev)"
         );

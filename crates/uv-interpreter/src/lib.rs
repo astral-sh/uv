@@ -10,20 +10,19 @@ pub use crate::interpreter::Interpreter;
 pub use crate::python_environment::PythonEnvironment;
 pub use crate::python_query::{find_default_python, find_requested_python};
 pub use crate::python_version::PythonVersion;
+pub use crate::virtualenv::Virtualenv;
 
 mod cfg;
 mod interpreter;
 mod python_environment;
 mod python_query;
 mod python_version;
-mod virtualenv_layout;
+mod virtualenv;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Expected `{0}` to be a virtualenv, but pyvenv.cfg is missing")]
+    #[error("Expected `{0}` to be a virtualenv, but `pyvenv.cfg` is missing")]
     MissingPyVenvCfg(PathBuf),
-    #[error("Broken virtualenv `{0}`, it contains a pyvenv.cfg but no Python binary at `{1}`")]
-    BrokenVenv(PathBuf, PathBuf),
     #[error("Both VIRTUAL_ENV and CONDA_PREFIX are set. Please unset one of them.")]
     Conflict,
     #[error("No versions of Python could be found. Is Python installed?")]

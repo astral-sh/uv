@@ -2,7 +2,7 @@
 
 use fs_err as fs;
 use std::env::consts::EXE_SUFFIX;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::Result;
@@ -71,6 +71,25 @@ fn uninstall_command(context: &TestContext) -> Command {
     }
 
     command
+}
+
+/// Returns the site-packages folder inside the venv.
+fn site_packages(context: &TestContext) -> PathBuf {
+    if cfg!(unix) {
+        context
+            .venv
+            .join("lib")
+            .join(format!(
+                "{}{}",
+                context.python_kind(),
+                context.python_version
+            ))
+            .join("site-packages")
+    } else if cfg!(windows) {
+        context.venv.join("Lib").join("site-packages")
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    }
 }
 
 #[test]
@@ -165,6 +184,13 @@ fn install() -> Result<()> {
      + markupsafe==2.1.3
     "###
     );
+
+    // Counterpart for the `compile()` test.
+    assert!(!site_packages(&context)
+        .join("markupsafe")
+        .join("__pycache__")
+        .join("__init__.cpython-312.pyc")
+        .exists());
 
     context.assert_command("import markupsafe").success();
 
@@ -2888,6 +2914,80 @@ requires-python = ">=3.8"
     Installed 1 package in [TIME]
      - example==0.0.0 (from [WORKSPACE_DIR])
      + example==0.0.0 (from [WORKSPACE_DIR])
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install with bytecode compilation.
+#[test]
+fn compile() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 3 files in [TIME]
+     + markupsafe==2.1.3
+    "###
+    );
+
+    assert!(site_packages(&context)
+        .join("markupsafe")
+        .join("__pycache__")
+        .join("__init__.cpython-312.pyc")
+        .exists());
+
+    context.assert_command("import markupsafe").success();
+
+    Ok(())
+}
+
+/// Raise an error when an editable's `Requires-Python` constraint is not met.
+#[test]
+fn requires_python_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with a `Requires-Python` constraint that is not met.
+    let editable_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = "<=3.5"
+"#,
+    )?;
+
+    // Write to a requirements file.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Editable `example` requires Python <=3.5, but 3.12.1 is installed
     "###
     );
 

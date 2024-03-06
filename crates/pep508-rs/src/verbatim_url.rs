@@ -32,7 +32,7 @@ pub struct VerbatimUrl {
 impl VerbatimUrl {
     /// Parse a URL from a string, expanding any environment variables.
     pub fn parse(given: impl AsRef<str>) -> Result<Self, ParseError> {
-        let url = Url::parse(&expand_env_vars(given.as_ref(), true))?;
+        let url = Url::parse(&expand_env_vars(given.as_ref(), Escape::Url))?;
         Ok(Self { url, given: None })
     }
 
@@ -52,7 +52,7 @@ impl VerbatimUrl {
     #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
     pub fn parse_path(path: impl AsRef<str>, working_dir: impl AsRef<Path>) -> Self {
         // Expand any environment variables.
-        let path = PathBuf::from(expand_env_vars(path.as_ref(), false).as_ref());
+        let path = PathBuf::from(expand_env_vars(path.as_ref(), Escape::Path).as_ref());
 
         // Convert the path to an absolute path, if necessary.
         let path = if path.is_absolute() {
@@ -73,7 +73,7 @@ impl VerbatimUrl {
     /// Parse a URL from an absolute path.
     pub fn parse_absolute_path(path: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
         // Expand any environment variables.
-        let path = PathBuf::from(expand_env_vars(path.as_ref(), false).as_ref());
+        let path = PathBuf::from(expand_env_vars(path.as_ref(), Escape::Path).as_ref());
 
         // Convert the path to an absolute path, if necessary.
         let path = if path.is_absolute() {
@@ -93,9 +93,9 @@ impl VerbatimUrl {
 
     /// Set the verbatim representation of the URL.
     #[must_use]
-    pub fn with_given(self, given: String) -> Self {
+    pub fn with_given(self, given: impl Into<String>) -> Self {
         Self {
-            given: Some(given),
+            given: Some(given.into()),
             ..self
         }
     }
@@ -160,6 +160,15 @@ pub enum VerbatimUrlError {
     RelativePath(PathBuf),
 }
 
+/// Whether to apply percent-encoding when expanding environment variables.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Escape {
+    /// Apply percent-encoding.
+    Url,
+    /// Do not apply percent-encoding.
+    Path,
+}
+
 /// Expand all available environment variables.
 ///
 /// This is modeled off of pip's environment variable expansion, which states:
@@ -175,7 +184,7 @@ pub enum VerbatimUrlError {
 ///   Valid characters in variable names follow the `POSIX standard
 ///   <http://pubs.opengroup.org/onlinepubs/9699919799/>`_ and are limited
 ///   to uppercase letter, digits and the `_` (underscore).
-fn expand_env_vars(s: &str, escape: bool) -> Cow<'_, str> {
+fn expand_env_vars(s: &str, escape: Escape) -> Cow<'_, str> {
     // Generate the project root, to be used via the `${PROJECT_ROOT}`
     // environment variable.
     static PROJECT_ROOT_FRAGMENT: Lazy<String> = Lazy::new(|| {
@@ -190,16 +199,18 @@ fn expand_env_vars(s: &str, escape: bool) -> Cow<'_, str> {
         let name = caps.name("name").unwrap().as_str();
         std::env::var(name).unwrap_or_else(|_| match name {
             // Ensure that the variable is URL-escaped, if necessary.
-            "PROJECT_ROOT" => {
-                if escape {
-                    PROJECT_ROOT_FRAGMENT.replace(' ', "%20")
-                } else {
-                    PROJECT_ROOT_FRAGMENT.to_string()
-                }
-            }
+            "PROJECT_ROOT" => match escape {
+                Escape::Url => PROJECT_ROOT_FRAGMENT.replace(' ', "%20"),
+                Escape::Path => PROJECT_ROOT_FRAGMENT.to_string(),
+            },
             _ => caps["var"].to_owned(),
         })
     })
+}
+
+/// Expand all available environment variables in a path-like string.
+pub fn expand_path_vars(path: &str) -> Cow<'_, str> {
+    expand_env_vars(path, Escape::Path)
 }
 
 /// Like [`Url::parse`], but only splits the scheme. Derived from the `url` crate.
