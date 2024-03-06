@@ -2293,17 +2293,17 @@ fn dry_run_install_url_dependency() -> std::result::Result<(), Box<dyn std::erro
         .arg("requirements.txt")
         .arg("--dry-run")
         .arg("--strict"), @r###"
-    success: false
-    exit_code: 101
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Would download 3 packages
     Would install 3 packages
-    thread 'main' panicked at crates/uv/src/commands/pip_install.rs:785:65:
-    called `Option::unwrap()` on a `None` value
-    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+     + anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz
+     + idna==3.4
+     + sniffio==1.3.0
     "###
     );
 

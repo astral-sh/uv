@@ -12,7 +12,8 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{
-    IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name, Resolution,
+    DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name,
+    Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{MarkerEnvironment, Requirement};
@@ -782,7 +783,7 @@ async fn install(
             })
             .chain(wheels.into_iter().map(|distribution| DryRunEvent {
                 name: distribution.name().clone(),
-                version: format!("=={}", distribution.version().unwrap()),
+                version: format!("{}", distribution.version_or_url()),
                 kind: ChangeEventKind::Added,
             }))
             .chain(local.into_iter().map(|distribution| DryRunEvent {
