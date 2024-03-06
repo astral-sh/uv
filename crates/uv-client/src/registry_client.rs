@@ -177,11 +177,10 @@ impl RegistryClient {
         self.timeout
     }
 
-    pub fn update_index_urls(&self, index_urls: IndexUrls) -> Self {
-        Self {
-            index_urls,
-            ..self.clone()
-        }
+    /// Set the index URLs to use for fetching packages.
+    #[must_use]
+    pub fn with_index_url(self, index_urls: IndexUrls) -> Self {
+        Self { index_urls, ..self }
     }
 
     /// Fetch a package from the `PyPI` simple API.

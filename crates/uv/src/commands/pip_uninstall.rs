@@ -26,7 +26,7 @@ pub(crate) async fn pip_uninstall(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
-    // initialize http client early to allow fetching remote requirements/constraints.txt files
+    // Initialize the registry client.
     let client: uv_client::RegistryClient = RegistryClientBuilder::new(cache.clone())
         .connectivity(connectivity)
         .build();

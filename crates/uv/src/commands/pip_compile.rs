@@ -83,9 +83,8 @@ pub(crate) async fn pip_compile(
         ));
     }
 
-    // initialize http client early to allow fetching remote requirements/constraints.txt files
-    let preliminary_client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_locations.index_urls())
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
         .connectivity(connectivity)
         .build();
 
@@ -106,7 +105,7 @@ pub(crate) async fn pip_compile(
         constraints,
         overrides,
         &extras,
-        &preliminary_client,
+        &client,
     )
     .await?;
 
@@ -136,7 +135,7 @@ pub(crate) async fn pip_compile(
             .map(RequirementsSource::from_path)
             .as_ref()
             .map(|source| async {
-                RequirementsSpecification::from_source(source, &extras, &preliminary_client).await
+                RequirementsSpecification::from_source(source, &extras, &client).await
             }),
     )
     .await
@@ -215,8 +214,9 @@ pub(crate) async fn pip_compile(
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
-    // Reuse existing client setup with updated indexes we parsed out of the requirements files
-    let client = preliminary_client.update_index_urls(index_locations.index_urls());
+    // Update the index URLs on the client, to take into account any index URLs added by the
+    // sources (e.g., `--index-url` in a `requirements.txt` file).
+    let client = client.with_index_url(index_locations.index_urls());
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

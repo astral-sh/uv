@@ -70,7 +70,7 @@ pub(crate) async fn pip_install(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
-    // initialize http client early to allow fetching remote requirements/constraints.txt files
+    // Initialize the registry client.
     let preliminary_client = RegistryClientBuilder::new(cache.clone())
         .index_urls(index_locations.index_urls())
         .connectivity(connectivity)
@@ -182,8 +182,9 @@ pub(crate) async fn pip_install(
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
-    // Reuse existing client setup with updated indexes we parsed out of the requirements files
-    let client = preliminary_client.update_index_urls(index_locations.index_urls());
+    // Update the index URLs on the client, to take into account any index URLs added by the
+    // sources (e.g., `--index-url` in a `requirements.txt` file).
+    let client = preliminary_client.with_index_url(index_locations.index_urls());
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
