@@ -40,6 +40,7 @@ uv-warnings = { path = "../uv-warnings" }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
+axoupdater = { workspace = true, features = ["github_releases", "tokio"] }
 base64 = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "string"] }
