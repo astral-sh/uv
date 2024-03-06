@@ -182,6 +182,7 @@ enum PipCommand {
     Freeze(PipFreezeArgs),
     /// Enumerate the installed packages in the current environment.
     List(PipListArgs),
+    /// Show information about one or more installed packages.
     Show(PipShowArgs),
 }
 
@@ -951,8 +952,8 @@ struct PipListArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 struct PipShowArgs {
-    #[clap(group = "sources")]
-    package: Vec<String>,
+    /// The package(s) to display.
+    package: Vec<PackageName>,
 
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
@@ -985,6 +986,7 @@ struct PipShowArgs {
     #[clap(long, conflicts_with = "python")]
     system: bool,
 }
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 struct VenvArgs {
@@ -1479,21 +1481,14 @@ async fn run() -> Result<ExitStatus> {
         ),
         Commands::Pip(PipNamespace {
             command: PipCommand::Show(args),
-        }) => {
-            let sources = args
-                .package
-                .into_iter()
-                .map(RequirementsSource::from_package)
-                .collect::<Vec<_>>();
-            commands::pip_show(
-                &sources,
-                args.strict,
-                args.python.as_deref(),
-                args.system,
-                &cache,
-                printer,
-            )
-        }
+        }) => commands::pip_show(
+            args.package,
+            args.strict,
+            args.python.as_deref(),
+            args.system,
+            &cache,
+            printer,
+        ),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })

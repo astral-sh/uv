@@ -10,64 +10,31 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
+use uv_normalize::PackageName;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
 /// Show information about one or more installed packages.
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_show(
-    sources: &[RequirementsSource],
+    mut packages: Vec<PackageName>,
     strict: bool,
     python: Option<&str>,
     system: bool,
     cache: &Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
-    if sources.is_empty() {
+    if packages.is_empty() {
         #[allow(clippy::print_stderr)]
         {
-            eprint!("Please provide a package name or names.");
+            eprintln!(
+                "{}{} Please provide a package name or names.",
+                "warning".yellow().bold(),
+                ":".bold(),
+            );
         }
         return Ok(ExitStatus::Failure);
     }
-
-    // Read all requirements from the provided sources.
-    let RequirementsSpecification {
-        project: _project,
-        requirements,
-        constraints: _constraints,
-        overrides: _overrides,
-        editables,
-        index_url: _index_url,
-        extra_index_urls: _extra_index_urls,
-        no_index: _no_index,
-        find_links: _find_links,
-        extras: _extras,
-    } = RequirementsSpecification::from_simple_sources(sources)?;
-
-    // Sort and deduplicate the packages, which are keyed by name.
-    let packages = {
-        let mut packages = requirements
-            .into_iter()
-            .map(|requirement| requirement.name)
-            .collect::<Vec<_>>();
-        packages.sort_unstable();
-        packages.dedup();
-        packages
-    };
-
-    // Sort and deduplicate the editable packages, which are keyed by URL rather than package name.
-    let editables = {
-        let mut editables = editables
-            .iter()
-            .map(requirements_txt::EditableRequirement::raw)
-            .collect::<Vec<_>>();
-        editables.sort_unstable();
-        editables.dedup();
-        editables
-    };
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -93,9 +60,14 @@ pub(crate) fn pip_show(
 
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&venv)?;
+
+    // Sort and deduplicate the packages, which are keyed by name.
+    packages.sort_unstable();
+    packages.dedup();
+
     // Map to the local distributions.
     let distributions = {
-        let mut distributions = Vec::with_capacity(packages.len() + editables.len());
+        let mut distributions = Vec::with_capacity(packages.len());
 
         // Identify all packages that are installed.
         for package in &packages {
@@ -103,7 +75,7 @@ pub(crate) fn pip_show(
             if installed.is_empty() {
                 writeln!(
                     printer,
-                    "{}{} Skipping {} as it is not installed.",
+                    "{}{} Package(s) not found for: {}",
                     "warning".yellow().bold(),
                     ":".bold(),
                     package.as_ref().bold()
@@ -113,48 +85,41 @@ pub(crate) fn pip_show(
             }
         }
 
-        // Identify all editables that are installed.
-        for editable in &editables {
-            let installed = site_packages.get_editables(editable);
-            if installed.is_empty() {
-                writeln!(
-                    printer,
-                    "{}{} Skipping {} as it is not installed.",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                    editable.as_ref().bold()
-                )?;
-            } else {
-                distributions.extend(installed);
-            }
-        }
-
-        // Deduplicate, since a package could be listed both by name and editable URL.
-        distributions.sort_unstable_by_key(|dist| dist.path());
-        distributions.dedup_by_key(|dist| dist.path());
         distributions
     };
 
+    // Like `pip`, if no packages were found, return a failure.
     if distributions.is_empty() {
         return Ok(ExitStatus::Failure);
     }
 
+    // Print the information for each package.
+    let mut first = true;
     for distribution in &distributions {
-        writeln!(printer, "Name: {}", distribution.name()).unwrap();
-        writeln!(printer, "Version: {}", distribution.version()).unwrap();
-        let location = if distribution.is_editable() {
-            distribution
-                .as_editable()
-                .unwrap()
-                .to_file_path()
-                .unwrap()
-                .into_os_string()
-                .into_string()
-                .unwrap()
+        if first {
+            first = false;
         } else {
-            distribution.path().parent().unwrap().display().to_string()
-        };
-        writeln!(printer, "Location: {location}").unwrap();
+            // Print a separator between packages.
+            #[allow(clippy::print_stdout)]
+            {
+                println!("---");
+            }
+        }
+
+        // Print the name, version, and location (e.g., the `site-packages` directory).
+        #[allow(clippy::print_stdout)]
+        {
+            println!("Name: {}", distribution.name());
+            println!("Version: {}", distribution.version());
+            println!(
+                "Location: {}",
+                distribution
+                    .path()
+                    .parent()
+                    .expect("package path is not root")
+                    .simplified_display()
+            );
+        }
     }
 
     // Validate that the environment is consistent.
