@@ -84,7 +84,7 @@ fn single_no_editable() -> Result<()> {
     ----- stdout -----
     Package    Version
     ---------- -------
-    markupsafe 2.1.3  
+    markupsafe 2.1.3
 
     ----- stderr -----
     "###
@@ -183,9 +183,9 @@ fn editable() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location                                
+    Package         Version Editable project location
     --------------- ------- ---------------------------------------------------------
-    numpy           1.26.2                                                           
+    numpy           1.26.2
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
     ----- stderr -----
@@ -279,7 +279,7 @@ fn editable_only() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location                                
+    Package         Version Editable project location
     --------------- ------- ---------------------------------------------------------
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
@@ -300,7 +300,7 @@ fn editable_only() -> Result<()> {
     ----- stdout -----
     Package Version
     ------- -------
-    numpy   1.26.2 
+    numpy   1.26.2
 
     ----- stderr -----
     "###
@@ -411,7 +411,7 @@ fn exclude() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location                                
+    Package         Version Editable project location
     --------------- ------- ---------------------------------------------------------
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
@@ -433,7 +433,7 @@ fn exclude() -> Result<()> {
     ----- stdout -----
     Package Version
     ------- -------
-    numpy   1.26.2 
+    numpy   1.26.2
 
     ----- stderr -----
     "###
@@ -504,10 +504,16 @@ fn format_json() -> Result<()> {
     "###
     );
 
-    // Account for difference length workspace dir
-    let prefix = if cfg!(windows) { "file:///" } else { "file://" };
+    let workspace_dir = regex::escape(
+        current_dir
+            .join("..")
+            .join("..")
+            .canonicalize()?
+            .to_str()
+            .unwrap(),
+    );
 
-    let workspace_len_difference = workspace_dir.as_str().len() + 32 - 16 - prefix.len();
+    let workspace_len_difference = workspace_dir.as_str().len() + 32 - 16;
     let find_divider = "-".repeat(25 + workspace_len_difference);
     let replace_divider = "-".repeat(57);
 
@@ -520,9 +526,9 @@ fn format_json() -> Result<()> {
     let find_whitespace = " ".repeat(25 + workspace_len_difference);
     let replace_whitespace = " ".repeat(57);
 
-    let search_workspace = workspace_dir.as_str().strip_prefix(prefix).unwrap();
+    let search_workspace = workspace_dir.as_str();
     let search_workspace_escaped = search_workspace.replace('/', "\\\\");
-    let replace_workspace = "[WORKSPACE_DIR]/";
+    let replace_workspace = "[WORKSPACE_DIR]";
 
     let filters: Vec<_> = [
         (search_workspace, replace_workspace),
@@ -547,7 +553,7 @@ fn format_json() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     [{"name":"numpy","version":"1.26.2"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable"}]
-    
+
     ----- stderr -----
     "###
     );
