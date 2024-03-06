@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.1.14"
+version = "0.1.15"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -45,7 +45,7 @@ chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "string"] }
 clap_complete_command = { workspace = true }
 console = { workspace = true }
-ctrlc = { workspace = true  }
+ctrlc = { workspace = true }
 dunce = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }

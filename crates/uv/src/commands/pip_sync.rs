@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
@@ -18,12 +18,12 @@ use uv_fs::Simplified;
 use uv_installer::{
     is_dynamic, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
-use uv_interpreter::PythonEnvironment;
+use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::InMemoryIndex;
 use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
-use crate::commands::{elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
+use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
@@ -33,6 +33,7 @@ pub(crate) async fn pip_sync(
     sources: &[RequirementsSource],
     reinstall: &Reinstall,
     link_mode: LinkMode,
+    compile: bool,
     index_locations: IndexLocations,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
@@ -150,7 +151,7 @@ pub(crate) async fn pip_sync(
         editables,
         &site_packages,
         reinstall,
-        &venv,
+        venv.interpreter(),
         tags,
         &cache,
         &client,
@@ -306,6 +307,10 @@ pub(crate) async fn pip_sync(
         )?;
     }
 
+    if compile {
+        compile_bytecode(&venv, &cache, printer).await?;
+    }
+
     // Report on any changes in the environment.
     for event in extraneous
         .into_iter()
@@ -408,7 +413,7 @@ async fn resolve_editables(
     editables: Vec<EditableRequirement>,
     site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
-    venv: &PythonEnvironment,
+    interpreter: &Interpreter,
     tags: &Tags,
     cache: &Cache,
     client: &RegistryClient,
@@ -474,7 +479,7 @@ async fn resolve_editables(
     } else {
         let start = std::time::Instant::now();
 
-        let temp_dir = tempfile::tempdir_in(venv.root())?;
+        let temp_dir = tempfile::tempdir_in(cache.root())?;
 
         let downloader = Downloader::new(cache, tags, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(uninstalled.len() as u64));
@@ -497,6 +502,20 @@ async fn resolve_editables(
             .context("Failed to build editables")?
             .into_iter()
             .collect();
+
+        // Validate that the editables are compatible with the target Python version.
+        for editable in &built_editables {
+            if let Some(python_requires) = editable.metadata.requires_python.as_ref() {
+                if !python_requires.contains(interpreter.python_version()) {
+                    return Err(anyhow!(
+                        "Editable `{}` requires Python {}, but {} is installed",
+                        editable.metadata.name,
+                        python_requires,
+                        interpreter.python_version()
+                    ));
+                }
+            }
+        }
 
         let s = if built_editables.len() == 1 { "" } else { "s" };
         writeln!(

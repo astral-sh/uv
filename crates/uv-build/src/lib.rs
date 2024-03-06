@@ -7,7 +7,7 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
-use std::process::Output;
+use std::process::{ExitStatus, Output};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::{env, iter};
@@ -78,16 +78,18 @@ pub enum Error {
     Virtualenv(#[from] uv_virtualenv::Error),
     #[error("Failed to run {0}")]
     CommandFailed(PathBuf, #[source] io::Error),
-    #[error("{message}:\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
+    #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     BuildBackend {
         message: String,
+        exit_code: ExitStatus,
         stdout: String,
         stderr: String,
     },
     /// Nudge the user towards installing the missing dev library
-    #[error("{message}:\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
+    #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
     MissingHeader {
         message: String,
+        exit_code: ExitStatus,
         stdout: String,
         stderr: String,
         #[source]
@@ -158,6 +160,7 @@ impl Error {
         if let Some(missing_library) = missing_library {
             return Self::MissingHeader {
                 message,
+                exit_code: output.status,
                 stdout,
                 stderr,
                 missing_header_cause: MissingHeaderCause {
@@ -169,6 +172,7 @@ impl Error {
 
         Self::BuildBackend {
             message,
+            exit_code: output.status,
             stdout,
             stderr,
         }
@@ -968,8 +972,10 @@ mod test {
             "pygraphviz-1.11",
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
-        insta::assert_snapshot!(err, @r###"
-        Failed building wheel through setup.py:
+        // Unix uses exit status, Windows uses exit code.
+        let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        insta::assert_snapshot!(formatted, @r###"
+        Failed building wheel through setup.py with exit code: 0
         --- stdout:
         running bdist_wheel
         running build
@@ -1018,8 +1024,10 @@ mod test {
             "pygraphviz-1.11",
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
-        insta::assert_snapshot!(err, @r###"
-        Failed building wheel through setup.py:
+        // Unix uses exit status, Windows uses exit code.
+        let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        insta::assert_snapshot!(formatted, @r###"
+        Failed building wheel through setup.py with exit code: 0
         --- stdout:
 
         --- stderr:

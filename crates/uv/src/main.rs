@@ -24,7 +24,7 @@ use uv_traits::{
     ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, SetupPyStrategy,
 };
 
-use crate::commands::{extra_name_with_clap_error, ExitStatus, Upgrade, VersionFormat};
+use crate::commands::{extra_name_with_clap_error, ExitStatus, ListFormat, Upgrade, VersionFormat};
 use crate::compat::CompatArgs;
 use crate::requirements::RequirementsSource;
 
@@ -50,6 +50,7 @@ mod confirm;
 mod logging;
 mod printer;
 mod requirements;
+mod shell;
 mod version;
 
 const DEFAULT_VENV_NAME: &str = ".venv";
@@ -563,6 +564,18 @@ struct PipSyncArgs {
     #[clap(long, conflicts_with = "no_build")]
     only_binary: Vec<PackageNameSpecifier>,
 
+    /// Compile Python files to bytecode.
+    ///
+    /// By default, does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`), instead
+    /// Python lazily does the compilation the first time a module is imported. In cases where the
+    /// first start time matters, such as CLI applications and docker containers, this option can
+    /// trade longer install time for faster startup.
+    ///
+    /// The compile option will process the entire site-packages directory for consistency and
+    /// (like pip) ignore all errors.
+    #[clap(long)]
+    compile: bool,
+
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[clap(long, short = 'C', alias = "config-settings")]
     config_setting: Vec<ConfigSettingEntry>,
@@ -776,6 +789,18 @@ struct PipInstallArgs {
     #[clap(long, conflicts_with = "no_build")]
     only_binary: Vec<PackageNameSpecifier>,
 
+    /// Compile Python files to bytecode.
+    ///
+    /// By default, does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`), instead
+    /// Python lazily does the compilation the first time a module is imported. In cases where the
+    /// first start time matters, such as CLI applications and docker containers, this option can
+    /// trade longer install time for faster startup.
+    ///
+    /// The compile option will process the entire site-packages directory for consistency and
+    /// (like pip) ignore all errors.
+    #[clap(long)]
+    compile: bool,
+
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[clap(long, short = 'C', alias = "config-settings")]
     config_setting: Vec<ConfigSettingEntry>,
@@ -895,6 +920,10 @@ struct PipListArgs {
     /// Exclude the specified package(s) from the output.
     #[clap(long)]
     r#exclude: Vec<PackageName>,
+
+    /// Select the output format between: `columns` (default), `freeze`, or `json`.
+    #[clap(long, value_enum, default_value_t = ListFormat::default())]
+    format: ListFormat,
 
     /// The Python interpreter for which packages should be listed.
     ///
@@ -1259,6 +1288,7 @@ async fn run() -> Result<ExitStatus> {
                 &sources,
                 &reinstall,
                 args.link_mode,
+                args.compile,
                 index_urls,
                 setup_py,
                 if args.offline {
@@ -1351,6 +1381,7 @@ async fn run() -> Result<ExitStatus> {
                 index_urls,
                 &reinstall,
                 args.link_mode,
+                args.compile,
                 setup_py,
                 if args.offline {
                     Connectivity::Offline
@@ -1402,6 +1433,7 @@ async fn run() -> Result<ExitStatus> {
             args.editable,
             args.exclude_editable,
             &args.exclude,
+            &args.format,
             args.python.as_deref(),
             args.system,
             &cache,

@@ -170,7 +170,16 @@ impl ErrorKind {
             // HEAD requests, so we can't check for range requests.
             Self::ReqwestError(err) => {
                 if let Some(status) = err.status() {
+                    // If the server doesn't support HEAD requests, we can't check for range
+                    // requests.
                     if status == reqwest::StatusCode::METHOD_NOT_ALLOWED {
+                        return true;
+                    }
+
+                    // In some cases, registries return a 404 for HEAD requests when they're not
+                    // supported. In the worst case, we'll now just proceed to attempt to stream the
+                    // entire file, so it's fine to be somewhat lenient here.
+                    if status == reqwest::StatusCode::NOT_FOUND {
                         return true;
                     }
                 }

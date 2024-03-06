@@ -1,4 +1,3 @@
-use std::ffi::{OsStr, OsString};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -29,11 +28,13 @@ pub struct Interpreter {
     platform: Platform,
     markers: Box<MarkerEnvironment>,
     scheme: Scheme,
+    virtualenv: Scheme,
     prefix: PathBuf,
     base_exec_prefix: PathBuf,
     base_prefix: PathBuf,
     base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
+    stdlib: PathBuf,
     tags: OnceCell<Tags>,
 }
 
@@ -52,11 +53,13 @@ impl Interpreter {
             platform,
             markers: Box::new(info.markers),
             scheme: info.scheme,
+            virtualenv: info.virtualenv,
             prefix: info.prefix,
             base_exec_prefix: info.base_exec_prefix,
             base_prefix: info.base_prefix,
             base_executable: info.base_executable,
             sys_executable: info.sys_executable,
+            stdlib: info.stdlib,
             tags: OnceCell::new(),
         })
     }
@@ -67,7 +70,13 @@ impl Interpreter {
             platform,
             markers: Box::new(markers),
             scheme: Scheme {
-                stdlib: PathBuf::from("/dev/null"),
+                purelib: PathBuf::from("/dev/null"),
+                platlib: PathBuf::from("/dev/null"),
+                include: PathBuf::from("/dev/null"),
+                scripts: PathBuf::from("/dev/null"),
+                data: PathBuf::from("/dev/null"),
+            },
+            virtualenv: Scheme {
                 purelib: PathBuf::from("/dev/null"),
                 platlib: PathBuf::from("/dev/null"),
                 include: PathBuf::from("/dev/null"),
@@ -79,6 +88,7 @@ impl Interpreter {
             base_prefix: PathBuf::from("/dev/null"),
             base_executable: None,
             sys_executable: PathBuf::from("/dev/null"),
+            stdlib: PathBuf::from("/dev/null"),
             tags: OnceCell::new(),
         }
     }
@@ -200,25 +210,6 @@ impl Interpreter {
         }
     }
 
-    /// Find the Python interpreter in `PATH`, respecting `UV_PYTHON_PATH`.
-    ///
-    /// Returns `Ok(None)` if not found.
-    pub(crate) fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
-        requested: R,
-    ) -> Result<Option<PathBuf>, Error> {
-        let result = if let Some(isolated) = std::env::var_os("UV_TEST_PYTHON_PATH") {
-            which::which_in(requested, Some(isolated), std::env::current_dir()?)
-        } else {
-            which::which(requested)
-        };
-
-        match result {
-            Err(which::Error::CannotFindBinaryPath) => Ok(None),
-            Err(err) => Err(Error::WhichError(requested.into(), err)),
-            Ok(path) => Ok(Some(path)),
-        }
-    }
-
     /// Returns the path to the Python virtual environment.
     #[inline]
     pub fn platform(&self) -> &Platform {
@@ -260,7 +251,7 @@ impl Interpreter {
             return None;
         }
 
-        let Ok(contents) = fs::read_to_string(self.scheme.stdlib.join("EXTERNALLY-MANAGED")) else {
+        let Ok(contents) = fs::read_to_string(self.stdlib.join("EXTERNALLY-MANAGED")) else {
             return None;
         };
 
@@ -365,6 +356,11 @@ impl Interpreter {
         &self.sys_executable
     }
 
+    /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
+    pub fn stdlib(&self) -> &Path {
+        &self.stdlib
+    }
+
     /// Return the `purelib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn purelib(&self) -> &Path {
         &self.scheme.purelib
@@ -390,21 +386,9 @@ impl Interpreter {
         &self.scheme.include
     }
 
-    /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn stdlib(&self) -> &Path {
-        &self.scheme.stdlib
-    }
-
-    /// Return the name of the Python directory used to build the path to the
-    /// `site-packages` directory.
-    ///
-    /// If one could not be determined, then `python` is returned.
-    pub fn site_packages_python(&self) -> &str {
-        if self.implementation_name() == "pypy" {
-            "pypy"
-        } else {
-            "python"
-        }
+    /// Return the [`Scheme`] for a virtual environment created by this [`Interpreter`].
+    pub fn virtualenv(&self) -> &Scheme {
+        &self.virtualenv
     }
 
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
@@ -414,7 +398,6 @@ impl Interpreter {
             sys_executable: self.sys_executable().to_path_buf(),
             os_name: self.markers.os_name.clone(),
             scheme: Scheme {
-                stdlib: self.stdlib().to_path_buf(),
                 purelib: self.purelib().to_path_buf(),
                 platlib: self.platlib().to_path_buf(),
                 scripts: self.scripts().to_path_buf(),
@@ -423,8 +406,7 @@ impl Interpreter {
                     // If the interpreter is a venv, then the `include` directory has a different structure.
                     // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/locations/_sysconfig.py#L172
                     self.prefix.join("include").join("site").join(format!(
-                        "{}{}.{}",
-                        self.site_packages_python(),
+                        "python{}.{}",
                         self.python_major(),
                         self.python_minor()
                     ))
@@ -455,11 +437,13 @@ impl ExternallyManaged {
 struct InterpreterInfo {
     markers: MarkerEnvironment,
     scheme: Scheme,
+    virtualenv: Scheme,
     prefix: PathBuf,
     base_exec_prefix: PathBuf,
     base_prefix: PathBuf,
     base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
+    stdlib: PathBuf,
 }
 
 impl InterpreterInfo {
@@ -523,6 +507,7 @@ impl InterpreterInfo {
                     interpreter.display(),
                     output.status,
                 ),
+                exit_code: output.status,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             });
@@ -534,6 +519,7 @@ impl InterpreterInfo {
                     "Querying Python at `{}` did not return the expected data: {err}",
                     interpreter.display(),
                 ),
+                exit_code: output.status,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             }
@@ -655,13 +641,20 @@ mod tests {
                 "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "prefix": "/home/ferris/projects/uv/.venv",
                 "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
+                "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
                 "scheme": {
                     "data": "/home/ferris/.pyenv/versions/3.12.0",
                     "include": "/home/ferris/.pyenv/versions/3.12.0/include",
                     "platlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages",
                     "purelib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages",
-                    "scripts": "/home/ferris/.pyenv/versions/3.12.0/bin",
-                    "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12"
+                    "scripts": "/home/ferris/.pyenv/versions/3.12.0/bin"
+                },
+                "virtualenv": {
+                    "data": "",
+                    "include": "include",
+                    "platlib": "lib/python3.12/site-packages",
+                    "purelib": "lib/python3.12/site-packages",
+                    "scripts": "bin"
                 }
             }
         "##};

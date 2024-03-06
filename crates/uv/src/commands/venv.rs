@@ -25,6 +25,7 @@ use uv_traits::{BuildContext, ConfigSettings, InFlight, NoBuild, SetupPyStrategy
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
+use crate::shell::Shell;
 
 /// Create a virtual environment.
 #[allow(clippy::unnecessary_wraps, clippy::too_many_arguments)]
@@ -210,29 +211,59 @@ async fn venv_impl(
         }
     }
 
-    if cfg!(windows) {
-        writeln!(
-            printer,
-            // This should work whether the user is on CMD or PowerShell:
-            "Activate with: {}",
-            path.join("Scripts")
-                .join("activate")
-                .simplified_display()
-                .green()
-        )
-        .into_diagnostic()?;
-    } else {
-        writeln!(
-            printer,
-            "Activate with: {}",
-            format!(
-                "source {}",
-                path.join("bin").join("activate").simplified_display()
-            )
-            .green()
-        )
-        .into_diagnostic()?;
+    // Determine the appropriate activation command.
+    let activation = match Shell::from_env() {
+        None => None,
+        Some(Shell::Bash | Shell::Zsh) => Some(format!(
+            "source {}",
+            shlex_posix(path.join("bin").join("activate"))
+        )),
+        Some(Shell::Fish) => Some(format!(
+            "source {}",
+            shlex_posix(path.join("bin").join("activate.fish"))
+        )),
+        Some(Shell::Nushell) => Some(format!(
+            "overlay use {}",
+            shlex_posix(path.join("bin").join("activate.nu"))
+        )),
+        Some(Shell::Csh) => Some(format!(
+            "source {}",
+            shlex_posix(path.join("bin").join("activate.csh"))
+        )),
+        Some(Shell::Powershell) => Some(shlex_windows(path.join("Scripts").join("activate"))),
     };
+    if let Some(act) = activation {
+        writeln!(printer, "Activate with: {}", act.green()).into_diagnostic()?;
+    }
 
     Ok(ExitStatus::Success)
+}
+
+/// Quote a path, if necessary, for safe use in a POSIX-compatible shell command.
+fn shlex_posix(executable: impl AsRef<Path>) -> String {
+    // Convert to a display path.
+    let executable = executable.as_ref().simplified_display().to_string();
+
+    // Like Python's `shlex.quote`:
+    // > Use single quotes, and put single quotes into double quotes
+    // > The string $'b is then quoted as '$'"'"'b'
+    if executable.contains(' ') {
+        format!("'{}'", executable.replace('\'', r#"'"'"'"#))
+    } else {
+        executable
+    }
+}
+
+/// Quote a path, if necessary, for safe use in `PowerShell`.
+fn shlex_windows(executable: impl AsRef<Path>) -> String {
+    // Convert to a display path.
+    let executable = executable.as_ref().simplified_display().to_string();
+
+    // Wrap the executable in quotes (and a `&` invocation) if it contains spaces.
+    // TODO(charlie): This won't work in `cmd.exe`.
+    if executable.contains(' ') {
+        format!("& \"{executable}\"")
+    } else {
+        executable
+    }
 }

@@ -19,6 +19,8 @@ use tracing_subscriber::EnvFilter;
 use resolve_many::ResolveManyArgs;
 
 use crate::build::{build, BuildArgs};
+use crate::clear_compile::ClearCompileArgs;
+use crate::compile::CompileArgs;
 use crate::install_many::InstallManyArgs;
 use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::resolve_cli::ResolveCliArgs;
@@ -41,6 +43,8 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod build;
+mod clear_compile;
+mod compile;
 mod install_many;
 mod render_benchmarks;
 mod resolve_cli;
@@ -67,6 +71,10 @@ enum Cli {
     Resolve(ResolveCliArgs),
     WheelMetadata(WheelMetadataArgs),
     RenderBenchmarks(RenderBenchmarksArgs),
+    /// Compile all `.py` to `.pyc` files in the tree.
+    Compile(CompileArgs),
+    /// Remove all `.pyc` in the tree.
+    ClearCompile(ClearCompileArgs),
 }
 
 #[instrument] // Anchor span to check for overhead
@@ -88,6 +96,8 @@ async fn run() -> Result<()> {
         }
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args).await?,
         Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
+        Cli::Compile(args) => compile::compile(args).await?,
+        Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
     }
     Ok(())
 }

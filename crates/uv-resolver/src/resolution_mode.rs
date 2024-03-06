@@ -1,5 +1,6 @@
 use rustc_hash::FxHashSet;
 
+use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
 use crate::Manifest;
@@ -31,7 +32,11 @@ pub(crate) enum ResolutionStrategy {
 }
 
 impl ResolutionStrategy {
-    pub(crate) fn from_mode(mode: ResolutionMode, manifest: &Manifest) -> Self {
+    pub(crate) fn from_mode(
+        mode: ResolutionMode,
+        manifest: &Manifest,
+        markers: &MarkerEnvironment,
+    ) -> Self {
         match mode {
             ResolutionMode::Highest => Self::Highest,
             ResolutionMode::Lowest => Self::Lowest,
@@ -40,12 +45,12 @@ impl ResolutionStrategy {
                 manifest
                     .requirements
                     .iter()
-                    .chain(
-                        manifest
-                            .editables
-                            .iter()
-                            .flat_map(|(_editable, metadata)| metadata.requires_dist.iter()),
-                    )
+                    .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+                    .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
+                        metadata.requires_dist.iter().filter(|requirement| {
+                            requirement.evaluate_markers(markers, &editable.extras)
+                        })
+                    }))
                     .map(|requirement| requirement.name.clone())
                     .collect(),
             ),
