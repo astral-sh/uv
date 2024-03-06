@@ -516,7 +516,13 @@ struct PipSyncArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    #[clap(
+        long,
+        short,
+        verbatim_doc_comment,
+        conflicts_with = "system",
+        group = "discovery"
+    )]
     python: Option<String>,
 
     /// Install packages into the system Python.
@@ -527,8 +533,17 @@ struct PipSyncArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python")]
+    #[clap(long, conflicts_with = "python", group = "discovery")]
     system: bool,
+
+    /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
+    ///
+    /// WARNING: `--break-system-packages` is intended for use in continuous integration (CI)
+    /// environments, when installing into Python installations that are managed by an external
+    /// package manager, like `apt`. It should be used with caution, as such Python installations
+    /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
+    #[clap(long, requires = "discovery")]
+    break_system_packages: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
@@ -741,7 +756,13 @@ struct PipInstallArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    #[clap(
+        long,
+        short,
+        verbatim_doc_comment,
+        conflicts_with = "system",
+        group = "discovery"
+    )]
     python: Option<String>,
 
     /// Install packages into the system Python.
@@ -752,8 +773,17 @@ struct PipInstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python")]
+    #[clap(long, conflicts_with = "python", group = "discovery")]
     system: bool,
+
+    /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
+    ///
+    /// WARNING: `--break-system-packages` is intended for use in continuous integration (CI)
+    /// environments, when installing into Python installations that are managed by an external
+    /// package manager, like `apt`. It should be used with caution, as such Python installations
+    /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
+    #[clap(long, requires = "discovery")]
+    break_system_packages: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
@@ -848,7 +878,13 @@ struct PipUninstallArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    #[clap(
+        long,
+        short,
+        verbatim_doc_comment,
+        conflicts_with = "system",
+        group = "discovery"
+    )]
     python: Option<String>,
 
     /// Use the system Python to uninstall packages.
@@ -859,8 +895,17 @@ struct PipUninstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python")]
+    #[clap(long, conflicts_with = "python", group = "discovery")]
     system: bool,
+
+    /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
+    ///
+    /// WARNING: `--break-system-packages` is intended for use in continuous integration (CI)
+    /// environments, when installing into Python installations that are managed by an external
+    /// package manager, like `apt`. It should be used with caution, as such Python installations
+    /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
+    #[clap(long, requires = "discovery")]
+    break_system_packages: bool,
 
     /// Run offline, i.e., without accessing the network.
     #[arg(global = true, long)]
@@ -886,7 +931,13 @@ struct PipFreezeArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    #[clap(
+        long,
+        short,
+        verbatim_doc_comment,
+        conflicts_with = "system",
+        group = "discovery"
+    )]
     python: Option<String>,
 
     /// List packages for the system Python.
@@ -898,7 +949,7 @@ struct PipFreezeArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(long, conflicts_with = "python")]
+    #[clap(long, conflicts_with = "python", group = "discovery")]
     system: bool,
 }
 
@@ -937,7 +988,13 @@ struct PipListArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    #[clap(
+        long,
+        short,
+        verbatim_doc_comment,
+        conflicts_with = "system",
+        group = "discovery"
+    )]
     python: Option<String>,
 
     /// List packages for the system Python.
@@ -949,7 +1006,7 @@ struct PipListArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(long, conflicts_with = "python")]
+    #[clap(long, conflicts_with = "python", group = "discovery")]
     system: bool,
 }
 
@@ -975,7 +1032,13 @@ struct PipShowArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    #[clap(
+        long,
+        short,
+        verbatim_doc_comment,
+        conflicts_with = "system",
+        group = "discovery"
+    )]
     python: Option<String>,
 
     /// List packages for the system Python.
@@ -987,7 +1050,7 @@ struct PipShowArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(long, conflicts_with = "python")]
+    #[clap(long, conflicts_with = "python", group = "discovery")]
     system: bool,
 }
 
@@ -1004,7 +1067,13 @@ struct VenvArgs {
     ///
     /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
     /// doesn't look for a Python interpreter on disk.
-    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    #[clap(
+        long,
+        short,
+        verbatim_doc_comment,
+        conflicts_with = "system",
+        group = "discovery"
+    )]
     python: Option<String>,
 
     /// Use the system Python to uninstall packages.
@@ -1015,7 +1084,7 @@ struct VenvArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python")]
+    #[clap(long, conflicts_with = "python", group = "discovery")]
     system: bool,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
@@ -1347,6 +1416,7 @@ async fn run() -> Result<ExitStatus> {
                 args.strict,
                 args.python,
                 args.system,
+                args.break_system_packages,
                 cache,
                 printer,
             )
@@ -1440,6 +1510,7 @@ async fn run() -> Result<ExitStatus> {
                 args.exclude_newer,
                 args.python,
                 args.system,
+                args.break_system_packages,
                 cache,
                 printer,
             )
@@ -1463,6 +1534,7 @@ async fn run() -> Result<ExitStatus> {
                 &sources,
                 args.python,
                 args.system,
+                args.break_system_packages,
                 cache,
                 if args.offline {
                     Connectivity::Offline
