@@ -27,7 +27,7 @@ fn command(context: &TestContext) -> Command {
 }
 
 #[test]
-fn empty() {
+fn list_empty() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(Command::new(get_bin())
@@ -47,7 +47,7 @@ fn empty() {
 }
 
 #[test]
-fn single_no_editable() -> Result<()> {
+fn list_single_no_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -94,7 +94,7 @@ fn single_no_editable() -> Result<()> {
 }
 
 #[test]
-fn editable() -> Result<()> {
+fn list_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
@@ -196,7 +196,7 @@ fn editable() -> Result<()> {
 }
 
 #[test]
-fn editable_only() -> Result<()> {
+fn list_editable_only() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
@@ -327,7 +327,7 @@ fn editable_only() -> Result<()> {
 }
 
 #[test]
-fn exclude() -> Result<()> {
+fn list_exclude() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
@@ -446,6 +446,309 @@ fn exclude() -> Result<()> {
     .arg("numpy")
     .arg("--exclude")
     .arg("poetry-editable")
+    .arg("--cache-dir")
+    .arg(context.cache_dir.path())
+    .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(windows))]
+fn list_format_json() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let current_dir = std::env::current_dir()?;
+    let workspace_dir = regex::escape(
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str(),
+    );
+
+    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    // Install the editable package.
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("pip")
+        .arg("install")
+        .arg("-e")
+        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + numpy==1.26.2
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+    "###
+    );
+
+    let workspace_dir = regex::escape(
+        current_dir
+            .join("..")
+            .join("..")
+            .canonicalize()?
+            .to_str()
+            .unwrap(),
+    );
+
+    let workspace_len_difference = workspace_dir.as_str().len() + 32 - 16;
+    let find_divider = "-".repeat(25 + workspace_len_difference);
+    let replace_divider = "-".repeat(57);
+
+    let find_header = format!(
+        "Editable project location{0}",
+        " ".repeat(workspace_len_difference)
+    );
+    let replace_header = format!("Editable project location{0}", " ".repeat(32));
+
+    let find_whitespace = " ".repeat(25 + workspace_len_difference);
+    let replace_whitespace = " ".repeat(57);
+
+    let search_workspace = workspace_dir.as_str();
+    let search_workspace_escaped = search_workspace.replace('/', "\\\\");
+    let replace_workspace = "[WORKSPACE_DIR]";
+
+    let filters: Vec<_> = [
+        (search_workspace, replace_workspace),
+        (search_workspace_escaped.as_str(), replace_workspace),
+        (find_divider.as_str(), replace_divider.as_str()),
+        (find_header.as_str(), replace_header.as_str()),
+        (find_whitespace.as_str(), replace_whitespace.as_str()),
+    ]
+    .into_iter()
+    .chain(INSTA_FILTERS.to_vec())
+    .collect();
+
+    uv_snapshot!(filters, Command::new(get_bin())
+    .arg("pip")
+    .arg("list")
+    .arg("--format=json")
+    .arg("--cache-dir")
+    .arg(context.cache_dir.path())
+    .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"numpy","version":"1.26.2"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable"}]
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(filters, Command::new(get_bin())
+    .arg("pip")
+    .arg("list")
+    .arg("--format=json")
+    .arg("--editable")
+    .arg("--cache-dir")
+    .arg(context.cache_dir.path())
+    .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable"}]
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(filters, Command::new(get_bin())
+    .arg("pip")
+    .arg("list")
+    .arg("--format=json")
+    .arg("--exclude-editable")
+    .arg("--cache-dir")
+    .arg(context.cache_dir.path())
+    .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"numpy","version":"1.26.2"}]
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(filters, Command::new(get_bin())
+    .arg("pip")
+    .arg("list")
+    .arg("--format=json")
+    .arg("--editable")
+    .arg("--exclude-editable")
+    .arg("--cache-dir")
+    .arg(context.cache_dir.path())
+    .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn list_format_freeze() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let current_dir = std::env::current_dir()?;
+    let workspace_dir = regex::escape(
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str(),
+    );
+
+    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    // Install the editable package.
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("pip")
+        .arg("install")
+        .arg("-e")
+        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + numpy==1.26.2
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+    "###
+    );
+
+    // Account for difference length workspace dir
+    let prefix = if cfg!(windows) { "file:///" } else { "file://" };
+
+    let workspace_len_difference = workspace_dir.as_str().len() + 32 - 16 - prefix.len();
+    let find_divider = "-".repeat(25 + workspace_len_difference);
+    let replace_divider = "-".repeat(57);
+
+    let find_header = format!(
+        "Editable project location{0}",
+        " ".repeat(workspace_len_difference)
+    );
+    let replace_header = format!("Editable project location{0}", " ".repeat(32));
+
+    let find_whitespace = " ".repeat(25 + workspace_len_difference);
+    let replace_whitespace = " ".repeat(57);
+
+    let search_workspace = workspace_dir.as_str().strip_prefix(prefix).unwrap();
+    let replace_workspace = "[WORKSPACE_DIR]/";
+
+    let filters = INSTA_FILTERS
+        .iter()
+        .copied()
+        .chain(vec![
+            (search_workspace, replace_workspace),
+            (find_divider.as_str(), replace_divider.as_str()),
+            (find_header.as_str(), replace_header.as_str()),
+            (find_whitespace.as_str(), replace_whitespace.as_str()),
+        ])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, Command::new(get_bin())
+    .arg("pip")
+    .arg("list")
+    .arg("--format=freeze")
+    .arg("--cache-dir")
+    .arg(context.cache_dir.path())
+    .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    numpy==1.26.2
+    poetry-editable==0.1.0
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(filters, Command::new(get_bin())
+    .arg("pip")
+    .arg("list")
+    .arg("--format=freeze")
+    .arg("--editable")
+    .arg("--cache-dir")
+    .arg(context.cache_dir.path())
+    .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    poetry-editable==0.1.0
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(filters, Command::new(get_bin())
+    .arg("pip")
+    .arg("list")
+    .arg("--format=freeze")
+    .arg("--exclude-editable")
+    .arg("--cache-dir")
+    .arg(context.cache_dir.path())
+    .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    numpy==1.26.2
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(filters, Command::new(get_bin())
+    .arg("pip")
+    .arg("list")
+    .arg("--format=freeze")
+    .arg("--editable")
+    .arg("--exclude-editable")
     .arg("--cache-dir")
     .arg(context.cache_dir.path())
     .env("VIRTUAL_ENV", context.venv.as_os_str())
