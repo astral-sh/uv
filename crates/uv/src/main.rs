@@ -280,7 +280,7 @@ struct PipCompileArgs {
     #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
     resolution: ResolutionMode,
 
-    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre")]
+    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre", env = "UV_PRERELEASE")]
     prerelease: PreReleaseMode,
 
     #[clap(long, hide = true, conflicts_with = "prerelease")]
@@ -682,7 +682,7 @@ struct PipInstallArgs {
     #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
     resolution: ResolutionMode,
 
-    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre")]
+    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre", env = "UV_PRERELEASE")]
     prerelease: PreReleaseMode,
 
     #[clap(long, hide = true, conflicts_with = "prerelease")]
