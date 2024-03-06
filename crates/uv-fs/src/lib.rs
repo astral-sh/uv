@@ -1,5 +1,5 @@
-use fs::tokio;
 use std::fmt::Display;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
@@ -13,35 +13,31 @@ pub use crate::path::*;
 
 mod path;
 
-/// Reads the contents of the file path given (local or https) into memory.
+/// Reads the contents of the file path into memory.
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
 pub async fn read(path: impl AsRef<Path>) -> std::io::Result<Vec<u8>> {
-    use std::io::Read;
-
     let path = path.as_ref();
     if path == Path::new("-") {
         let mut buf = Vec::with_capacity(1024);
         std::io::stdin().read_to_end(&mut buf)?;
         Ok(buf)
     } else {
-        tokio::read(path).await
+        fs_err::tokio::read(path).await
     }
 }
 
-/// Reads the contents of the file path given (local or https) into memory as a `String`.
+/// Reads the contents of the file path into memory as a `String`.
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
 pub async fn read_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
-    use std::io::Read;
-
     let path = path.as_ref();
     if path == Path::new("-") {
         let mut buf = String::with_capacity(1024);
         std::io::stdin().read_to_string(&mut buf)?;
         Ok(buf)
     } else {
-        tokio::read_to_string(path).await
+        fs_err::tokio::read_to_string(path).await
     }
 }
 
