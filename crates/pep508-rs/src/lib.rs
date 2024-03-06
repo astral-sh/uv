@@ -358,6 +358,18 @@ impl Requirement {
         }
     }
 
+    /// Returns whether the markers apply for the given environment
+    pub fn evaluate_markers2(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
+        if let Some(marker) = &self.marker {
+            marker.evaluate_extras_and_python_version(
+                &extras.into_iter().cloned().collect(),
+                &[env.python_version.version.clone()],
+            )
+        } else {
+            true
+        }
+    }
+
     /// Returns whether the requirement would be satisfied, independent of environment markers, i.e.
     /// if there is potentially an environment that could activate this requirement.
     ///

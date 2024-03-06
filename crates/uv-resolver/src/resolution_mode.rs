@@ -45,10 +45,10 @@ impl ResolutionStrategy {
                 manifest
                     .requirements
                     .iter()
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+                    .filter(|requirement| requirement.evaluate_markers2(markers, &[]))
                     .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
                         metadata.requires_dist.iter().filter(|requirement| {
-                            requirement.evaluate_markers(markers, &editable.extras)
+                            requirement.evaluate_markers2(markers, &editable.extras)
                         })
                     }))
                     .map(|requirement| requirement.name.clone())

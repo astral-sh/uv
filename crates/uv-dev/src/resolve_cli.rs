@@ -114,7 +114,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         let graphviz = Dot::with_attr_getters(
             resolution_graph.petgraph(),
             &[DotConfig::NodeNoLabel, DotConfig::EdgeNoLabel],
-            &|_graph, edge_ref| format!("label={:?}", edge_ref.weight().to_string()),
+            &|_graph, edge_ref| format!("label={:?}", edge_ref.weight().0.to_string()),
             &|_graph, (_node_index, dist)| {
                 format!("label={:?}", dist.to_string().replace("==", "\n"))
             },

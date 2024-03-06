@@ -163,6 +163,15 @@ pub(crate) async fn pip_sync(
     )
     .await?;
 
+    let requirements: Vec<_> = requirements
+        .into_iter()
+        .filter(|req| {
+            req.marker.as_ref().map_or(true, |marker| {
+                marker.evaluate(venv.interpreter().markers(), &[])
+            })
+        })
+        .collect();
+
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
     let Plan {

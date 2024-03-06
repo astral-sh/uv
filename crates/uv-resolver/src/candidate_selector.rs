@@ -65,7 +65,7 @@ impl Preferences {
             requirements
                 .iter()
                 .filter_map(|requirement| {
-                    if !requirement.evaluate_markers(markers, &[]) {
+                    if !requirement.evaluate_markers2(markers, &[]) {
                         return None;
                     }
                     let Some(VersionOrUrl::VersionSpecifier(version_specifiers)) =

@@ -34,10 +34,10 @@ impl PubGrubDependencies {
         for requirement in overrides.apply(requirements) {
             // If the requirement isn't relevant for the current platform, skip it.
             if let Some(extra) = source_extra {
-                if !requirement.evaluate_markers(env, std::slice::from_ref(extra)) {
+                if !requirement.evaluate_markers2(env, std::slice::from_ref(extra)) {
                     continue;
                 }
-            } else if !requirement.evaluate_markers(env, &[]) {
+            } else if !requirement.evaluate_markers2(env, &[]) {
                 continue;
             }
 
@@ -68,10 +68,10 @@ impl PubGrubDependencies {
                 for constraint in constraints.get(&requirement.name).into_iter().flatten() {
                     // If the requirement isn't relevant for the current platform, skip it.
                     if let Some(extra) = source_extra {
-                        if !constraint.evaluate_markers(env, std::slice::from_ref(extra)) {
+                        if !constraint.evaluate_markers2(env, std::slice::from_ref(extra)) {
                             continue;
                         }
-                    } else if !constraint.evaluate_markers(env, &[]) {
+                    } else if !constraint.evaluate_markers2(env, &[]) {
                         continue;
                     }
 

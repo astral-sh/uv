@@ -15,6 +15,7 @@ use url::Url;
 use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim};
 use once_map::OnceMap;
 use pep440_rs::Version;
+use pep508_rs::MarkerTree;
 use pypi_types::{Hashes, Metadata21};
 use uv_normalize::{ExtraName, PackageName};
 
@@ -42,7 +43,8 @@ pub enum AnnotationStyle {
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    petgraph: petgraph::graph::Graph<Dist, Range<Version>, petgraph::Directed>,
+    petgraph:
+        petgraph::graph::Graph<Dist, (Range<Version>, Option<MarkerTree>), petgraph::Directed>,
     /// The metadata for every distribution in this resolution.
     hashes: FxHashMap<PackageName, Vec<Hashes>>,
     /// The set of editable requirements in this resolution.
@@ -64,7 +66,11 @@ impl ResolutionGraph {
     ) -> Result<Self, ResolveError> {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
-        let mut petgraph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
+        let mut petgraph: petgraph::graph::Graph<
+            Dist,
+            (Range<Version>, Option<MarkerTree>),
+            petgraph::Directed,
+        > = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
         let mut hashes =
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
         let mut diagnostics = Vec::new();
@@ -207,13 +213,13 @@ impl ResolutionGraph {
         for (package, version) in selection {
             for id in &state.incompatibilities[package] {
                 if let Kind::FromDependencyOf(
-                    self_package,
+                    self_package2,
                     self_version,
                     dependency_package,
                     dependency_range,
                 ) = &state.incompatibility_store[*id].kind
                 {
-                    let PubGrubPackage::Package(self_package, _, _) = self_package else {
+                    let PubGrubPackage::Package(self_package, _, _) = self_package2 else {
                         continue;
                     };
                     let PubGrubPackage::Package(dependency_package, _, _) = dependency_package
@@ -226,13 +232,39 @@ impl ResolutionGraph {
                         continue;
                     }
 
+                    let dist =
+                        PubGrubDistribution::from_registry(self_package, &selection[self_package2]);
+                    let requires_dist =
+                        if let Some((_editable, metadata)) = editables.get(self_package) {
+                            metadata.requires_dist.clone()
+                        } else {
+                            distributions
+                                .get(&dist.package_id())
+                                .expect("Missing metadata")
+                                .requires_dist
+                                .clone()
+                        };
+
+                    let markers: Vec<MarkerTree> = requires_dist
+                        .iter()
+                        .filter(|req| &req.name == dependency_package)
+                        .filter_map(|req| req.marker.clone())
+                        .collect();
+
+                    let markers_joined = match markers.as_slice() {
+                        [] => None,
+                        [marker_tree] => Some(marker_tree.clone()),
+                        // The package gets installed if any marker is fulfilled.
+                        _ => Some(MarkerTree::Or(markers)),
+                    };
+
                     if self_version.contains(version) {
                         let self_index = &inverse[self_package];
                         let dependency_index = &inverse[dependency_package];
                         petgraph.update_edge(
                             *self_index,
                             *dependency_index,
-                            dependency_range.clone(),
+                            (dependency_range.clone(), markers_joined),
                         );
                     }
                 }
@@ -270,7 +302,10 @@ impl ResolutionGraph {
     }
 
     /// Return the underlying graph.
-    pub fn petgraph(&self) -> &petgraph::graph::Graph<Dist, Range<Version>, petgraph::Directed> {
+    pub fn petgraph(
+        &self,
+    ) -> &petgraph::graph::Graph<Dist, (Range<Version>, Option<MarkerTree>), petgraph::Directed>
+    {
         &self.petgraph
     }
 }
@@ -404,6 +439,16 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                         }
                     }
                 }
+            }
+
+            let markers: Vec<_> = self
+                .resolution
+                .petgraph
+                .edges_directed(index, Direction::Incoming)
+                .filter_map(|edge| edge.weight().1.clone())
+                .collect();
+            if !markers.is_empty() {
+                line.push_str(&format!(" ; {}", MarkerTree::Or(markers)));
             }
 
             // Determine the annotation comment and separator (between comment and requirement).

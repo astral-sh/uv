@@ -20,12 +20,12 @@ impl AllowedYanks {
             .chain(manifest.constraints.iter())
             .chain(manifest.overrides.iter())
             .chain(manifest.preferences.iter())
-            .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+            .filter(|requirement| requirement.evaluate_markers2(markers, &[]))
             .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
                 metadata
                     .requires_dist
                     .iter()
-                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
+                    .filter(|requirement| requirement.evaluate_markers2(markers, &editable.extras))
             }))
         {
             let Some(pep508_rs::VersionOrUrl::VersionSpecifier(specifiers)) =

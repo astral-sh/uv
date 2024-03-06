@@ -22,7 +22,7 @@ impl Urls {
             .iter()
             .chain(manifest.constraints.iter())
         {
-            if !requirement.evaluate_markers(markers, &[]) {
+            if !requirement.evaluate_markers2(markers, &[]) {
                 continue;
             }
 
@@ -56,7 +56,7 @@ impl Urls {
             }
 
             for requirement in &metadata.requires_dist {
-                if !requirement.evaluate_markers(markers, &editable.extras) {
+                if !requirement.evaluate_markers2(markers, &editable.extras) {
                     continue;
                 }
 
@@ -79,7 +79,7 @@ impl Urls {
         // Add any overrides. Conflicts here are fine, as the overrides are meant to be
         // authoritative.
         for requirement in &manifest.overrides {
-            if !requirement.evaluate_markers(markers, &[]) {
+            if !requirement.evaluate_markers2(markers, &[]) {
                 continue;
             }
 

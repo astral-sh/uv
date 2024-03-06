@@ -65,10 +65,10 @@ impl PreReleaseStrategy {
                     .iter()
                     .chain(manifest.constraints.iter())
                     .chain(manifest.overrides.iter())
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+                    .filter(|requirement| requirement.evaluate_markers2(markers, &[]))
                     .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
                         metadata.requires_dist.iter().filter(|requirement| {
-                            requirement.evaluate_markers(markers, &editable.extras)
+                            requirement.evaluate_markers2(markers, &editable.extras)
                         })
                     }))
                     .filter(|requirement| {
@@ -94,10 +94,10 @@ impl PreReleaseStrategy {
                     .iter()
                     .chain(manifest.constraints.iter())
                     .chain(manifest.overrides.iter())
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+                    .filter(|requirement| requirement.evaluate_markers2(markers, &[]))
                     .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
                         metadata.requires_dist.iter().filter(|requirement| {
-                            requirement.evaluate_markers(markers, &editable.extras)
+                            requirement.evaluate_markers2(markers, &editable.extras)
                         })
                     }))
                     .filter(|requirement| {
