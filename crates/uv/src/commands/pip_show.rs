@@ -4,7 +4,6 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use anstream::{eprintln, println};
 use distribution_types::Name;
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -22,18 +21,18 @@ pub(crate) fn pip_show(
     strict: bool,
     python: Option<&str>,
     system: bool,
-    quiet: bool,
     cache: &Cache,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     if packages.is_empty() {
         #[allow(clippy::print_stderr)]
         {
-            eprintln!(
+            writeln!(
+                printer.stderr(),
                 "{}{} Please provide a package name or names.",
                 "warning".yellow().bold(),
                 ":".bold(),
-            );
+            )?;
         }
         return Ok(ExitStatus::Failure);
     }
@@ -76,7 +75,7 @@ pub(crate) fn pip_show(
             let installed = site_packages.get_packages(package);
             if installed.is_empty() {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     "{}{} Package(s) not found for: {}",
                     "warning".yellow().bold(),
                     ":".bold(),
@@ -95,47 +94,40 @@ pub(crate) fn pip_show(
         return Ok(ExitStatus::Failure);
     }
 
-    if !quiet {
-        // Print the information for each package.
-        let mut first = true;
-        for distribution in &distributions {
-            if first {
-                first = false;
-            } else {
-                // Print a separator between packages.
-                #[allow(clippy::print_stdout)]
-                {
-                    println!("---");
-                }
-            }
-
-            // Print the name, version, and location (e.g., the `site-packages` directory).
-            #[allow(clippy::print_stdout)]
-            {
-                println!("Name: {}", distribution.name());
-                println!("Version: {}", distribution.version());
-                println!(
-                    "Location: {}",
-                    distribution
-                        .path()
-                        .parent()
-                        .expect("package path is not root")
-                        .simplified_display()
-                );
-            }
+    // Print the information for each package.
+    let mut first = true;
+    for distribution in &distributions {
+        if first {
+            first = false;
+        } else {
+            // Print a separator between packages.
+            writeln!(printer.stdout(), "---")?;
         }
 
-        // Validate that the environment is consistent.
-        if strict {
-            for diagnostic in site_packages.diagnostics()? {
-                writeln!(
-                    printer,
-                    "{}{} {}",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                    diagnostic.message().bold()
-                )?;
-            }
+        // Print the name, version, and location (e.g., the `site-packages` directory).
+        writeln!(printer.stdout(), "Name: {}", distribution.name())?;
+        writeln!(printer.stdout(), "Version: {}", distribution.version())?;
+        writeln!(
+            printer.stdout(),
+            "Location: {}",
+            distribution
+                .path()
+                .parent()
+                .expect("package path is not root")
+                .simplified_display()
+        )?;
+    }
+
+    // Validate that the environment is consistent.
+    if strict {
+        for diagnostic in site_packages.diagnostics()? {
+            writeln!(
+                printer.stderr(),
+                "{}{} {}",
+                "warning".yellow().bold(),
+                ":".bold(),
+                diagnostic.message().bold()
+            )?;
         }
     }
 

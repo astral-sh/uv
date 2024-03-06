@@ -94,7 +94,7 @@ async fn venv_impl(
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
     cache: &Cache,
-    mut printer: Printer,
+    printer: Printer,
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter.
     let platform = Platform::current().into_diagnostic()?;
@@ -108,7 +108,7 @@ async fn venv_impl(
     };
 
     writeln!(
-        printer,
+        printer.stderr(),
         "Using Python {} interpreter at: {}",
         interpreter.python_version(),
         interpreter.sys_executable().simplified_display().cyan()
@@ -116,7 +116,7 @@ async fn venv_impl(
     .into_diagnostic()?;
 
     writeln!(
-        printer,
+        printer.stderr(),
         "Creating virtualenv at: {}",
         path.simplified_display().cyan()
     )
@@ -201,7 +201,7 @@ async fn venv_impl(
             .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(&b.version())))
         {
             writeln!(
-                printer,
+                printer.stderr(),
                 " {} {}{}",
                 "+".green(),
                 distribution.name().as_ref().bold(),
@@ -233,7 +233,7 @@ async fn venv_impl(
         Some(Shell::Powershell) => Some(shlex_windows(path.join("Scripts").join("activate"))),
     };
     if let Some(act) = activation {
-        writeln!(printer, "Activate with: {}", act.green()).into_diagnostic()?;
+        writeln!(printer.stderr(), "Activate with: {}", act.green()).into_diagnostic()?;
     }
 
     Ok(ExitStatus::Success)

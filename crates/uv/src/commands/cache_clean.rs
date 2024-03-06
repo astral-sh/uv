@@ -14,11 +14,11 @@ use crate::printer::Printer;
 pub(crate) fn cache_clean(
     packages: &[PackageName],
     cache: &Cache,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     if !cache.root().exists() {
         writeln!(
-            printer,
+            printer.stderr(),
             "No cache found at: {}",
             cache.root().simplified_display().cyan()
         )?;
@@ -27,7 +27,7 @@ pub(crate) fn cache_clean(
 
     if packages.is_empty() {
         writeln!(
-            printer,
+            printer.stderr(),
             "Clearing cache at: {}",
             cache.root().simplified_display().cyan()
         )?;
@@ -42,19 +42,19 @@ pub(crate) fn cache_clean(
         // Write a summary of the number of files and directories removed.
         match (summary.num_files, summary.num_dirs) {
             (0, 0) => {
-                write!(printer, "No cache entries found")?;
+                write!(printer.stderr(), "No cache entries found")?;
             }
             (0, 1) => {
-                write!(printer, "Removed 1 directory")?;
+                write!(printer.stderr(), "Removed 1 directory")?;
             }
             (0, num_dirs_removed) => {
-                write!(printer, "Removed {num_dirs_removed} directories")?;
+                write!(printer.stderr(), "Removed {num_dirs_removed} directories")?;
             }
             (1, _) => {
-                write!(printer, "Removed 1 file")?;
+                write!(printer.stderr(), "Removed 1 file")?;
             }
             (num_files_removed, _) => {
-                write!(printer, "Removed {num_files_removed} files")?;
+                write!(printer.stderr(), "Removed {num_files_removed} files")?;
             }
         }
 
@@ -66,10 +66,10 @@ pub(crate) fn cache_clean(
                 let (bytes, unit) = human_readable_bytes(summary.total_bytes);
                 format!("{bytes:.1}{unit}")
             };
-            write!(printer, " ({})", bytes.green())?;
+            write!(printer.stderr(), " ({})", bytes.green())?;
         }
 
-        writeln!(printer)?;
+        writeln!(printer.stderr())?;
     } else {
         for package in packages {
             let summary = cache.remove(package)?;
@@ -77,24 +77,32 @@ pub(crate) fn cache_clean(
             // Write a summary of the number of files and directories removed.
             match (summary.num_files, summary.num_dirs) {
                 (0, 0) => {
-                    write!(printer, "No cache entries found for {}", package.cyan())?;
+                    write!(
+                        printer.stderr(),
+                        "No cache entries found for {}",
+                        package.cyan()
+                    )?;
                 }
                 (0, 1) => {
-                    write!(printer, "Removed 1 directory for {}", package.cyan())?;
+                    write!(
+                        printer.stderr(),
+                        "Removed 1 directory for {}",
+                        package.cyan()
+                    )?;
                 }
                 (0, num_dirs_removed) => {
                     write!(
-                        printer,
+                        printer.stderr(),
                         "Removed {num_dirs_removed} directories for {}",
                         package.cyan()
                     )?;
                 }
                 (1, _) => {
-                    write!(printer, "Removed 1 file for {}", package.cyan())?;
+                    write!(printer.stderr(), "Removed 1 file for {}", package.cyan())?;
                 }
                 (num_files_removed, _) => {
                     write!(
-                        printer,
+                        printer.stderr(),
                         "Removed {num_files_removed} files for {}",
                         package.cyan()
                     )?;
@@ -109,10 +117,10 @@ pub(crate) fn cache_clean(
                     let (bytes, unit) = human_readable_bytes(summary.total_bytes);
                     format!("{bytes:.1}{unit}")
                 };
-                write!(printer, " ({})", bytes.green())?;
+                write!(printer.stderr(), " ({})", bytes.green())?;
             }
 
-            writeln!(printer)?;
+            writeln!(printer.stderr())?;
         }
     }
 

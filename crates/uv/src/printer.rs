@@ -1,4 +1,4 @@
-use anstream::eprint;
+use anstream::{eprint, print};
 use indicatif::ProgressDrawTarget;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,18 +22,64 @@ impl Printer {
             Self::Verbose => ProgressDrawTarget::hidden(),
         }
     }
+
+    /// Return the [`Stdout`] for this printer.
+    pub(crate) fn stdout(self) -> Stdout {
+        match self {
+            Self::Default => Stdout::Enabled,
+            Self::Quiet => Stdout::Disabled,
+            Self::Verbose => Stdout::Enabled,
+        }
+    }
+
+    /// Return the [`Stderr`] for this printer.
+    pub(crate) fn stderr(self) -> Stderr {
+        match self {
+            Self::Default => Stderr::Enabled,
+            Self::Quiet => Stderr::Disabled,
+            Self::Verbose => Stderr::Enabled,
+        }
+    }
 }
 
-impl std::fmt::Write for Printer {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Stdout {
+    Enabled,
+    Disabled,
+}
+
+impl std::fmt::Write for Stdout {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         match self {
-            Self::Default | Self::Verbose => {
+            Self::Enabled => {
+                #[allow(clippy::print_stdout, clippy::ignored_unit_patterns)]
+                {
+                    print!("{s}");
+                }
+            }
+            Self::Disabled => {}
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Stderr {
+    Enabled,
+    Disabled,
+}
+
+impl std::fmt::Write for Stderr {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        match self {
+            Self::Enabled => {
                 #[allow(clippy::print_stderr, clippy::ignored_unit_patterns)]
                 {
                     eprint!("{s}");
                 }
             }
-            Self::Quiet => {}
+            Self::Disabled => {}
         }
 
         Ok(())

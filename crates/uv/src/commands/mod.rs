@@ -114,7 +114,7 @@ pub(crate) enum ListFormat {
 pub(super) async fn compile_bytecode(
     venv: &PythonEnvironment,
     cache: &Cache,
-    mut printer: Printer,
+    printer: Printer,
 ) -> anyhow::Result<()> {
     let start = std::time::Instant::now();
     let files = compile_tree(venv.site_packages(), venv.python_executable(), cache.root())
@@ -127,7 +127,7 @@ pub(super) async fn compile_bytecode(
         })?;
     let s = if files == 1 { "" } else { "s" };
     writeln!(
-        printer,
+        printer.stderr(),
         "{}",
         format!(
             "Bytecode compiled {} in {}",
