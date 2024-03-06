@@ -8,13 +8,12 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::Result;
-use serde::ser::SerializeMap;
 
 use distribution_types::{CachedDist, DistributionId, IndexLocations, Resolution, SourceDist};
 use once_map::OnceMap;
 use pep508_rs::Requirement;
 use uv_cache::Cache;
-use uv_interpreter::{Interpreter, Virtualenv};
+use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 
 /// Avoid cyclic crate dependencies between resolver, installer and builder.
@@ -65,9 +64,6 @@ pub trait BuildContext: Sync {
     /// it's metadata (e.g. wheel compatibility tags).
     fn interpreter(&self) -> &Interpreter;
 
-    /// The system (or conda) python interpreter to create venvs.
-    fn base_python(&self) -> &Path;
-
     /// Whether source distribution building is disabled. This [`BuildContext::setup_build`] calls
     /// will fail in this case. This method exists to avoid fetching source distributions if we know
     /// we can't build them
@@ -89,11 +85,11 @@ pub trait BuildContext: Sync {
     ) -> impl Future<Output = Result<Resolution>> + Send + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must
-    /// use the same base python as [`BuildContext::base_python`]
+    /// use the same base Python as [`BuildContext::interpreter`]
     fn install<'a>(
         &'a self,
         resolution: &'a Resolution,
-        venv: &'a Virtualenv,
+        venv: &'a PythonEnvironment,
     ) -> impl Future<Output = Result<()>> + Send + 'a;
 
     /// Setup a source distribution build by installing the required dependencies. A wrapper for
@@ -364,6 +360,8 @@ impl ConfigSettings {
 #[cfg(feature = "serde")]
 impl serde::Serialize for ConfigSettings {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+
         let mut map = serializer.serialize_map(Some(self.0.len()))?;
         for (key, value) in &self.0 {
             match value {

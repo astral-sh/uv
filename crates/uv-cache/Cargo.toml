@@ -21,7 +21,7 @@ uv-normalize = { path = "../uv-normalize" }
 pypi-types = { path = "../pypi-types" }
 
 cachedir = { workspace = true }
-clap = { workspace = true, features = ["derive"], optional = true }
+clap = { workspace = true, features = ["derive", "env"], optional = true }
 directories = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 nanoid = { workspace = true }

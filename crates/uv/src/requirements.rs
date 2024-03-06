@@ -12,7 +12,7 @@ use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 use tracing::{instrument, Level};
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::confirm;
@@ -208,7 +208,7 @@ impl RequirementsSpecification {
             RequirementsSource::PyprojectToml(path) => {
                 let contents = uv_fs::read_to_string(path)?;
                 let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
-                    .with_context(|| format!("Failed to parse `{}`", path.normalized_display()))?;
+                    .with_context(|| format!("Failed to parse `{}`", path.simplified_display()))?;
                 let mut used_extras = FxHashSet::default();
                 let mut requirements = Vec::new();
                 let mut project_name = None;
@@ -217,7 +217,7 @@ impl RequirementsSpecification {
                     // Parse the project name.
                     let parsed_project_name =
                         PackageName::new(project.name).with_context(|| {
-                            format!("Invalid `project.name` in {}", path.normalized_display())
+                            format!("Invalid `project.name` in {}", path.simplified_display())
                         })?;
 
                     // Include the default dependencies.
@@ -253,7 +253,7 @@ impl RequirementsSpecification {
                             .any(|v| v.name.as_dist_info_name().starts_with("poetry"))
                     })
                 {
-                    warn_user!("`{}` does not contain any dependencies (hint: specify dependencies in the `project.dependencies` section; `tool.poetry.dependencies` is not currently supported)", path.normalized_display());
+                    warn_user!("`{}` does not contain any dependencies (hint: specify dependencies in the `project.dependencies` section; `tool.poetry.dependencies` is not currently supported)", path.simplified_display());
                 }
 
                 Self {

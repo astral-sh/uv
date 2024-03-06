@@ -1,11 +1,10 @@
 use std::io;
 use std::path::Path;
 
-use camino::{FromPathError, Utf8Path};
 use thiserror::Error;
 
 use platform_host::PlatformError;
-use uv_interpreter::{Interpreter, Virtualenv};
+use uv_interpreter::{Interpreter, PythonEnvironment};
 
 pub use crate::bare::create_bare_venv;
 
@@ -51,14 +50,20 @@ pub fn create_venv(
     location: &Path,
     interpreter: Interpreter,
     prompt: Prompt,
+    system_site_packages: bool,
     extra_cfg: Vec<(String, String)>,
-) -> Result<Virtualenv, Error> {
-    let location: &Utf8Path = location
-        .try_into()
-        .map_err(|err: FromPathError| err.into_io_error())?;
-    let paths = create_bare_venv(location, &interpreter, prompt, extra_cfg)?;
-    Ok(Virtualenv::from_interpreter(
-        interpreter,
-        paths.root.as_std_path(),
-    ))
+) -> Result<PythonEnvironment, Error> {
+    // Create the virtualenv at the given location.
+    let virtualenv = create_bare_venv(
+        location,
+        &interpreter,
+        prompt,
+        system_site_packages,
+        extra_cfg,
+    )?;
+
+    // Create the corresponding `PythonEnvironment`.
+    let interpreter = interpreter.with_virtualenv(virtualenv);
+    let root = interpreter.prefix().to_path_buf();
+    Ok(PythonEnvironment::from_interpreter(interpreter, root))
 }

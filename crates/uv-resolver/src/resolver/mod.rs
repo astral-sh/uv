@@ -158,21 +158,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         index: &'a InMemoryIndex,
         provider: Provider,
     ) -> Result<Self, ResolveError> {
-        let selector = CandidateSelector::for_resolution(&manifest, options);
-
-        // Determine the allowed yanked package versions
-        let allowed_yanks = manifest
-            .requirements
-            .iter()
-            .chain(manifest.constraints.iter())
-            .collect();
-
         Ok(Self {
             index,
             unavailable_packages: DashMap::default(),
             visited: DashSet::default(),
-            selector,
-            allowed_yanks,
+            selector: CandidateSelector::for_resolution(options, &manifest, markers),
+            allowed_yanks: AllowedYanks::from_manifest(&manifest, markers),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, markers)?,
             project: manifest.project,

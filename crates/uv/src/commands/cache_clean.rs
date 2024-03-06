@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
 use crate::commands::ExitStatus;
@@ -12,15 +12,15 @@ use crate::printer::Printer;
 
 /// Clear the cache.
 pub(crate) fn cache_clean(
-    cache: &Cache,
     packages: &[PackageName],
+    cache: &Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
     if !cache.root().exists() {
         writeln!(
             printer,
             "No cache found at: {}",
-            cache.root().normalized_display().cyan()
+            cache.root().simplified_display().cyan()
         )?;
         return Ok(ExitStatus::Success);
     }
@@ -29,13 +29,13 @@ pub(crate) fn cache_clean(
         writeln!(
             printer,
             "Clearing cache at: {}",
-            cache.root().normalized_display().cyan()
+            cache.root().simplified_display().cyan()
         )?;
 
         let summary = cache.clear().with_context(|| {
             format!(
                 "Failed to clear cache at: {}",
-                cache.root().normalized_display()
+                cache.root().simplified_display()
             )
         })?;
 

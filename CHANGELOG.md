@@ -1,5 +1,90 @@
 # Changelog
 
+## 0.1.15
+
+### Enhancements
+
+- Add a `--compile` option to `install` to enable bytecode compilation ([#2086](https://github.com/astral-sh/uv/pull/2086))
+- Expose the `--exclude-newer` flag to limit candidate packages based on date ([#2166](https://github.com/astral-sh/uv/pull/2166))
+- Add `uv` version to user agent ([#2136](https://github.com/astral-sh/uv/pull/2136))
+
+### Bug fixes
+
+- Set `.metadata` suffix on URL path ([#2123](https://github.com/astral-sh/uv/pull/2123))
+- Fallback to non-range requests when HEAD returns 404 ([#2186](https://github.com/astral-sh/uv/pull/2186))
+- Allow direct URLs in optional dependencies in editables ([#2206](https://github.com/astral-sh/uv/pull/2206))
+- Allow empty values in WHEEL files ([#2170](https://github.com/astral-sh/uv/pull/2170))
+- Avoid Windows Store shims in `--python python3`-like invocations ([#2212](https://github.com/astral-sh/uv/pull/2212))
+- Expand Windows shim detection to include `python3.12.exe` ([#2209](https://github.com/astral-sh/uv/pull/2209))
+- HTML-decode URLs in HTML indexes ([#2215](https://github.com/astral-sh/uv/pull/2215))
+- Make direct dependency detection respect markers ([#2207](https://github.com/astral-sh/uv/pull/2207))
+- Respect `py --list-paths` fallback in `--python python3` invocations on Windows ([#2214](https://github.com/astral-sh/uv/pull/2214))
+- Respect local freshness when auditing installed environment ([#2169](https://github.com/astral-sh/uv/pull/2169))
+- Respect markers on URL dependencies in editables ([#2176](https://github.com/astral-sh/uv/pull/2176))
+- Respect nested editable requirements in parser ([#2204](https://github.com/astral-sh/uv/pull/2204))
+- Run Windows against Python 3.13 ([#2171](https://github.com/astral-sh/uv/pull/2171))
+- Error when editables don't match `Requires-Python` ([#2194](https://github.com/astral-sh/uv/pull/2194))
+
+## 0.1.14
+
+### Enhancements
+
+- Add support for `--system-site-packages` in `uv venv` ([#2101](https://github.com/astral-sh/uv/pull/2101))
+- Add support for Python installed from Windows Store ([#2122](https://github.com/astral-sh/uv/pull/2122))
+- Expand environment variables in `-r` and `-c` subfile paths ([#2143](https://github.com/astral-sh/uv/pull/2143))
+- Treat empty index URL strings as null instead of erroring ([#2137](https://github.com/astral-sh/uv/pull/2137))
+- Use space as delimiter for `UV_EXTRA_INDEX_URL` ([#2140](https://github.com/astral-sh/uv/pull/2140))
+- Report line and column numbers in `requirements.txt` parser errors ([#2100](https://github.com/astral-sh/uv/pull/2100))
+- Improve error messages when `uv` is offline ([#2110](https://github.com/astral-sh/uv/pull/2110))
+
+### Bug fixes
+
+- Future-proof the `pip` entrypoints special-case ([#1982](https://github.com/astral-sh/uv/pull/1982))
+- Allow empty extras in `pep508-rs` and add more corner case to tests ([#2128](https://github.com/astral-sh/uv/pull/2128))
+- Adjust base Python lookup logic for Windows to respect Windows Store ([#2121](https://github.com/astral-sh/uv/pull/2121))
+- Consider editable dependencies to be 'direct' for `--resolution` ([#2114](https://github.com/astral-sh/uv/pull/2114))
+- Preserve environment variables in resolved Git dependencies ([#2125](https://github.com/astral-sh/uv/pull/2125))
+- Use `prefix` instead of `base_prefix` for environment root ([#2117](https://github.com/astral-sh/uv/pull/2117))
+- Wrap unsafe script shebangs in `/bin/sh` ([#2097](https://github.com/astral-sh/uv/pull/2097))
+- Make WHEEL parsing error line numbers one indexed ([#2151](https://github.com/astral-sh/uv/pull/2151))
+- Determine `site-packages` path based on implementation name ([#2094](https://github.com/astral-sh/uv/pull/2094))
+
+### Documentation
+
+- Add caveats on `--system` support to the README ([#2131](https://github.com/astral-sh/uv/pull/2131))
+- Add instructions for `SSL_CERT_FILE` env var ([#2124](https://github.com/astral-sh/uv/pull/2124))
+
+## 0.1.13
+
+### Bug fixes
+
+- Prioritize `PATH` over `py --list-paths` in Windows selection ([#2057](https://github.com/astral-sh/uv/pull/2057)). This fixes an issue in which the `--system` flag would not work correctly on Windows in GitHub Actions.
+- Avoid canonicalizing user-provided interpreters ([#2072](https://github.com/astral-sh/uv/pull/2072)). This fixes an issue in which the `--python` flag would not work correctly with pyenv and other interpreters.
+- Allow pre-releases for requirements in constraints files ([#2069](https://github.com/astral-sh/uv/pull/2069))
+- Avoid truncating EXTERNALLY-MANAGED error message ([#2073](https://github.com/astral-sh/uv/pull/2073))
+- Extend activation highlighting to entire `venv` command ([#2070](https://github.com/astral-sh/uv/pull/2070))
+- Reverse the order of `--index-url` and `--extra-index-url` priority ([#2083](https://github.com/astral-sh/uv/pull/2083))
+- Avoid assuming `RECORD` file is in `platlib` ([#2091](https://github.com/astral-sh/uv/pull/2091))
+
+## 0.1.12
+
+### CLI
+
+- Add a `--python` flag to allow installation into arbitrary Python interpreters ([#2000](https://github.com/astral-sh/uv/pull/2000))
+- Add a `--system` flag for opt-in non-virtualenv installs ([#2046](https://github.com/astral-sh/uv/pull/2046))
+
+### Enhancements
+
+- Add a `--pre` alias for `--prerelease=allow` ([#2049](https://github.com/astral-sh/uv/pull/2049))
+- Enable `freeze` and `list` to introspect non-virtualenv Pythons ([#2033](https://github.com/astral-sh/uv/pull/2033))
+- Support environment variables in index URLs in requirements files ([#2036](https://github.com/astral-sh/uv/pull/2036))
+- Add `--exclude-editable` and `--exclude` args to `uv pip list` ([#1985](https://github.com/astral-sh/uv/pull/1985))
+- Always remove color codes from output file ([#2018](https://github.com/astral-sh/uv/pull/2018))
+- Support recursive extras in direct `pyproject.toml` files ([#1990](https://github.com/astral-sh/uv/pull/1990))
+- Un-cache editable requirements with dynamic metadata ([#2029](https://github.com/astral-sh/uv/pull/2029))
+- Use a non-local lock file for locking system interpreters ([#2045](https://github.com/astral-sh/uv/pull/2045))
+- Surface the `EXTERNALLY-MANAGED` message to users ([#2032](https://github.com/astral-sh/uv/pull/2032))
+
 ## 0.1.11
 
 ### Enhancements

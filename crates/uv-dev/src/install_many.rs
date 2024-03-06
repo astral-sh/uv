@@ -21,7 +21,7 @@ use uv_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::RegistryWheelIndex;
 use uv_installer::{Downloader, NoBinary};
-use uv_interpreter::Virtualenv;
+use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_resolver::{DistFinder, InMemoryIndex};
 use uv_traits::{BuildContext, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
@@ -56,7 +56,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
 
     let cache = Cache::try_from(args.cache_args)?;
     let platform = Platform::current()?;
-    let venv = Virtualenv::from_env(platform, &cache)?;
+    let venv = PythonEnvironment::from_virtualenv(platform, &cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_locations = IndexLocations::default();
     let flat_index = FlatIndex::default();
@@ -79,7 +79,6 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
         &flat_index,
         &index,
         &in_flight,
-        venv.python_executable(),
         setup_py,
         &config_settings,
         &no_build,
@@ -113,7 +112,7 @@ async fn install_chunk(
     build_dispatch: &BuildDispatch<'_>,
     tags: &Tags,
     client: &RegistryClient,
-    venv: &Virtualenv,
+    venv: &PythonEnvironment,
     index_locations: &IndexLocations,
 ) -> Result<()> {
     let resolution: Vec<_> = DistFinder::new(

@@ -6,6 +6,7 @@ use rustc_hash::FxHashMap;
 
 use distribution_types::{CachedRegistryDist, FlatIndexLocation, IndexLocations, IndexUrl};
 use pep440_rs::Version;
+use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_fs::{directories, symlinks};
@@ -83,7 +84,9 @@ impl<'a> RegistryWheelIndex<'a> {
             .flat_index()
             .filter_map(|flat_index| match flat_index {
                 FlatIndexLocation::Path(_) => None,
-                FlatIndexLocation::Url(url) => Some(IndexUrl::Url(url.clone())),
+                FlatIndexLocation::Url(url) => {
+                    Some(IndexUrl::Url(VerbatimUrl::unknown(url.clone())))
+                }
             })
             .collect();
 

@@ -8,26 +8,11 @@ use crate::{wheel, Error};
 
 /// A script defining the name of the runnable entrypoint and the module and function that should be
 /// run.
-#[cfg(feature = "python_bindings")]
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[pyo3::pyclass(dict)]
-pub struct Script {
-    #[pyo3(get)]
-    pub script_name: String,
-    #[pyo3(get)]
-    pub module: String,
-    #[pyo3(get)]
-    pub function: String,
-}
-
-/// A script defining the name of the runnable entrypoint and the module and function that should be
-/// run.
-#[cfg(not(feature = "python_bindings"))]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct Script {
-    pub script_name: String,
-    pub module: String,
-    pub function: String,
+pub(crate) struct Script {
+    pub(crate) name: String,
+    pub(crate) module: String,
+    pub(crate) function: String,
 }
 
 impl Script {
@@ -36,7 +21,7 @@ impl Script {
     /// <https://packaging.python.org/en/latest/specifications/entry-points/>
     ///
     /// Extras are supposed to be ignored, which happens if you pass None for extras
-    pub fn from_value(
+    pub(crate) fn from_value(
         script_name: &str,
         value: &str,
         extras: Option<&[String]>,
@@ -66,13 +51,13 @@ impl Script {
         }
 
         Ok(Some(Self {
-            script_name: script_name.to_string(),
+            name: script_name.to_string(),
             module: captures.name("module").unwrap().as_str().to_string(),
             function: captures.name("function").unwrap().as_str().to_string(),
         }))
     }
 
-    pub fn import_name(&self) -> &str {
+    pub(crate) fn import_name(&self) -> &str {
         self.function
             .split_once('.')
             .map_or(&self.function, |(import_name, _)| import_name)
@@ -103,14 +88,20 @@ pub(crate) fn scripts_from_ini(
     // Special case to generate versioned pip launchers.
     // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/operations/install/wheel.py#L283
     // https://github.com/astral-sh/uv/issues/1593
-    for script in &mut console_scripts {
-        let Some((left, right)) = script.script_name.split_once('.') else {
-            continue;
+    // Older pip versions have a wrong `pip3.x` launcher we have to remove, while newer pip versions
+    // (post https://github.com/pypa/pip/pull/12536) don't, ...
+    console_scripts.retain(|script| {
+        let Some((left, right)) = script.name.split_once('.') else {
+            return true;
         };
-        if left != "pip3" || right.parse::<u8>().is_err() {
-            continue;
-        }
-        script.script_name = format!("pip3.{python_minor}");
+        !(left == "pip3" || right.parse::<u8>().is_ok())
+    });
+    // ... either has a `pip3` launcher we can use as template for the `pip3.x` users expect.
+    if let Some(pip_script) = console_scripts.iter().find(|script| script.name == "pip3") {
+        console_scripts.push(Script {
+            name: format!("pip3.{python_minor}"),
+            ..pip_script.clone()
+        });
     }
 
     Ok((console_scripts, gui_scripts))
@@ -118,7 +109,7 @@ pub(crate) fn scripts_from_ini(
 
 #[cfg(test)]
 mod test {
-    use crate::Script;
+    use crate::script::Script;
 
     #[test]
     fn test_valid_script_names() {

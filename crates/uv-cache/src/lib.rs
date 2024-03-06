@@ -6,6 +6,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use distribution_types::InstalledDist;
 use fs_err as fs;
 use tempfile::{tempdir, TempDir};
 
@@ -21,6 +22,7 @@ pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
 mod by_timestamp;
+#[cfg(feature = "clap")]
 mod cli;
 mod removal;
 mod timestamp;
@@ -691,6 +693,36 @@ impl ArchiveTimestamp {
             Self::Approximate(timestamp) => *timestamp,
         }
     }
+
+    /// Returns `true` if the `target` (an installed or cached distribution) is up-to-date with the
+    /// source archive (`source`).
+    ///
+    /// The `target` should be an installed package in a virtual environment, or an unzipped
+    /// package in the cache.
+    ///
+    /// The `source` is a source archive, i.e., a path to a built wheel or a Python package directory.
+    pub fn up_to_date_with(source: &Path, target: ArchiveTarget) -> Result<bool, io::Error> {
+        let Some(modified_at) = Self::from_path(source)? else {
+            // If there's no entrypoint, we can't determine the modification time, so we assume that the
+            // target is not up-to-date.
+            return Ok(false);
+        };
+        let created_at = match target {
+            ArchiveTarget::Install(installed) => {
+                Timestamp::from_path(installed.path().join("METADATA"))?
+            }
+            ArchiveTarget::Cache(cache) => Timestamp::from_path(cache)?,
+        };
+        Ok(modified_at.timestamp() <= created_at)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ArchiveTarget<'a> {
+    /// The target is an installed package in a virtual environment.
+    Install(&'a InstalledDist),
+    /// The target is an unzipped package in the cache.
+    Cache(&'a Path),
 }
 
 impl PartialOrd for ArchiveTimestamp {

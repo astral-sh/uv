@@ -15,7 +15,7 @@ use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Output;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -45,6 +45,7 @@ pub struct TestContext {
     pub temp_dir: assert_fs::TempDir,
     pub cache_dir: assert_fs::TempDir,
     pub venv: PathBuf,
+    pub python_version: String,
 
     // Standard filters for this test context
     filters: Vec<(String, String)>,
@@ -77,6 +78,7 @@ impl TestContext {
             temp_dir,
             cache_dir,
             venv,
+            python_version: python_version.to_string(),
             filters,
         }
     }
@@ -96,6 +98,13 @@ impl TestContext {
             .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .current_dir(self.temp_dir.path());
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            cmd.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
+        }
+
         cmd
     }
 
@@ -132,7 +141,7 @@ impl TestContext {
                         .canonicalize()
                         .expect("Failed to create canonical path")
                         // Normalize the path to match display and remove UNC prefixes on Windows
-                        .normalized()
+                        .simplified()
                         .display()
                         .to_string(),
                 )
@@ -143,7 +152,7 @@ impl TestContext {
             // Include a non-canonicalized version
             format!(
                 r"{}\\?/?",
-                regex::escape(&path.as_ref().normalized().display().to_string())
+                regex::escape(&path.as_ref().simplified().display().to_string())
                     .replace(r"\\", r"(\\|\/)")
             ),
         ]
@@ -158,6 +167,12 @@ impl TestContext {
             .map(|(p, r)| (p.as_str(), r.as_str()))
             .chain(INSTA_FILTERS.iter().copied())
             .collect()
+    }
+
+    /// For when we add pypy to the test suite.
+    #[allow(clippy::unused_self)]
+    pub fn python_kind(&self) -> &str {
+        "python"
     }
 }
 

@@ -1,5 +1,3 @@
-#![cfg(feature = "clap")]
-
 use std::io;
 use std::path::PathBuf;
 

@@ -12,7 +12,7 @@ use indoc::indoc;
 use url::Url;
 
 use common::{uv_snapshot, TestContext, INSTA_FILTERS};
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 
 use crate::common::{get_bin, EXCLUDE_NEWER};
 
@@ -1613,7 +1613,7 @@ optional-dependencies.bar = [
     ----- stderr -----
     error: the argument '--all-extras' cannot be used with '--extra <EXTRA>'
 
-    Usage: uv pip compile --cache-dir [CACHE_DIR] --all-extras <SRC_FILE>...
+    Usage: uv pip compile --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER> --all-extras <SRC_FILE>...
 
     For more information, try '--help'.
     "###
@@ -1917,7 +1917,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     requirements_in.write_str(&format!("flask @ {}", flask_wheel.path().display()))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filter_path = regex::escape(&flask_wheel.normalized_display().to_string());
+    let filter_path = regex::escape(&flask_wheel.simplified_display().to_string());
     let filters: Vec<_> = [(filter_path.as_str(), "/[TEMP_DIR]/")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
@@ -2345,7 +2345,7 @@ fn compile_editable() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_in.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_in.simplified_display().to_string());
     let filters: Vec<_> = [(filter_path.as_str(), "requirements.in")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
@@ -2406,13 +2406,20 @@ fn recursive_extras_direct_url() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black[dev] @ ../../scripts/editable-installs/black_editable")?;
 
-    let filter_path = regex::escape(&requirements_in.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_in.simplified_display().to_string());
     let filters: Vec<_> = [(filter_path.as_str(), "requirements.in")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect();
 
-    uv_snapshot!(filters, Command::new(get_bin())
+    let mut command = Command::new(get_bin());
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    uv_snapshot!(filters, command
             .arg("pip")
             .arg("compile")
             .arg(requirements_in.path())
@@ -2462,7 +2469,7 @@ fn compile_editable_url_requirement() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-e ../../scripts/editable-installs/hatchling_editable")?;
 
-    let filter_path = regex::escape(&requirements_in.normalized_display().to_string());
+    let filter_path = regex::escape(&requirements_in.simplified_display().to_string());
     let filters: Vec<_> = [(filter_path.as_str(), "requirements.in")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
@@ -2553,7 +2560,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
         for file in &cache_files {
             let file = context.cache_dir.join(file);
             if !file.is_file() {
-                bail!("Missing cache file {}", file.normalized_display());
+                bail!("Missing cache file {}", file.simplified_display());
             }
             fs_err::write(file, "I borken you cache")?;
         }
@@ -2568,7 +2575,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
             for file in cache_files {
                 let file = context.cache_dir.join(file);
                 if !file.is_file() {
-                    bail!("Missing cache file {}", file.normalized_display());
+                    bail!("Missing cache file {}", file.simplified_display());
                 }
 
                 fs_err::OpenOptions::new()
@@ -2869,7 +2876,7 @@ fn find_links_directory() -> Result<()> {
     "})?;
 
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("..").join(".."))?;
-    let project_root_string = regex::escape(&project_root.normalized_display().to_string());
+    let project_root_string = regex::escape(&project_root.simplified_display().to_string());
     let filters: Vec<_> = [
         (project_root_string.as_str(), "[PROJECT_ROOT]"),
         // Unify trailing (back)slash between Windows and Unix.
@@ -3332,15 +3339,17 @@ fn emit_index_urls() -> Result<()> {
     uv_snapshot!(context.compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
+            .arg("--index-url")
+            .arg("https://test.pypi.org/simple/")
             .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple/"), @r###"
+            .arg("https://pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z requirements.in --emit-index-url --extra-index-url https://test.pypi.org/simple/
-    --index-url https://pypi.org/simple
-    --extra-index-url https://test.pypi.org/simple/
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z requirements.in --emit-index-url --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple
+    --index-url https://test.pypi.org/simple/
+    --extra-index-url https://pypi.org/simple
 
     black==23.10.1
     click==8.1.7
@@ -3934,7 +3943,7 @@ fn editable_invalid_extra() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-e ../../scripts/editable-installs/black_editable[empty]")?;
 
-    let requirements_path = regex::escape(&requirements_in.normalized_display().to_string());
+    let requirements_path = regex::escape(&requirements_in.simplified_display().to_string());
     let filters: Vec<_> = [
         (r" file://.*/", " file://[TEMP_DIR]/"),
         (requirements_path.as_str(), "requirements.in"),
@@ -4118,8 +4127,8 @@ fn override_editable() -> Result<()> {
     let overrides_txt = context.temp_dir.child("overrides.txt");
     overrides_txt.write_str("black==23.10.1")?;
 
-    let requirements_path = regex::escape(&requirements_in.normalized_display().to_string());
-    let overrides_path = regex::escape(&overrides_txt.normalized_display().to_string());
+    let requirements_path = regex::escape(&requirements_in.simplified_display().to_string());
+    let overrides_path = regex::escape(&overrides_txt.simplified_display().to_string());
     let filters: Vec<_> = [
         (requirements_path.as_str(), "requirements.in"),
         (overrides_path.as_str(), "overrides.txt"),
@@ -4344,6 +4353,82 @@ fn pre_release_upper_bound_include() -> Result<()> {
     Ok(())
 }
 
+/// Allow `--pre` as an alias for `--prerelease=allow`.
+#[test]
+fn pre_alias() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("flask<2.0.0")?;
+
+    uv_snapshot!(context.compile()
+            .arg("requirements.in")
+            .arg("--pre"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z requirements.in --pre
+    click==7.1.2
+        # via flask
+    flask==1.1.4
+    itsdangerous==1.1.0
+        # via flask
+    jinja2==2.11.3
+        # via flask
+    markupsafe==2.1.3
+        # via jinja2
+    werkzeug==1.0.1
+        # via flask
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// Allow a pre-release for a version specifier in a constraint file.
+#[test]
+fn pre_release_constraint() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("flask")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("flask<=2.0.0rc2")?;
+
+    uv_snapshot!(context.compile()
+            .arg("requirements.in")
+            .arg("--constraint")
+            .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z requirements.in --constraint constraints.txt
+    click==8.1.7
+        # via flask
+    flask==2.0.0rc2
+    itsdangerous==2.1.2
+        # via flask
+    jinja2==3.1.2
+        # via flask
+    markupsafe==2.1.3
+        # via
+        #   jinja2
+        #   werkzeug
+    werkzeug==3.0.1
+        # via flask
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
 /// Resolve from a `pyproject.toml` file with a recursive extra.
 #[test]
 fn compile_pyproject_toml_recursive_extra() -> Result<()> {
@@ -4383,6 +4468,387 @@ dev = [
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// The dependencies of a local editable dependency should be considered "direct" dependencies.
+#[test]
+fn editable_direct_dependency() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("-e ../../scripts/editable-installs/setuptools_editable")?;
+
+    let requirements_path = regex::escape(&requirements_in.simplified_display().to_string());
+    let filters: Vec<_> = [
+        (r" file://.*/", " file://[TEMP_DIR]/"),
+        (requirements_path.as_str(), "requirements.in"),
+    ]
+    .into_iter()
+    .chain(INSTA_FILTERS.to_vec())
+    .collect();
+
+    uv_snapshot!(filters, Command::new(get_bin())
+            .arg("pip")
+            .arg("compile")
+            .arg(requirements_in.path())
+            .arg("--resolution")
+            .arg("lowest-direct")
+            .arg("--cache-dir")
+            .arg(context.cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("VIRTUAL_ENV", context.venv.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile requirements.in --resolution lowest-direct --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z
+    -e ../../scripts/editable-installs/setuptools_editable
+    iniconfig==0.1
+        # via setuptools-editable
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 2 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// Setting `UV_INDEX_URL` to the empty string should treat it as "unset".
+#[test]
+fn empty_index_url_env_var() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio")?;
+
+    uv_snapshot!(context.compile()
+            .arg("requirements.in")
+            .arg("--emit-index-url")
+            .env("UV_INDEX_URL", ""), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z requirements.in --emit-index-url
+    --index-url https://pypi.org/simple
+
+    anyio==4.0.0
+    idna==3.4
+        # via anyio
+    sniffio==1.3.0
+        # via anyio
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// Setting `EXTRA_UV_INDEX_URL` to the empty string should treat it as "unset".
+#[test]
+fn empty_extra_index_url_env_var() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio")?;
+
+    uv_snapshot!(context.compile()
+            .arg("requirements.in")
+            .arg("--emit-index-url")
+            .env("EXTRA_UV_INDEX_URL", ""), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z requirements.in --emit-index-url
+    --index-url https://pypi.org/simple
+
+    anyio==4.0.0
+    idna==3.4
+        # via anyio
+    sniffio==1.3.0
+        # via anyio
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// Setting `UV_INDEX_URL` to the empty string should treat it as "unset", and so should be
+/// overridden by an `--index-url` in a requirements file.
+#[test]
+fn empty_index_url_env_var_override() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("--index-url https://test.pypi.org/simple\nidna")?;
+
+    uv_snapshot!(context.compile()
+            .arg("requirements.in")
+            .arg("--emit-index-url")
+            .env("UV_INDEX_URL", ""), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z requirements.in --emit-index-url
+    --index-url https://test.pypi.org/simple
+
+    idna==2.7
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// The `UV_INDEX_URL` should override an `--index-url` in a requirements file.
+#[test]
+fn index_url_env_var_override() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("--index-url https://pypi.org/simple\nidna")?;
+
+    uv_snapshot!(context.compile()
+            .arg("requirements.in")
+            .arg("--emit-index-url")
+            .env("UV_INDEX_URL", "https://test.pypi.org/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z requirements.in --emit-index-url
+    --index-url https://test.pypi.org/simple
+
+    idna==2.7
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// Expand an environment variable in a `-r` path within a `requirements.in` file.
+#[test]
+fn expand_env_var_requirements_txt() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("-r ${PROJECT_ROOT}/requirements-dev.in")?;
+
+    let requirements_dev_in = context.temp_dir.child("requirements-dev.in");
+    requirements_dev_in.write_str("anyio")?;
+
+    uv_snapshot!(context.compile()
+            .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z requirements.in
+    anyio==4.0.0
+    idna==3.4
+        # via anyio
+    sniffio==1.3.0
+        # via anyio
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// Raise an error when an editable's `Requires-Python` constraint is not met.
+#[test]
+fn requires_python_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with a `Requires-Python` constraint that is not met.
+    let editable_dir = TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = "<=3.8"
+"#,
+    )?;
+
+    // Write to a requirements file.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
+
+    uv_snapshot!(context.compile()
+        .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Editable `example` requires Python <=3.8, but resolution targets Python 3.12.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// Raise an error when an editable's `Requires-Python` constraint is not met.
+#[test]
+fn requires_python_editable_target_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with a `Requires-Python` constraint that is not met.
+    let editable_dir = TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = "<=3.8"
+"#,
+    )?;
+
+    // Write to a requirements file.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
+
+    let filters: Vec<_> = [
+        // 3.11 may not be installed
+        (
+            "warning: The requested Python version 3.11 is not available; .* will be used to build dependencies instead.\n",
+            "",
+        ),
+    ]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    uv_snapshot!(filters, context.compile()
+        .arg("requirements.in")
+        .arg("--python-version=3.11"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Editable `example` requires Python <=3.8, but resolution targets Python 3.11
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn editable_optional_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with an optional URL dependency.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = []
+requires-python = '>=3.8'
+
+[project.optional-dependencies]
+dev = [
+  "anyio @ https://files.pythonhosted.org/packages/bf/cd/d6d9bb1dadf73e7af02d18225cbd2c93f8552e13130484f1c8dcfece292b/anyio-4.2.0-py3-none-any.whl"
+]
+"#,
+    )?;
+
+    // Write to a requirements file.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("-e .[dev]")?;
+
+    uv_snapshot!(context.compile()
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z requirements.in
+    -e .
+    anyio @ https://files.pythonhosted.org/packages/bf/cd/d6d9bb1dadf73e7af02d18225cbd2c93f8552e13130484f1c8dcfece292b/anyio-4.2.0-py3-none-any.whl
+        # via example
+    idna==3.4
+        # via anyio
+    sniffio==1.3.0
+        # via anyio
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 4 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// Under `--resolution=lowest-direct`, ignore optional dependencies.
+///
+/// In the below example, ensure that `setuptools` does not resolve to the lowest-available version.
+#[test]
+fn editable_optional_lowest_direct() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with an optional URL dependency.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = ["setuptools-scm>=8.0.0"]
+requires-python = '>=3.8'
+
+[project.optional-dependencies]
+dev = ["setuptools"]
+"#,
+    )?;
+
+    // Write to a requirements file.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("-e .")?;
+
+    uv_snapshot!(context.compile()
+        .arg("requirements.in")
+        .arg("--resolution=lowest-direct"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2023-11-18T12:00:00Z requirements.in --resolution=lowest-direct
+    -e .
+    packaging==23.2
+        # via setuptools-scm
+    setuptools==68.2.2
+        # via setuptools-scm
+    setuptools-scm==8.0.1
+        # via example
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 4 packages in [TIME]
     "###
     );
 

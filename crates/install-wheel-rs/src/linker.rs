@@ -15,12 +15,12 @@ use pep440_rs::Version;
 use pypi_types::DirectUrl;
 use uv_normalize::PackageName;
 
-use crate::install_location::InstallLocation;
-use crate::script::scripts_from_ini;
+use crate::script::{scripts_from_ini, Script};
 use crate::wheel::{
-    extra_dist_info, install_data, parse_metadata, parse_wheel_version, write_script_entrypoints,
+    extra_dist_info, install_data, parse_metadata, parse_wheel_file, read_record_file,
+    write_script_entrypoints, LibKind,
 };
-use crate::{read_record_file, Error, Script};
+use crate::{Error, Layout};
 
 /// Install the given wheel to the given venv
 ///
@@ -31,30 +31,13 @@ use crate::{read_record_file, Error, Script};
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
 #[instrument(skip_all, fields(wheel = % wheel.as_ref().display()))]
 pub fn install_wheel(
-    location: &InstallLocation<impl AsRef<Path>>,
+    layout: &Layout,
     wheel: impl AsRef<Path>,
     filename: &WheelFilename,
     direct_url: Option<&DirectUrl>,
     installer: Option<&str>,
     link_mode: LinkMode,
 ) -> Result<(), Error> {
-    let root = location.venv_root();
-
-    // TODO(charlie): Pass this in.
-    let site_packages_python = format!(
-        "python{}.{}",
-        location.python_version().0,
-        location.python_version().1
-    );
-    let site_packages = if cfg!(target_os = "windows") {
-        root.as_ref().join("Lib").join("site-packages")
-    } else {
-        root.as_ref()
-            .join("lib")
-            .join(site_packages_python)
-            .join("site-packages")
-    };
-
     let dist_info_prefix = find_dist_info(&wheel)?;
     let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
     let (name, version) = parse_metadata(&dist_info_prefix, &metadata)?;
@@ -80,13 +63,16 @@ pub fn install_wheel(
         .as_ref()
         .join(format!("{dist_info_prefix}.dist-info/WHEEL"));
     let wheel_text = fs::read_to_string(wheel_file_path)?;
-    parse_wheel_version(&wheel_text)?;
+    let lib_kind = parse_wheel_file(&wheel_text)?;
 
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).
-    // We always install in the same virtualenv site packages
     debug!(name, "Extracting file");
-    let num_unpacked = link_mode.link_wheel_files(&site_packages, &wheel)?;
+    let site_packages = match lib_kind {
+        LibKind::Pure => &layout.scheme.purelib,
+        LibKind::Plat => &layout.scheme.platlib,
+    };
+    let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel)?;
     debug!(name, "Extracted {num_unpacked} files");
 
     // Read the RECORD file.
@@ -99,27 +85,20 @@ pub fn install_wheel(
 
     debug!(name, "Writing entrypoints");
     let (console_scripts, gui_scripts) =
-        parse_scripts(&wheel, &dist_info_prefix, None, location.python_version().1)?;
-    write_script_entrypoints(
-        &site_packages,
-        location,
-        &console_scripts,
-        &mut record,
-        false,
-    )?;
-    write_script_entrypoints(&site_packages, location, &gui_scripts, &mut record, true)?;
+        parse_scripts(&wheel, &dist_info_prefix, None, layout.python_version.1)?;
+    write_script_entrypoints(layout, site_packages, &console_scripts, &mut record, false)?;
+    write_script_entrypoints(layout, site_packages, &gui_scripts, &mut record, true)?;
 
-    let data_dir = site_packages.join(format!("{dist_info_prefix}.data"));
     // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.
     // 2.b Move each subtree of distribution-1.0.data/ onto its destination path. Each subdirectory of distribution-1.0.data/ is a key into a dict of destination directories, such as distribution-1.0.data/(purelib|platlib|headers|scripts|data). The initially supported paths are taken from distutils.command.install.
+    let data_dir = site_packages.join(format!("{dist_info_prefix}.data"));
     if data_dir.is_dir() {
         debug!(name, "Installing data");
         install_data(
-            root.as_ref(),
-            &site_packages,
+            layout,
+            site_packages,
             &data_dir,
             &name,
-            location,
             &console_scripts,
             &gui_scripts,
             &mut record,
@@ -134,7 +113,7 @@ pub fn install_wheel(
 
     debug!(name, "Writing extra metadata");
     extra_dist_info(
-        &site_packages,
+        site_packages,
         &dist_info_prefix,
         true,
         direct_url,

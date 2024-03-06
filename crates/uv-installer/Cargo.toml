@@ -20,6 +20,8 @@ once-map = { path = "../once-map" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
+pypi-types = { path = "../pypi-types" }
+requirements-txt = { path = "../requirements-txt" }
 uv-cache = { path = "../uv-cache" }
 uv-client = { path = "../uv-client" }
 uv-distribution = { path = "../uv-distribution" }
@@ -29,16 +31,20 @@ uv-git = { path = "../uv-git", features = ["vendored-openssl"] }
 uv-interpreter = { path = "../uv-interpreter" }
 uv-normalize = { path = "../uv-normalize" }
 uv-traits = { path = "../uv-traits" }
-pypi-types = { path = "../pypi-types" }
-requirements-txt = { path = "../requirements-txt" }
+uv-warnings = { path = "../uv-warnings" }
 
 anyhow = { workspace = true }
+async-channel = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
+pyproject-toml = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
+serde = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["process"] }
+toml = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+walkdir = { workspace = true }

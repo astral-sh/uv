@@ -1,36 +1,25 @@
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
+use std::io::{BufRead, BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
-use std::str::FromStr;
 use std::{env, io, iter};
 
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use mailparse::MailHeaderMap;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
-use tempfile::tempdir;
-use tracing::{debug, error, instrument, warn};
+use tracing::{instrument, warn};
 use walkdir::WalkDir;
-use zip::result::ZipError;
 use zip::write::FileOptions;
-use zip::{ZipArchive, ZipWriter};
+use zip::ZipWriter;
 
-use distribution_filename::WheelFilename;
-use pep440_rs::Version;
 use pypi_types::DirectUrl;
-use uv_fs::Normalized;
-use uv_normalize::PackageName;
+use uv_fs::Simplified;
 
-use crate::install_location::{InstallLocation, LockedDir};
 use crate::record::RecordEntry;
-use crate::script::{scripts_from_ini, Script};
-use crate::{find_dist_info, Error};
-
-/// `#!/usr/bin/env python`
-pub const SHEBANG_PYTHON: &str = "#!/usr/bin/env python";
+use crate::script::Script;
+use crate::{Error, Layout};
 
 const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 
@@ -97,27 +86,6 @@ pub(crate) fn read_scripts_from_section(
     Ok(scripts)
 }
 
-/// Parses the `entry_points.txt` entry in the wheel for console scripts
-///
-/// Returns (`script_name`, module, function)
-///
-/// Extras are supposed to be ignored, which happens if you pass None for extras
-fn parse_scripts<R: Read + Seek>(
-    archive: &mut ZipArchive<R>,
-    dist_info_dir: &str,
-    extras: Option<&[String]>,
-    python_minor: u8,
-) -> Result<(Vec<Script>, Vec<Script>), Error> {
-    let entry_points_path = format!("{dist_info_dir}/entry_points.txt");
-    let ini = match archive.by_name(&entry_points_path) {
-        Ok(file) => std::io::read_to_string(file)?,
-        Err(ZipError::FileNotFound) => return Ok((Vec::new(), Vec::new())),
-        Err(err) => return Err(Error::Zip(entry_points_path, err)),
-    };
-
-    scripts_from_ini(extras, python_minor, ini)
-}
-
 /// Shamelessly stolen (and updated for recent sha2)
 /// <https://github.com/richo/hashing-copy/blob/d8dd2fdb63c6faf198de0c9e5713d6249cbb5323/src/lib.rs#L10-L52>
 /// which in turn got it from std
@@ -146,127 +114,33 @@ fn copy_and_hash(reader: &mut impl Read, writer: &mut impl Write) -> io::Result<
     ))
 }
 
-/// Extract all files from the wheel into the site packages
+/// Format the shebang for a given Python executable.
 ///
-/// Matches with the RECORD entries
+/// Like pip, if a shebang is non-simple (too long or contains spaces), we use `/bin/sh` as the
+/// executable.
 ///
-/// Returns paths relative to site packages
-fn unpack_wheel_files<R: Read + Seek>(
-    site_packages: &Path,
-    record_path: &str,
-    archive: &mut ZipArchive<R>,
-    record: &[RecordEntry],
-    check_hashes: bool,
-) -> Result<Vec<PathBuf>, Error> {
-    let mut extracted_paths = Vec::new();
-    // Cache the created parent dirs to avoid io calls
-    // When deactivating bytecode compilation and sha2 those were 5% of total runtime, with
-    // cache it 2.3%
-    let mut created_dirs = FxHashSet::default();
-    // https://github.com/zip-rs/zip/blob/7edf2489d5cff8b80f02ee6fc5febf3efd0a9442/examples/extract.rs
-    for i in 0..archive.len() {
-        let mut file = archive.by_index(i).map_err(|err| {
-            let file1 = format!("(index {i})");
-            Error::Zip(file1, err)
-        })?;
-        // enclosed_name takes care of evil zip paths
-        let relative = match file.enclosed_name() {
-            Some(path) => path.to_owned(),
-            None => continue,
-        };
-        let out_path = site_packages.join(&relative);
+/// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_vendor/distlib/scripts.py#L136-L165>
+fn format_shebang(executable: impl AsRef<Path>, os_name: &str) -> String {
+    // Convert the executable to a simplified path.
+    let executable = executable.as_ref().simplified_display().to_string();
 
-        if file.name().ends_with('/') {
-            // pip seems to do ignore those folders, so do we
-            // fs::create_dir_all(&out_path)?;
-            continue;
-        }
+    // Validate the shebang.
+    if os_name == "posix" {
+        // The length of the full line: the shebang, plus the leading `#` and `!`, and a trailing
+        // newline.
+        let shebang_length = 2 + executable.len() + 1;
 
-        if let Some(parent) = out_path.parent() {
-            if created_dirs.insert(parent.to_path_buf()) {
-                fs::create_dir_all(parent)?;
-            }
-        }
-        let mut outfile = BufWriter::new(File::create(&out_path)?);
-        let encoded_hash = if check_hashes {
-            let (_size, encoded_hash) = copy_and_hash(&mut file, &mut outfile)?;
-            Some(encoded_hash)
-        } else {
-            io::copy(&mut file, &mut outfile)?;
-            None
-        };
-
-        extracted_paths.push(relative.clone());
-
-        // Get and Set permissions
-        #[cfg(unix)]
-        {
-            use std::fs::Permissions;
-            use std::os::unix::fs::PermissionsExt;
-
-            if let Some(mode) = file.unix_mode() {
-                fs::set_permissions(&out_path, Permissions::from_mode(mode))?;
-            }
-        }
-
-        // This is the RECORD file that contains the hashes so naturally it can't contain it's own
-        // hash and size (but it does contain an entry with two empty fields)
-        // > 6. RECORD.jws is used for digital signatures. It is not mentioned in RECORD.
-        // > 7. RECORD.p7s is allowed as a courtesy to anyone who would prefer to use S/MIME
-        // >    signatures to secure their wheel files. It is not mentioned in RECORD.
-        let record_path = PathBuf::from(&record_path);
-        if [
-            record_path.clone(),
-            record_path.with_extension("jws"),
-            record_path.with_extension("p7s"),
-        ]
-        .contains(&relative)
-        {
-            continue;
-        }
-
-        if let Some(encoded_hash) = encoded_hash {
-            // `relative == Path::new(entry.path)` was really slow
-            let relative_str = relative.display().to_string();
-            let recorded_hash = record
-                .iter()
-                .find(|entry| relative_str == entry.path)
-                .and_then(|entry| entry.hash.as_ref())
-                .ok_or_else(|| {
-                    Error::RecordFile(format!(
-                        "Missing hash for {} (expected {})",
-                        relative.normalized_display(),
-                        encoded_hash
-                    ))
-                })?;
-            if recorded_hash != &encoded_hash {
-                if relative.as_os_str().to_string_lossy().starts_with("torch-") {
-                    error!(
-                        "Hash mismatch for {}. Recorded: {}, Actual: {}",
-                        relative.normalized_display(),
-                        recorded_hash,
-                        encoded_hash,
-                    );
-                    error!(
-                        "Torch isn't capable of producing correct hashes 🙄 Ignoring. \
-                    https://github.com/pytorch/pytorch/issues/47916"
-                    );
-                    continue;
-                }
-                return Err(Error::RecordFile(format!(
-                    "Hash mismatch for {}. Recorded: {}, Actual: {}",
-                    relative.normalized_display(),
-                    recorded_hash,
-                    encoded_hash,
-                )));
-            }
+        // If the shebang is too long, or contains spaces, wrap it in `/bin/sh`.
+        if shebang_length > 127 || executable.contains(' ') {
+            // Like Python's `shlex.quote`:
+            // > Use single quotes, and put single quotes into double quotes
+            // > The string $'b is then quoted as '$'"'"'b'
+            let executable = format!("'{}'", executable.replace('\'', r#"'"'"'"#));
+            return format!("#!/bin/sh\n'''exec' {executable} \"$0\" \"$@\"\n' '''");
         }
     }
-    Ok(extracted_paths)
-}
 
-fn get_shebang(location: &InstallLocation<impl AsRef<Path>>) -> String {
-    format!("#!{}", location.python().normalized().display())
+    format!("#!{executable}")
 }
 
 /// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
@@ -278,7 +152,7 @@ fn get_shebang(location: &InstallLocation<impl AsRef<Path>>) -> String {
 pub(crate) fn windows_script_launcher(
     launcher_python_script: &str,
     is_gui: bool,
-    installation: &InstallLocation<impl AsRef<Path>>,
+    python_executable: impl AsRef<Path>,
 ) -> Result<Vec<u8>, Error> {
     // This method should only be called on Windows, but we avoid `#[cfg(windows)]` to retain
     // compilation on all platforms.
@@ -326,8 +200,8 @@ pub(crate) fn windows_script_launcher(
         archive.finish().expect(error_msg);
     }
 
-    let python = installation.python();
-    let python_path = python.normalized().to_string_lossy();
+    let python = python_executable.as_ref();
+    let python_path = python.simplified().to_string_lossy();
 
     let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len() + payload.len());
     launcher.extend_from_slice(launcher_bin);
@@ -343,42 +217,53 @@ pub(crate) fn windows_script_launcher(
     Ok(launcher)
 }
 
-/// Create the wrapper scripts in the bin folder of the venv for launching console scripts
-///
-/// We also pass `venv_base` so we can write the same path as pip does
-///
-/// TODO: Test for this launcher directly in install-wheel-rs
+/// Create the wrapper scripts in the bin folder of the venv for launching console scripts.
 pub(crate) fn write_script_entrypoints(
+    layout: &Layout,
     site_packages: &Path,
-    location: &InstallLocation<impl AsRef<Path>>,
     entrypoints: &[Script],
     record: &mut Vec<RecordEntry>,
     is_gui: bool,
 ) -> Result<(), Error> {
     for entrypoint in entrypoints {
-        let entrypoint_relative = if cfg!(windows) {
+        let entrypoint_absolute = if cfg!(windows) {
             // On windows we actually build an .exe wrapper
             let script_name = entrypoint
-                .script_name
+                .name
                 // FIXME: What are the in-reality rules here for names?
                 .strip_suffix(".py")
-                .unwrap_or(&entrypoint.script_name)
+                .unwrap_or(&entrypoint.name)
                 .to_string()
                 + ".exe";
-            bin_rel().join(script_name)
+
+            layout.scheme.scripts.join(script_name)
         } else {
-            bin_rel().join(&entrypoint.script_name)
+            layout.scheme.scripts.join(&entrypoint.name)
         };
 
+        let entrypoint_relative = pathdiff::diff_paths(&entrypoint_absolute, site_packages)
+            .ok_or_else(|| {
+                Error::Io(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!(
+                        "Could not find relative path for: {}",
+                        entrypoint_absolute.simplified_display()
+                    ),
+                ))
+            })?;
+
         // Generate the launcher script.
-        let launcher_python_script = get_script_launcher(entrypoint, &get_shebang(location));
+        let launcher_python_script = get_script_launcher(
+            entrypoint,
+            &format_shebang(&layout.sys_executable, &layout.os_name),
+        );
 
         // If necessary, wrap the launcher script in a Windows launcher binary.
         if cfg!(windows) {
             write_file_recorded(
                 site_packages,
                 &entrypoint_relative,
-                &windows_script_launcher(&launcher_python_script, is_gui, location)?,
+                &windows_script_launcher(&launcher_python_script, is_gui, &layout.sys_executable)?,
                 record,
             )?;
         } else {
@@ -403,23 +288,34 @@ pub(crate) fn write_script_entrypoints(
     Ok(())
 }
 
-fn bin_rel() -> PathBuf {
-    if cfg!(windows) {
-        // windows doesn't have the python part, only Lib/site-packages
-        Path::new("..").join("..").join("Scripts")
-    } else {
-        // linux/mac has lib/python/site-packages
-        Path::new("..").join("..").join("..").join("bin")
-    }
+/// Whether the wheel should be installed into the `purelib` or `platlib` directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LibKind {
+    /// Install into the `purelib` directory.
+    Pure,
+    /// Install into the `platlib` directory.
+    Plat,
 }
 
-/// Parse WHEEL file
+/// Parse WHEEL file.
 ///
 /// > {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same
 /// > basic key: value format:
-pub(crate) fn parse_wheel_version(wheel_text: &str) -> Result<(), Error> {
+pub(crate) fn parse_wheel_file(wheel_text: &str) -> Result<LibKind, Error> {
     // {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same basic key: value format:
     let data = parse_key_value_file(&mut wheel_text.as_bytes(), "WHEEL")?;
+
+    // Determine whether Root-Is-Purelib == ‘true’.
+    // If it is, the wheel is pure, and should be installed into purelib.
+    let root_is_purelib = data
+        .get("Root-Is-Purelib")
+        .and_then(|root_is_purelib| root_is_purelib.first())
+        .is_some_and(|root_is_purelib| root_is_purelib == "true");
+    let lib_kind = if root_is_purelib {
+        LibKind::Pure
+    } else {
+        LibKind::Plat
+    };
 
     // mkl_fft-1.3.6-58-cp310-cp310-manylinux2014_x86_64.whl has multiple Wheel-Version entries, we have to ignore that
     // like pip
@@ -437,7 +333,7 @@ pub(crate) fn parse_wheel_version(wheel_text: &str) -> Result<(), Error> {
     // and technically we only need to check that the version is not higher
     if wheel_version == ("0", "1") {
         warn!("Ancient wheel version 0.1 (expected is 1.0)");
-        return Ok(());
+        return Ok(lib_kind);
     }
     // Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
     // Wheel-Version: 1.0
@@ -453,151 +349,7 @@ pub(crate) fn parse_wheel_version(wheel_text: &str) -> Result<(), Error> {
             0, wheel_version.1
         );
     }
-    Ok(())
-}
-
-/// Call `python -m compileall` to generate pyc file for the installed code
-///
-/// 2.f Compile any installed .py to .pyc. (Uninstallers should be smart enough to remove .pyc
-/// even if it is not mentioned in RECORD.)
-#[instrument(skip_all)]
-fn bytecode_compile(
-    site_packages: &Path,
-    unpacked_paths: Vec<PathBuf>,
-    python_version: (u8, u8),
-    sys_executable: &Path,
-    // Only for logging
-    name: &str,
-    record: &mut Vec<RecordEntry>,
-) -> Result<(), Error> {
-    // https://github.com/pypa/pip/blob/b5457dfee47dd9e9f6ec45159d9d410ba44e5ea1/src/pip/_internal/operations/install/wheel.py#L592-L603
-    let py_source_paths: Vec<_> = unpacked_paths
-        .into_iter()
-        .filter(|path| {
-            path.extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
-                && site_packages.join(path).is_file()
-        })
-        .collect();
-
-    // bytecode compiling crashes non-deterministically with various errors, from syntax errors
-    // to cpython segmentation faults, so we add a simple retry loop
-    let mut retries = 3;
-    let (status, lines) = loop {
-        let (status, lines) =
-            bytecode_compile_inner(site_packages, &py_source_paths, sys_executable)?;
-        retries -= 1;
-        if status.success() || retries == 0 {
-            break (status, lines);
-        }
-
-        warn!("Failed to compile {name} with python compileall, retrying",);
-    };
-    if !status.success() {
-        // lossy because we want the error reporting to survive c̴̞̏ü̸̜̹̈́ŕ̴͉̈ś̷̤ė̵̤͋d̷͙̄ filenames in the zip
-        return Err(Error::PythonSubcommand(io::Error::new(
-            io::ErrorKind::Other,
-            format!("Failed to run python compileall, log above: {status}"),
-        )));
-    }
-
-    // like pip, we just ignored all that failed to compile
-    // Add each that succeeded to the RECORD
-    for py_path in lines {
-        let py_path = py_path.trim();
-        if py_path.is_empty() {
-            continue;
-        }
-        let py_path = Path::new(py_path);
-        let pyc_path = py_path
-            .parent()
-            .unwrap_or_else(|| Path::new(""))
-            .join("__pycache__")
-            // Unwrap is save because we checked for an extension before
-            .join(py_path.file_name().unwrap())
-            .with_extension(format!(
-                "cpython-{}{}.pyc",
-                python_version.0, python_version.1
-            ));
-        if !site_packages.join(&pyc_path).is_file() {
-            return Err(Error::PythonSubcommand(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!(
-                    "Didn't find pyc generated by compileall: {}",
-                    site_packages.join(&pyc_path).normalized_display()
-                ),
-            )));
-        }
-        // 2.d Update distribution-1.0.dist-info/RECORD with the installed paths.
-
-        // https://www.python.org/dev/peps/pep-0376/#record
-        // > [..] a hash of the file's contents. Notice that pyc and pyo generated files don't have
-        // > any hash because they are automatically produced from py files. So checking the hash of
-        // > the corresponding py file is enough to decide if the file and its associated pyc or pyo
-        // > files have changed.
-        record.push(RecordEntry {
-            path: pyc_path.display().to_string(),
-            hash: None,
-            size: None,
-        });
-    }
-
-    Ok(())
-}
-
-/// The actual command part which we repeat if it fails
-fn bytecode_compile_inner(
-    site_packages: &Path,
-    py_source_paths: &[PathBuf],
-    sys_executable: &Path,
-) -> Result<(ExitStatus, Vec<String>), Error> {
-    let temp_dir = tempdir()?;
-    // Running python with an actual file will produce better error messages
-    let pip_compileall_py = temp_dir.path().join("pip_compileall.py");
-    fs::write(&pip_compileall_py, include_str!("pip_compileall.py"))?;
-    // We input the paths through stdin and get the successful paths returned through stdout
-    let mut bytecode_compiler = Command::new(sys_executable)
-        .arg(&pip_compileall_py)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .current_dir(site_packages.normalized())
-        .spawn()
-        .map_err(Error::PythonSubcommand)?;
-
-    // https://stackoverflow.com/questions/49218599/write-to-child-process-stdin-in-rust/49597789#comment120223107_49597789
-    let mut child_stdin = bytecode_compiler
-        .stdin
-        .take()
-        .expect("Child must have stdin");
-
-    // Pass paths newline terminated to compileall
-    for path in py_source_paths {
-        debug!("bytecode compiling {}", path.display());
-        // There is no OsStr -> Bytes conversion on windows :o
-        // https://stackoverflow.com/questions/43083544/how-can-i-convert-osstr-to-u8-vecu8-on-windows
-        writeln!(&mut child_stdin, "{}", path.display()).map_err(Error::PythonSubcommand)?;
-    }
-    // Close stdin to finish and avoid indefinite blocking
-    drop(child_stdin);
-
-    // Already read stdout here to avoid it running full (pipes are limited)
-    let stdout = bytecode_compiler.stdout.take().unwrap();
-    let mut lines: Vec<String> = Vec::new();
-    for line in BufReader::new(stdout).lines() {
-        let line = line.map_err(|err| {
-            Error::PythonSubcommand(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Invalid utf-8 returned by python compileall: {err}"),
-            ))
-        })?;
-        lines.push(line);
-    }
-
-    let output = bytecode_compiler
-        .wait_with_output()
-        .map_err(Error::PythonSubcommand)?;
-    Ok((output.status, lines))
+    Ok(lib_kind)
 }
 
 /// Give the path relative to the base directory
@@ -605,7 +357,7 @@ fn bytecode_compile_inner(
 /// lib/python/site-packages/foo/__init__.py and lib/python/site-packages -> foo/__init__.py
 /// lib/marker.txt and lib/python/site-packages -> ../../marker.txt
 /// `bin/foo_launcher` and lib/python/site-packages -> ../../../`bin/foo_launcher`
-pub fn relative_to(path: &Path, base: &Path) -> Result<PathBuf, Error> {
+pub(crate) fn relative_to(path: &Path, base: &Path) -> Result<PathBuf, Error> {
     // Find the longest common prefix, and also return the path stripped from that prefix
     let (stripped, common_prefix) = base
         .ancestors()
@@ -619,8 +371,8 @@ pub fn relative_to(path: &Path, base: &Path) -> Result<PathBuf, Error> {
                 io::ErrorKind::Other,
                 format!(
                     "Trivial strip failed: {} vs. {}",
-                    path.normalized_display(),
-                    base.normalized_display()
+                    path.simplified_display(),
+                    base.simplified_display()
                 ),
             ))
         })?;
@@ -662,8 +414,8 @@ pub(crate) fn move_folder_recorded(
                 .ok_or_else(|| {
                     Error::RecordFile(format!(
                         "Could not find entry for {} ({})",
-                        relative_to_site_packages.normalized_display(),
-                        src.normalized_display()
+                        relative_to_site_packages.simplified_display(),
+                        src.simplified_display()
                     ))
                 })?;
             entry.path = relative_to(&target, site_packages)?.display().to_string();
@@ -676,10 +428,10 @@ pub(crate) fn move_folder_recorded(
 ///
 /// Has to deal with both binaries files (just move) and scripts (rewrite the shebang if applicable)
 fn install_script(
+    layout: &Layout,
     site_packages: &Path,
     record: &mut [RecordEntry],
     file: &DirEntry,
-    location: &InstallLocation<impl AsRef<Path>>,
 ) -> Result<(), Error> {
     if !file.file_type()?.is_file() {
         return Err(Error::InvalidWheel(format!(
@@ -688,7 +440,7 @@ fn install_script(
         )));
     }
 
-    let target_path = bin_rel().join(file.file_name());
+    let target_path = layout.scheme.scripts.join(file.file_name());
 
     let path = file.path();
     let mut script = File::open(&path)?;
@@ -706,15 +458,17 @@ fn install_script(
     let mut start = vec![0; placeholder_python.len()];
     script.read_exact(&mut start)?;
     let size_and_encoded_hash = if start == placeholder_python {
-        let start = get_shebang(location).as_bytes().to_vec();
-        let mut target = File::create(site_packages.join(&target_path))?;
+        let start = format_shebang(&layout.sys_executable, &layout.os_name)
+            .as_bytes()
+            .to_vec();
+        let mut target = File::create(&target_path)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
         fs::remove_file(&path)?;
         Some(size_and_encoded_hash)
     } else {
         // reading and writing is slow especially for large binaries, so we move them instead
         drop(script);
-        fs::rename(&path, site_packages.join(&target_path))?;
+        fs::rename(&path, &target_path)?;
         None
     };
     #[cfg(unix)]
@@ -722,10 +476,7 @@ fn install_script(
         use std::fs::Permissions;
         use std::os::unix::fs::PermissionsExt;
 
-        fs::set_permissions(
-            site_packages.join(&target_path),
-            Permissions::from_mode(0o755),
-        )?;
+        fs::set_permissions(&target_path, Permissions::from_mode(0o755))?;
     }
 
     let relative_to_site_packages = path
@@ -738,8 +489,8 @@ fn install_script(
             // This should be possible to occur at this point, but filesystems and such
             Error::RecordFile(format!(
                 "Could not find entry for {} ({})",
-                relative_to_site_packages.normalized_display(),
-                path.normalized_display()
+                relative_to_site_packages.simplified_display(),
+                path.simplified_display()
             ))
         })?;
     entry.path = target_path.display().to_string();
@@ -754,11 +505,10 @@ fn install_script(
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 pub(crate) fn install_data(
-    venv_root: &Path,
+    layout: &Layout,
     site_packages: &Path,
     data_dir: &Path,
     dist_name: &str,
-    location: &InstallLocation<impl AsRef<Path>>,
     console_scripts: &[Script],
     gui_scripts: &[Script],
     record: &mut [RecordEntry],
@@ -770,7 +520,7 @@ pub(crate) fn install_data(
         match path.file_name().and_then(|name| name.to_str()) {
             Some("data") => {
                 // Move the content of the folder to the root of the venv
-                move_folder_recorded(&path, venv_root, site_packages, record)?;
+                move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
             }
             Some("scripts") => {
                 for file in fs::read_dir(path)? {
@@ -787,30 +537,23 @@ pub(crate) fn install_data(
                     if console_scripts
                         .iter()
                         .chain(gui_scripts)
-                        .any(|script| script.script_name == match_name)
+                        .any(|script| script.name == match_name)
                     {
                         continue;
                     }
 
-                    install_script(site_packages, record, &file, location)?;
+                    install_script(layout, site_packages, record, &file)?;
                 }
             }
             Some("headers") => {
-                let target_path = venv_root
-                    .join("include")
-                    .join("site")
-                    .join(format!(
-                        "python{}.{}",
-                        location.python_version().0,
-                        location.python_version().1
-                    ))
-                    .join(dist_name);
+                let target_path = layout.scheme.include.join(dist_name);
                 move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
-            Some("purelib" | "platlib") => {
-                // purelib and platlib locations are not relevant when using venvs
-                // https://stackoverflow.com/a/27882460/3549270
-                move_folder_recorded(&path, site_packages, site_packages, record)?;
+            Some("purelib") => {
+                move_folder_recorded(&path, &layout.scheme.purelib, site_packages, record)?;
+            }
+            Some("platlib") => {
+                move_folder_recorded(&path, &layout.scheme.platlib, site_packages, record)?;
             }
             _ => {
                 return Err(Error::InvalidWheel(format!(
@@ -833,6 +576,12 @@ pub(crate) fn write_file_recorded(
     content: impl AsRef<[u8]>,
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
+    debug_assert!(
+        !relative_path.is_absolute(),
+        "Path must be relative: {}",
+        relative_path.display()
+    );
+
     File::create(site_packages.join(relative_path))?.write_all(content.as_ref())?;
     let hash = Sha256::new().chain_update(content.as_ref()).finalize();
     let encoded_hash = format!("sha256={}", BASE64URL_NOPAD.encode(&hash));
@@ -884,7 +633,7 @@ pub(crate) fn extra_dist_info(
 
 /// Reads the record file
 /// <https://www.python.org/dev/peps/pep-0376/#record>
-pub fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Error> {
+pub(crate) fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Error> {
     csv::ReaderBuilder::new()
         .has_headers(false)
         .escape(Some(b'"'))
@@ -902,8 +651,8 @@ pub fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Erro
 }
 
 /// Parse a file with `Key: value` entries such as WHEEL and METADATA
-pub fn parse_key_value_file(
-    file: &mut impl Read,
+fn parse_key_value_file(
+    file: impl Read,
     debug_filename: &str,
 ) -> Result<FxHashMap<String, Vec<String>>, Error> {
     let mut data: FxHashMap<String, Vec<String>> = FxHashMap::default();
@@ -914,207 +663,17 @@ pub fn parse_key_value_file(
         if line.is_empty() {
             continue;
         }
-        let (key, value) = line.split_once(": ").ok_or_else(|| {
+        let (key, value) = line.split_once(':').ok_or_else(|| {
             Error::InvalidWheel(format!(
-                "Line {line_no} of the {debug_filename} file is invalid"
+                "Line {} of the {debug_filename} file is invalid",
+                line_no + 1
             ))
         })?;
-        data.entry(key.to_string())
+        data.entry(key.trim().to_string())
             .or_default()
-            .push(value.to_string());
+            .push(value.trim().to_string());
     }
     Ok(data)
-}
-
-/// Install the given wheel to the given venv
-///
-/// The caller must ensure that the wheel is compatible to the environment.
-///
-/// <https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl>
-///
-/// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
-#[allow(clippy::too_many_arguments)]
-#[instrument(skip_all, fields(name = % filename.name))]
-pub fn install_wheel(
-    location: &InstallLocation<LockedDir>,
-    reader: impl Read + Seek,
-    filename: &WheelFilename,
-    direct_url: Option<&DirectUrl>,
-    installer: Option<&str>,
-    compile: bool,
-    check_hashes: bool,
-    // initially used to the console scripts, currently unused. Keeping it because we likely need
-    // it for validation later.
-    _extras: &[String],
-    sys_executable: impl AsRef<Path>,
-) -> Result<String, Error> {
-    let name = &filename.name;
-
-    let base_location = location.venv_root();
-
-    let site_packages_python = format!(
-        "python{}.{}",
-        location.python_version().0,
-        location.python_version().1
-    );
-    let site_packages = if cfg!(target_os = "windows") {
-        base_location.as_ref().join("Lib").join("site-packages")
-    } else {
-        base_location
-            .as_ref()
-            .join("lib")
-            .join(site_packages_python)
-            .join("site-packages")
-    };
-
-    debug!(name = name.as_ref(), "Opening zip");
-    // No BufReader: https://github.com/zip-rs/zip/issues/381
-    let mut archive = ZipArchive::new(reader).map_err(|err| {
-        let file = "(index)".to_string();
-        Error::Zip(file, err)
-    })?;
-
-    debug!(name = name.as_ref(), "Getting wheel metadata");
-    let dist_info_prefix = find_dist_info(filename, archive.file_names().map(|name| (name, name)))?
-        .1
-        .to_string();
-    let metadata = dist_info_metadata(&dist_info_prefix, &mut archive)?;
-    let (name, version) = parse_metadata(&dist_info_prefix, &metadata)?;
-
-    // Validate the wheel name and version.
-    {
-        let name = PackageName::from_str(&name)?;
-        if name != filename.name {
-            return Err(Error::MismatchedName(name, filename.name.clone()));
-        }
-
-        let version = Version::from_str(&version)?;
-        if version != filename.version {
-            return Err(Error::MismatchedVersion(version, filename.version.clone()));
-        }
-    }
-
-    let record_path = format!("{dist_info_prefix}.dist-info/RECORD");
-    let mut record = read_record_file(&mut archive.by_name(&record_path).map_err(|err| {
-        let file = record_path.clone();
-        Error::Zip(file, err)
-    })?)?;
-
-    // We're going step by step though
-    // https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl
-    // > 1.a Parse distribution-1.0.dist-info/WHEEL.
-    // > 1.b Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
-    let wheel_file_path = format!("{dist_info_prefix}.dist-info/WHEEL");
-    let wheel_file = archive
-        .by_name(&wheel_file_path)
-        .map_err(|err| Error::Zip(wheel_file_path, err))?;
-    let wheel_text = io::read_to_string(wheel_file)?;
-    parse_wheel_version(&wheel_text)?;
-    // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
-    // > 1.d Else unpack archive into platlib (site-packages).
-    // We always install in the same virtualenv site packages
-    debug!(name = name.as_str(), "Extracting file");
-    let unpacked_paths = unpack_wheel_files(
-        &site_packages,
-        &record_path,
-        &mut archive,
-        &record,
-        check_hashes,
-    )?;
-    debug!(
-        name = name.as_str(),
-        "Extracted {} files",
-        unpacked_paths.len()
-    );
-
-    debug!(name = name.as_str(), "Writing entrypoints");
-    let (console_scripts, gui_scripts) = parse_scripts(
-        &mut archive,
-        &dist_info_prefix,
-        None,
-        location.python_version().1,
-    )?;
-    write_script_entrypoints(
-        &site_packages,
-        location,
-        &console_scripts,
-        &mut record,
-        false,
-    )?;
-    write_script_entrypoints(&site_packages, location, &gui_scripts, &mut record, true)?;
-
-    let data_dir = site_packages.join(format!("{dist_info_prefix}.data"));
-    // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.
-    // 2.b Move each subtree of distribution-1.0.data/ onto its destination path. Each subdirectory of distribution-1.0.data/ is a key into a dict of destination directories, such as distribution-1.0.data/(purelib|platlib|headers|scripts|data). The initially supported paths are taken from distutils.command.install.
-    if data_dir.is_dir() {
-        debug!(name = name.as_str(), "Installing data");
-        install_data(
-            base_location.as_ref(),
-            &site_packages,
-            &data_dir,
-            &name,
-            location,
-            &console_scripts,
-            &gui_scripts,
-            &mut record,
-        )?;
-        // 2.c If applicable, update scripts starting with #!python to point to the correct interpreter.
-        // Script are unsupported through data
-        // 2.e Remove empty distribution-1.0.data directory.
-        fs::remove_dir_all(data_dir)?;
-    } else {
-        debug!(name = name.as_str(), "No data");
-    }
-
-    // 2.f Compile any installed .py to .pyc. (Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.)
-    if compile {
-        debug!(name = name.as_str(), "Bytecode compiling");
-        bytecode_compile(
-            &site_packages,
-            unpacked_paths,
-            location.python_version(),
-            sys_executable.as_ref(),
-            name.as_str(),
-            &mut record,
-        )?;
-    }
-
-    debug!(name = name.as_str(), "Writing extra metadata");
-
-    extra_dist_info(
-        &site_packages,
-        &dist_info_prefix,
-        true,
-        direct_url,
-        installer,
-        &mut record,
-    )?;
-
-    debug!(name = name.as_str(), "Writing record");
-    let mut record_writer = csv::WriterBuilder::new()
-        .has_headers(false)
-        .escape(b'"')
-        .from_path(site_packages.join(record_path))?;
-    record.sort();
-    for entry in record {
-        record_writer.serialize(entry)?;
-    }
-
-    Ok(filename.get_tag())
-}
-
-/// Read the `dist-info` metadata from a wheel archive.
-fn dist_info_metadata(
-    dist_info_prefix: &str,
-    archive: &mut ZipArchive<impl Read + Seek + Sized>,
-) -> Result<Vec<u8>, Error> {
-    let mut content = Vec::new();
-    let dist_info_file = format!("{dist_info_prefix}.dist-info/METADATA");
-    archive
-        .by_name(&dist_info_file)
-        .map_err(|err| Error::Zip(dist_info_file.clone(), err))?
-        .read_to_end(&mut content)?;
-    Ok(content)
 }
 
 /// Parse the distribution name and version from a wheel's `dist-info` metadata.
@@ -1162,11 +721,15 @@ pub(crate) fn parse_metadata(
 
 #[cfg(test)]
 mod test {
+    use std::io::Cursor;
     use std::path::Path;
 
+    use crate::Error;
     use indoc::{formatdoc, indoc};
 
-    use super::{parse_key_value_file, parse_wheel_version, read_record_file, relative_to, Script};
+    use crate::wheel::format_shebang;
+
+    use super::{parse_key_value_file, parse_wheel_file, read_record_file, relative_to, Script};
 
     #[test]
     fn test_parse_key_value_file() {
@@ -1194,8 +757,8 @@ mod test {
                 version
             }
         }
-        parse_wheel_version(&wheel_with_version("1.0")).unwrap();
-        parse_wheel_version(&wheel_with_version("2.0")).unwrap_err();
+        parse_wheel_file(&wheel_with_version("1.0")).unwrap();
+        parse_wheel_file(&wheel_with_version("2.0")).unwrap_err();
     }
 
     #[test]
@@ -1256,7 +819,7 @@ mod test {
         assert_eq!(
             Script::from_value("launcher", "foo.bar:main", None).unwrap(),
             Some(Script {
-                script_name: "launcher".to_string(),
+                name: "launcher".to_string(),
                 module: "foo.bar".to_string(),
                 function: "main".to_string(),
             })
@@ -1269,7 +832,7 @@ mod test {
             )
             .unwrap(),
             Some(Script {
-                script_name: "launcher".to_string(),
+                name: "launcher".to_string(),
                 module: "foo.bar".to_string(),
                 function: "main".to_string(),
             })
@@ -1286,11 +849,76 @@ mod test {
             )
             .unwrap(),
             Some(Script {
-                script_name: "launcher".to_string(),
+                name: "launcher".to_string(),
                 module: "foomod".to_string(),
                 function: "main_bar".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn test_shebang() {
+        // By default, use a simple shebang.
+        let executable = Path::new("/usr/bin/python3");
+        let os_name = "posix";
+        assert_eq!(format_shebang(executable, os_name), "#!/usr/bin/python3");
+
+        // If the path contains spaces, we should use the `exec` trick.
+        let executable = Path::new("/usr/bin/path to python3");
+        let os_name = "posix";
+        assert_eq!(
+            format_shebang(executable, os_name),
+            "#!/bin/sh\n'''exec' '/usr/bin/path to python3' \"$0\" \"$@\"\n' '''"
+        );
+
+        // Except on Windows...
+        let executable = Path::new("/usr/bin/path to python3");
+        let os_name = "nt";
+        assert_eq!(
+            format_shebang(executable, os_name),
+            "#!/usr/bin/path to python3"
+        );
+
+        // Quotes, however, are ok.
+        let executable = Path::new("/usr/bin/'python3'");
+        let os_name = "posix";
+        assert_eq!(format_shebang(executable, os_name), "#!/usr/bin/'python3'");
+
+        // If the path is too long, we should not use the `exec` trick.
+        let executable = Path::new("/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3");
+        let os_name = "posix";
+        assert_eq!(format_shebang(executable, os_name), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
+    }
+
+    #[test]
+    fn test_empty_value() -> Result<(), Error> {
+        let wheel = indoc! {r"
+        Wheel-Version: 1.0
+        Generator: custom
+        Root-Is-Purelib: false
+        Tag:
+        Tag: -manylinux_2_17_x86_64
+        Tag: -manylinux2014_x86_64
+        "
+        };
+        let reader = Cursor::new(wheel.to_string().into_bytes());
+        let wheel_file = parse_key_value_file(reader, "WHEEL")?;
+        assert_eq!(
+            wheel_file.get("Wheel-Version"),
+            Some(&["1.0".to_string()].to_vec())
+        );
+        assert_eq!(
+            wheel_file.get("Tag"),
+            Some(
+                &[
+                    String::new(),
+                    "-manylinux_2_17_x86_64".to_string(),
+                    "-manylinux2014_x86_64".to_string()
+                ]
+                .to_vec()
+            )
+        );
+        Ok(())
     }
 
     #[test]

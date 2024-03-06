@@ -11,26 +11,31 @@ use zip::result::ZipError;
 use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
-pub use install_location::{normalize_name, InstallLocation, LockedDir};
 use pep440_rs::Version;
 use platform_host::{Arch, Os};
-pub use record::RecordEntry;
-pub use script::Script;
+use pypi_types::Scheme;
 pub use uninstall::{uninstall_wheel, Uninstall};
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
-pub use wheel::{
-    install_wheel, parse_key_value_file, read_record_file, relative_to, SHEBANG_PYTHON,
-};
 
-mod install_location;
 pub mod linker;
-#[cfg(feature = "python_bindings")]
-mod python_bindings;
 mod record;
 mod script;
 mod uninstall;
 mod wheel;
+
+/// The layout of the target environment into which a wheel can be installed.
+#[derive(Debug, Clone)]
+pub struct Layout {
+    /// The Python interpreter, as returned by `sys.executable`.
+    pub sys_executable: PathBuf,
+    /// The Python version, as returned by `sys.version_info`.
+    pub python_version: (u8, u8),
+    /// The `os.name` value for the current platform.
+    pub os_name: String,
+    /// The [`Scheme`] paths for the interpreter.
+    pub scheme: Scheme,
+}
 
 /// Note: The caller is responsible for adding the path of the wheel we're installing.
 #[derive(Error, Debug)]
@@ -38,7 +43,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     /// Custom error type to add a path to error reading a file from a zip
-    #[error("Failed to reflink {} to {}", from.normalized_display(), to.normalized_display())]
+    #[error("Failed to reflink {} to {}", from.simplified_display(), to.simplified_display())]
     Reflink {
         from: PathBuf,
         to: PathBuf,
@@ -79,7 +84,7 @@ pub enum Error {
     DirectUrlJson(#[from] serde_json::Error),
     #[error("No .dist-info directory found")]
     MissingDistInfo,
-    #[error("Cannot uninstall package; RECORD file not found at: {}", _0.normalized_display())]
+    #[error("Cannot uninstall package; RECORD file not found at: {}", _0.simplified_display())]
     MissingRecord(PathBuf),
     #[error("Multiple .dist-info directories found: {0}")]
     MultipleDistInfo(String),

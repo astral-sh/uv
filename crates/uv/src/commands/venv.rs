@@ -12,13 +12,12 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name};
-use gourgeist::Prompt;
 use pep508_rs::Requirement;
 use platform_host::Platform;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
-use uv_fs::Normalized;
+use uv_fs::Simplified;
 use uv_installer::NoBinary;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{InMemoryIndex, OptionsBuilder};
@@ -26,6 +25,7 @@ use uv_traits::{BuildContext, ConfigSettings, InFlight, NoBuild, SetupPyStrategy
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
+use crate::shell::Shell;
 
 /// Create a virtual environment.
 #[allow(clippy::unnecessary_wraps, clippy::too_many_arguments)]
@@ -33,7 +33,8 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
-    prompt: Prompt,
+    prompt: uv_virtualenv::Prompt,
+    system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -45,6 +46,7 @@ pub(crate) async fn venv(
         python_request,
         index_locations,
         prompt,
+        system_site_packages,
         connectivity,
         seed,
         exclude_newer,
@@ -65,7 +67,7 @@ pub(crate) async fn venv(
 enum VenvError {
     #[error("Failed to create virtualenv")]
     #[diagnostic(code(uv::venv::creation))]
-    Creation(#[source] gourgeist::Error),
+    Creation(#[source] uv_virtualenv::Error),
 
     #[error("Failed to install seed packages")]
     #[diagnostic(code(uv::venv::seed))]
@@ -86,7 +88,8 @@ async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
-    prompt: Prompt,
+    prompt: uv_virtualenv::Prompt,
+    system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
@@ -106,16 +109,16 @@ async fn venv_impl(
 
     writeln!(
         printer,
-        "Using Python {} interpreter at {}",
+        "Using Python {} interpreter at: {}",
         interpreter.python_version(),
-        interpreter.sys_executable().normalized_display().cyan()
+        interpreter.sys_executable().simplified_display().cyan()
     )
     .into_diagnostic()?;
 
     writeln!(
         printer,
         "Creating virtualenv at: {}",
-        path.normalized_display().cyan()
+        path.simplified_display().cyan()
     )
     .into_diagnostic()?;
 
@@ -123,8 +126,9 @@ async fn venv_impl(
     let extra_cfg = vec![("uv".to_string(), env!("CARGO_PKG_VERSION").to_string())];
 
     // Create the virtual environment.
-    let venv = gourgeist::create_venv(path, interpreter, prompt, extra_cfg)
-        .map_err(VenvError::Creation)?;
+    let venv =
+        uv_virtualenv::create_venv(path, interpreter, prompt, system_site_packages, extra_cfg)
+            .map_err(VenvError::Creation)?;
 
     // Install seed packages.
     if seed {
@@ -166,7 +170,6 @@ async fn venv_impl(
             &flat_index,
             &index,
             &in_flight,
-            venv.python_executable(),
             SetupPyStrategy::default(),
             &config_settings,
             &NoBuild::All,
@@ -208,22 +211,59 @@ async fn venv_impl(
         }
     }
 
-    if cfg!(windows) {
-        writeln!(
-            printer,
-            // This should work whether the user is on CMD or PowerShell:
-            "Activate with: {}\\Scripts\\activate",
-            path.normalized_display().cyan()
-        )
-        .into_diagnostic()?;
-    } else {
-        writeln!(
-            printer,
-            "Activate with: source {}/bin/activate",
-            path.normalized_display().cyan()
-        )
-        .into_diagnostic()?;
+    // Determine the appropriate activation command.
+    let activation = match Shell::from_env() {
+        None => None,
+        Some(Shell::Bash | Shell::Zsh) => Some(format!(
+            "source {}",
+            shlex_posix(path.join("bin").join("activate"))
+        )),
+        Some(Shell::Fish) => Some(format!(
+            "source {}",
+            shlex_posix(path.join("bin").join("activate.fish"))
+        )),
+        Some(Shell::Nushell) => Some(format!(
+            "overlay use {}",
+            shlex_posix(path.join("bin").join("activate.nu"))
+        )),
+        Some(Shell::Csh) => Some(format!(
+            "source {}",
+            shlex_posix(path.join("bin").join("activate.csh"))
+        )),
+        Some(Shell::Powershell) => Some(shlex_windows(path.join("Scripts").join("activate"))),
     };
+    if let Some(act) = activation {
+        writeln!(printer, "Activate with: {}", act.green()).into_diagnostic()?;
+    }
 
     Ok(ExitStatus::Success)
+}
+
+/// Quote a path, if necessary, for safe use in a POSIX-compatible shell command.
+fn shlex_posix(executable: impl AsRef<Path>) -> String {
+    // Convert to a display path.
+    let executable = executable.as_ref().simplified_display().to_string();
+
+    // Like Python's `shlex.quote`:
+    // > Use single quotes, and put single quotes into double quotes
+    // > The string $'b is then quoted as '$'"'"'b'
+    if executable.contains(' ') {
+        format!("'{}'", executable.replace('\'', r#"'"'"'"#))
+    } else {
+        executable
+    }
+}
+
+/// Quote a path, if necessary, for safe use in `PowerShell`.
+fn shlex_windows(executable: impl AsRef<Path>) -> String {
+    // Convert to a display path.
+    let executable = executable.as_ref().simplified_display().to_string();
+
+    // Wrap the executable in quotes (and a `&` invocation) if it contains spaces.
+    // TODO(charlie): This won't work in `cmd.exe`.
+    if executable.contains(' ') {
+        format!("& \"{executable}\"")
+    } else {
+        executable
+    }
 }

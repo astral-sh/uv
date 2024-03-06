@@ -2,21 +2,23 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
-use std::future::Future;
-use std::path::{Path, PathBuf};
+use std::ffi::OsStr;
+use std::path::Path;
+use std::{ffi::OsString, future::Future};
 
 use anyhow::{bail, Context, Result};
+use futures::FutureExt;
 use itertools::Itertools;
+use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
 use distribution_types::{IndexLocations, Name, Resolution, SourceDist};
-use futures::FutureExt;
 use pep508_rs::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::{FlatIndex, RegistryClient};
 use uv_installer::{Downloader, Installer, NoBinary, Plan, Planner, Reinstall, SitePackages};
-use uv_interpreter::{Interpreter, Virtualenv};
+use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
 use uv_traits::{BuildContext, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
@@ -30,13 +32,13 @@ pub struct BuildDispatch<'a> {
     flat_index: &'a FlatIndex,
     index: &'a InMemoryIndex,
     in_flight: &'a InFlight,
-    base_python: PathBuf,
     setup_py: SetupPyStrategy,
     no_build: &'a NoBuild,
     no_binary: &'a NoBinary,
     config_settings: &'a ConfigSettings,
     source_build_context: SourceBuildContext,
     options: Options,
+    build_extra_env_vars: FxHashMap<OsString, OsString>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -49,7 +51,6 @@ impl<'a> BuildDispatch<'a> {
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
         in_flight: &'a InFlight,
-        base_python: PathBuf,
         setup_py: SetupPyStrategy,
         config_settings: &'a ConfigSettings,
         no_build: &'a NoBuild,
@@ -63,19 +64,34 @@ impl<'a> BuildDispatch<'a> {
             flat_index,
             index,
             in_flight,
-            base_python,
             setup_py,
             config_settings,
             no_build,
             no_binary,
             source_build_context: SourceBuildContext::default(),
             options: Options::default(),
+            build_extra_env_vars: FxHashMap::default(),
         }
     }
 
     #[must_use]
     pub fn with_options(mut self, options: Options) -> Self {
         self.options = options;
+        self
+    }
+
+    /// Set the environment variables to be used when building a source distribution.
+    #[must_use]
+    pub fn with_build_extra_env_vars<I, K, V>(mut self, sdist_build_env_variables: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        self.build_extra_env_vars = sdist_build_env_variables
+            .into_iter()
+            .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
+            .collect();
         self
     }
 }
@@ -91,10 +107,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.interpreter
     }
 
-    fn base_python(&self) -> &Path {
-        &self.base_python
-    }
-
     fn no_build(&self) -> &NoBuild {
         self.no_build
     }
@@ -103,12 +115,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.no_binary
     }
 
-    fn setup_py_strategy(&self) -> SetupPyStrategy {
-        self.setup_py
-    }
-
     fn index_locations(&self) -> &IndexLocations {
         self.index_locations
+    }
+
+    fn setup_py_strategy(&self) -> SetupPyStrategy {
+        self.setup_py
     }
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
@@ -145,7 +157,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     fn install<'data>(
         &'data self,
         resolution: &'data Resolution,
-        venv: &'data Virtualenv,
+        venv: &'data PythonEnvironment,
     ) -> impl Future<Output = Result<()>> + Send + 'data {
         async move {
             debug!(
@@ -284,6 +296,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.setup_py,
             self.config_settings.clone(),
             build_kind,
+            self.build_extra_env_vars.clone(),
         )
         .boxed()
         .await?;

@@ -13,9 +13,9 @@ use distribution_types::{
 };
 use platform_tags::Tags;
 use pypi_types::Metadata21;
-use uv_cache::{Cache, CacheBucket, Timestamp, WheelCache};
+use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, WheelCache};
 use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
-use uv_fs::metadata_if_exists;
+
 use uv_git::GitSource;
 use uv_traits::{BuildContext, NoBinary, NoBuild};
 
@@ -123,19 +123,17 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         // return it.
                         match cache_entry.path().canonicalize() {
                             Ok(archive) => {
-                                if let (Some(cache_metadata), Some(path_metadata)) = (
-                                    metadata_if_exists(&archive).map_err(Error::CacheRead)?,
-                                    metadata_if_exists(path).map_err(Error::CacheRead)?,
-                                ) {
-                                    let cache_modified = Timestamp::from_metadata(&cache_metadata);
-                                    let path_modified = Timestamp::from_metadata(&path_metadata);
-                                    if cache_modified >= path_modified {
-                                        return Ok(LocalWheel::Unzipped(UnzippedWheel {
-                                            dist: dist.clone(),
-                                            archive,
-                                            filename: wheel.filename.clone(),
-                                        }));
-                                    }
+                                if ArchiveTimestamp::up_to_date_with(
+                                    path,
+                                    ArchiveTarget::Cache(&archive),
+                                )
+                                .map_err(Error::CacheRead)?
+                                {
+                                    return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                                        dist: dist.clone(),
+                                        archive,
+                                        filename: wheel.filename.clone(),
+                                    }));
                                 }
                             }
                             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
@@ -290,19 +288,17 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 // return it.
                 match cache_entry.path().canonicalize() {
                     Ok(archive) => {
-                        if let (Some(cache_metadata), Some(path_metadata)) = (
-                            metadata_if_exists(&archive).map_err(Error::CacheRead)?,
-                            metadata_if_exists(&wheel.path).map_err(Error::CacheRead)?,
-                        ) {
-                            let cache_modified = Timestamp::from_metadata(&cache_metadata);
-                            let path_modified = Timestamp::from_metadata(&path_metadata);
-                            if cache_modified >= path_modified {
-                                return Ok(LocalWheel::Unzipped(UnzippedWheel {
-                                    dist: dist.clone(),
-                                    archive,
-                                    filename: wheel.filename.clone(),
-                                }));
-                            }
+                        if ArchiveTimestamp::up_to_date_with(
+                            &wheel.path,
+                            ArchiveTarget::Cache(&archive),
+                        )
+                        .map_err(Error::CacheRead)?
+                        {
+                            return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                                dist: dist.clone(),
+                                archive,
+                                filename: wheel.filename.clone(),
+                            }));
                         }
                     }
                     Err(err) if err.kind() == io::ErrorKind::NotFound => {}

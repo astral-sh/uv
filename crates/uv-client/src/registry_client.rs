@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
-
 use http::HeaderMap;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
 use reqwest_retry::policies::ExponentialBackoff;
@@ -25,6 +24,7 @@ use pypi_types::{Metadata21, SimpleJson};
 use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
+use uv_version::version;
 use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
@@ -88,6 +88,9 @@ impl RegistryClientBuilder {
     }
 
     pub fn build(self) -> RegistryClient {
+        // Create user agent.
+        let user_agent_string = format!("uv/{}", version());
+
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
         let default_timeout = 5 * 60;
@@ -108,7 +111,7 @@ impl RegistryClientBuilder {
         let client_raw = self.client.unwrap_or_else(|| {
             // Disallow any connections.
             let client_core = ClientBuilder::new()
-                .user_agent("uv")
+                .user_agent(user_agent_string)
                 .pool_max_idle_per_host(20)
                 .timeout(std::time::Duration::from_secs(timeout));
 
@@ -184,24 +187,25 @@ impl RegistryClient {
         &self,
         package_name: &PackageName,
     ) -> Result<(IndexUrl, OwnedArchive<SimpleMetadata>), Error> {
-        if self.index_urls.no_index() {
+        let mut it = self.index_urls.indexes().peekable();
+        if it.peek().is_none() {
             return Err(ErrorKind::NoIndex(package_name.as_ref().to_string()).into());
         }
 
-        for index in self.index_urls.indexes() {
+        for index in it {
             let result = self.simple_single_index(package_name, index).await?;
 
             return match result {
                 Ok(metadata) => Ok((index.clone(), metadata)),
                 Err(CachedClientError::Client(err)) => match err.into_kind() {
                     ErrorKind::Offline(_) => continue,
-                    ErrorKind::RequestError(err) => {
+                    ErrorKind::ReqwestError(err) => {
                         if err.status() == Some(StatusCode::NOT_FOUND)
                             || err.status() == Some(StatusCode::FORBIDDEN)
                         {
                             continue;
                         }
-                        Err(ErrorKind::RequestError(err).into())
+                        Err(ErrorKind::from(err).into())
                     }
                     other => Err(other.into()),
                 },
@@ -237,7 +241,7 @@ impl RegistryClient {
         let cache_entry = self.cache.entry(
             CacheBucket::Simple,
             Path::new(&match index {
-                IndexUrl::Pypi => "pypi".to_string(),
+                IndexUrl::Pypi(_) => "pypi".to_string(),
                 IndexUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
             }),
             format!("{package_name}.rkyv"),
@@ -258,7 +262,7 @@ impl RegistryClient {
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
             .build()
-            .map_err(ErrorKind::RequestError)?;
+            .map_err(ErrorKind::from)?;
         let parse_simple_response = |response: Response| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
@@ -282,14 +286,14 @@ impl RegistryClient {
 
                 let unarchived = match media_type {
                     MediaType::Json => {
-                        let bytes = response.bytes().await.map_err(ErrorKind::RequestError)?;
+                        let bytes = response.bytes().await.map_err(ErrorKind::from)?;
                         let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
 
                         SimpleMetadata::from_files(data.files, package_name, &url)
                     }
                     MediaType::Html => {
-                        let text = response.text().await.map_err(ErrorKind::RequestError)?;
+                        let text = response.text().await.map_err(ErrorKind::from)?;
                         let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                             .map_err(|err| Error::from_html_err(err, url.clone()))?;
                         let base = safe_copy_url_auth(&url, base.into_url());
@@ -385,7 +389,8 @@ impl RegistryClient {
             .as_ref()
             .is_some_and(pypi_types::DistInfoMetadata::is_available)
         {
-            let url = Url::parse(&format!("{url}.metadata")).map_err(ErrorKind::UrlParseError)?;
+            let mut url = url.clone();
+            url.set_path(&format!("{}.metadata", url.path()));
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
@@ -402,7 +407,7 @@ impl RegistryClient {
             };
 
             let response_callback = |response: Response| async {
-                let bytes = response.bytes().await.map_err(ErrorKind::RequestError)?;
+                let bytes = response.bytes().await.map_err(ErrorKind::from)?;
 
                 info_span!("parse_metadata21")
                     .in_scope(|| Metadata21::parse(bytes.as_ref()))
@@ -419,7 +424,7 @@ impl RegistryClient {
                 .uncached()
                 .get(url.clone())
                 .build()
-                .map_err(ErrorKind::RequestError)?;
+                .map_err(ErrorKind::from)?;
             Ok(self
                 .client
                 .get_serde(req, &cache_entry, cache_control, response_callback)
@@ -464,7 +469,7 @@ impl RegistryClient {
                 http::HeaderValue::from_static("identity"),
             )
             .build()
-            .map_err(ErrorKind::RequestError)?;
+            .map_err(ErrorKind::from)?;
 
         // Copy authorization headers from the HEAD request to subsequent requests
         let mut headers = HeaderMap::default();
@@ -535,9 +540,9 @@ impl RegistryClient {
                 .get(url.to_string())
                 .send()
                 .await
-                .map_err(ErrorKind::RequestMiddlewareError)?
+                .map_err(ErrorKind::from)?
                 .error_for_status()
-                .map_err(ErrorKind::RequestError)?
+                .map_err(ErrorKind::from)?
                 .bytes_stream()
                 .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
                 .into_async_read(),
