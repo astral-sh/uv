@@ -169,7 +169,7 @@ windows-archive = ".zip"
 unix-archive = ".tar.gz"
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu", "i686-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl", "i686-unknown-linux-musl", "x86_64-pc-windows-msvc", "i686-pc-windows-msvc", "armv7-unknown-linux-gnueabihf", "powerpc64-unknown-linux-gnu", "powerpc64le-unknown-linux-gnu", "s390x-unknown-linux-gnu"]
-# Whether to auto-include files like READMEs and CHANGELOGs (default true)
+# Whether to auto-include files like READMEs, LICENSEs, and CHANGELOGs (default true)
 auto-includes = false
 # Whether cargo-dist should create a Github Release or use an existing draft
 create-release = true
@@ -183,5 +183,5 @@ build-local-artifacts = false
 local-artifacts-jobs = ["./build-binaries"]
 # Publish jobs to run in CI
 publish-jobs = ["./publish-pypi"]
-# The location to install the binaries in
+# Path that installers should place binaries in
 install-path = "~/.local/bin"
