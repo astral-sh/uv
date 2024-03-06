@@ -2311,6 +2311,58 @@ fn dry_run_install_url_dependency() -> std::result::Result<(), Box<dyn std::erro
 }
 
 #[test]
+fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz")?;
+
+    // Install the URL dependency
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    // Then switch to a registry dependency
+    requirements_txt.write_str("anyio")?;
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--upgrade-package")
+        .arg("anyio")
+        .arg("--dry-run")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Would download 1 package
+    Would uninstall 1 package
+    Would install 1 package
+     - anyio==4.2.0
+     + anyio==4.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
