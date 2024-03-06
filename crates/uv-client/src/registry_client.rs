@@ -108,7 +108,8 @@ impl RegistryClientBuilder {
             .unwrap_or(default_timeout);
         debug!("Using registry request timeout of {}s", timeout);
 
-        let client_raw = self.client.unwrap_or_else(|| {
+        // Initialize the base client.
+        let client = self.client.unwrap_or_else(|| {
             // Disallow any connections.
             let client_core = ClientBuilder::new()
                 .user_agent(user_agent_string)
@@ -118,26 +119,29 @@ impl RegistryClientBuilder {
             client_core.build().expect("Failed to build HTTP client.")
         });
 
-        let uncached_client = match self.connectivity {
+        // Wrap in any relevant middleware.
+        let client = match self.connectivity {
             Connectivity::Online => {
                 let retry_policy =
                     ExponentialBackoff::builder().build_with_max_retries(self.retries);
                 let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
-                reqwest_middleware::ClientBuilder::new(client_raw.clone())
+                reqwest_middleware::ClientBuilder::new(client.clone())
                     .with(retry_strategy)
                     .build()
             }
-            Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client_raw.clone())
+            Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client.clone())
                 .with(OfflineMiddleware)
                 .build(),
         };
+
+        // Wrap in the cache middleware.
+        let client = CachedClient::new(client);
 
         RegistryClient {
             index_urls: self.index_urls,
             cache: self.cache,
             connectivity: self.connectivity,
-            client_raw,
-            client: CachedClient::new(uncached_client),
+            client,
             timeout,
         }
     }
@@ -150,9 +154,6 @@ pub struct RegistryClient {
     index_urls: IndexUrls,
     /// The underlying HTTP client.
     client: CachedClient,
-    /// Don't use this client, it only exists because `async_http_range_reader` needs.
-    /// [`reqwest::Client] instead of [`reqwest_middleware::Client`]
-    client_raw: Client,
     /// Used for the remote wheel METADATA cache.
     cache: Cache,
     /// The connectivity mode to use.
@@ -465,7 +466,6 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let client = self.client_raw.clone();
         let req = self
             .client
             .uncached()
@@ -487,10 +487,13 @@ impl RegistryClient {
         // fetch the file from the remote zip.
         let read_metadata_range_request = |response: Response| {
             async {
-                let mut reader =
-                    AsyncHttpRangeReader::from_head_response(client, response, headers)
-                        .await
-                        .map_err(ErrorKind::AsyncHttpRangeReader)?;
+                let mut reader = AsyncHttpRangeReader::from_head_response(
+                    self.client.uncached(),
+                    response,
+                    headers,
+                )
+                .await
+                .map_err(ErrorKind::AsyncHttpRangeReader)?;
                 trace!("Getting metadata for {filename} by range request");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
                 let metadata = Metadata21::parse(text.as_bytes()).map_err(|err| {
