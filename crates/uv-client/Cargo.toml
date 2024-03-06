@@ -46,6 +46,7 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
+reqwest-netrc = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
