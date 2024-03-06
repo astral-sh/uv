@@ -1,6 +1,5 @@
 use std::fmt::Write;
 
-use anstream::println;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -22,7 +21,7 @@ pub(crate) fn pip_freeze(
     python: Option<&str>,
     system: bool,
     cache: &Cache,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -54,13 +53,13 @@ pub(crate) fn pip_freeze(
     {
         match dist {
             InstalledDist::Registry(dist) => {
-                println!("{}=={}", dist.name().bold(), dist.version);
+                writeln!(printer.stdout(), "{}=={}", dist.name().bold(), dist.version)?;
             }
             InstalledDist::Url(dist) => {
                 if dist.editable {
-                    println!("-e {}", dist.url);
+                    writeln!(printer.stdout(), "-e {}", dist.url)?;
                 } else {
-                    println!("{} @ {}", dist.name().bold(), dist.url);
+                    writeln!(printer.stdout(), "{} @ {}", dist.name().bold(), dist.url)?;
                 }
             }
         }
@@ -70,7 +69,7 @@ pub(crate) fn pip_freeze(
     if strict {
         for diagnostic in site_packages.diagnostics()? {
             writeln!(
-                printer,
+                printer.stderr(),
                 "{}{} {}",
                 "warning".yellow().bold(),
                 ":".bold(),

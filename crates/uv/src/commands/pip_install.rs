@@ -66,7 +66,7 @@ pub(crate) async fn pip_install(
     python: Option<String>,
     system: bool,
     cache: Cache,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -152,7 +152,7 @@ pub(crate) async fn pip_install(
         let num_requirements = requirements.len() + editables.len();
         let s = if num_requirements == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Audited {} in {}",
@@ -366,7 +366,7 @@ async fn build_editables(
     tags: &Tags,
     client: &RegistryClient,
     build_dispatch: &BuildDispatch<'_>,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<Vec<BuiltEditable>, Error> {
     let start = std::time::Instant::now();
 
@@ -409,7 +409,7 @@ async fn build_editables(
 
     let s = if editables.len() == 1 { "" } else { "s" };
     writeln!(
-        printer,
+        printer.stderr(),
         "{}",
         format!(
             "Built {} in {}",
@@ -441,7 +441,7 @@ async fn resolve(
     index: &InMemoryIndex,
     build_dispatch: &BuildDispatch<'_>,
     options: Options,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
@@ -504,7 +504,7 @@ async fn resolve(
 
     let s = if resolution.len() == 1 { "" } else { "s" };
     writeln!(
-        printer,
+        printer.stderr(),
         "{}",
         format!(
             "Resolved {} in {}",
@@ -534,7 +534,7 @@ async fn install(
     build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
     venv: &PythonEnvironment,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
 
@@ -570,7 +570,7 @@ async fn install(
     if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Audited {} in {}",
@@ -610,7 +610,7 @@ async fn install(
 
         let s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Downloaded {} in {}",
@@ -649,7 +649,7 @@ async fn install(
 
         let s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Installed {} in {}",
@@ -685,7 +685,7 @@ async fn install(
         match event.kind {
             ChangeEventKind::Added => {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     " {} {}{}",
                     "+".green(),
                     event.dist.name().as_ref().bold(),
@@ -694,7 +694,7 @@ async fn install(
             }
             ChangeEventKind::Removed => {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     " {} {}{}",
                     "-".red(),
                     event.dist.name().as_ref().bold(),
@@ -714,7 +714,7 @@ async fn install(
             None | Some(Yanked::Bool(false)) => {}
             Some(Yanked::Bool(true)) => {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     "{}{} {dist} is yanked.",
                     "warning".yellow().bold(),
                     ":".bold(),
@@ -722,7 +722,7 @@ async fn install(
             }
             Some(Yanked::Reason(reason)) => {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     "{}{} {dist} is yanked (reason: \"{reason}\").",
                     "warning".yellow().bold(),
                     ":".bold(),
@@ -738,7 +738,7 @@ async fn install(
 fn validate(
     resolution: &Resolution,
     venv: &PythonEnvironment,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<(), Error> {
     let site_packages = SitePackages::from_executable(venv)?;
     let diagnostics = site_packages.diagnostics()?;
@@ -749,7 +749,7 @@ fn validate(
             .any(|package| diagnostic.includes(package))
         {
             writeln!(
-                printer,
+                printer.stderr(),
                 "{}{} {}",
                 "warning".yellow().bold(),
                 ":".bold(),

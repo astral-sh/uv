@@ -1,7 +1,6 @@
 use std::cmp::max;
 use std::fmt::Write;
 
-use anstream::println;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -33,7 +32,7 @@ pub(crate) fn pip_list(
     python: Option<&str>,
     system: bool,
     cache: &Cache,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -112,17 +111,22 @@ pub(crate) fn pip_list(
             }
 
             for elems in MultiZip(columns.iter().map(Column::fmt).collect_vec()) {
-                println!("{}", elems.join(" "));
+                writeln!(printer.stdout(), "{}", elems.join(" "))?;
             }
         }
         ListFormat::Json => {
             let rows = results.iter().copied().map(Entry::from).collect_vec();
             let output = serde_json::to_string(&rows)?;
-            println!("{output}");
+            writeln!(printer.stdout(), "{output}")?;
         }
         ListFormat::Freeze => {
             for dist in &results {
-                println!("{}=={}", dist.name().bold(), dist.version());
+                writeln!(
+                    printer.stdout(),
+                    "{}=={}",
+                    dist.name().bold(),
+                    dist.version()
+                )?;
             }
         }
     }
@@ -131,7 +135,7 @@ pub(crate) fn pip_list(
     if strict {
         for diagnostic in site_packages.diagnostics()? {
             writeln!(
-                printer,
+                printer.stderr(),
                 "{}{} {}",
                 "warning".yellow().bold(),
                 ":".bold(),

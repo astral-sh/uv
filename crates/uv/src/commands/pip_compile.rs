@@ -67,7 +67,7 @@ pub(crate) async fn pip_compile(
     annotation_style: AnnotationStyle,
     quiet: bool,
     cache: Cache,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -271,7 +271,7 @@ pub(crate) async fn pip_compile(
 
         let s = if editables.len() == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Built {} in {}",
@@ -326,7 +326,7 @@ pub(crate) async fn pip_compile(
 
     let s = if resolution.len() == 1 { "" } else { "s" };
     writeln!(
-        printer,
+        printer.stderr(),
         "{}",
         format!(
             "Resolved {} in {}",
@@ -339,7 +339,7 @@ pub(crate) async fn pip_compile(
     // Notify the user of any diagnostics.
     for diagnostic in resolution.diagnostics() {
         writeln!(
-            printer,
+            printer.stderr(),
             "{}{} {}",
             "warning".yellow().bold(),
             ":".bold(),

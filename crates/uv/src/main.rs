@@ -1486,7 +1486,6 @@ async fn run() -> Result<ExitStatus> {
             args.strict,
             args.python.as_deref(),
             args.system,
-            cli.quiet,
             &cache,
             printer,
         ),
