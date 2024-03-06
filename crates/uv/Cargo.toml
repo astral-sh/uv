@@ -22,7 +22,7 @@ pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
 pypi-types = { path = "../pypi-types" }
-requirements-txt = { path = "../requirements-txt" }
+requirements-txt = { path = "../requirements-txt", features = ["reqwest"] }
 uv-build = { path = "../uv-build" }
 uv-cache = { path = "../uv-cache", features = ["clap"] }
 uv-client = { path = "../uv-client" }

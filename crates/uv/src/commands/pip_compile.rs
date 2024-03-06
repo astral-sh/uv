@@ -9,7 +9,6 @@ use std::str::FromStr;
 use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
-use futures::future::OptionFuture;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
@@ -17,7 +16,6 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{IndexLocations, LocalEditable, Verbatim};
-use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
@@ -38,7 +36,9 @@ use uv_warnings::warn_user;
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
+use crate::requirements::{
+    read_lockfile, ExtrasSpecification, RequirementsSource, RequirementsSpecification,
+};
 
 /// Resolve a set of requirements into a set of pinned versions.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
@@ -109,7 +109,7 @@ pub(crate) async fn pip_compile(
     )
     .await?;
 
-    // Check that all provided extras are used
+    // Check that all provided extras are used.
     if let ExtrasSpecification::Some(extras) = extras {
         let mut unused_extras = extras
             .iter()
@@ -126,33 +126,8 @@ pub(crate) async fn pip_compile(
         }
     }
 
-    let preferences: Vec<Requirement> = OptionFuture::from(
-        output_file
-            // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
-            .filter(|_| !upgrade.is_all())
-            .filter(|output_file| output_file.exists())
-            .map(Path::to_path_buf)
-            .map(RequirementsSource::from_path)
-            .as_ref()
-            .map(|source| async {
-                RequirementsSpecification::from_source(source, &extras, &client).await
-            }),
-    )
-    .await
-    .transpose()?
-    .map(|spec| spec.requirements)
-    .map(|requirements| match upgrade {
-        // Respect all pinned versions from the existing lockfile.
-        Upgrade::None => requirements,
-        // Ignore all pinned versions from the existing lockfile.
-        Upgrade::All => vec![],
-        // Ignore pinned versions for the specified packages.
-        Upgrade::Packages(packages) => requirements
-            .into_iter()
-            .filter(|requirement| !packages.contains(&requirement.name))
-            .collect(),
-    })
-    .unwrap_or_default();
+    // Read the lockfile, if present.
+    let preferences = read_lockfile(output_file, upgrade).await?;
 
     // Find an interpreter to use for building distributions
     let platform = Platform::current()?;
