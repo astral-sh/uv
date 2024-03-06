@@ -976,7 +976,6 @@ mod test {
         let formatted = err.to_string().replace("exit status: ", "exit code: ");
         insta::assert_snapshot!(formatted, @r###"
         Failed building wheel through setup.py with exit code: 0
-        Failed building wheel through setup.py:
         --- stdout:
         running bdist_wheel
         running build
