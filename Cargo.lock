@@ -2883,6 +2883,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "reqwest-netrc"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eca0c58cd4b2978f9697dea94302e772399f559cd175356eb631cb6daaa0b6db"
+dependencies = [
+ "reqwest-middleware",
+ "rust-netrc",
+]
+
+[[package]]
 name = "reqwest-retry"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3036,6 +3046,15 @@ name = "roxmltree"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3cd14fd5e3b777a7422cca79358c57a8f6e3a703d9ac187448d0daf220c2407f"
+
+[[package]]
+name = "rust-netrc"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32662f97cbfdbad9d5f78f1338116f06871e7dae4fd37e9f59a0f57cf2044868"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "rustc-demangle"
@@ -4316,6 +4335,7 @@ dependencies = [
  "pypi-types",
  "reqwest",
  "reqwest-middleware",
+ "reqwest-netrc",
  "reqwest-retry",
  "rkyv",
  "rmp-serde",

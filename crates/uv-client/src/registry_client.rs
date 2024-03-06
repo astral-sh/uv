@@ -8,6 +8,7 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
+use reqwest_netrc::NetrcMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
@@ -122,12 +123,22 @@ impl RegistryClientBuilder {
         // Wrap in any relevant middleware.
         let client = match self.connectivity {
             Connectivity::Online => {
+                let client = reqwest_middleware::ClientBuilder::new(client.clone());
+
+                // Initialize the retry strategy.
                 let retry_policy =
                     ExponentialBackoff::builder().build_with_max_retries(self.retries);
                 let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
-                reqwest_middleware::ClientBuilder::new(client.clone())
-                    .with(retry_strategy)
-                    .build()
+                let client = client.with(retry_strategy);
+
+                // Initialize the netrc middleware.
+                let client = if let Ok(netrc) = NetrcMiddleware::new() {
+                    client.with_init(netrc)
+                } else {
+                    client
+                };
+
+                client.build()
             }
             Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client.clone())
                 .with(OfflineMiddleware)
