@@ -35,6 +35,7 @@ pub(crate) async fn pip_sync(
     link_mode: LinkMode,
     compile: bool,
     index_locations: IndexLocations,
+    use_keyring: bool,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -53,6 +54,7 @@ pub(crate) async fn pip_sync(
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .connectivity(connectivity)
+        .use_keyring(use_keyring)
         .build();
 
     // Read all requirements from the provided sources.
@@ -125,7 +127,7 @@ pub(crate) async fn pip_sync(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, &cache);
+        let client = FlatIndexClient::new(&client, &cache, use_keyring);
         let entries = client.fetch(index_locations.flat_index()).await?;
         FlatIndex::from_entries(entries, tags)
     };

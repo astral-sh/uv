@@ -4355,6 +4355,7 @@ dependencies = [
  "uv-auth",
  "uv-cache",
  "uv-fs",
+ "uv-keyring",
  "uv-normalize",
  "uv-version",
  "uv-warnings",
@@ -4604,6 +4605,15 @@ dependencies = [
  "uv-cache",
  "uv-fs",
  "which",
+]
+
+[[package]]
+name = "uv-keyring"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "tracing",
+ "url",
 ]
 
 [[package]]

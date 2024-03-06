@@ -33,6 +33,7 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    use_keyring: bool,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -45,6 +46,7 @@ pub(crate) async fn venv(
         path,
         python_request,
         index_locations,
+        use_keyring,
         prompt,
         system_site_packages,
         connectivity,
@@ -88,6 +90,7 @@ async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    use_keyring: bool,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -138,13 +141,14 @@ async fn venv_impl(
         // Instantiate a client.
         let client = RegistryClientBuilder::new(cache.clone())
             .index_urls(index_locations.index_urls())
+            .use_keyring(use_keyring)
             .connectivity(connectivity)
             .build();
 
         // Resolve the flat indexes from `--find-links`.
         let flat_index = {
             let tags = interpreter.tags().map_err(VenvError::Tags)?;
-            let client = FlatIndexClient::new(&client, cache);
+            let client = FlatIndexClient::new(&client, cache, use_keyring);
             let entries = client
                 .fetch(index_locations.flat_index())
                 .await

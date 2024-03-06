@@ -14,6 +14,7 @@ platform-tags = { path = "../platform-tags" }
 uv-auth = { path = "../uv-auth" }
 uv-cache = { path = "../uv-cache" }
 uv-fs = { path = "../uv-fs", features = ["tokio"] }
+uv-keyring = { path = "../uv-keyring" }
 uv-normalize = { path = "../uv-normalize" }
 uv-version = { path = "../uv-version" }
 uv-warnings = { path = "../uv-warnings" }

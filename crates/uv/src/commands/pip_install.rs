@@ -53,6 +53,7 @@ pub(crate) async fn pip_install(
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
+    use_keyring: bool,
     reinstall: &Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -75,6 +76,7 @@ pub(crate) async fn pip_install(
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .connectivity(connectivity)
+        .use_keyring(use_keyring)
         .build();
 
     // Read all requirements from the provided sources.
@@ -186,7 +188,7 @@ pub(crate) async fn pip_install(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, &cache);
+        let client = FlatIndexClient::new(&client, &cache, use_keyring);
         let entries = client.fetch(index_locations.flat_index()).await?;
         FlatIndex::from_entries(entries, tags)
     };
