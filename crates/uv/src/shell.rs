@@ -36,12 +36,13 @@ impl Shell {
         } else if let Some(env_shell) = std::env::var_os("SHELL") {
             Shell::from_shell_path(env_shell)
         } else if cfg!(windows) {
-            // Command Prompt relies on PROMPT for its appearance where-as PowerShell does not.
-            // https://stackoverflow.com/a/66415037
+            // Command Prompt relies on PROMPT for its appearance whereas PowerShell does not.
+            // See: https://stackoverflow.com/a/66415037.
             if std::env::var_os("PROMPT").is_some() {
                 Some(Shell::Cmd)
             } else {
-                Some(Shell::Powershell) // Fallback to PowerShell
+                // Fallback to PowerShell if the PROMPT environment variable is not set.
+                Some(Shell::Powershell)
             }
         } else {
             None

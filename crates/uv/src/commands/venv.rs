@@ -261,17 +261,19 @@ fn shlex_posix(executable: impl AsRef<Path>) -> String {
     }
 }
 
-/// Quote a path, if necessary, for safe use in `PowerShell`.
+/// Quote a path, if necessary, for safe use in `PowerShell` and `cmd`.
 fn shlex_windows(executable: impl AsRef<Path>, shell: Shell) -> String {
     // Convert to a display path.
     let executable = executable.as_ref().simplified_display().to_string();
 
-    // Wrap the executable in quotes (and a `&` invocation on PS) if it contains spaces.
+    // Wrap the executable in quotes (and a `&` invocation on PowerShell), if it contains spaces.
     if executable.contains(' ') {
         if shell == Shell::Powershell {
-            format!("& \"{executable}\"") // PowerShell
+            // For PowerShell, wrap in a `&` invocation.
+            format!("& \"{executable}\"")
         } else {
-            format!("\"{executable}\"") // Command Prompt
+            // Otherwise, assume `cmd`, which doesn't need the `&`.
+            format!("\"{executable}\"")
         }
     } else {
         executable
