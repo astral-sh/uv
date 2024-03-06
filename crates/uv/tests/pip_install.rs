@@ -2404,6 +2404,7 @@ fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::e
 
     ----- stderr -----
     Audited 1 package in [TIME]
+    Would make no changes
     "###
     );
 

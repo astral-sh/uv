@@ -163,6 +163,9 @@ pub(crate) async fn pip_install(
             )
             .dimmed()
         )?;
+        if dry_run {
+            writeln!(printer, "Would make no changes")?;
+        }
         return Ok(ExitStatus::Success);
     }
 
