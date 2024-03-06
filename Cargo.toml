@@ -67,7 +67,7 @@ pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.6.0" }
-pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "aab132a3d4d444dd8dd41d8c4e605abd69dacfe1" }
+pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "332f02b0e436ca8449c7ef5e15b992dd5f35908b" }
 pyo3 = { version = "0.20.3" }
 pyo3-log = { version = "0.9.0" }
 pyproject-toml = { version = "0.10.0" }
