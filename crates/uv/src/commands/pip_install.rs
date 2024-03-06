@@ -778,12 +778,12 @@ async fn install(
             .into_iter()
             .map(|distribution| DryRunEvent {
                 name: distribution.name().clone(),
-                version: format!("=={}", distribution.version()),
+                version: distribution.installed_version().to_string(),
                 kind: ChangeEventKind::Removed,
             })
             .chain(wheels.into_iter().map(|distribution| DryRunEvent {
                 name: distribution.name().clone(),
-                version: format!("{}", distribution.version_or_url()),
+                version: distribution.version_or_url().to_string(),
                 kind: ChangeEventKind::Added,
             }))
             .chain(local.into_iter().map(|distribution| DryRunEvent {

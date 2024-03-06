@@ -2354,7 +2354,7 @@ fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::er
     Would download 1 package
     Would uninstall 1 package
     Would install 1 package
-     - anyio==4.2.0
+     - anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
      + anyio==4.0.0
     "###
     );
