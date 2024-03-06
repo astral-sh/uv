@@ -183,3 +183,5 @@ build-local-artifacts = false
 local-artifacts-jobs = ["./build-binaries"]
 # Publish jobs to run in CI
 publish-jobs = ["./publish-pypi"]
+# The location to install the binaries in
+install-path = "~/.local/bin"
