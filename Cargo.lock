@@ -2816,7 +2816,6 @@ dependencies = [
  "tracing",
  "unscanny",
  "url",
- "uv-cache",
  "uv-client",
  "uv-fs",
  "uv-normalize",

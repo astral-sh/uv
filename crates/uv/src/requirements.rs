@@ -7,18 +7,18 @@ use anyhow::{Context, Result};
 use console::Term;
 use indexmap::IndexMap;
 use rustc_hash::FxHashSet;
+use tracing::{instrument, Level};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
-use tracing::{instrument, Level};
 use uv_client::RegistryClient;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
-
-use crate::confirm;
-
 use uv_warnings::warn_user;
+
+use crate::commands::Upgrade;
+use crate::confirm;
 
 #[derive(Debug)]
 pub(crate) enum RequirementsSource {
@@ -179,7 +179,7 @@ impl RequirementsSpecification {
             }
             RequirementsSource::RequirementsTxt(path) => {
                 let requirements_txt =
-                    RequirementsTxt::parse(path, std::env::current_dir()?, client).await?;
+                    RequirementsTxt::parse(path, std::env::current_dir()?, Some(client)).await?;
                 Self {
                     project: None,
                     requirements: requirements_txt
@@ -432,4 +432,46 @@ fn flatten_extra(
         extras,
         &mut FxHashSet::default(),
     )
+}
+
+/// Load the preferred requirements from an existing lockfile, applying the upgrade strategy.
+pub(crate) async fn read_lockfile(
+    output_file: Option<&Path>,
+    upgrade: Upgrade,
+) -> Result<Vec<Requirement>> {
+    // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
+    let Some(output_file) = output_file
+        .filter(|_| !upgrade.is_all())
+        .filter(|output_file| output_file.exists())
+    else {
+        return Ok(Vec::new());
+    };
+
+    // Parse the requirements from the lockfile.
+    let requirements_txt =
+        RequirementsTxt::parse(output_file, std::env::current_dir()?, None).await?;
+    let requirements = requirements_txt
+        .requirements
+        .into_iter()
+        .filter_map(|entry| {
+            if entry.editable {
+                None
+            } else {
+                Some(entry.requirement)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    // Apply the upgrade strategy to the requirements.
+    Ok(match upgrade {
+        // Respect all pinned versions from the existing lockfile.
+        Upgrade::None => requirements,
+        // Ignore all pinned versions from the existing lockfile.
+        Upgrade::All => vec![],
+        // Ignore pinned versions for the specified packages.
+        Upgrade::Packages(packages) => requirements
+            .into_iter()
+            .filter(|requirement| !packages.contains(&requirement.name))
+            .collect(),
+    })
 }
