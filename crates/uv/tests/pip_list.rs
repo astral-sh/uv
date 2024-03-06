@@ -27,7 +27,7 @@ fn command(context: &TestContext) -> Command {
 }
 
 #[test]
-fn empty() {
+fn list_empty() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(Command::new(get_bin())
@@ -47,7 +47,7 @@ fn empty() {
 }
 
 #[test]
-fn single_no_editable() -> Result<()> {
+fn list_single_no_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -94,7 +94,7 @@ fn single_no_editable() -> Result<()> {
 }
 
 #[test]
-fn editable() -> Result<()> {
+fn list_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
@@ -183,9 +183,9 @@ fn editable() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location
+    Package         Version Editable project location                                
     --------------- ------- ---------------------------------------------------------
-    numpy           1.26.2
+    numpy           1.26.2                                                           
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
     ----- stderr -----
@@ -196,7 +196,7 @@ fn editable() -> Result<()> {
 }
 
 #[test]
-fn editable_only() -> Result<()> {
+fn list_editable_only() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
@@ -279,7 +279,7 @@ fn editable_only() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location
+    Package         Version Editable project location                                
     --------------- ------- ---------------------------------------------------------
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
@@ -300,7 +300,7 @@ fn editable_only() -> Result<()> {
     ----- stdout -----
     Package Version
     ------- -------
-    numpy   1.26.2
+    numpy   1.26.2 
 
     ----- stderr -----
     "###
@@ -327,7 +327,7 @@ fn editable_only() -> Result<()> {
 }
 
 #[test]
-fn exclude() -> Result<()> {
+fn list_exclude() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
@@ -411,7 +411,7 @@ fn exclude() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location
+    Package         Version Editable project location                                
     --------------- ------- ---------------------------------------------------------
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
@@ -433,7 +433,7 @@ fn exclude() -> Result<()> {
     ----- stdout -----
     Package Version
     ------- -------
-    numpy   1.26.2
+    numpy   1.26.2 
 
     ----- stderr -----
     "###
@@ -462,7 +462,7 @@ fn exclude() -> Result<()> {
 }
 
 #[test]
-fn format_json() -> Result<()> {
+fn list_format_json() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
@@ -616,7 +616,7 @@ fn format_json() -> Result<()> {
 }
 
 #[test]
-fn format_freeze() -> Result<()> {
+fn list_format_freeze() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
