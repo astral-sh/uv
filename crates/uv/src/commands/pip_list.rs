@@ -77,7 +77,11 @@ pub(crate) fn pip_list(
             let mut columns = vec![
                 Column {
                     header: String::from("Package"),
-                    rows: results.iter().map(|f| f.name().to_string()).collect_vec(),
+                    rows: results
+                        .iter()
+                        .copied()
+                        .map(|f| f.name().to_string())
+                        .collect_vec(),
                 },
                 Column {
                     header: String::from("Version"),
@@ -89,7 +93,7 @@ pub(crate) fn pip_list(
             ];
 
             // Editable column is only displayed if at least one editable package is found.
-            if results.iter().any(|f| f.is_editable()) {
+            if results.iter().copied().any(InstalledDist::is_editable) {
                 columns.push(Column {
                     header: String::from("Editable project location"),
                     rows: results
@@ -111,12 +115,11 @@ pub(crate) fn pip_list(
             }
 
             for elems in Multizip(columns.iter().map(Column::fmt_padded).collect_vec()) {
-                println!("{0}", elems.join(" "));
+                println!("{}", elems.join(" "));
             }
         }
         ListFormat::Json => {
-            let rows = results.iter().map(Row::from).collect_vec();
-
+            let rows = results.iter().copied().map(Row::from).collect_vec();
             let output = serde_json::to_string(&rows)?;
             println!("{output}");
         }
@@ -151,18 +154,14 @@ struct Row {
     editable_project_location: Option<String>,
 }
 
-impl From<&&InstalledDist> for Row {
-    fn from(dist: &&InstalledDist) -> Self {
+impl From<&InstalledDist> for Row {
+    fn from(dist: &InstalledDist) -> Self {
         Self {
             name: dist.name().to_string(),
             version: dist.version().to_string(),
-            editable_project_location: dist.as_editable().map(|url| {
-                url.to_file_path()
-                    .unwrap()
-                    .into_os_string()
-                    .into_string()
-                    .unwrap()
-            }),
+            editable_project_location: dist
+                .as_editable()
+                .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
         }
     }
 }

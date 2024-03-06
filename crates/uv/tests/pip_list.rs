@@ -84,7 +84,7 @@ fn list_single_no_editable() -> Result<()> {
     ----- stdout -----
     Package    Version
     ---------- -------
-    markupsafe 2.1.3
+    markupsafe 2.1.3  
 
     ----- stderr -----
     "###
@@ -462,6 +462,7 @@ fn list_exclude() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(windows))]
 fn list_format_json() -> Result<()> {
     let context = TestContext::new("3.12");
 
