@@ -123,19 +123,22 @@ impl RegistryClientBuilder {
         // Wrap in any relevant middleware.
         let client = match self.connectivity {
             Connectivity::Online => {
+                let client = reqwest_middleware::ClientBuilder::new(client.clone());
+
+                // Initialize the retry strategy.
                 let retry_policy =
                     ExponentialBackoff::builder().build_with_max_retries(self.retries);
                 let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
+                let client = client.with(retry_strategy);
 
-                let client =
-                    reqwest_middleware::ClientBuilder::new(client.clone())
-                    .with(retry_strategy);
-
-                if let Ok(netrc) = NetrcMiddleware::new() {
-                    client.with_init(netrc).build()
+                // Initialize the netrc middleware.
+                let client = if let Ok(netrc) = NetrcMiddleware::new() {
+                    client.with_init(netrc)
                 } else {
-                    client.build()
-                }
+                    client
+                };
+
+                client.build()
             }
             Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client.clone())
                 .with(OfflineMiddleware)

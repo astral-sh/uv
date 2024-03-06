@@ -30,6 +30,7 @@ html-escape = { workspace = true }
 http = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
+reqwest-netrc = { workspace = true }
 reqwest-retry = { workspace = true }
 rkyv = { workspace = true, features = ["strict", "validation"] }
 rmp-serde = { workspace = true }
@@ -46,7 +47,6 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
-reqwest-netrc = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
