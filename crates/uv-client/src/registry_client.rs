@@ -177,6 +177,12 @@ impl RegistryClient {
         self.timeout
     }
 
+    /// Set the index URLs to use for fetching packages.
+    #[must_use]
+    pub fn with_index_url(self, index_urls: IndexUrls) -> Self {
+        Self { index_urls, ..self }
+    }
+
     /// Fetch a package from the `PyPI` simple API.
     ///
     /// "simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)

@@ -40,11 +40,13 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use tracing::{instrument, warn};
+use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
+use uv_client::RegistryClient;
 use uv_warnings::warn_user;
 
+use async_recursion::async_recursion;
 use pep508_rs::{
     expand_path_vars, split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, Scheme,
     VerbatimUrl,
@@ -321,28 +323,38 @@ pub struct RequirementsTxt {
 impl RequirementsTxt {
     /// See module level documentation
     #[instrument(skip_all, fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str()))]
-    pub fn parse(
+    pub async fn parse(
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
+        client: &RegistryClient,
     ) -> Result<Self, RequirementsTxtFileError> {
+        let requirements_txt = requirements_txt.as_ref();
+        let working_dir = working_dir.as_ref();
+
         let content =
-            uv_fs::read_to_string(&requirements_txt).map_err(|err| RequirementsTxtFileError {
-                file: requirements_txt.as_ref().to_path_buf(),
-                error: RequirementsTxtParserError::IO(err),
+            if requirements_txt.starts_with("http://") | requirements_txt.starts_with("https://") {
+                read_url_to_string(&requirements_txt, client).await
+            } else {
+                uv_fs::read_to_string(&requirements_txt)
+                    .await
+                    .map_err(RequirementsTxtParserError::IO)
+            }
+            .map_err(|err| RequirementsTxtFileError {
+                file: requirements_txt.to_path_buf(),
+                error: err,
             })?;
 
-        let working_dir = working_dir.as_ref();
-        let requirements_dir = requirements_txt.as_ref().parent().unwrap_or(working_dir);
-        let data = Self::parse_inner(&content, working_dir, requirements_dir).map_err(|err| {
-            RequirementsTxtFileError {
-                file: requirements_txt.as_ref().to_path_buf(),
+        let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
+        let data = Self::parse_inner(&content, working_dir, requirements_dir, client)
+            .await
+            .map_err(|err| RequirementsTxtFileError {
+                file: requirements_txt.to_path_buf(),
                 error: err,
-            }
-        })?;
+            })?;
         if data == Self::default() {
             warn_user!(
                 "Requirements file {} does not contain any dependencies",
-                requirements_txt.as_ref().display()
+                requirements_txt.simplified_display()
             );
         }
 
@@ -355,10 +367,12 @@ impl RequirementsTxt {
     /// the current working directory. However, relative paths to sub-files (e.g., `-r ../requirements.txt`)
     /// are resolved against the directory of the containing `requirements.txt` file, to match
     /// `pip`'s behavior.
-    pub fn parse_inner(
+    #[async_recursion]
+    pub async fn parse_inner(
         content: &str,
         working_dir: &Path,
         requirements_dir: &Path,
+        client: &RegistryClient,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
@@ -370,14 +384,20 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let sub_file = requirements_dir.join(expand_path_vars(&filename).as_ref());
-                    let sub_requirements = Self::parse(&sub_file, working_dir).map_err(|err| {
-                        RequirementsTxtParserError::Subfile {
+                    let filename = expand_path_vars(&filename);
+                    let sub_file =
+                        if filename.starts_with("http://") || filename.starts_with("https://") {
+                            PathBuf::from(filename.as_ref())
+                        } else {
+                            requirements_dir.join(filename.as_ref())
+                        };
+                    let sub_requirements = Self::parse(&sub_file, working_dir, client)
+                        .await
+                        .map_err(|err| RequirementsTxtParserError::Subfile {
                             source: Box::new(err),
                             start,
                             end,
-                        }
-                    })?;
+                        })?;
 
                     // Disallow conflicting `--index-url` in nested `requirements` files.
                     if sub_requirements.index_url.is_some()
@@ -402,14 +422,20 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let sub_file = requirements_dir.join(expand_path_vars(&filename).as_ref());
-                    let sub_constraints = Self::parse(&sub_file, working_dir).map_err(|err| {
-                        RequirementsTxtParserError::Subfile {
+                    let filename = expand_path_vars(&filename);
+                    let sub_file =
+                        if filename.starts_with("http://") || filename.starts_with("https://") {
+                            PathBuf::from(filename.as_ref())
+                        } else {
+                            requirements_dir.join(filename.as_ref())
+                        };
+                    let sub_constraints = Self::parse(&sub_file, working_dir, client)
+                        .await
+                        .map_err(|err| RequirementsTxtParserError::Subfile {
                             source: Box::new(err),
                             start,
                             end,
-                        }
-                    })?;
+                        })?;
                     // Treat any nested requirements or constraints as constraints. This differs
                     // from `pip`, which seems to treat `-r` requirements in constraints files as
                     // _requirements_, but we don't want to support that.
@@ -767,6 +793,31 @@ fn parse_value<'a, T>(
     }
 }
 
+/// Fetch the contents of a URL and return them as a string.
+async fn read_url_to_string(
+    path: impl AsRef<Path>,
+    client: &RegistryClient,
+) -> Result<String, RequirementsTxtParserError> {
+    // pip would URL-encode the non-UTF-8 bytes of the string; we just don't support them.
+    let path_utf8 =
+        path.as_ref()
+            .to_str()
+            .ok_or_else(|| RequirementsTxtParserError::NonUnicodeUrl {
+                url: path.as_ref().to_owned(),
+            })?;
+    Ok(client
+        .cached_client()
+        .uncached()
+        .get(path_utf8)
+        .send()
+        .await?
+        .error_for_status()
+        .map_err(reqwest_middleware::Error::Reqwest)?
+        .text()
+        .await
+        .map_err(reqwest_middleware::Error::Reqwest)?)
+}
+
 /// Error parsing requirements.txt, wrapper with filename
 #[derive(Debug)]
 pub struct RequirementsTxtFileError {
@@ -807,6 +858,10 @@ pub enum RequirementsTxtParserError {
         source: Box<RequirementsTxtFileError>,
         start: usize,
         end: usize,
+    },
+    Reqwest(reqwest_middleware::Error),
+    NonUnicodeUrl {
+        url: PathBuf,
     },
 }
 
@@ -855,6 +910,8 @@ impl RequirementsTxtParserError {
                 start: start + offset,
                 end: end + offset,
             },
+            Self::Reqwest(err) => Self::Reqwest(err),
+            Self::NonUnicodeUrl { url } => Self::NonUnicodeUrl { url },
         }
     }
 }
@@ -897,6 +954,16 @@ impl Display for RequirementsTxtParserError {
             Self::Subfile { start, .. } => {
                 write!(f, "Error parsing included file at position {start}")
             }
+            Self::Reqwest(err) => {
+                write!(f, "Error while accessing remote requirements file {err}")
+            }
+            Self::NonUnicodeUrl { url } => {
+                write!(
+                    f,
+                    "Remote requirements URL contains non-unicode characters: {}",
+                    url.display(),
+                )
+            }
         }
     }
 }
@@ -914,6 +981,8 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::Pep508 { source, .. } => Some(source),
             Self::Subfile { source, .. } => Some(source.as_ref()),
             Self::Parser { .. } => None,
+            Self::Reqwest(err) => err.source(),
+            Self::NonUnicodeUrl { .. } => None,
         }
     }
 }
@@ -989,6 +1058,21 @@ impl Display for RequirementsTxtFileError {
                     self.file.simplified_display(),
                 )
             }
+            RequirementsTxtParserError::Reqwest(err) => {
+                write!(
+                    f,
+                    "Error while accessing remote requirements file {}: {err}",
+                    self.file.simplified_display(),
+                )
+            }
+
+            RequirementsTxtParserError::NonUnicodeUrl { url } => {
+                write!(
+                    f,
+                    "Remote requirements URL contains non-unicode characters: {}",
+                    url.display(),
+                )
+            }
         }
     }
 }
@@ -1002,6 +1086,12 @@ impl std::error::Error for RequirementsTxtFileError {
 impl From<io::Error> for RequirementsTxtParserError {
     fn from(err: io::Error) -> Self {
         Self::IO(err)
+    }
+}
+
+impl From<reqwest_middleware::Error> for RequirementsTxtParserError {
+    fn from(err: reqwest_middleware::Error) -> Self {
+        Self::Reqwest(err)
     }
 }
 
@@ -1057,12 +1147,19 @@ mod test {
     use tempfile::tempdir;
     use test_case::test_case;
     use unscanny::Scanner;
+    use uv_client::{RegistryClient, RegistryClientBuilder};
     use uv_fs::Simplified;
 
     use crate::{calculate_row_column, EditableRequirement, RequirementsTxt};
 
     fn workspace_test_data_dir() -> PathBuf {
         PathBuf::from("./test-data")
+    }
+
+    fn registry_client() -> RegistryClient {
+        RegistryClientBuilder::new(uv_cache::Cache::temp().unwrap())
+            .connectivity(uv_client::Connectivity::Online)
+            .build()
     }
 
     #[test_case(Path::new("basic.txt"))]
@@ -1075,11 +1172,14 @@ mod test {
     #[test_case(Path::new("poetry-with-hashes.txt"))]
     #[test_case(Path::new("small.txt"))]
     #[test_case(Path::new("whitespace.txt"))]
-    fn parse(path: &Path) {
+    #[tokio::test]
+    async fn parse(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual = RequirementsTxt::parse(requirements_txt, &working_dir).unwrap();
+        let actual = RequirementsTxt::parse(requirements_txt, &working_dir, &registry_client())
+            .await
+            .unwrap();
 
         let snapshot = format!("parse-{}", path.to_string_lossy());
         insta::assert_debug_snapshot!(snapshot, actual);
@@ -1096,7 +1196,8 @@ mod test {
     #[test_case(Path::new("small.txt"))]
     #[test_case(Path::new("whitespace.txt"))]
     #[test_case(Path::new("editable.txt"))]
-    fn line_endings(path: &Path) {
+    #[tokio::test]
+    async fn line_endings(path: &Path) {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
@@ -1120,14 +1221,16 @@ mod test {
         let requirements_txt = temp_dir.path().join(path);
         fs::write(&requirements_txt, contents).unwrap();
 
-        let actual = RequirementsTxt::parse(&requirements_txt, &working_dir).unwrap();
+        let actual = RequirementsTxt::parse(&requirements_txt, &working_dir, &registry_client())
+            .await
+            .unwrap();
 
         let snapshot = format!("line-endings-{}", path.to_string_lossy());
         insta::assert_debug_snapshot!(snapshot, actual);
     }
 
-    #[test]
-    fn invalid_include_missing_file() -> Result<()> {
+    #[tokio::test]
+    async fn invalid_include_missing_file() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
         let missing_txt = temp_dir.child("missing.txt");
         let requirements_txt = temp_dir.child("requirements.txt");
@@ -1135,7 +1238,10 @@ mod test {
             -r missing.txt
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let error =
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap_err();
         let errors = anyhow::Error::new(error)
             .chain()
             // The last error is operating-system specific.
@@ -1155,22 +1261,25 @@ mod test {
         }, {
             insta::assert_snapshot!(errors, @r###"
             Error parsing included file in `<REQUIREMENTS_TXT>` at position 0
-            failed to open file `<MISSING_TXT>`
+            failed to read from file `<MISSING_TXT>`
             "###);
         });
 
         Ok(())
     }
 
-    #[test]
-    fn invalid_requirement() -> Result<()> {
+    #[tokio::test]
+    async fn invalid_requirement() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
         let requirements_txt = temp_dir.child("requirements.txt");
         requirements_txt.write_str(indoc! {"
             numpy[ö]==1.29
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let error =
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
@@ -1193,15 +1302,18 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn unsupported_editable() -> Result<()> {
+    #[tokio::test]
+    async fn unsupported_editable() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
         let requirements_txt = temp_dir.child("requirements.txt");
         requirements_txt.write_str(indoc! {"
             -e http://localhost:8080/
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let error =
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
@@ -1219,15 +1331,18 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn invalid_editable_extra() -> Result<()> {
+    #[tokio::test]
+    async fn invalid_editable_extra() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
         let requirements_txt = temp_dir.child("requirements.txt");
         requirements_txt.write_str(indoc! {"
             -e black[,abcdef]
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let error =
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
@@ -1247,15 +1362,18 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn invalid_index_url() -> Result<()> {
+    #[tokio::test]
+    async fn invalid_index_url() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
         let requirements_txt = temp_dir.child("requirements.txt");
         requirements_txt.write_str(indoc! {"
             --index-url 123
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let error =
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
@@ -1276,8 +1394,8 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn missing_r() -> Result<()> {
+    #[tokio::test]
+    async fn missing_r() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
 
         let file_txt = temp_dir.child("file.txt");
@@ -1289,7 +1407,10 @@ mod test {
             file.txt
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let error =
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
@@ -1307,8 +1428,8 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn relative_requirement() -> Result<()> {
+    #[tokio::test]
+    async fn relative_requirement() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
 
         // Create a requirements file with a relative entry, in a subdirectory.
@@ -1330,7 +1451,10 @@ mod test {
             -r subdir/child.txt
         "})?;
 
-        let requirements = RequirementsTxt::parse(parent_txt.path(), temp_dir.path()).unwrap();
+        let requirements =
+            RequirementsTxt::parse(parent_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap();
         insta::assert_debug_snapshot!(requirements, @r###"
         RequirementsTxt {
             requirements: [
@@ -1359,9 +1483,9 @@ mod test {
         Ok(())
     }
 
-    #[test]
+    #[tokio::test]
     #[cfg(not(windows))]
-    fn nested_editable() -> Result<()> {
+    async fn nested_editable() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
 
         let requirements_txt = temp_dir.child("requirements.txt");
@@ -1381,7 +1505,9 @@ mod test {
         "})?;
 
         let requirements =
-            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap();
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap();
 
         insta::assert_debug_snapshot!(requirements, @r###"
             RequirementsTxt {
@@ -1419,8 +1545,8 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn nested_conflicting_index_url() -> Result<()> {
+    #[tokio::test]
+    async fn nested_conflicting_index_url() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
 
         let requirements_txt = temp_dir.child("requirements.txt");
@@ -1439,7 +1565,10 @@ mod test {
             --index-url https://fake.pypi.org/simple
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let error =
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
@@ -1477,8 +1606,8 @@ mod test {
         );
     }
 
-    #[test]
-    fn parser_error_line_and_column() -> Result<()> {
+    #[tokio::test]
+    async fn parser_error_line_and_column() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
         let requirements_txt = temp_dir.child("requirements.txt");
         requirements_txt.write_str(indoc! {"
@@ -1487,7 +1616,10 @@ mod test {
             tqdm
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path()).unwrap_err();
+        let error =
+            RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), &registry_client())
+                .await
+                .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =

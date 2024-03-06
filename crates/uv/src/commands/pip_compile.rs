@@ -9,6 +9,7 @@ use std::str::FromStr;
 use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
+use futures::future::OptionFuture;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
@@ -82,6 +83,11 @@ pub(crate) async fn pip_compile(
         ));
     }
 
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .connectivity(connectivity)
+        .build();
+
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project,
@@ -94,11 +100,14 @@ pub(crate) async fn pip_compile(
         no_index,
         find_links,
         extras: used_extras,
-    } = RequirementsSpecification::from_sources(requirements, constraints, overrides, &extras)?;
-
-    // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+    } = RequirementsSpecification::from_sources(
+        requirements,
+        constraints,
+        overrides,
+        &extras,
+        &client,
+    )
+    .await?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {
@@ -117,28 +126,33 @@ pub(crate) async fn pip_compile(
         }
     }
 
-    let preferences: Vec<Requirement> = output_file
-        // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
-        .filter(|_| !upgrade.is_all())
-        .filter(|output_file| output_file.exists())
-        .map(Path::to_path_buf)
-        .map(RequirementsSource::from_path)
-        .as_ref()
-        .map(|source| RequirementsSpecification::from_source(source, &extras))
-        .transpose()?
-        .map(|spec| spec.requirements)
-        .map(|requirements| match upgrade {
-            // Respect all pinned versions from the existing lockfile.
-            Upgrade::None => requirements,
-            // Ignore all pinned versions from the existing lockfile.
-            Upgrade::All => vec![],
-            // Ignore pinned versions for the specified packages.
-            Upgrade::Packages(packages) => requirements
-                .into_iter()
-                .filter(|requirement| !packages.contains(&requirement.name))
-                .collect(),
-        })
-        .unwrap_or_default();
+    let preferences: Vec<Requirement> = OptionFuture::from(
+        output_file
+            // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
+            .filter(|_| !upgrade.is_all())
+            .filter(|output_file| output_file.exists())
+            .map(Path::to_path_buf)
+            .map(RequirementsSource::from_path)
+            .as_ref()
+            .map(|source| async {
+                RequirementsSpecification::from_source(source, &extras, &client).await
+            }),
+    )
+    .await
+    .transpose()?
+    .map(|spec| spec.requirements)
+    .map(|requirements| match upgrade {
+        // Respect all pinned versions from the existing lockfile.
+        Upgrade::None => requirements,
+        // Ignore all pinned versions from the existing lockfile.
+        Upgrade::All => vec![],
+        // Ignore pinned versions for the specified packages.
+        Upgrade::Packages(packages) => requirements
+            .into_iter()
+            .filter(|requirement| !packages.contains(&requirement.name))
+            .collect(),
+    })
+    .unwrap_or_default();
 
     // Find an interpreter to use for building distributions
     let platform = Platform::current()?;
@@ -196,11 +210,13 @@ pub(crate) async fn pip_compile(
         |python_version| Cow::Owned(python_version.markers(interpreter.markers())),
     );
 
-    // Instantiate a client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_locations.index_urls())
-        .connectivity(connectivity)
-        .build();
+    // Incorporate any index locations from the provided sources.
+    let index_locations =
+        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+
+    // Update the index URLs on the client, to take into account any index URLs added by the
+    // sources (e.g., `--index-url` in a `requirements.txt` file).
+    let client = client.with_index_url(index_locations.index_urls());
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

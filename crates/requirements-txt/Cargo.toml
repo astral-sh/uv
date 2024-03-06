@@ -15,15 +15,21 @@ workspace = true
 [dependencies]
 pep440_rs = { path = "../pep440-rs", features = ["rkyv", "serde"] }
 pep508_rs = { path = "../pep508-rs", features = ["rkyv", "serde", "non-pep508-extensions"] }
+uv-cache = { path = "../uv-cache" }
+uv-client = { path = "../uv-client" }
 uv-fs = { path = "../uv-fs" }
 uv-normalize = { path = "../uv-normalize" }
 uv-warnings = { path = "../uv-warnings" }
 
+async-recursion = { workspace = true }
 fs-err = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
+reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }
 url = { workspace = true }

@@ -12,6 +12,7 @@ use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 use tracing::{instrument, Level};
+use uv_client::RegistryClient;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 
@@ -138,9 +139,10 @@ pub(crate) struct RequirementsSpecification {
 impl RequirementsSpecification {
     /// Read the requirements and constraints from a source.
     #[instrument(skip_all, level = Level::DEBUG, fields(source = % source))]
-    pub(crate) fn from_source(
+    pub(crate) async fn from_source(
         source: &RequirementsSource,
-        extras: &ExtrasSpecification,
+        extras: &ExtrasSpecification<'_>,
+        client: &RegistryClient,
     ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Package(name) => {
@@ -176,7 +178,8 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::RequirementsTxt(path) => {
-                let requirements_txt = RequirementsTxt::parse(path, std::env::current_dir()?)?;
+                let requirements_txt =
+                    RequirementsTxt::parse(path, std::env::current_dir()?, client).await?;
                 Self {
                     project: None,
                     requirements: requirements_txt
@@ -206,7 +209,7 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
-                let contents = uv_fs::read_to_string(path)?;
+                let contents = uv_fs::read_to_string(path).await?;
                 let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
                     .with_context(|| format!("Failed to parse `{}`", path.simplified_display()))?;
                 let mut used_extras = FxHashSet::default();
@@ -273,11 +276,12 @@ impl RequirementsSpecification {
     }
 
     /// Read the combined requirements and constraints from a set of sources.
-    pub(crate) fn from_sources(
+    pub(crate) async fn from_sources(
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
-        extras: &ExtrasSpecification,
+        extras: &ExtrasSpecification<'_>,
+        client: &RegistryClient,
     ) -> Result<Self> {
         let mut spec = Self::default();
 
@@ -285,7 +289,7 @@ impl RequirementsSpecification {
         // A `requirements.txt` can contain a `-c constraints.txt` directive within it, so reading
         // a requirements file can also add constraints.
         for source in requirements {
-            let source = Self::from_source(source, extras)?;
+            let source = Self::from_source(source, extras, client).await?;
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
@@ -312,7 +316,7 @@ impl RequirementsSpecification {
 
         // Read all constraints, treating _everything_ as a constraint.
         for source in constraints {
-            let source = Self::from_source(source, extras)?;
+            let source = Self::from_source(source, extras, client).await?;
             spec.constraints.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.constraints.extend(source.overrides);
@@ -332,7 +336,7 @@ impl RequirementsSpecification {
 
         // Read all overrides, treating both requirements _and_ constraints as overrides.
         for source in overrides {
-            let source = Self::from_source(source, extras)?;
+            let source = Self::from_source(source, extras, client).await?;
             spec.overrides.extend(source.requirements);
             spec.overrides.extend(source.constraints);
             spec.overrides.extend(source.overrides);
@@ -354,8 +358,11 @@ impl RequirementsSpecification {
     }
 
     /// Read the requirements from a set of sources.
-    pub(crate) fn from_simple_sources(requirements: &[RequirementsSource]) -> Result<Self> {
-        Self::from_sources(requirements, &[], &[], &ExtrasSpecification::None)
+    pub(crate) async fn from_simple_sources(
+        requirements: &[RequirementsSource],
+        client: &RegistryClient,
+    ) -> Result<Self> {
+        Self::from_sources(requirements, &[], &[], &ExtrasSpecification::None, client).await
     }
 }
 

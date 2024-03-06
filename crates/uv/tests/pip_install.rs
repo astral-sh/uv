@@ -100,7 +100,7 @@ fn missing_requirements_txt() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to open file `requirements.txt`
+    error: failed to read from file `requirements.txt`
       Caused by: No such file or directory (os error 2)
     "###
     );
@@ -1507,6 +1507,73 @@ fn install_constraints_inline() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Install a package from a `constraints.txt` file on a remote http server.
+#[test]
+fn install_constraints_remote() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+            .arg("-c")
+            .arg("https://raw.githubusercontent.com/apache/airflow/constraints-2-6/constraints-3.11.txt")
+            .arg("typing_extensions>=4.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.7.1
+    "###
+    ); // would yield typing-extensions==4.8.2 without constraint file
+}
+
+/// Install a package from a `requirements.txt` file, with an inline constraint, which points
+/// to a remote http server.
+#[test]
+fn install_constraints_inline_remote() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirementstxt = context.temp_dir.child("requirements.txt");
+    requirementstxt.write_str("typing-extensions>=4.0\n-c https://raw.githubusercontent.com/apache/airflow/constraints-2-6/constraints-3.11.txt")?;
+
+    uv_snapshot!(command(&context)
+            .arg("-r")
+            .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.7.1
+    "### // would yield typing-extensions==4.8.2 without constraint file
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_constraints_respects_offline_mode() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+            .arg("--offline")
+            .arg("-r")
+            .arg("http://example.com/requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while accessing remote requirements file http://example.com/requirements.txt: Middleware error: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://example.com/requirements.txt`
+      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://example.com/requirements.txt`
+    "###
+    );
 }
 
 /// Tests that we can install `polars==0.14.0`, which has this odd dependency

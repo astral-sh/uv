@@ -48,6 +48,11 @@ pub(crate) async fn pip_sync(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .connectivity(connectivity)
+        .build();
+
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project: _project,
@@ -60,17 +65,13 @@ pub(crate) async fn pip_sync(
         no_index,
         find_links,
         extras: _extras,
-    } = RequirementsSpecification::from_simple_sources(sources)?;
+    } = RequirementsSpecification::from_simple_sources(sources, &client).await?;
 
     let num_requirements = requirements.len() + editables.len();
     if num_requirements == 0 {
         writeln!(printer.stderr(), "No requirements found")?;
         return Ok(ExitStatus::Success);
     }
-
-    // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -108,11 +109,13 @@ pub(crate) async fn pip_sync(
     // Determine the current environment markers.
     let tags = venv.interpreter().tags()?;
 
-    // Prep the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_locations.index_urls())
-        .connectivity(connectivity)
-        .build();
+    // Incorporate any index locations from the provided sources.
+    let index_locations =
+        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+
+    // Update the index URLs on the client, to take into account any index URLs added by the
+    // sources (e.g., `--index-url` in a `requirements.txt` file).
+    let client = client.with_index_url(index_locations.index_urls());
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
