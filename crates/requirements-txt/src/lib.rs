@@ -328,32 +328,33 @@ impl RequirementsTxt {
         working_dir: impl AsRef<Path>,
         client: &RegistryClient,
     ) -> Result<Self, RequirementsTxtFileError> {
-        let content = if requirements_txt.as_ref().starts_with("http://")
-            | requirements_txt.as_ref().starts_with("https://")
-        {
-            read_url_to_string(&requirements_txt, client).await
-        } else {
-            uv_fs::read_to_string(&requirements_txt)
-                .await
-                .map_err(RequirementsTxtParserError::IO)
-        }
-        .map_err(|err| RequirementsTxtFileError {
-            file: requirements_txt.as_ref().to_path_buf(),
-            error: err,
-        })?;
-
+        let requirements_txt = requirements_txt.as_ref();
         let working_dir = working_dir.as_ref();
-        let requirements_dir = requirements_txt.as_ref().parent().unwrap_or(working_dir);
+
+        let content =
+            if requirements_txt.starts_with("http://") | requirements_txt.starts_with("https://") {
+                read_url_to_string(&requirements_txt, client).await
+            } else {
+                uv_fs::read_to_string(&requirements_txt)
+                    .await
+                    .map_err(RequirementsTxtParserError::IO)
+            }
+            .map_err(|err| RequirementsTxtFileError {
+                file: requirements_txt.to_path_buf(),
+                error: err,
+            })?;
+
+        let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
         let data = Self::parse_inner(&content, working_dir, requirements_dir, client)
             .await
             .map_err(|err| RequirementsTxtFileError {
-                file: requirements_txt.as_ref().to_path_buf(),
+                file: requirements_txt.to_path_buf(),
                 error: err,
             })?;
         if data == Self::default() {
             warn_user!(
                 "Requirements file {} does not contain any dependencies",
-                requirements_txt.as_ref().display()
+                requirements_txt.simplified_display()
             );
         }
 
@@ -383,7 +384,13 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let sub_file = requirements_dir.join(expand_path_vars(&filename).as_ref());
+                    let filename = expand_path_vars(&filename);
+                    let sub_file =
+                        if filename.starts_with("http://") || filename.starts_with("https://") {
+                            PathBuf::from(filename.as_ref())
+                        } else {
+                            requirements_dir.join(filename.as_ref())
+                        };
                     let sub_requirements = Self::parse(&sub_file, working_dir, client)
                         .await
                         .map_err(|err| RequirementsTxtParserError::Subfile {
@@ -415,7 +422,13 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let sub_file = requirements_dir.join(expand_path_vars(&filename).as_ref());
+                    let filename = expand_path_vars(&filename);
+                    let sub_file =
+                        if filename.starts_with("http://") || filename.starts_with("https://") {
+                            PathBuf::from(filename.as_ref())
+                        } else {
+                            requirements_dir.join(filename.as_ref())
+                        };
                     let sub_constraints = Self::parse(&sub_file, working_dir, client)
                         .await
                         .map_err(|err| RequirementsTxtParserError::Subfile {
@@ -780,43 +793,24 @@ fn parse_value<'a, T>(
     }
 }
 
+/// Fetch the contents of a URL and return them as a string.
 async fn read_url_to_string(
     path: impl AsRef<Path>,
     client: &RegistryClient,
 ) -> Result<String, RequirementsTxtParserError> {
-    // here, pip would url-encode the non-utf8 bytes of the string instead of crashing
-    // this behavior is probably not worth recreating
-    let path_utf8 = path.as_ref().to_str().ok_or_else(|| {
-        RequirementsTxtParserError::NonUnicodeRemoteRequirementsUrl {
-            url: path.as_ref().to_owned(),
-        }
-    })?;
-
-    let mut response = client
+    // pip would URL-encode the non-UTF-8 bytes of the string; we just don't support them.
+    let path_utf8 =
+        path.as_ref()
+            .to_str()
+            .ok_or_else(|| RequirementsTxtParserError::NonUnicodeUrl {
+                url: path.as_ref().to_owned(),
+            })?;
+    Ok(client
         .cached_client()
         .uncached()
         .get(path_utf8)
         .send()
-        .await?;
-
-    if response.status() == 401 {
-        let basic_auth_user: String = dialoguer::Input::with_theme(&dialoguer::theme::SimpleTheme)
-            .with_prompt(format!("User for {path_utf8}"))
-            .interact_text()?;
-        let basic_auth_password = dialoguer::Password::with_theme(&dialoguer::theme::SimpleTheme)
-            .with_prompt("Password")
-            .interact()?;
-
-        response = client
-            .cached_client()
-            .uncached()
-            .get(path_utf8)
-            .basic_auth(basic_auth_user, Some(basic_auth_password))
-            .send()
-            .await?;
-    }
-
-    Ok(response
+        .await?
         .error_for_status()
         .map_err(reqwest_middleware::Error::Reqwest)?
         .text()
@@ -866,10 +860,9 @@ pub enum RequirementsTxtParserError {
         end: usize,
     },
     Reqwest(reqwest_middleware::Error),
-    NonUnicodeRemoteRequirementsUrl {
+    NonUnicodeUrl {
         url: PathBuf,
     },
-    InteractivePrompt(dialoguer::Error),
 }
 
 impl RequirementsTxtParserError {
@@ -918,10 +911,7 @@ impl RequirementsTxtParserError {
                 end: end + offset,
             },
             Self::Reqwest(err) => Self::Reqwest(err),
-            Self::NonUnicodeRemoteRequirementsUrl { url } => {
-                Self::NonUnicodeRemoteRequirementsUrl { url }
-            }
-            Self::InteractivePrompt(err) => Self::InteractivePrompt(err),
+            Self::NonUnicodeUrl { url } => Self::NonUnicodeUrl { url },
         }
     }
 }
@@ -967,14 +957,13 @@ impl Display for RequirementsTxtParserError {
             Self::Reqwest(err) => {
                 write!(f, "Error while accessing remote requirements file {err}")
             }
-            Self::NonUnicodeRemoteRequirementsUrl { url } => {
+            Self::NonUnicodeUrl { url } => {
                 write!(
                     f,
                     "Remote requirements URL contains non-unicode characters: {}",
                     url.display(),
                 )
             }
-            Self::InteractivePrompt(err) => err.fmt(f),
         }
     }
 }
@@ -993,8 +982,7 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::Subfile { source, .. } => Some(source.as_ref()),
             Self::Parser { .. } => None,
             Self::Reqwest(err) => err.source(),
-            Self::NonUnicodeRemoteRequirementsUrl { .. } => None,
-            Self::InteractivePrompt(err) => err.source(),
+            Self::NonUnicodeUrl { .. } => None,
         }
     }
 }
@@ -1078,18 +1066,11 @@ impl Display for RequirementsTxtFileError {
                 )
             }
 
-            RequirementsTxtParserError::NonUnicodeRemoteRequirementsUrl { url } => {
+            RequirementsTxtParserError::NonUnicodeUrl { url } => {
                 write!(
                     f,
                     "Remote requirements URL contains non-unicode characters: {}",
                     url.display(),
-                )
-            }
-            RequirementsTxtParserError::InteractivePrompt(err) => {
-                write!(
-                    f,
-                    "Error while getting user input for authentication with file {}: {err}",
-                    self.file.simplified_display(),
                 )
             }
         }
@@ -1111,12 +1092,6 @@ impl From<io::Error> for RequirementsTxtParserError {
 impl From<reqwest_middleware::Error> for RequirementsTxtParserError {
     fn from(err: reqwest_middleware::Error) -> Self {
         Self::Reqwest(err)
-    }
-}
-
-impl From<dialoguer::Error> for RequirementsTxtParserError {
-    fn from(err: dialoguer::Error) -> Self {
-        Self::InteractivePrompt(err)
     }
 }
 

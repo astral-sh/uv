@@ -38,7 +38,6 @@ ctrlc = { version = "3.4.2" }
 dashmap = { version = "5.5.3" }
 data-encoding = { version = "2.5.0" }
 derivative = { version = "2.2.0" }
-dialoguer = { version = "0.11.0" }
 directories = { version = "5.0.1" }
 dunce = { version = "1.0.4" }
 either = { version = "1.9.0" }

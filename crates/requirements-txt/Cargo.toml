@@ -33,7 +33,6 @@ async-recursion = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
-dialoguer = { workspace = true }
 
 [dev-dependencies]
 anyhow = { version = "1.0.80" }
