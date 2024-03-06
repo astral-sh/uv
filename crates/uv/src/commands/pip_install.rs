@@ -798,7 +798,7 @@ async fn install(
             writeln!(
                 printer.stderr(),
                 "{}",
-                format!("Would install {}", format!("{installs} package{s}").bold(),).dimmed()
+                format!("Would install {}", format!("{installs} package{s}").bold()).dimmed()
             )?;
         }
 
