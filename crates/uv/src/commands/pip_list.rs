@@ -5,10 +5,11 @@ use anstream::println;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use serde::Serialize;
 use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
-use distribution_types::Name;
+use distribution_types::{InstalledDist, Name};
 use platform_host::Platform;
 use uv_cache::Cache;
 use uv_fs::Simplified;
@@ -19,6 +20,8 @@ use uv_normalize::PackageName;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
+use super::ListFormat;
+
 /// Enumerate the installed packages in the current environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_list(
@@ -26,6 +29,7 @@ pub(crate) fn pip_list(
     editable: bool,
     exclude_editable: bool,
     exclude: &[PackageName],
+    format: &ListFormat,
     python: Option<&str>,
     system: bool,
     cache: &Cache,
@@ -59,53 +63,68 @@ pub(crate) fn pip_list(
     // Filter if `--editable` is specified; always sort by name.
     let results = site_packages
         .iter()
-        .filter(|f| (!f.is_editable() && !editable) || (f.is_editable() && !exclude_editable))
-        .filter(|f| !exclude.contains(f.name()))
+        .filter(|dist| {
+            (!dist.is_editable() && !editable) || (dist.is_editable() && !exclude_editable)
+        })
+        .filter(|dist| !exclude.contains(dist.name()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .collect_vec();
     if results.is_empty() {
         return Ok(ExitStatus::Success);
     }
 
-    // The package name and version are always present.
-    let mut columns = vec![
-        Column {
-            header: String::from("Package"),
-            rows: results.iter().map(|f| f.name().to_string()).collect_vec(),
-        },
-        Column {
-            header: String::from("Version"),
-            rows: results
-                .iter()
-                .map(|f| f.version().to_string())
-                .collect_vec(),
-        },
-    ];
+    match format {
+        ListFormat::Columns => {
+            // The package name and version are always present.
+            let mut columns = vec![
+                Column {
+                    header: String::from("Package"),
+                    rows: results
+                        .iter()
+                        .copied()
+                        .map(|dist| dist.name().to_string())
+                        .collect_vec(),
+                },
+                Column {
+                    header: String::from("Version"),
+                    rows: results
+                        .iter()
+                        .map(|dist| dist.version().to_string())
+                        .collect_vec(),
+                },
+            ];
 
-    // Editable column is only displayed if at least one editable package is found.
-    if results.iter().any(|f| f.is_editable()) {
-        columns.push(Column {
-            header: String::from("Editable project location"),
-            rows: results
-                .iter()
-                .map(|f| f.as_editable())
-                .map(|e| {
-                    if let Some(url) = e {
-                        url.to_file_path()
-                            .unwrap()
-                            .into_os_string()
-                            .into_string()
-                            .unwrap()
-                    } else {
-                        String::new()
-                    }
-                })
-                .collect_vec(),
-        });
-    }
+            // Editable column is only displayed if at least one editable package is found.
+            if results.iter().copied().any(InstalledDist::is_editable) {
+                columns.push(Column {
+                    header: String::from("Editable project location"),
+                    rows: results
+                        .iter()
+                        .map(|dist| dist.as_editable())
+                        .map(|url| {
+                            url.map(|url| {
+                                url.to_file_path().unwrap().simplified_display().to_string()
+                            })
+                            .unwrap_or_default()
+                        })
+                        .collect_vec(),
+                });
+            }
 
-    for elems in Multizip(columns.iter().map(Column::fmt_padded).collect_vec()) {
-        println!("{0}", elems.join(" "));
+            for elems in MultiZip(columns.iter().map(Column::fmt).collect_vec()) {
+                println!("{}", elems.join(" "));
+            }
+        }
+        ListFormat::Json => {
+            let rows = results.iter().copied().map(Entry::from).collect_vec();
+            let output = serde_json::to_string(&rows)?;
+            println!("{output}");
+        }
+        ListFormat::Freeze => {
+            for dist in &results {
+                println!("{}=={}", dist.name().bold(), dist.version());
+            }
+        }
     }
 
     // Validate that the environment is consistent.
@@ -122,6 +141,27 @@ pub(crate) fn pip_list(
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// An entry in a JSON list of installed packages.
+#[derive(Debug, Serialize)]
+struct Entry {
+    name: String,
+    version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    editable_project_location: Option<String>,
+}
+
+impl From<&InstalledDist> for Entry {
+    fn from(dist: &InstalledDist) -> Self {
+        Self {
+            name: dist.name().to_string(),
+            version: dist.version().to_string(),
+            editable_project_location: dist
+                .as_editable()
+                .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -142,7 +182,7 @@ impl<'a> Column {
     }
 
     /// Return an iterator of the column, with the header and rows formatted to the maximum width.
-    fn fmt_padded(&'a self) -> impl Iterator<Item = String> + 'a {
+    fn fmt(&'a self) -> impl Iterator<Item = String> + 'a {
         let max_width = self.max_width();
         let header = vec![
             format!("{0:width$}", self.header, width = max_width),
@@ -158,9 +198,9 @@ impl<'a> Column {
 /// Zip an unknown number of iterators.
 /// Combination of [`itertools::multizip`] and [`itertools::izip`].
 #[derive(Debug)]
-struct Multizip<T>(Vec<T>);
+struct MultiZip<T>(Vec<T>);
 
-impl<T> Iterator for Multizip<T>
+impl<T> Iterator for MultiZip<T>
 where
     T: Iterator,
 {

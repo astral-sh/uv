@@ -95,6 +95,18 @@ pub(crate) enum VersionFormat {
     Json,
 }
 
+#[derive(Debug, Default, Clone, clap::ValueEnum)]
+pub(crate) enum ListFormat {
+    /// Display the list of packages in a human-readable table.
+    #[default]
+    Columns,
+    /// Display the list of packages in a `pip freeze`-like format, with one package per line
+    /// alongside its version.
+    Freeze,
+    /// Display the list of packages in a machine-readable JSON format.
+    Json,
+}
+
 /// Compile all Python source files in site-packages to bytecode, to speed up the
 /// initial run of any subsequent executions.
 ///

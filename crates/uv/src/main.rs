@@ -24,7 +24,7 @@ use uv_traits::{
     ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, SetupPyStrategy,
 };
 
-use crate::commands::{extra_name_with_clap_error, ExitStatus, Upgrade, VersionFormat};
+use crate::commands::{extra_name_with_clap_error, ExitStatus, ListFormat, Upgrade, VersionFormat};
 use crate::compat::CompatArgs;
 use crate::requirements::RequirementsSource;
 
@@ -917,6 +917,10 @@ struct PipListArgs {
     #[clap(long)]
     r#exclude: Vec<PackageName>,
 
+    /// Select the output format between: `columns` (default), `freeze`, or `json`.
+    #[clap(long, value_enum, default_value_t = ListFormat::default())]
+    format: ListFormat,
+
     /// The Python interpreter for which packages should be listed.
     ///
     /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
@@ -1467,6 +1471,7 @@ async fn run() -> Result<ExitStatus> {
             args.editable,
             args.exclude_editable,
             &args.exclude,
+            &args.format,
             args.python.as_deref(),
             args.system,
             &cache,
