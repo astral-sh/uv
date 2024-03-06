@@ -28,7 +28,7 @@ use crate::printer::Printer;
 use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
 /// Install a set of locked requirements into the current Python environment.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_sync(
     sources: &[RequirementsSource],
     reinstall: &Reinstall,
@@ -43,6 +43,7 @@ pub(crate) async fn pip_sync(
     strict: bool,
     python: Option<String>,
     system: bool,
+    break_system_packages: bool,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -90,18 +91,22 @@ pub(crate) async fn pip_sync(
 
     // If the environment is externally managed, abort.
     if let Some(externally_managed) = venv.interpreter().is_externally_managed() {
-        return if let Some(error) = externally_managed.into_error() {
-            Err(anyhow::anyhow!(
-                "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
-                venv.root().simplified_display().cyan(),
-                textwrap::indent(&error, "  ").green(),
-            ))
+        if break_system_packages {
+            debug!("Ignoring externally managed environment due to `--break-system-packages`");
         } else {
-            Err(anyhow::anyhow!(
-                "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
-                venv.root().simplified_display().cyan()
-            ))
-        };
+            return if let Some(error) = externally_managed.into_error() {
+                Err(anyhow::anyhow!(
+                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
+                    venv.root().simplified_display().cyan(),
+                    textwrap::indent(&error, "  ").green(),
+                ))
+            } else {
+                Err(anyhow::anyhow!(
+                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
+                    venv.root().simplified_display().cyan()
+                ))
+            };
+        }
     }
 
     let _lock = venv.lock()?;
