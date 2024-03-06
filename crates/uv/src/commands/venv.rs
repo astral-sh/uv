@@ -230,7 +230,14 @@ async fn venv_impl(
             "source {}",
             shlex_posix(path.join("bin").join("activate.csh"))
         )),
-        Some(Shell::Powershell) => Some(shlex_windows(path.join("Scripts").join("activate"))),
+        Some(Shell::Powershell) => Some(shlex_windows(
+            path.join("Scripts").join("activate"),
+            Shell::Powershell,
+        )),
+        Some(Shell::Cmd) => Some(shlex_windows(
+            path.join("Scripts").join("activate"),
+            Shell::Cmd,
+        )),
     };
     if let Some(act) = activation {
         writeln!(printer.stderr(), "Activate with: {}", act.green()).into_diagnostic()?;
@@ -254,15 +261,20 @@ fn shlex_posix(executable: impl AsRef<Path>) -> String {
     }
 }
 
-/// Quote a path, if necessary, for safe use in `PowerShell`.
-fn shlex_windows(executable: impl AsRef<Path>) -> String {
+/// Quote a path, if necessary, for safe use in `PowerShell` and `cmd`.
+fn shlex_windows(executable: impl AsRef<Path>, shell: Shell) -> String {
     // Convert to a display path.
     let executable = executable.as_ref().simplified_display().to_string();
 
-    // Wrap the executable in quotes (and a `&` invocation) if it contains spaces.
-    // TODO(charlie): This won't work in `cmd.exe`.
+    // Wrap the executable in quotes (and a `&` invocation on PowerShell), if it contains spaces.
     if executable.contains(' ') {
-        format!("& \"{executable}\"")
+        if shell == Shell::Powershell {
+            // For PowerShell, wrap in a `&` invocation.
+            format!("& \"{executable}\"")
+        } else {
+            // Otherwise, assume `cmd`, which doesn't need the `&`.
+            format!("\"{executable}\"")
+        }
     } else {
         executable
     }
