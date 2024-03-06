@@ -9,6 +9,8 @@ pub(crate) enum Shell {
     Fish,
     /// PowerShell
     Powershell,
+    /// Cmd (Command Prompt)
+    Cmd,
     /// Z SHell (zsh)
     Zsh,
     /// Nushell
@@ -34,7 +36,13 @@ impl Shell {
         } else if let Some(env_shell) = std::env::var_os("SHELL") {
             Shell::from_shell_path(env_shell)
         } else if cfg!(windows) {
-            Some(Shell::Powershell)
+            // Command Prompt relies on PROMPT for its appearance where-as PowerShell does not.
+            // https://stackoverflow.com/a/66415037
+            if std::env::var_os("PROMPT").is_some() {
+                Some(Shell::Cmd)
+            } else {
+                Some(Shell::Powershell) // Fallback to PowerShell
+            }
         } else {
             None
         }
