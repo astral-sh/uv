@@ -442,6 +442,7 @@ mod windows {
                     "Running `py --list-paths` failed with status {}",
                     output.status
                 ),
+                exit_code: output.status,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             });
@@ -451,6 +452,7 @@ mod windows {
         let stdout =
             String::from_utf8(output.stdout).map_err(|err| Error::PythonSubcommandOutput {
                 message: format!("The stdout of `py --list-paths` isn't UTF-8 encoded: {err}"),
+                exit_code: output.status,
                 stdout: String::from_utf8_lossy(err.as_bytes()).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             })?;

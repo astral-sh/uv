@@ -507,6 +507,7 @@ impl InterpreterInfo {
                     interpreter.display(),
                     output.status,
                 ),
+                exit_code: output.status,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             });
@@ -518,6 +519,7 @@ impl InterpreterInfo {
                     "Querying Python at `{}` did not return the expected data: {err}",
                     interpreter.display(),
                 ),
+                exit_code: output.status,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             }
