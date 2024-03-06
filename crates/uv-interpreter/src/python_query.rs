@@ -115,7 +115,7 @@ fn find_python(
     #[allow(non_snake_case)]
     let UV_TEST_PYTHON_PATH = env::var_os("UV_TEST_PYTHON_PATH");
 
-    let override_path = UV_TEST_PYTHON_PATH.is_some();
+    let use_override = UV_TEST_PYTHON_PATH.is_some();
     let possible_names = selector.possible_names();
 
     #[allow(non_snake_case)]
@@ -182,11 +182,17 @@ fn find_python(
         }
     }
 
-    if cfg!(windows) && !override_path {
+    if cfg!(windows) && !use_override {
         // Use `py` to find the python installation on the system.
-        match windows::py_list_paths(selector, platform, cache) {
-            Ok(Some(interpreter)) => return Ok(Some(interpreter)),
-            Ok(None) => {}
+        match windows::py_list_paths() {
+            Ok(paths) => {
+                for entry in paths {
+                    let installation = PythonInstallation::PyListPath(entry);
+                    if let Some(interpreter) = installation.select(selector, platform, cache)? {
+                        return Ok(Some(interpreter));
+                    }
+                }
+            }
             Err(Error::PyList(error)) => {
                 if error.kind() == std::io::ErrorKind::NotFound {
                     debug!("`py` is not installed");
@@ -208,6 +214,8 @@ fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
 ) -> Result<Option<PathBuf>, Error> {
     #[allow(non_snake_case)]
     let UV_TEST_PYTHON_PATH = env::var_os("UV_TEST_PYTHON_PATH");
+
+    let use_override = UV_TEST_PYTHON_PATH.is_some();
 
     #[allow(non_snake_case)]
     let PATH = UV_TEST_PYTHON_PATH
@@ -231,30 +239,62 @@ fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
         }
     }
 
+    if cfg!(windows) && !use_override {
+        // Use `py` to find the python installation on the system.
+        match windows::py_list_paths() {
+            Ok(paths) => {
+                for entry in paths {
+                    // Ex) `--python python3.12.exe`
+                    if entry.executable_path.file_name() == Some(requested.as_ref()) {
+                        return Ok(Some(entry.executable_path));
+                    }
+
+                    // Ex) `--python python3.12`
+                    if entry
+                        .executable_path
+                        .file_stem()
+                        .is_some_and(|stem| stem == requested.as_ref())
+                    {
+                        return Ok(Some(entry.executable_path));
+                    }
+                }
+            }
+            Err(Error::PyList(error)) => {
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    debug!("`py` is not installed");
+                }
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
     Ok(None)
 }
 
 #[derive(Debug, Clone)]
+struct PyListPath {
+    major: u8,
+    minor: u8,
+    executable_path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
 enum PythonInstallation {
-    PyListPath {
-        major: u8,
-        minor: u8,
-        executable_path: PathBuf,
-    },
+    PyListPath(PyListPath),
     Interpreter(Interpreter),
 }
 
 impl PythonInstallation {
     fn major(&self) -> u8 {
         match self {
-            Self::PyListPath { major, .. } => *major,
+            Self::PyListPath(PyListPath { major, .. }) => *major,
             Self::Interpreter(interpreter) => interpreter.python_major(),
         }
     }
 
     fn minor(&self) -> u8 {
         match self {
-            Self::PyListPath { minor, .. } => *minor,
+            Self::PyListPath(PyListPath { minor, .. }) => *minor,
             Self::Interpreter(interpreter) => interpreter.python_minor(),
         }
     }
@@ -268,6 +308,7 @@ impl PythonInstallation {
     ) -> Result<Option<Interpreter>, Error> {
         let selected = match selector {
             PythonVersionSelector::Default => true,
+
             PythonVersionSelector::Major(major) => self.major() == major,
 
             PythonVersionSelector::MajorMinor(major, minor) => {
@@ -302,9 +343,9 @@ impl PythonInstallation {
         cache: &Cache,
     ) -> Result<Interpreter, Error> {
         match self {
-            Self::PyListPath {
+            Self::PyListPath(PyListPath {
                 executable_path, ..
-            } => Interpreter::query(&executable_path, platform.clone(), cache),
+            }) => Interpreter::query(&executable_path, platform.clone(), cache),
             Self::Interpreter(interpreter) => Ok(interpreter),
         }
     }
@@ -373,11 +414,8 @@ mod windows {
     use regex::Regex;
     use tracing::info_span;
 
-    use platform_host::Platform;
-    use uv_cache::Cache;
-
-    use crate::python_query::{PythonInstallation, PythonVersionSelector};
-    use crate::{Error, Interpreter};
+    use crate::python_query::PyListPath;
+    use crate::Error;
 
     /// ```text
     /// -V:3.12          C:\Users\Ferris\AppData\Local\Programs\Python\Python312\python.exe
@@ -392,11 +430,7 @@ mod windows {
     ///
     /// The command takes 8ms on my machine.
     /// TODO(konstin): Implement <https://peps.python.org/pep-0514/> to read python installations from the registry instead.
-    pub(super) fn py_list_paths(
-        selector: PythonVersionSelector,
-        platform: &Platform,
-        cache: &Cache,
-    ) -> Result<Option<Interpreter>, Error> {
+    pub(super) fn py_list_paths() -> Result<Vec<PyListPath>, Error> {
         let output = info_span!("py_list_paths")
             .in_scope(|| Command::new("py").arg("--list-paths").output())
             .map_err(Error::PyList)?;
@@ -408,6 +442,7 @@ mod windows {
                     "Running `py --list-paths` failed with status {}",
                     output.status
                 ),
+                exit_code: output.status,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             });
@@ -417,28 +452,28 @@ mod windows {
         let stdout =
             String::from_utf8(output.stdout).map_err(|err| Error::PythonSubcommandOutput {
                 message: format!("The stdout of `py --list-paths` isn't UTF-8 encoded: {err}"),
+                exit_code: output.status,
                 stdout: String::from_utf8_lossy(err.as_bytes()).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             })?;
 
-        for captures in PY_LIST_PATHS.captures_iter(&stdout) {
-            let (_, [major, minor, path]) = captures.extract();
-
-            if let (Some(major), Some(minor)) = (major.parse::<u8>().ok(), minor.parse::<u8>().ok())
-            {
-                let installation = PythonInstallation::PyListPath {
-                    major,
-                    minor,
-                    executable_path: PathBuf::from(path),
-                };
-
-                if let Some(interpreter) = installation.select(selector, platform, cache)? {
-                    return Ok(Some(interpreter));
+        Ok(PY_LIST_PATHS
+            .captures_iter(&stdout)
+            .filter_map(|captures| {
+                let (_, [major, minor, path]) = captures.extract();
+                if let (Some(major), Some(minor)) =
+                    (major.parse::<u8>().ok(), minor.parse::<u8>().ok())
+                {
+                    Some(PyListPath {
+                        major,
+                        minor,
+                        executable_path: PathBuf::from(path),
+                    })
+                } else {
+                    None
                 }
-            }
-        }
-
-        Ok(None)
+            })
+            .collect())
     }
 
     /// On Windows we might encounter the windows store proxy shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).

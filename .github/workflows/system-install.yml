@@ -18,6 +18,30 @@ env:
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
+  install-debian:
+    name: "Install Python on Debian"
+    runs-on: ubuntu-latest
+    container: debian:bullseye
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: apt-get update && apt-get install -y python3.9 python3-pip python3.9-venv
+
+      - name: "Install Rust toolchain"
+        run: apt-get update && apt-get install -y curl build-essential && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Build"
+        run: $HOME/.cargo/bin/cargo build --no-default-features
+
+      - name: "Print Python path"
+        run: echo $(which python3.9)
+
+      - name: "Validate global Python install"
+        run: python3.9 scripts/check_system_python.py --uv ./target/debug/uv
+
   install-ubuntu:
     name: "Install Python on Ubuntu"
     runs-on: ubuntu-latest
@@ -65,6 +89,27 @@ jobs:
 
       - name: "Validate global Python install"
         run: pypy scripts/check_system_python.py --uv ./target/debug/uv
+
+  install-pyston:
+    name: "Install Pyston"
+    runs-on: ubuntu-latest
+    container: pyston/pyston:2.3.5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Rust toolchain"
+        run: apt-get update && apt-get install -y curl build-essential && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Build"
+        run: $HOME/.cargo/bin/cargo build --no-default-features
+
+      - name: "Print Python path"
+        run: echo $(which pyston)
+
+      - name: "Validate global Python install"
+        run: pyston scripts/check_system_python.py --uv ./target/debug/uv
 
   install-macos:
     name: "Install Python on macOS"

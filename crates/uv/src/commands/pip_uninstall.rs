@@ -22,7 +22,7 @@ pub(crate) async fn pip_uninstall(
     system: bool,
     cache: Cache,
     connectivity: Connectivity,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -112,7 +112,7 @@ pub(crate) async fn pip_uninstall(
             let installed = site_packages.get_packages(package);
             if installed.is_empty() {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     "{}{} Skipping {} as it is not installed.",
                     "warning".yellow().bold(),
                     ":".bold(),
@@ -128,7 +128,7 @@ pub(crate) async fn pip_uninstall(
             let installed = site_packages.get_editables(editable);
             if installed.is_empty() {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     "{}{} Skipping {} as it is not installed.",
                     "warning".yellow().bold(),
                     ":".bold(),
@@ -147,7 +147,7 @@ pub(crate) async fn pip_uninstall(
 
     if distributions.is_empty() {
         writeln!(
-            printer,
+            printer.stderr(),
             "{}{} No packages to uninstall.",
             "warning".yellow().bold(),
             ":".bold(),
@@ -169,7 +169,7 @@ pub(crate) async fn pip_uninstall(
     }
 
     writeln!(
-        printer,
+        printer.stderr(),
         "{}",
         format!(
             "Uninstalled {} in {}",
@@ -186,7 +186,7 @@ pub(crate) async fn pip_uninstall(
 
     for distribution in distributions {
         writeln!(
-            printer,
+            printer.stderr(),
             " {} {}{}",
             "-".red(),
             distribution.name().as_ref().bold(),

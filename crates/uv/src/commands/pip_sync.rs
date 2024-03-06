@@ -44,7 +44,7 @@ pub(crate) async fn pip_sync(
     python: Option<String>,
     system: bool,
     cache: Cache,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -70,7 +70,7 @@ pub(crate) async fn pip_sync(
 
     let num_requirements = requirements.len() + editables.len();
     if num_requirements == 0 {
-        writeln!(printer, "No requirements found")?;
+        writeln!(printer.stderr(), "No requirements found")?;
         return Ok(ExitStatus::Success);
     }
 
@@ -187,7 +187,7 @@ pub(crate) async fn pip_sync(
     if remote.is_empty() && local.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
         let s = if num_requirements == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Audited {} in {}",
@@ -213,7 +213,7 @@ pub(crate) async fn pip_sync(
 
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Resolved {} in {}",
@@ -242,7 +242,7 @@ pub(crate) async fn pip_sync(
 
         let s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Downloaded {} in {}",
@@ -277,7 +277,7 @@ pub(crate) async fn pip_sync(
             "s"
         };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Uninstalled {} in {}",
@@ -299,7 +299,7 @@ pub(crate) async fn pip_sync(
 
         let s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Installed {} in {}",
@@ -337,7 +337,7 @@ pub(crate) async fn pip_sync(
         match event.kind {
             ChangeEventKind::Added => {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     " {} {}{}",
                     "+".green(),
                     event.dist.name().as_ref().bold(),
@@ -346,7 +346,7 @@ pub(crate) async fn pip_sync(
             }
             ChangeEventKind::Removed => {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     " {} {}{}",
                     "-".red(),
                     event.dist.name().as_ref().bold(),
@@ -361,7 +361,7 @@ pub(crate) async fn pip_sync(
         let site_packages = SitePackages::from_executable(&venv)?;
         for diagnostic in site_packages.diagnostics()? {
             writeln!(
-                printer,
+                printer.stderr(),
                 "{}{} {}",
                 "warning".yellow().bold(),
                 ":".bold(),
@@ -380,7 +380,7 @@ pub(crate) async fn pip_sync(
             None | Some(Yanked::Bool(false)) => {}
             Some(Yanked::Bool(true)) => {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     "{}{} {dist} is yanked. Refresh your lockfile to pin an un-yanked version.",
                     "warning".yellow().bold(),
                     ":".bold(),
@@ -388,7 +388,7 @@ pub(crate) async fn pip_sync(
             }
             Some(Yanked::Reason(reason)) => {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     "{}{} {dist} is yanked (reason: \"{reason}\"). Refresh your lockfile to pin an un-yanked version.",
                     "warning".yellow().bold(),
                     ":".bold(),
@@ -421,7 +421,7 @@ async fn resolve_editables(
     cache: &Cache,
     client: &RegistryClient,
     build_dispatch: &BuildDispatch<'_>,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<ResolvedEditables> {
     // Partition the editables into those that are already installed, and those that must be built.
     let mut installed = Vec::with_capacity(editables.len());
@@ -522,7 +522,7 @@ async fn resolve_editables(
 
         let s = if built_editables.len() == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Built {} in {}",
