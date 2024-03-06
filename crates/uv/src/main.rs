@@ -343,11 +343,10 @@ struct PipCompileArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
-    /// Attempt to use `keyring` for authentication for index urls should be
-    /// used in conjunction with `--index-url` flag.
+    /// Attempt to use `keyring` for authentication for index urls
     ///
-    /// Unlike `pip`, `uv` will not retry with `keyring` after 401 status code.
-    /// Rather, `uv` will forcably try to use keyring when this flag is used.
+    /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
+    /// `uv` will try to use `keyring` via CLI when this flag is used.
     #[clap(long, conflicts_with = "no_index")]
     use_keyring: bool,
 
@@ -518,11 +517,10 @@ struct PipSyncArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
-    /// Attempt to use `keyring` for authentication for index urls should be
-    /// used in conjunction with `--index-url` flag.
+    /// Attempt to use `keyring` for authentication for index urls
     ///
-    /// Unlike `pip`, `uv` will not retry with `keyring` after 401 status code.
-    /// Rather, `uv` will forcably try to use keyring when this flag is used.
+    /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
+    /// `uv` will try to use `keyring` via CLI when this flag is used.
     #[clap(long, conflicts_with = "no_index")]
     use_keyring: bool,
 
@@ -772,11 +770,10 @@ struct PipInstallArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
-    /// Attempt to use `keyring` for authentication for index urls should be
-    /// used in conjunction with `--index-url` flag.
+    /// Attempt to use `keyring` for authentication for index urls
     ///
-    /// Unlike `pip`, `uv` will not retry with `keyring` after 401 status code.
-    /// Rather, `uv` will forcably try to use keyring when this flag is used.
+    /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
+    /// `uv` will try to use `keyring` via CLI when this flag is used.
     #[clap(long, conflicts_with = "no_index")]
     use_keyring: bool,
 
@@ -1187,11 +1184,10 @@ struct VenvArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
-    /// Attempt to use `keyring` for authentication for index urls should be
-    /// used in conjunction with `--index-url` flag.
+    /// Attempt to use `keyring` for authentication for index urls
     ///
-    /// Unlike `pip`, `uv` will not retry with `keyring` after 401 status code.
-    /// Rather, `uv` will forcably try to use keyring when this flag is used.
+    /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
+    /// `uv` will try to use `keyring` via CLI when this flag is used.
     #[clap(long, conflicts_with = "no_index")]
     use_keyring: bool,
 
