@@ -11,6 +11,7 @@ pub(crate) use pip_compile::{extra_name_with_clap_error, pip_compile, Upgrade};
 pub(crate) use pip_freeze::pip_freeze;
 pub(crate) use pip_install::pip_install;
 pub(crate) use pip_list::pip_list;
+pub(crate) use pip_show::pip_show;
 pub(crate) use pip_sync::pip_sync;
 pub(crate) use pip_uninstall::pip_uninstall;
 use uv_cache::Cache;
@@ -29,6 +30,7 @@ mod pip_compile;
 mod pip_freeze;
 mod pip_install;
 mod pip_list;
+mod pip_show;
 mod pip_sync;
 mod pip_uninstall;
 mod reporters;
@@ -119,7 +121,7 @@ pub(crate) enum ListFormat {
 pub(super) async fn compile_bytecode(
     venv: &PythonEnvironment,
     cache: &Cache,
-    mut printer: Printer,
+    printer: Printer,
 ) -> anyhow::Result<()> {
     let start = std::time::Instant::now();
     let files = compile_tree(venv.site_packages(), venv.python_executable(), cache.root())
@@ -132,7 +134,7 @@ pub(super) async fn compile_bytecode(
         })?;
     let s = if files == 1 { "" } else { "s" };
     writeln!(
-        printer,
+        printer.stderr(),
         "{}",
         format!(
             "Bytecode compiled {} in {}",

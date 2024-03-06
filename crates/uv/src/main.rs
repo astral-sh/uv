@@ -182,6 +182,8 @@ enum PipCommand {
     Freeze(PipFreezeArgs),
     /// Enumerate the installed packages in the current environment.
     List(PipListArgs),
+    /// Show information about one or more installed packages.
+    Show(PipShowArgs),
 }
 
 /// Clap parser for the union of date and datetime
@@ -954,6 +956,44 @@ struct PipListArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
+struct PipShowArgs {
+    /// The package(s) to display.
+    package: Vec<PackageName>,
+
+    /// Validate the virtual environment, to detect packages with missing dependencies or other
+    /// issues.
+    #[clap(long)]
+    strict: bool,
+
+    /// The Python interpreter for which packages should be listed.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(long, short, verbatim_doc_comment, conflicts_with = "system")]
+    python: Option<String>,
+
+    /// List packages for the system Python.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found. The `--system` option
+    /// instructs `uv` to use the first Python found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution.
+    #[clap(long, conflicts_with = "python")]
+    system: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     ///
@@ -1108,6 +1148,12 @@ async fn run() -> Result<ExitStatus> {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
                             ContextValue::String("uv pip list".to_string()),
+                        );
+                    }
+                    "show" => {
+                        err.insert(
+                            ContextKind::SuggestedSubcommand,
+                            ContextValue::String("uv pip show".to_string()),
                         );
                     }
                     _ => {}
@@ -1396,8 +1442,8 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.system,
                 cache,
-                printer,
                 args.dry_run,
+                printer,
             )
             .await
         }
@@ -1434,6 +1480,16 @@ async fn run() -> Result<ExitStatus> {
             args.exclude_editable,
             &args.exclude,
             &args.format,
+            args.python.as_deref(),
+            args.system,
+            &cache,
+            printer,
+        ),
+        Commands::Pip(PipNamespace {
+            command: PipCommand::Show(args),
+        }) => commands::pip_show(
+            args.package,
+            args.strict,
             args.python.as_deref(),
             args.system,
             &cache,

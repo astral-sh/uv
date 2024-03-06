@@ -94,7 +94,7 @@ async fn venv_impl(
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
     cache: &Cache,
-    mut printer: Printer,
+    printer: Printer,
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter.
     let platform = Platform::current().into_diagnostic()?;
@@ -108,7 +108,7 @@ async fn venv_impl(
     };
 
     writeln!(
-        printer,
+        printer.stderr(),
         "Using Python {} interpreter at: {}",
         interpreter.python_version(),
         interpreter.sys_executable().simplified_display().cyan()
@@ -116,7 +116,7 @@ async fn venv_impl(
     .into_diagnostic()?;
 
     writeln!(
-        printer,
+        printer.stderr(),
         "Creating virtualenv at: {}",
         path.simplified_display().cyan()
     )
@@ -201,7 +201,7 @@ async fn venv_impl(
             .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(&b.version())))
         {
             writeln!(
-                printer,
+                printer.stderr(),
                 " {} {}{}",
                 "+".green(),
                 distribution.name().as_ref().bold(),
@@ -230,10 +230,17 @@ async fn venv_impl(
             "source {}",
             shlex_posix(path.join("bin").join("activate.csh"))
         )),
-        Some(Shell::Powershell) => Some(shlex_windows(path.join("Scripts").join("activate"))),
+        Some(Shell::Powershell) => Some(shlex_windows(
+            path.join("Scripts").join("activate"),
+            Shell::Powershell,
+        )),
+        Some(Shell::Cmd) => Some(shlex_windows(
+            path.join("Scripts").join("activate"),
+            Shell::Cmd,
+        )),
     };
     if let Some(act) = activation {
-        writeln!(printer, "Activate with: {}", act.green()).into_diagnostic()?;
+        writeln!(printer.stderr(), "Activate with: {}", act.green()).into_diagnostic()?;
     }
 
     Ok(ExitStatus::Success)
@@ -254,15 +261,20 @@ fn shlex_posix(executable: impl AsRef<Path>) -> String {
     }
 }
 
-/// Quote a path, if necessary, for safe use in `PowerShell`.
-fn shlex_windows(executable: impl AsRef<Path>) -> String {
+/// Quote a path, if necessary, for safe use in `PowerShell` and `cmd`.
+fn shlex_windows(executable: impl AsRef<Path>, shell: Shell) -> String {
     // Convert to a display path.
     let executable = executable.as_ref().simplified_display().to_string();
 
-    // Wrap the executable in quotes (and a `&` invocation) if it contains spaces.
-    // TODO(charlie): This won't work in `cmd.exe`.
+    // Wrap the executable in quotes (and a `&` invocation on PowerShell), if it contains spaces.
     if executable.contains(' ') {
-        format!("& \"{executable}\"")
+        if shell == Shell::Powershell {
+            // For PowerShell, wrap in a `&` invocation.
+            format!("& \"{executable}\"")
+        } else {
+            // Otherwise, assume `cmd`, which doesn't need the `&`.
+            format!("\"{executable}\"")
+        }
     } else {
         executable
     }
