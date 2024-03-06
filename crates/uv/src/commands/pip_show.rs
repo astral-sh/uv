@@ -4,6 +4,7 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use anstream::{eprintln, println};
 use distribution_types::Name;
 use platform_host::Platform;
 use uv_cache::Cache;
@@ -21,6 +22,7 @@ pub(crate) fn pip_show(
     strict: bool,
     python: Option<&str>,
     system: bool,
+    quiet: bool,
     cache: &Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -93,45 +95,47 @@ pub(crate) fn pip_show(
         return Ok(ExitStatus::Failure);
     }
 
-    // Print the information for each package.
-    let mut first = true;
-    for distribution in &distributions {
-        if first {
-            first = false;
-        } else {
-            // Print a separator between packages.
+    if !quiet {
+        // Print the information for each package.
+        let mut first = true;
+        for distribution in &distributions {
+            if first {
+                first = false;
+            } else {
+                // Print a separator between packages.
+                #[allow(clippy::print_stdout)]
+                {
+                    println!("---");
+                }
+            }
+
+            // Print the name, version, and location (e.g., the `site-packages` directory).
             #[allow(clippy::print_stdout)]
             {
-                println!("---");
+                println!("Name: {}", distribution.name());
+                println!("Version: {}", distribution.version());
+                println!(
+                    "Location: {}",
+                    distribution
+                        .path()
+                        .parent()
+                        .expect("package path is not root")
+                        .simplified_display()
+                );
             }
         }
 
-        // Print the name, version, and location (e.g., the `site-packages` directory).
-        #[allow(clippy::print_stdout)]
-        {
-            println!("Name: {}", distribution.name());
-            println!("Version: {}", distribution.version());
-            println!(
-                "Location: {}",
-                distribution
-                    .path()
-                    .parent()
-                    .expect("package path is not root")
-                    .simplified_display()
-            );
-        }
-    }
-
-    // Validate that the environment is consistent.
-    if strict {
-        for diagnostic in site_packages.diagnostics()? {
-            writeln!(
-                printer,
-                "{}{} {}",
-                "warning".yellow().bold(),
-                ":".bold(),
-                diagnostic.message().bold()
-            )?;
+        // Validate that the environment is consistent.
+        if strict {
+            for diagnostic in site_packages.diagnostics()? {
+                writeln!(
+                    printer,
+                    "{}{} {}",
+                    "warning".yellow().bold(),
+                    ":".bold(),
+                    diagnostic.message().bold()
+                )?;
+            }
         }
     }
 

@@ -1,14 +1,14 @@
 use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::prelude::*;
 use assert_fs::fixture::PathChild;
 use assert_fs::fixture::{FileTouch, FileWriteStr};
 use indoc::indoc;
-use url::Url;
 
 use common::uv_snapshot;
 
-use crate::common::{get_bin, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
+use crate::common::{get_bin, TestContext, EXCLUDE_NEWER};
 
 mod common;
 
@@ -28,7 +28,7 @@ fn command(context: &TestContext) -> Command {
 }
 
 #[test]
-fn empty() {
+fn show_empty() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(Command::new(get_bin())
@@ -43,13 +43,13 @@ fn empty() {
     ----- stdout -----
 
     ----- stderr -----
-    Please provide a package name or names.
+    warning: Please provide a package name or names.
     "###
     );
 }
 
 #[test]
-fn found_single_package() -> Result<()> {
+fn show_found_single_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -90,11 +90,11 @@ fn found_single_package() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-
-    ----- stderr -----
     Name: markupsafe
     Version: 2.1.3
     Location: [WORKSPACE_DIR]/site-packages
+
+    ----- stderr -----
     "###
     );
 
@@ -102,7 +102,7 @@ fn found_single_package() -> Result<()> {
 }
 
 #[test]
-fn found_multiple_packages() -> Result<()> {
+fn show_found_multiple_packages() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -151,14 +151,15 @@ fn found_multiple_packages() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-
-    ----- stderr -----
     Name: markupsafe
     Version: 2.1.3
     Location: [WORKSPACE_DIR]/site-packages
+    ---
     Name: pip
     Version: 21.3.1
     Location: [WORKSPACE_DIR]/site-packages
+
+    ----- stderr -----
     "###
     );
 
@@ -166,7 +167,7 @@ fn found_multiple_packages() -> Result<()> {
 }
 
 #[test]
-fn found_one_out_of_two() -> Result<()> {
+fn show_found_one_out_of_two() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -215,12 +216,12 @@ fn found_one_out_of_two() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-
-    ----- stderr -----
-    warning: Skipping flask as it is not installed.
     Name: markupsafe
     Version: 2.1.3
     Location: [WORKSPACE_DIR]/site-packages
+
+    ----- stderr -----
+    warning: Package(s) not found for: flask
     "###
     );
 
@@ -228,7 +229,7 @@ fn found_one_out_of_two() -> Result<()> {
 }
 
 #[test]
-fn found_one_out_of_two_quiet() -> Result<()> {
+fn show_found_one_out_of_two_quiet() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -257,6 +258,8 @@ fn found_one_out_of_two_quiet() -> Result<()> {
     );
 
     context.assert_command("import markupsafe").success();
+
+    // Flask isn't installed, but markupsafe is, so the command should succeed.
     uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("show")
@@ -279,7 +282,7 @@ fn found_one_out_of_two_quiet() -> Result<()> {
 }
 
 #[test]
-fn empty_quiet() -> Result<()> {
+fn show_empty_quiet() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -308,6 +311,8 @@ fn empty_quiet() -> Result<()> {
     );
 
     context.assert_command("import markupsafe").success();
+
+    // Flask isn't installed, so the command should fail.
     uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("show")
@@ -329,24 +334,11 @@ fn empty_quiet() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "maturin")]
-fn editable() -> Result<()> {
+fn show_editable() {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
-
-    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
     // Install the editable package.
-    uv_snapshot!(filters, Command::new(get_bin())
+    Command::new(get_bin())
         .arg("pip")
         .arg("install")
         .arg("-e")
@@ -357,51 +349,36 @@ fn editable() -> Result<()> {
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+        .env(
+            "CARGO_TARGET_DIR",
+            "../../../target/target_install_editable",
+        )
+        .assert()
+        .success();
 
-    ----- stderr -----
-    Built 1 editable in [TIME]
-    Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 2 packages in [TIME]
-     + numpy==1.26.2
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-    "###
-    );
-
-    // Account for difference length workspace dir
-    let prefix = if cfg!(windows) { "file:///" } else { "file://" };
-
-    let search_workspace = workspace_dir.as_str().strip_prefix(prefix).unwrap();
-    let replace_workspace = "[WORKSPACE_DIR]/";
-
-    let filters = INSTA_FILTERS
-        .iter()
-        .copied()
-        .chain(vec![(search_workspace, replace_workspace)])
-        .collect::<Vec<_>>();
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let filters = [(
+        r"Location:.*site-packages",
+        "Location: [WORKSPACE_DIR]/site-packages",
+    )]
+    .to_vec();
 
     uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("show")
-    .arg("poetry-editable")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .current_dir(&context.temp_dir), @r###"
+        .arg("pip")
+        .arg("show")
+        .arg("poetry-editable")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-
-    ----- stderr -----
     Name: poetry-editable
     Version: 0.1.0
-    Location: [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
+    Location: [WORKSPACE_DIR]/site-packages
+
+    ----- stderr -----
     "###
     );
-
-    Ok(())
 }
