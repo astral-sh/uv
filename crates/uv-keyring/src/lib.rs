@@ -11,7 +11,7 @@ pub struct BasicAuthData {
 }
 
 pub fn get_keyring_auth(url: &Url) -> Result<BasicAuthData> {
-    if let Some(_) = url.password() {
+    if url.password().is_some() {
         bail!("Url already contains password - keyring not required")
     }
     let username = match url.username() {
