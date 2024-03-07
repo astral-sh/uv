@@ -179,18 +179,32 @@ pub fn create_bare_venv(
             match fs_err::copy(shim, scripts.join(python_exe)) {
                 Ok(_) => {}
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                    let launcher = match python_exe {
+                        "python.exe" => "venvwlauncher.exe",
+                        "pythonw.exe" => "venvwlauncher.exe",
+                        _ => unreachable!(),
+                    };
+
                     // If `python.exe` doesn't exist, try the `venvlaucher.exe` shim.
                     let shim = interpreter
                         .stdlib()
                         .join("venv")
                         .join("scripts")
                         .join("nt")
-                        .join(match python_exe {
-                            "python.exe" => "venvwlauncher.exe",
-                            "pythonw.exe" => "venvwlauncher.exe",
-                            _ => unreachable!(),
-                        });
-                    fs_err::copy(shim, scripts.join(python_exe))?;
+                        .join(launcher);
+
+                    // If the `venvwlauncher.exe` shim doesn't exist, then on Conda at least, we
+                    // can look for it next to the Python executable itself.
+                    match fs_err::copy(shim, scripts.join(python_exe)) {
+                        Ok(_) => {}
+                        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                            let shim = base_python.with_file_name(launcher);
+                            fs_err::copy(shim, scripts.join(python_exe))?;
+                        }
+                        Err(err) => {
+                            return Err(err.into());
+                        }
+                    }
                 }
                 Err(err) => {
                     return Err(err.into());
