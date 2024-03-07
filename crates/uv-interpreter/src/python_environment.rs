@@ -1,5 +1,6 @@
 use std::env;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use tracing::debug;
 
@@ -15,6 +16,7 @@ use crate::{find_default_python, find_requested_python, Error, Interpreter};
 pub struct PythonEnvironment {
     root: PathBuf,
     interpreter: Interpreter,
+    lock: Arc<Mutex<()>>,
 }
 
 impl PythonEnvironment {
@@ -37,6 +39,7 @@ impl PythonEnvironment {
         Ok(Self {
             root: venv,
             interpreter,
+            lock: Arc::new(Mutex::default()),
         })
     }
 
@@ -52,6 +55,7 @@ impl PythonEnvironment {
         Ok(Self {
             root: interpreter.prefix().to_path_buf(),
             interpreter,
+            lock: Arc::new(Mutex::default()),
         })
     }
 
@@ -61,12 +65,17 @@ impl PythonEnvironment {
         Ok(Self {
             root: interpreter.prefix().to_path_buf(),
             interpreter,
+            lock: Arc::new(Mutex::default()),
         })
     }
 
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and root directory.
     pub fn from_interpreter(interpreter: Interpreter, root: PathBuf) -> Self {
-        Self { root, interpreter }
+        Self {
+            root,
+            interpreter,
+            lock: Arc::new(Mutex::default()),
+        }
     }
 
     /// Returns the location of the Python interpreter.
@@ -100,7 +109,12 @@ impl PythonEnvironment {
         self.interpreter.scripts()
     }
 
-    /// Lock the virtual environment to prevent concurrent writes.
+    /// Grab an in-memory lock for the virtual environment to prevent concurrent writes across threads.
+    pub fn acquire(&self) -> Arc<Mutex<()>> {
+        self.lock.clone()
+    }
+
+    /// Grab a file lock for the virtual environment to prevent concurrent writes across processes.
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
         if self.interpreter.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lock file.

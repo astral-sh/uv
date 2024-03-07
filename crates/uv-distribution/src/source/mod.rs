@@ -857,6 +857,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             return Err(Error::NoBuild);
         }
 
+        // Lock the build context.
+        println!("Locking build context");
+        let mutex = self.build_context.mutex();
+        let lock = mutex.lock().await;
+
         // Build the wheel.
         fs::create_dir_all(&cache_shard)
             .await
@@ -875,6 +880,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .wheel(cache_shard)
             .await
             .map_err(|err| Error::Build(dist.to_string(), err))?;
+
+        drop(lock);
 
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
@@ -901,6 +908,16 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         subdirectory: Option<&Path>,
     ) -> Result<Option<Metadata21>, Error> {
         debug!("Preparing metadata for: {dist}");
+
+        // Lock the build context.
+        // let mutex;
+        // let _lock;
+        // if self.build_context.build_isolation().is_shared() {
+        //     mutex = self.build_context.mutex();
+        //     _lock = mutex.lock().await;
+        // }
+
+        // let _lock = self.build_context.lock().await;
 
         // Setup the builder.
         let mut builder = self
@@ -949,6 +966,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         editable_wheel_dir: &Path,
     ) -> Result<(Dist, String, WheelFilename, Metadata21), Error> {
         debug!("Building (editable) {editable}");
+
+        // Build the wheel.
         let disk_filename = self
             .build_context
             .setup_build(
