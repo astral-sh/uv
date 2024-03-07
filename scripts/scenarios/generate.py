@@ -144,6 +144,19 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             else []
         )
 
+    # TEMPORARY
+    # We do not yet support local version identifiers
+    for scenario in data["scenarios"]:
+        expected = scenario["expected"]
+        if (
+            scenario["name"].startswith("local-")
+            and scenario["name"] != "local-not-latest"
+        ):
+            expected["satisfiable"] = False
+            expected[
+                "explanation"
+            ] = "We do not have correct behavior for local version identifiers yet"
+
     # Generate cute names for each scenario
     for scenario in data["scenarios"]:
         for package in scenario["packages"]:

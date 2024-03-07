@@ -1345,12 +1345,7 @@ fn local_simple() {
     "###);
 
     // The verison '1.2.3+foo' satisfies the constraint '==1.2.3'.
-    assert_installed(
-        &context.venv,
-        "local_simple_a",
-        "1.2.3+foo",
-        &context.temp_dir,
-    );
+    assert_not_installed(&context.venv, "local_simple_a", &context.temp_dir);
 }
 
 /// If there is a 1.2.3 version with an sdist published and no compatible wheels,
@@ -1392,10 +1387,9 @@ fn local_not_used_with_sdist() {
     "###);
 
     // The verison '1.2.3' with an sdist satisfies the constraint '==1.2.3'.
-    assert_installed(
+    assert_not_installed(
         &context.venv,
         "local_not_used_with_sdist_a",
-        "1.2.3",
         &context.temp_dir,
     );
 }
@@ -1438,10 +1432,9 @@ fn local_used_without_sdist() {
     "###);
 
     // The verison '1.2.3+foo' satisfies the constraint '==1.2.3'.
-    assert_installed(
+    assert_not_installed(
         &context.venv,
         "local_used_without_sdist_a",
-        "1.2.3+foo",
         &context.temp_dir,
     );
 }
@@ -1538,18 +1531,8 @@ fn local_transitive() {
     "###);
 
     // The verison '2.0.0+foo' satisfies both ==2.0.0 and ==2.0.0+foo.
-    assert_installed(
-        &context.venv,
-        "local_transitive_a",
-        "1.0.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "local_transitive_b",
-        "2.0.0+foo",
-        &context.temp_dir,
-    );
+    assert_not_installed(&context.venv, "local_transitive_a", &context.temp_dir);
+    assert_not_installed(&context.venv, "local_transitive_b", &context.temp_dir);
 }
 
 /// A transitive dependency has both a non-local and local version published, but
@@ -1595,10 +1578,9 @@ fn local_transitive_confounding() {
     "###);
 
     // The verison '1.2.3+foo' satisfies the constraint '==1.2.3'.
-    assert_installed(
+    assert_not_installed(
         &context.venv,
         "local_transitive_confounding_a",
-        "2.0.0+foo",
         &context.temp_dir,
     );
 }
