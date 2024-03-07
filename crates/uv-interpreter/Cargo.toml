@@ -35,6 +35,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 which = { workspace = true}
+winapi = { workspace = true }
 
 [dev-dependencies]
 anyhow = { version = "1.0.80" }

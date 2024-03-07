@@ -130,7 +130,7 @@ fn find_python(
         for name in possible_names.iter().flatten() {
             if let Ok(paths) = which::which_in_global(&**name, Some(&path)) {
                 for path in paths {
-                    if cfg!(windows) && windows::is_windows_store_shim(&path) {
+                    if windows::is_windows_store_shim(&path) {
                         continue;
                     }
 
@@ -226,15 +226,13 @@ fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
     // binary is executable and exists. It also has some extra logic that handles inconsistent casing on Windows
     // and expands `~`.
     for path in env::split_paths(&PATH) {
-        let paths = match which::which_in_global(requested, Some(&path)) {
+        let mut paths = match which::which_in_global(requested, Some(&path)) {
             Ok(paths) => paths,
             Err(which::Error::CannotFindBinaryPath) => continue,
             Err(err) => return Err(Error::WhichError(requested.into(), err)),
         };
-        for path in paths {
-            if cfg!(windows) && windows::is_windows_store_shim(&path) {
-                continue;
-            }
+
+        if let Some(path) = paths.find(|path| !windows::is_windows_store_shim(path)) {
             return Ok(Some(path));
         }
     }
@@ -476,34 +474,47 @@ mod windows {
             .collect())
     }
 
-    /// On Windows we might encounter the windows store proxy shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).
-    /// This requires quite a bit of custom logic to figure out what this thing does.
+    /// On Windows we might encounter the Windows Store proxy shim (enabled in:
+    /// Settings/Apps/Advanced app settings/App execution aliases). When Python is _not_ installed
+    /// via the Windows Store, but the proxy shim is enabled, then executing `python.exe` or
+    /// `python3.exe` will redirect to the Windows Store installer.
     ///
-    /// This is a pretty dumb way.  We know how to parse this reparse point, but Microsoft
-    /// does not want us to do this as the format is unstable.  So this is a best effort way.
-    /// we just hope that the reparse point has the python redirector in it, when it's not
-    /// pointing to a valid Python.
+    /// We need to detect that these `python.exe` and `python3.exe` files are _not_ Python
+    /// executables.
     ///
-    /// Matches against paths like:
-    ///     `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python.exe`
+    /// This method is taken from Rye:
+    ///
+    /// > This is a pretty dumb way.  We know how to parse this reparse point, but Microsoft
+    /// > does not want us to do this as the format is unstable.  So this is a best effort way.
+    /// > we just hope that the reparse point has the python redirector in it, when it's not
+    /// > pointing to a valid Python.
+    ///
+    /// See: <https://github.com/astral-sh/rye/blob/b0e9eccf05fe4ff0ae7b0250a248c54f2d780b4d/rye/src/cli/shim.rs#L108>
+    #[cfg(windows)]
     pub(super) fn is_windows_store_shim(path: &Path) -> bool {
-        // Rye uses a more sophisticated test to identify the windows store shim.
-        // Unfortunately, it only works with the `python.exe` shim but not `python3.exe`.
-        // What we do here is a very naive implementation but probably sufficient for all we need.
-        // There's the risk of false positives but I consider it rare, considering how specific
-        // the path is.
+        use std::os::windows::fs::MetadataExt;
+        use std::os::windows::prelude::OsStrExt;
+        use winapi::um::fileapi::{CreateFileW, OPEN_EXISTING};
+        use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
+        use winapi::um::ioapiset::DeviceIoControl;
+        use winapi::um::winbase::{FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT};
+        use winapi::um::winioctl::FSCTL_GET_REPARSE_POINT;
+        use winapi::um::winnt::{FILE_ATTRIBUTE_REPARSE_POINT, MAXIMUM_REPARSE_DATA_BUFFER_SIZE};
+
+        // The path must be absolute.
         if !path.is_absolute() {
             return false;
         }
 
+        // The path must point to something like:
+        //   `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.exe`
         let mut components = path.components().rev();
 
-        // Ex) `python.exe` or `python3.exe` or `python3.12.exe`
+        // Ex) `python.exe` or `python3.exe`
         if !components
             .next()
             .and_then(|component| component.as_os_str().to_str())
-            .and_then(|component| component.rsplit_once('.'))
-            .is_some_and(|(name, extension)| name.starts_with("python") && extension == "exe")
+            .is_some_and(|component| component == "python.exe" || component == "python3.exe")
         {
             return false;
         }
@@ -524,15 +535,68 @@ mod windows {
             return false;
         }
 
-        // Ex) `Local`
-        if !components
-            .next()
-            .is_some_and(|component| component.as_os_str() == "Local")
-        {
+        // The file is only relevant if it's a reparse point.
+        let Ok(md) = fs_err::symlink_metadata(path) else {
+            return false;
+        };
+        if md.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0 {
             return false;
         }
 
-        true
+        let mut path_encoded = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+
+        // SAFETY: The path is null-terminated.
+        #[allow(unsafe_code)]
+        let reparse_handle = unsafe {
+            CreateFileW(
+                path_encoded.as_mut_ptr(),
+                0,
+                0,
+                std::ptr::null_mut(),
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                std::ptr::null_mut(),
+            )
+        };
+
+        if reparse_handle == INVALID_HANDLE_VALUE {
+            return false;
+        }
+
+        let mut buf = [0u16; MAXIMUM_REPARSE_DATA_BUFFER_SIZE as usize];
+        let mut bytes_returned = 0;
+
+        // SAFETY: The buffer is large enough to hold the reparse point.
+        #[allow(unsafe_code, clippy::cast_possible_truncation)]
+        let success = unsafe {
+            DeviceIoControl(
+                reparse_handle,
+                FSCTL_GET_REPARSE_POINT,
+                std::ptr::null_mut(),
+                0,
+                buf.as_mut_ptr().cast(),
+                buf.len() as u32 * 2,
+                &mut bytes_returned,
+                std::ptr::null_mut(),
+            ) != 0
+        };
+
+        // SAFETY: The handle is valid.
+        #[allow(unsafe_code)]
+        unsafe {
+            CloseHandle(reparse_handle);
+        }
+
+        success && String::from_utf16_lossy(&buf).contains("\\AppInstallerPythonRedirector.exe")
+    }
+
+    #[cfg(not(windows))]
+    pub(super) fn is_windows_store_shim(_: &Path) -> bool {
+        false
     }
 
     #[cfg(test)]
@@ -573,22 +637,6 @@ mod windows {
           Caused by: The system cannot find the path specified. (os error 3)
         "###);
             });
-        }
-
-        #[test]
-        fn detect_shim() {
-            assert!(super::is_windows_store_shim(
-                r"C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python.exe".as_ref()
-            ));
-            assert!(super::is_windows_store_shim(
-                r"C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.exe".as_ref()
-            ));
-            assert!(super::is_windows_store_shim(
-                r"C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.12.exe".as_ref()
-            ));
-            assert!(!super::is_windows_store_shim(
-                r"C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0\python.exe".as_ref()
-            ));
         }
     }
 }
