@@ -181,7 +181,7 @@ pub(crate) fn detect_python_executable(venv: impl AsRef<Path>) -> PathBuf {
         }
 
         // Fallback for Conda environments.
-        venv.to_path_buf()
+        venv.join("python.exe")
     } else {
         // Search for `python` in the `bin` directory.
         venv.join("bin").join("python")
