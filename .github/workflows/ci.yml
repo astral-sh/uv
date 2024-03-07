@@ -53,7 +53,7 @@ jobs:
           # For Ubuntu and Windows, this requires Organization-level configuration
           # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
           - { os: "ubuntu", runner: "ubuntu-latest-large" }
-          - { os: "windows", runner: "windows-latest-large" }
+          - { os: "windows", runner: "windows-2019" }
           - { os: "macos", runner: "macos-14" }
       fail-fast: false
     runs-on:
@@ -82,6 +82,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Cargo build"
+        run: cargo build
+      - name: "Do thing"
+        run: ./target/debug/uv venv && ./target/debug/uv pip install lxml && ./target/debug/uv pip uninstall lxml && ./target/debug/uv pip install lxml
       - name: "Cargo test"
         run: |
           cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow

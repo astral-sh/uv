@@ -2,7 +2,9 @@ use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
 use fs_err as fs;
+use rustc_hash::FxHashSet;
 use tracing::debug;
+use uv_fs::Simplified;
 
 use crate::wheel::read_record_file;
 use crate::Error;
@@ -31,12 +33,14 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
 
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
+    let mut deleted = FxHashSet::default();
     for entry in &record {
         let path = site_packages.join(&entry.path);
         match fs::remove_file(&path) {
             Ok(()) => {
-                debug!("Removed file: {}", path.display());
+                println!("Removed file: {}", path.display());
                 file_count += 1;
+                deleted.insert(normalize_path(&path));
                 if let Some(parent) = path.parent() {
                     visited.insert(normalize_path(parent));
                 }
@@ -44,8 +48,9 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => match fs::remove_dir_all(&path) {
                 Ok(()) => {
-                    debug!("Removed directory: {}", path.display());
+                    println!("Removed directory: {}", path.display());
                     dir_count += 1;
+                    deleted.insert(normalize_path(&path));
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
                 Err(_) => return Err(err.into()),
@@ -77,8 +82,9 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
             let pycache = path.join("__pycache__");
             match fs::remove_dir_all(&pycache) {
                 Ok(()) => {
-                    debug!("Removed directory: {}", pycache.display());
+                    println!("Removed directory: {}", pycache.display());
                     dir_count += 1;
+                    deleted.insert(normalize_path(path));
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
                 Err(err) => return Err(err.into()),
@@ -92,15 +98,26 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
                 Err(err) => return Err(err.into()),
             };
 
+            // Ignore files that were deleted.
+            let mut entries = read_dir.filter(|entry| {
+                let Ok(entry) = entry else {
+                    return false;
+                };
+                let is_deleted = deleted.contains(&normalize_path(&entry.path()));
+                println!("entry is deleted: {} : {}", entry.path().simplified_display(), is_deleted);
+                !is_deleted
+            });
+
             // If the directory is not empty, we're done.
-            if read_dir.next().is_some() {
+            if entries.next().is_some() {
                 break;
             }
 
-            fs::remove_dir(path)?;
+            fs::remove_dir_all(path)?;
 
-            debug!("Removed directory: {}", path.display());
+            println!("Removed directory: {}", path.display());
             dir_count += 1;
+            deleted.insert(normalize_path(path));
 
             if let Some(parent) = path.parent() {
                 path = parent;
