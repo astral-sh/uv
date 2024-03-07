@@ -8,8 +8,8 @@ use crate::Manifest;
 
 /// A set of package versions that are permitted, even if they're marked as yanked by the
 /// relevant index.
-#[derive(Debug, Default)]
-pub(crate) struct AllowedYanks(FxHashMap<PackageName, FxHashSet<Version>>);
+#[derive(Debug, Default, Clone)]
+pub struct AllowedYanks(FxHashMap<PackageName, FxHashSet<Version>>);
 
 impl AllowedYanks {
     pub(crate) fn from_manifest(manifest: &Manifest, markers: &MarkerEnvironment) -> Self {

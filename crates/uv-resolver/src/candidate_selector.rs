@@ -1,7 +1,7 @@
 use pubgrub::range::Range;
 use rustc_hash::FxHashMap;
 
-use distribution_types::CompatibleDist;
+use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
@@ -192,7 +192,7 @@ impl CandidateSelector {
         for (version, maybe_dist) in versions {
             steps += 1;
 
-            let dist = if version.any_prerelease() {
+            let candidate = if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
                         AllowPreRelease::Yes => {
@@ -209,7 +209,7 @@ impl CandidateSelector {
                             );
                             // If pre-releases are allowed, treat them equivalently
                             // to stable distributions.
-                            dist
+                            Candidate::new(package_name, version, dist)
                         }
                         AllowPreRelease::IfNecessary => {
                             let Some(dist) = maybe_dist.prioritized_dist() else {
@@ -235,7 +235,7 @@ impl CandidateSelector {
                 // current range.
                 prerelease = Some(PreReleaseCandidate::NotNecessary);
 
-                // Always return the first-matching stable distribution.
+                // Return the first-matching stable distribution.
                 if range.contains(version) {
                     let Some(dist) = maybe_dist.prioritized_dist() else {
                         continue;
@@ -248,18 +248,27 @@ impl CandidateSelector {
                         steps,
                         version,
                     );
-                    dist
+                    Candidate::new(package_name, version, dist)
                 } else {
                     continue;
                 }
             };
 
-            // Skip empty candidates due to exclude newer
-            if dist.exclude_newer() && dist.incompatible_wheel().is_none() && dist.get().is_none() {
+            // If candidate is not compatible due to exclude newer, continue searching.
+            // This is a special case — we pretend versions with exclude newer incompatibilities
+            // do not exist so that they are not present in error messages in our test suite
+            // We cannot
+            if matches!(
+                candidate.dist(),
+                CandidateDist::Incompatible(
+                    IncompatibleDist::Source(IncompatibleSource::ExcludeNewer(_))
+                        | IncompatibleDist::Wheel(IncompatibleWheel::ExcludeNewer(_))
+                )
+            ) {
                 continue;
             }
 
-            return Some(Candidate::new(package_name, version, dist));
+            return Some(candidate);
         }
         tracing::trace!(
             "exhausted all candidates for package {:?} with range {:?} \
@@ -281,23 +290,26 @@ impl CandidateSelector {
 #[derive(Debug, Clone)]
 pub(crate) enum CandidateDist<'a> {
     Compatible(CompatibleDist<'a>),
-    Incompatible(Option<&'a IncompatibleWheel>),
-    ExcludeNewer,
+    Incompatible(IncompatibleDist),
 }
 
 impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
     fn from(value: &'a PrioritizedDist) -> Self {
         if let Some(dist) = value.get() {
             CandidateDist::Compatible(dist)
-        } else if value.exclude_newer() && value.incompatible_wheel().is_none() {
-            // If empty because of exclude-newer, mark as a special case
-            CandidateDist::ExcludeNewer
         } else {
-            CandidateDist::Incompatible(
-                value
-                    .incompatible_wheel()
-                    .map(|(_, incompatibility)| incompatibility),
-            )
+            // TODO(zanieb)
+            // We always return the source distribution (if one exists) instead of the wheel
+            // but in the future we may want to return both so the resolver can explain
+            // why neither distribution kind can be used.
+            let dist = if let Some((_, incompatibility)) = value.incompatible_source() {
+                IncompatibleDist::Source(incompatibility.clone())
+            } else if let Some((_, incompatibility)) = value.incompatible_wheel() {
+                IncompatibleDist::Wheel(incompatibility.clone())
+            } else {
+                IncompatibleDist::Unavailable
+            };
+            CandidateDist::Incompatible(dist)
         }
     }
 }

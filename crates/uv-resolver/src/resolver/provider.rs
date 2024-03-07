@@ -14,6 +14,7 @@ use uv_traits::{BuildContext, NoBinary};
 
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
+use crate::yanks::AllowedYanks;
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
 pub type WheelMetadataResult = Result<(Metadata21, Option<Url>), uv_distribution::Error>;
@@ -66,6 +67,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     flat_index: FlatIndex,
     tags: Tags,
     python_requirement: PythonRequirement,
+    allowed_yanks: AllowedYanks,
     exclude_newer: Option<DateTime<Utc>>,
     no_binary: NoBinary,
 }
@@ -79,6 +81,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
         flat_index: &'a FlatIndex,
         tags: &'a Tags,
         python_requirement: PythonRequirement,
+        allowed_yanks: AllowedYanks,
         exclude_newer: Option<DateTime<Utc>>,
         no_binary: &'a NoBinary,
     ) -> Self {
@@ -88,6 +91,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
             flat_index: flat_index.clone(),
             tags: tags.clone(),
             python_requirement,
+            allowed_yanks,
             exclude_newer,
             no_binary: no_binary.clone(),
         }
@@ -113,6 +117,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                 &index,
                 &self.tags,
                 &self.python_requirement,
+                &self.allowed_yanks,
                 self.exclude_newer.as_ref(),
                 self.flat_index.get(package_name).cloned(),
                 &self.no_binary,
