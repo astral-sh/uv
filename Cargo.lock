@@ -4604,6 +4604,7 @@ dependencies = [
  "uv-cache",
  "uv-fs",
  "which",
+ "winapi",
 ]
 
 [[package]]
