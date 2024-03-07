@@ -1,5 +1,4 @@
 use std::fmt::Display;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
@@ -16,7 +15,10 @@ mod path;
 /// Reads the contents of the file path into memory as a `String`.
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
+#[cfg(feature = "tokio")]
 pub async fn read_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
+    use std::io::Read;
+
     let path = path.as_ref();
     if path == Path::new("-") {
         let mut buf = String::with_capacity(1024);
