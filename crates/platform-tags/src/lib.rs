@@ -113,7 +113,7 @@ impl Tags {
         // 2. abi3 and no abi (e.g. executable binary)
         if matches!(implementation, Implementation::CPython) {
             // For some reason 3.2 is the minimum python for the cp abi
-            for minor in 2..=python_version.1 {
+            for minor in (2..=python_version.1).rev() {
                 for platform_tag in &platform_tags {
                     tags.push((
                         implementation.language_tag((python_version.0, minor)),
@@ -124,7 +124,7 @@ impl Tags {
             }
         }
         // 3. no abi (e.g. executable binary)
-        for minor in 0..=python_version.1 {
+        for minor in (0..=python_version.1).rev() {
             for platform_tag in &platform_tags {
                 tags.push((
                     format!("py{}{}", python_version.0, minor),
@@ -142,7 +142,7 @@ impl Tags {
             ));
         }
         // 5. no binary
-        for minor in 0..=python_version.1 {
+        for minor in (0..=python_version.1).rev() {
             tags.push((
                 format!("py{}{}", python_version.0, minor),
                 "none".to_string(),
