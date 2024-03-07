@@ -47,7 +47,7 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple")
+        .arg("{{index_url}}")
         .arg("--find-links")
         .arg("{{vendor_links}}")
         .arg("--cache-dir")
@@ -67,14 +67,12 @@ fn command(context: &TestContext) -> Command {
 
 {{#scenarios}}
 
-/// {{name}}
-///
 {{#description_lines}}
 /// {{.}}
 {{/description_lines}}
 ///
 /// ```text
-/// {{version}}
+/// {{name}}
 {{#tree}}
 /// {{.}}
 {{/tree}}
@@ -88,7 +86,7 @@ fn {{module_name}}() {
     {{#packages}}
     filters.push((r"{{name}}", "{{cute_name}}"));
     {{/packages}}
-    filters.push((r"-{{version}}", ""));
+    filters.push((r"{{name}}-", "pkg-"));
 
     uv_snapshot!(filters, command(&context)
         {{#resolver_options.prereleases}}
@@ -96,11 +94,11 @@ fn {{module_name}}() {
         {{/resolver_options.prereleases}}
         {{#resolver_options.no_build}}
         .arg("--only-binary")
-        .arg("{{.}}-{{version}}")
+        .arg("{{.}}")
         {{/resolver_options.no_build}}
         {{#resolver_options.no_binary}}
         .arg("--no-binary")
-        .arg("{{.}}-{{version}}")
+        .arg("{{.}}")
         {{/resolver_options.no_binary}}
         {{#root.requires}}
         .arg("{{requirement}}")
