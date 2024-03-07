@@ -535,38 +535,54 @@ impl RegistryClient {
             Ok(metadata) => return Ok(metadata),
             Err(err) => {
                 if err.kind().is_http_range_requests_unsupported() {
-                    // The range request version failed. Fall back to downloading the entire file
-                    // and the reading the file from the zip the regular way.
-                    warn!("Range requests not supported for {filename}; downloading wheel");
+                    // The range request version failed. Fall back to streaming the file to search
+                    // for the METADATA file.
+                    warn!("Range requests not supported for {filename}; streaming wheel");
                 } else {
                     return Err(err);
                 }
             }
-        }
+        };
+
+        // Create a request to stream the file.
+        let req = self
+            .client
+            .uncached()
+            .get(url.clone())
+            .build()
+            .map_err(ErrorKind::from)?;
 
         // Stream the file, searching for the METADATA.
-        let reader = self.stream_external(url).await?;
-        read_metadata_async_stream(filename, url.to_string(), reader).await
+        let read_metadata_stream = |response: Response| {
+            async {
+                let reader = response
+                    .bytes_stream()
+                    .map_err(|err| self.handle_response_errors(err))
+                    .into_async_read();
+
+                read_metadata_async_stream(filename, url.to_string(), reader).await
+            }
+            .instrument(info_span!("read_metadata_stream", wheel = %filename))
+        };
+
+        self.client
+            .get_serde(req, &cache_entry, cache_control, read_metadata_stream)
+            .await
+            .map_err(crate::Error::from)
     }
 
-    /// Stream a file from an external URL.
-    pub async fn stream_external(
-        &self,
-        url: &Url,
-    ) -> Result<Box<dyn futures::AsyncRead + Unpin + Send + Sync>, Error> {
-        Ok(Box::new(
-            self.client
-                .uncached()
-                .get(url.to_string())
-                .send()
-                .await
-                .map_err(ErrorKind::from)?
-                .error_for_status()
-                .map_err(ErrorKind::from)?
-                .bytes_stream()
-                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
-                .into_async_read(),
-        ))
+    /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
+    fn handle_response_errors(&self, err: reqwest::Error) -> std::io::Error {
+        if err.is_timeout() {
+            std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                format!(
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",  self.timeout()
+                ),
+            )
+        } else {
+            std::io::Error::new(std::io::ErrorKind::Other, err)
+        }
     }
 }
 
