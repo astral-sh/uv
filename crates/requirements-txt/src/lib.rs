@@ -359,7 +359,7 @@ impl RequirementsTxt {
                     read_url_to_string(&requirements_txt, client).await
                 }
             } else {
-                uv_fs::read_to_string(&requirements_txt)
+                uv_fs::read_to_string_transcode(&requirements_txt)
                     .await
                     .map_err(RequirementsTxtParserError::IO)
             }

@@ -41,6 +41,7 @@ derivative = { version = "2.2.0" }
 directories = { version = "5.0.1" }
 dunce = { version = "1.0.4" }
 either = { version = "1.9.0" }
+encoding_rs_io = { version = "0.1.7" }
 flate2 = { version = "1.0.28", default-features = false }
 fs-err = { version = "2.11.0" }
 fs2 = { version = "0.4.3" }
