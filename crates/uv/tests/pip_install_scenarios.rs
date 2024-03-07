@@ -64,12 +64,10 @@ fn command(context: &TestContext) -> Command {
     command
 }
 
-/// requires-package-does-not-exist
-///
 /// The user requires any version of package `a` which does not exist.
 ///
 /// ```text
-/// 388e8135
+/// requires-package-does-not-exist
 /// ├── environment
 /// │   └── python3.8
 /// └── root
@@ -103,12 +101,10 @@ fn requires_package_does_not_exist() {
     );
 }
 
-/// requires-exact-version-does-not-exist
-///
 /// The user requires an exact version of package `a` but only other versions exist
 ///
 /// ```text
-/// ef648a78
+/// requires-exact-version-does-not-exist
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -145,13 +141,11 @@ fn requires_exact_version_does_not_exist() {
     );
 }
 
-/// requires-greater-version-does-not-exist
-///
 /// The user requires a version of `a` greater than `1.0.0` but only smaller or
 /// equal versions exist
 ///
 /// ```text
-/// b33b2dca
+/// requires-greater-version-does-not-exist
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -189,13 +183,11 @@ fn requires_greater_version_does_not_exist() {
     );
 }
 
-/// requires-less-version-does-not-exist
-///
 /// The user requires a version of `a` less than `1.0.0` but only larger versions
 /// exist
 ///
 /// ```text
-/// a71baf60
+/// requires-less-version-does-not-exist
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -234,12 +226,10 @@ fn requires_less_version_does_not_exist() {
     );
 }
 
-/// transitive-requires-package-does-not-exist
-///
 /// The user requires package `a` but `a` requires package `b` which does not exist
 ///
 /// ```text
-/// ed146f67
+/// transitive-requires-package-does-not-exist
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -279,13 +269,11 @@ fn transitive_requires_package_does_not_exist() {
     );
 }
 
-/// excluded-only-version
-///
 /// Only one version of the requested package is available, but the user has banned
 /// that version.
 ///
 /// ```text
-/// d5e62e6c
+/// excluded-only-version
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -322,13 +310,11 @@ fn excluded_only_version() {
     assert_not_installed(&context.venv, "excluded_only_version_a", &context.temp_dir);
 }
 
-/// excluded-only-compatible-version
-///
 /// Only one version of the requested package `a` is compatible, but the user has
 /// banned that version.
 ///
 /// ```text
-/// 26dd59e3
+/// excluded-only-compatible-version
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -405,13 +391,11 @@ fn excluded_only_compatible_version() {
     );
 }
 
-/// dependency-excludes-range-of-compatible-versions
-///
 /// There is a range of compatible versions for the requested package `a`, but
 /// another dependency `c` excludes that range.
 ///
 /// ```text
-/// cb8d51de
+/// dependency-excludes-range-of-compatible-versions
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -530,8 +514,6 @@ fn dependency_excludes_range_of_compatible_versions() {
     );
 }
 
-/// dependency-excludes-non-contiguous-range-of-compatible-versions
-///
 /// There is a non-contiguous range of compatible versions for the requested package
 /// `a`, but another dependency `c` excludes the range. This is the same as
 /// `dependency-excludes-range-of-compatible-versions` but some of the versions of
@@ -539,7 +521,7 @@ fn dependency_excludes_range_of_compatible_versions() {
 /// `d`.
 ///
 /// ```text
-/// 5d038b4f
+/// dependency-excludes-non-contiguous-range-of-compatible-versions
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -669,12 +651,10 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
     );
 }
 
-/// extra-required
-///
 /// Optional dependencies are requested for the package.
 ///
 /// ```text
-/// bbd42201
+/// extra-required
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -728,13 +708,11 @@ fn extra_required() {
     );
 }
 
-/// missing-extra
-///
 /// Optional dependencies are requested for the package, but the extra does not
 /// exist.
 ///
 /// ```text
-/// d7b6e0b1
+/// missing-extra
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -770,12 +748,10 @@ fn missing_extra() {
     assert_installed(&context.venv, "missing_extra_a", "1.0.0", &context.temp_dir);
 }
 
-/// multiple-extras-required
-///
 /// Multiple optional dependencies are requested for the package.
 ///
 /// ```text
-/// 73ee83b9
+/// multiple-extras-required
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -843,12 +819,10 @@ fn multiple_extras_required() {
     );
 }
 
-/// all-extras-required
-///
 /// Multiple optional dependencies are requested for the package via an 'all' extra.
 ///
 /// ```text
-/// 61571b3c
+/// all-extras-required
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -928,13 +902,11 @@ fn all_extras_required() {
     );
 }
 
-/// extra-incompatible-with-extra
-///
 /// Multiple optional dependencies are requested for the package, but they have
 /// conflicting requirements with each other.
 ///
 /// ```text
-/// eeb916b5
+/// extra-incompatible-with-extra
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -987,12 +959,10 @@ fn extra_incompatible_with_extra() {
     );
 }
 
-/// extra-incompatible-with-extra-not-requested
-///
 /// One of two incompatible optional dependencies are requested for the package.
 ///
 /// ```text
-/// 97cf0638
+/// extra-incompatible-with-extra-not-requested
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1056,13 +1026,11 @@ fn extra_incompatible_with_extra_not_requested() {
     );
 }
 
-/// extra-incompatible-with-root
-///
 /// Optional dependencies are requested for the package, but the extra is not
 /// compatible with other requested versions.
 ///
 /// ```text
-/// 6faf09f6
+/// extra-incompatible-with-root
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1118,13 +1086,11 @@ fn extra_incompatible_with_root() {
     );
 }
 
-/// extra-does-not-exist-backtrack
-///
 /// Optional dependencies are requested for the package, the extra is only available
 /// on an older version.
 ///
 /// ```text
-/// 05f843a2
+/// extra-does-not-exist-backtrack
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1177,12 +1143,10 @@ fn extra_does_not_exist_backtrack() {
     );
 }
 
-/// direct-incompatible-versions
-///
 /// The user requires two incompatible, existing versions of package `a`
 ///
 /// ```text
-/// 516a39b2
+/// direct-incompatible-versions
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1228,13 +1192,11 @@ fn direct_incompatible_versions() {
     );
 }
 
-/// transitive-incompatible-with-root-version
-///
 /// The user requires packages `a` and `b` but `a` requires a different version of
 /// `b`
 ///
 /// ```text
-/// c4bc5b1f
+/// transitive-incompatible-with-root-version
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1286,13 +1248,11 @@ fn transitive_incompatible_with_root_version() {
     );
 }
 
-/// transitive-incompatible-with-transitive
-///
 /// The user requires package `a` and `b`; `a` and `b` require different versions of
 /// `c`
 ///
 /// ```text
-/// 4132b57a
+/// transitive-incompatible-with-transitive
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1350,13 +1310,11 @@ fn transitive_incompatible_with_transitive() {
     );
 }
 
-/// local-simple
-///
 /// A simple version constraint should not exclude published versions with local
 /// segments.
 ///
 /// ```text
-/// 5b70bb3c
+/// local-simple
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1395,13 +1353,11 @@ fn local_simple() {
     );
 }
 
-/// local-not-used-with-sdist
-///
 /// If there is a 1.2.3 version with an sdist published and no compatible wheels,
 /// then the sdist will be used.
 ///
 /// ```text
-/// 207c9df5
+/// local-not-used-with-sdist
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1444,14 +1400,12 @@ fn local_not_used_with_sdist() {
     );
 }
 
-/// local-used-without-sdist
-///
 /// Even if there is a 1.2.3 version published, if it is unavailable for some reason
 /// (no sdist and no compatible wheels in this case), a 1.2.3 version with a local
 /// segment should be usable instead.
 ///
 /// ```text
-/// ea57116a
+/// local-used-without-sdist
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1492,13 +1446,11 @@ fn local_used_without_sdist() {
     );
 }
 
-/// local-not-latest
-///
 /// Tests that we can select an older version with a local segment when newer
 /// versions are incompatible.
 ///
 /// ```text
-/// b8eed201
+/// local-not-latest
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1542,13 +1494,11 @@ fn local_not_latest() {
     );
 }
 
-/// local-transitive
-///
 /// A simple version constraint should not exclude published versions with local
 /// segments.
 ///
 /// ```text
-/// a79dc870
+/// local-transitive
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1602,13 +1552,11 @@ fn local_transitive() {
     );
 }
 
-/// local-transitive-confounding
-///
 /// A transitive dependency has both a non-local and local version published, but
 /// the non-local version is unuable.
 ///
 /// ```text
-/// 082fdb86
+/// local-transitive-confounding
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1655,13 +1603,11 @@ fn local_transitive_confounding() {
     );
 }
 
-/// package-only-prereleases
-///
 /// The user requires any version of package `a` which only has prerelease versions
 /// available.
 ///
 /// ```text
-/// 85d9c93d
+/// package-only-prereleases
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1703,13 +1649,11 @@ fn package_only_prereleases() {
     );
 }
 
-/// package-only-prereleases-in-range
-///
 /// The user requires a version of package `a` which only matches prerelease
 /// versions but they did not include a prerelease specifier.
 ///
 /// ```text
-/// 4c7ed550
+/// package-only-prereleases-in-range
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1751,14 +1695,12 @@ fn package_only_prereleases_in_range() {
     );
 }
 
-/// requires-package-only-prereleases-in-range-global-opt-in
-///
 /// The user requires a version of package `a` which only matches prerelease
 /// versions. They did not include a prerelease specifier for the package, but they
 /// opted into prereleases globally.
 ///
 /// ```text
-/// 8229237e
+/// requires-package-only-prereleases-in-range-global-opt-in
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1806,13 +1748,11 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
     );
 }
 
-/// requires-package-prerelease-and-final-any
-///
 /// The user requires any version of package `a` has a prerelease version available
 /// and an older non-prerelease version.
 ///
 /// ```text
-/// 7c7cec06
+/// requires-package-prerelease-and-final-any
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1855,13 +1795,11 @@ fn requires_package_prerelease_and_final_any() {
     );
 }
 
-/// package-prerelease-specified-only-final-available
-///
 /// The user requires a version of `a` with a prerelease specifier and only stable
 /// releases are available.
 ///
 /// ```text
-/// 1284cb1e
+/// package-prerelease-specified-only-final-available
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1912,13 +1850,11 @@ fn package_prerelease_specified_only_final_available() {
     );
 }
 
-/// package-prerelease-specified-only-prerelease-available
-///
 /// The user requires a version of `a` with a prerelease specifier and only
 /// prerelease releases are available.
 ///
 /// ```text
-/// 2b59d4b1
+/// package-prerelease-specified-only-prerelease-available
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -1969,13 +1905,11 @@ fn package_prerelease_specified_only_prerelease_available() {
     );
 }
 
-/// package-prerelease-specified-mixed-available
-///
 /// The user requires a version of `a` with a prerelease specifier and both
 /// prerelease and stable releases are available.
 ///
 /// ```text
-/// 4204a13b
+/// package-prerelease-specified-mixed-available
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2026,13 +1960,11 @@ fn package_prerelease_specified_mixed_available() {
     );
 }
 
-/// package-multiple-prereleases-kinds
-///
 /// The user requires `a` which has multiple prereleases available with different
 /// labels.
 ///
 /// ```text
-/// ca392ea8
+/// package-multiple-prereleases-kinds
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2077,12 +2009,10 @@ fn package_multiple_prereleases_kinds() {
     );
 }
 
-/// package-multiple-prereleases-numbers
-///
 /// The user requires `a` which has multiple alphas available.
 ///
 /// ```text
-/// b08385b3
+/// package-multiple-prereleases-numbers
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2127,13 +2057,11 @@ fn package_multiple_prereleases_numbers() {
     );
 }
 
-/// transitive-package-only-prereleases
-///
 /// The user requires any version of package `a` which requires `b` which only has
 /// prerelease versions available.
 ///
 /// ```text
-/// 589ddff5
+/// transitive-package-only-prereleases
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2187,13 +2115,11 @@ fn transitive_package_only_prereleases() {
     );
 }
 
-/// transitive-package-only-prereleases-in-range
-///
 /// The user requires package `a` which has a dependency on a package which only
 /// matches prerelease versions but they did not include a prerelease specifier.
 ///
 /// ```text
-/// 91d42144
+/// transitive-package-only-prereleases-in-range
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2248,14 +2174,12 @@ fn transitive_package_only_prereleases_in_range() {
     );
 }
 
-/// transitive-package-only-prereleases-in-range-opt-in
-///
 /// The user requires package `a` which has a dependency on a package which only
 /// matches prerelease versions; the user has opted into allowing prereleases in `b`
 /// explicitly.
 ///
 /// ```text
-/// dc3b4feb
+/// transitive-package-only-prereleases-in-range-opt-in
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2322,13 +2246,11 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
     );
 }
 
-/// transitive-prerelease-and-stable-dependency
-///
 /// A transitive dependency has both a prerelease and a stable selector, but can
 /// only be satisfied by a prerelease
 ///
 /// ```text
-/// 73a8bb29
+/// transitive-prerelease-and-stable-dependency
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2391,14 +2313,12 @@ fn transitive_prerelease_and_stable_dependency() {
     );
 }
 
-/// transitive-prerelease-and-stable-dependency-opt-in
-///
 /// A transitive dependency has both a prerelease and a stable selector, but can
 /// only be satisfied by a prerelease. The user includes an opt-in to prereleases of
 /// the transitive dependency.
 ///
 /// ```text
-/// 87b86d9c
+/// transitive-prerelease-and-stable-dependency-opt-in
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2483,13 +2403,11 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
     );
 }
 
-/// transitive-prerelease-and-stable-dependency-many-versions
-///
 /// A transitive dependency has both a prerelease and a stable selector, but can
 /// only be satisfied by a prerelease. There are many prerelease versions.
 ///
 /// ```text
-/// b550f888
+/// transitive-prerelease-and-stable-dependency-many-versions
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2588,14 +2506,12 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
     );
 }
 
-/// transitive-prerelease-and-stable-dependency-many-versions-holes
-///
 /// A transitive dependency has both a prerelease and a stable selector, but can
 /// only be satisfied by a prerelease. There are many prerelease versions and some
 /// are excluded.
 ///
 /// ```text
-/// 34e5a2d3
+/// transitive-prerelease-and-stable-dependency-many-versions-holes
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2697,13 +2613,11 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     );
 }
 
-/// package-only-prereleases-boundary
-///
 /// The user requires a non-prerelease version of `a` which only has prerelease
 /// versions available. There are pre-releases on the boundary of their range.
 ///
 /// ```text
-/// dd941311
+/// package-only-prereleases-boundary
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2748,13 +2662,11 @@ fn package_only_prereleases_boundary() {
     );
 }
 
-/// package-prereleases-boundary
-///
 /// The user requires a non-prerelease version of `a` but has enabled pre-releases.
 /// There are pre-releases on the boundary of their range.
 ///
 /// ```text
-/// 16ba0350
+/// package-prereleases-boundary
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2799,13 +2711,11 @@ fn package_prereleases_boundary() {
     );
 }
 
-/// package-prereleases-global-boundary
-///
 /// The user requires a non-prerelease version of `a` but has enabled pre-releases.
 /// There are pre-releases on the boundary of their range.
 ///
 /// ```text
-/// ca458d54
+/// package-prereleases-global-boundary
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2850,13 +2760,11 @@ fn package_prereleases_global_boundary() {
     );
 }
 
-/// package-prereleases-specifier-boundary
-///
 /// The user requires a prerelease version of `a`. There are pre-releases on the
 /// boundary of their range.
 ///
 /// ```text
-/// ed960178
+/// package-prereleases-specifier-boundary
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2903,12 +2811,10 @@ fn package_prereleases_specifier_boundary() {
     );
 }
 
-/// requires-python-version-does-not-exist
-///
 /// The user requires a package which requires a Python version that does not exist
 ///
 /// ```text
-/// 60569166
+/// requires-python-version-does-not-exist
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2947,13 +2853,11 @@ fn requires_python_version_does_not_exist() {
     );
 }
 
-/// requires-python-version-less-than-current
-///
 /// The user requires a package which requires a Python version less than the
 /// current version
 ///
 /// ```text
-/// 825af31b
+/// requires-python-version-less-than-current
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2992,13 +2896,11 @@ fn requires_python_version_less_than_current() {
     );
 }
 
-/// requires-python-version-greater-than-current
-///
 /// The user requires a package which requires a Python version greater than the
 /// current version
 ///
 /// ```text
-/// 84f56c42
+/// requires-python-version-greater-than-current
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -3040,13 +2942,11 @@ fn requires_python_version_greater_than_current() {
     );
 }
 
-/// requires-python-version-greater-than-current-patch
-///
 /// The user requires a package which requires a Python version with a patch version
 /// greater than the current patch version
 ///
 /// ```text
-/// b8692f29
+/// requires-python-version-greater-than-current-patch
 /// ├── environment
 /// │   └── python3.8.12
 /// ├── root
@@ -3091,13 +2991,11 @@ fn requires_python_version_greater_than_current_patch() {
     );
 }
 
-/// requires-python-version-greater-than-current-many
-///
 /// The user requires a package which has many versions which all require a Python
 /// version greater than the current version
 ///
 /// ```text
-/// c3f96666
+/// requires-python-version-greater-than-current-many
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -3163,13 +3061,11 @@ fn requires_python_version_greater_than_current_many() {
     );
 }
 
-/// requires-python-version-greater-than-current-backtrack
-///
 /// The user requires a package where recent versions require a Python version
 /// greater than the current version, but an older version is compatible.
 ///
 /// ```text
-/// 38bdbe97
+/// requires-python-version-greater-than-current-backtrack
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -3224,13 +3120,11 @@ fn requires_python_version_greater_than_current_backtrack() {
     );
 }
 
-/// requires-python-version-greater-than-current-excluded
-///
 /// The user requires a package where recent versions require a Python version
 /// greater than the current version, but an excluded older version is compatible.
 ///
 /// ```text
-/// 289ae72d
+/// requires-python-version-greater-than-current-excluded
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -3298,12 +3192,10 @@ fn requires_python_version_greater_than_current_excluded() {
     );
 }
 
-/// specific-tag-and-default
-///
 /// A wheel for a specific platform is available alongside the default.
 ///
 /// ```text
-/// 0336e09c
+/// specific-tag-and-default
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3336,12 +3228,10 @@ fn specific_tag_and_default() {
     "###);
 }
 
-/// only-wheels
-///
 /// No source distributions are available, only wheels.
 ///
 /// ```text
-/// f756804e
+/// only-wheels
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3374,12 +3264,10 @@ fn only_wheels() {
     "###);
 }
 
-/// no-wheels
-///
 /// No wheels are available, only source distributions.
 ///
 /// ```text
-/// 0bb7827a
+/// no-wheels
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3412,12 +3300,10 @@ fn no_wheels() {
     "###);
 }
 
-/// no-wheels-with-matching-platform
-///
 /// No wheels with matching platform tags are available, just source distributions.
 ///
 /// ```text
-/// c1494f5f
+/// no-wheels-with-matching-platform
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3450,13 +3336,11 @@ fn no_wheels_with_matching_platform() {
     "###);
 }
 
-/// no-sdist-no-wheels-with-matching-platform
-///
 /// No wheels with matching platform tags are available, nor are any source
 /// distributions available
 ///
 /// ```text
-/// 46f0c229
+/// no-sdist-no-wheels-with-matching-platform
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3494,13 +3378,11 @@ fn no_sdist_no_wheels_with_matching_platform() {
     );
 }
 
-/// no-sdist-no-wheels-with-matching-python
-///
 /// No wheels with matching Python tags are available, nor are any source
 /// distributions available
 ///
 /// ```text
-/// 7b1e0ba3
+/// no-sdist-no-wheels-with-matching-python
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3538,13 +3420,11 @@ fn no_sdist_no_wheels_with_matching_python() {
     );
 }
 
-/// no-sdist-no-wheels-with-matching-abi
-///
 /// No wheels with matching ABI tags are available, nor are any source distributions
 /// available
 ///
 /// ```text
-/// 2f8e7202
+/// no-sdist-no-wheels-with-matching-abi
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3582,13 +3462,11 @@ fn no_sdist_no_wheels_with_matching_abi() {
     );
 }
 
-/// no-wheels-no-build
-///
 /// No wheels are available, only source distributions but the user has disabled
 /// builds.
 ///
 /// ```text
-/// 1db1b462
+/// no-wheels-no-build
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3625,13 +3503,11 @@ fn no_wheels_no_build() {
     assert_not_installed(&context.venv, "no_wheels_no_build_a", &context.temp_dir);
 }
 
-/// only-wheels-no-binary
-///
 /// No source distributions are available, only wheels but the user has disabled
 /// using pre-built binaries.
 ///
 /// ```text
-/// 859a4cea
+/// only-wheels-no-binary
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3668,13 +3544,11 @@ fn only_wheels_no_binary() {
     assert_not_installed(&context.venv, "only_wheels_no_binary_a", &context.temp_dir);
 }
 
-/// no-build
-///
 /// Both wheels and source distributions are available, and the user has disabled
 /// builds.
 ///
 /// ```text
-/// bb7d81b8
+/// no-build
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3711,13 +3585,11 @@ fn no_build() {
     // The wheel should be used for install
 }
 
-/// no-binary
-///
 /// Both wheels and source distributions are available, and the user has disabled
 /// binaries.
 ///
 /// ```text
-/// b1d20084
+/// no-binary
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3754,13 +3626,11 @@ fn no_binary() {
     // The source distribution should be used for install
 }
 
-/// package-only-yanked
-///
 /// The user requires any version of package `a` which only has yanked versions
 /// available.
 ///
 /// ```text
-/// 2919761d
+/// package-only-yanked
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3796,12 +3666,10 @@ fn package_only_yanked() {
     assert_not_installed(&context.venv, "package_only_yanked_a", &context.temp_dir);
 }
 
-/// package-only-yanked-in-range
-///
 /// The user requires a version of package `a` which only matches yanked versions.
 ///
 /// ```text
-/// f1ab2a3f
+/// package-only-yanked-in-range
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3845,13 +3713,11 @@ fn package_only_yanked_in_range() {
     );
 }
 
-/// requires-package-yanked-and-unyanked-any
-///
 /// The user requires any version of package `a` has a yanked version available and
 /// an older unyanked version.
 ///
 /// ```text
-/// c1d7f24e
+/// requires-package-yanked-and-unyanked-any
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3893,13 +3759,11 @@ fn requires_package_yanked_and_unyanked_any() {
     );
 }
 
-/// package-yanked-specified-mixed-available
-///
 /// The user requires any version of `a` and both yanked and unyanked releases are
 /// available.
 ///
 /// ```text
-/// e9d957b6
+/// package-yanked-specified-mixed-available
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3944,13 +3808,11 @@ fn package_yanked_specified_mixed_available() {
     );
 }
 
-/// transitive-package-only-yanked
-///
 /// The user requires any version of package `a` which requires `b` which only has
 /// yanked versions available.
 ///
 /// ```text
-/// fbebea19
+/// transitive-package-only-yanked
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -3996,13 +3858,11 @@ fn transitive_package_only_yanked() {
     );
 }
 
-/// transitive-package-only-yanked-in-range
-///
 /// The user requires package `a` which has a dependency on a package which only
 /// matches yanked versions.
 ///
 /// ```text
-/// e2eb8cbc
+/// transitive-package-only-yanked-in-range
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -4052,14 +3912,12 @@ fn transitive_package_only_yanked_in_range() {
     );
 }
 
-/// transitive-package-only-yanked-in-range-opt-in
-///
 /// The user requires package `a` which has a dependency on a package which only
 /// matches yanked versions; the user has opted into allowing the yanked version of
 /// `b` explicitly.
 ///
 /// ```text
-/// 637e27eb
+/// transitive-package-only-yanked-in-range-opt-in
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -4124,13 +3982,11 @@ fn transitive_package_only_yanked_in_range_opt_in() {
     );
 }
 
-/// transitive-yanked-and-unyanked-dependency
-///
 /// A transitive dependency has both a yanked and an unyanked version, but can only
 /// be satisfied by a yanked version
 ///
 /// ```text
-/// 0abad3b6
+/// transitive-yanked-and-unyanked-dependency
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -4188,14 +4044,12 @@ fn transitive_yanked_and_unyanked_dependency() {
     );
 }
 
-/// transitive-yanked-and-unyanked-dependency-opt-in
-///
 /// A transitive dependency has both a yanked and an unyanked version, but can only
 /// be satisfied by a yanked. The user includes an opt-in to the yanked version of
 /// the transitive dependency.
 ///
 /// ```text
-/// b2a53fbd
+/// transitive-yanked-and-unyanked-dependency-opt-in
 /// ├── environment
 /// │   └── python3.8
 /// ├── root

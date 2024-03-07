@@ -67,14 +67,12 @@ fn command(context: &TestContext) -> Command {
 
 {{#scenarios}}
 
-/// {{name}}
-///
 {{#description_lines}}
 /// {{.}}
 {{/description_lines}}
 ///
 /// ```text
-/// {{version}}
+/// {{name}}
 {{#tree}}
 /// {{.}}
 {{/tree}}

@@ -48,14 +48,12 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
 
 {{#scenarios}}
 
-/// {{name}}
-///
 {{#description_lines}}
 /// {{.}}
 {{/description_lines}}
 ///
 /// ```text
-/// {{version}}
+/// {{name}}
 {{#tree}}
 /// {{.}}
 {{/tree}}

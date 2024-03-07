@@ -46,14 +46,12 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
     command
 }
 
-/// requires-incompatible-python-version-compatible-override
-///
 /// The user requires a package which requires a Python version greater than the
 /// current version, but they use an alternative Python version for package
 /// resolution.
 ///
 /// ```text
-/// 039e6393
+/// requires-incompatible-python-version-compatible-override
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -106,13 +104,11 @@ fn requires_incompatible_python_version_compatible_override() -> Result<()> {
     Ok(())
 }
 
-/// requires-compatible-python-version-incompatible-override
-///
 /// The user requires a package which requires a compatible Python version, but they
 /// request an incompatible Python version for package resolution.
 ///
 /// ```text
-/// d6900949
+/// requires-compatible-python-version-incompatible-override
 /// ├── environment
 /// │   └── python3.11
 /// ├── root
@@ -162,14 +158,12 @@ fn requires_compatible_python_version_incompatible_override() -> Result<()> {
     Ok(())
 }
 
-/// requires-incompatible-python-version-compatible-override-no-wheels
-///
 /// The user requires a package which requires a incompatible Python version, but
 /// they request a compatible Python version for package resolution. There are only
 /// source distributions available for the package.
 ///
 /// ```text
-/// 47be0a82
+/// requires-incompatible-python-version-compatible-override-no-wheels
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -222,15 +216,13 @@ fn requires_incompatible_python_version_compatible_override_no_wheels() -> Resul
     Ok(())
 }
 
-/// requires-incompatible-python-version-compatible-override-no-wheels-available-system
-///
 /// The user requires a package which requires a incompatible Python version, but
 /// they request a compatible Python version for package resolution. There are only
 /// source distributions available for the package. The user has a compatible Python
 /// version installed elsewhere on their system.
 ///
 /// ```text
-/// f9eee6c7
+/// requires-incompatible-python-version-compatible-override-no-wheels-available-system
 /// ├── environment
 /// │   ├── python3.11
 /// │   └── python3.9 (active)
@@ -287,14 +279,12 @@ fn requires_incompatible_python_version_compatible_override_no_wheels_available_
     Ok(())
 }
 
-/// requires-incompatible-python-version-compatible-override-no-compatible-wheels
-///
 /// The user requires a package which requires a incompatible Python version, but
 /// they request a compatible Python version for package resolution. There is a
 /// wheel available for the package, but it does not have a compatible tag.
 ///
 /// ```text
-/// e8742545
+/// requires-incompatible-python-version-compatible-override-no-compatible-wheels
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -348,15 +338,13 @@ fn requires_incompatible_python_version_compatible_override_no_compatible_wheels
     Ok(())
 }
 
-/// requires-incompatible-python-version-compatible-override-other-wheel
-///
 /// The user requires a package which requires a incompatible Python version, but
 /// they request a compatible Python version for package resolution. There are only
 /// source distributions available for the compatible version of the package, but
 /// there is an incompatible version with a wheel available.
 ///
 /// ```text
-/// a1d23099
+/// requires-incompatible-python-version-compatible-override-other-wheel
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -420,13 +408,11 @@ fn requires_incompatible_python_version_compatible_override_other_wheel() -> Res
     Ok(())
 }
 
-/// requires-python-patch-version-override-no-patch
-///
 /// The user requires a package which requires a Python version with a patch version
 /// and the user provides a target version without a patch version.
 ///
 /// ```text
-/// 0449cf16
+/// requires-python-patch-version-override-no-patch
 /// ├── environment
 /// │   └── python3.8.18
 /// ├── root
@@ -473,13 +459,11 @@ fn requires_python_patch_version_override_no_patch() -> Result<()> {
     Ok(())
 }
 
-/// requires-python-patch-version-override-patch-compatible
-///
 /// The user requires a package which requires a Python version with a patch version
 /// and the user provides a target version with a compatible patch version.
 ///
 /// ```text
-/// d65487b2
+/// requires-python-patch-version-override-patch-compatible
 /// ├── environment
 /// │   └── python3.8.18
 /// ├── root
