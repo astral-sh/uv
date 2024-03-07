@@ -1150,9 +1150,15 @@ impl Display for MarkerTree {
 /// version_cmp   = wsp* <'<=' | '<' | '!=' | '==' | '>=' | '>' | '~=' | '==='>
 /// marker_op     = version_cmp | (wsp* 'in') | (wsp* 'not' wsp+ 'in')
 /// ```
+/// The `wsp*` has already been consumed by the caller.
 fn parse_marker_operator(cursor: &mut Cursor) -> Result<MarkerOperator, Pep508Error> {
-    let (start, len) =
-        cursor.take_while(|char| !char.is_whitespace() && char != '\'' && char != '"');
+    let (start, len) = if cursor.peek_char().is_some_and(|c| c.is_alphabetic()) {
+        // "in" or "not"
+        cursor.take_while(|char| !char.is_whitespace() && char != '\'' && char != '"')
+    } else {
+        // A mathematical operator
+        cursor.take_while(|char| matches!(char, '<' | '=' | '>' | '~' | '!'))
+    };
     let operator = cursor.slice(start, len);
     if operator == "not" {
         // 'not' wsp+ 'in'

@@ -1710,4 +1710,10 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn no_space_after_operator() {
+        let requirement = Requirement::from_str("pytest;'4.0'>=python_version").unwrap();
+        assert_eq!(requirement.to_string(), "pytest ; '4.0' >= python_version");
+    }
 }
