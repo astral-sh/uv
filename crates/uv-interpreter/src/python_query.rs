@@ -130,6 +130,7 @@ fn find_python(
         for name in possible_names.iter().flatten() {
             if let Ok(paths) = which::which_in_global(&**name, Some(&path)) {
                 for path in paths {
+                    #[cfg(windows)]
                     if windows::is_windows_store_shim(&path) {
                         continue;
                     }
@@ -226,13 +227,19 @@ fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
     // binary is executable and exists. It also has some extra logic that handles inconsistent casing on Windows
     // and expands `~`.
     for path in env::split_paths(&PATH) {
-        let mut paths = match which::which_in_global(requested, Some(&path)) {
+        let paths = match which::which_in_global(requested, Some(&path)) {
             Ok(paths) => paths,
             Err(which::Error::CannotFindBinaryPath) => continue,
             Err(err) => return Err(Error::WhichError(requested.into(), err)),
         };
 
-        if let Some(path) = paths.find(|path| !windows::is_windows_store_shim(path)) {
+        #[allow(clippy::never_loop)]
+        for path in paths {
+            #[cfg(windows)]
+            if windows::is_windows_store_shim(&path) {
+                continue;
+            }
+
             return Ok(Some(path));
         }
     }
@@ -405,7 +412,7 @@ impl PythonVersionSelector {
 }
 
 mod windows {
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     use std::process::Command;
 
     use once_cell::sync::Lazy;
@@ -491,7 +498,7 @@ mod windows {
     ///
     /// See: <https://github.com/astral-sh/rye/blob/b0e9eccf05fe4ff0ae7b0250a248c54f2d780b4d/rye/src/cli/shim.rs#L108>
     #[cfg(windows)]
-    pub(super) fn is_windows_store_shim(path: &Path) -> bool {
+    pub(super) fn is_windows_store_shim(path: &std::path::Path) -> bool {
         use std::os::windows::fs::MetadataExt;
         use std::os::windows::prelude::OsStrExt;
         use winapi::um::fileapi::{CreateFileW, OPEN_EXISTING};
@@ -591,12 +598,13 @@ mod windows {
             CloseHandle(reparse_handle);
         }
 
-        success && String::from_utf16_lossy(&buf).contains("\\AppInstallerPythonRedirector.exe")
-    }
+        // If the operation failed, assume it's not a reparse point.
+        if !success {
+            return false;
+        }
 
-    #[cfg(not(windows))]
-    pub(super) fn is_windows_store_shim(_: &Path) -> bool {
-        false
+        let reparse_point = String::from_utf16_lossy(&buf[..bytes_returned as usize]);
+        reparse_point.contains("\\AppInstallerPythonRedirector.exe")
     }
 
     #[cfg(test)]
