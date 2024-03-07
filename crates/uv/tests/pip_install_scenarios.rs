@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/sync.sh
-//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.6/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.7/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -46,9 +46,9 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.6/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.7/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.6/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.7/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -2796,7 +2796,7 @@ fn package_prereleases_specifier_boundary() {
 /// The user requires a package which requires a Python version that does not exist
 ///
 /// ```text
-/// requires-python-version-does-not-exist
+/// python-version-does-not-exist
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
@@ -2807,16 +2807,16 @@ fn package_prereleases_specifier_boundary() {
 ///         └── requires python>=3.30 (incompatible with environment)
 /// ```
 #[test]
-fn requires_python_version_does_not_exist() {
+fn python_version_does_not_exist() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-python-version-does-not-exist-a", "albatross"));
-    filters.push((r"requires-python-version-does-not-exist-", "pkg-"));
+    filters.push((r"python-version-does-not-exist-a", "albatross"));
+    filters.push((r"python-version-does-not-exist-", "pkg-"));
 
     uv_snapshot!(filters, command(&context)
-        .arg("requires-python-version-does-not-exist-a==1.0.0")
+        .arg("python-version-does-not-exist-a==1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -2830,7 +2830,7 @@ fn requires_python_version_does_not_exist() {
 
     assert_not_installed(
         &context.venv,
-        "requires_python_version_does_not_exist_a",
+        "python_version_does_not_exist_a",
         &context.temp_dir,
     );
 }
@@ -2839,7 +2839,7 @@ fn requires_python_version_does_not_exist() {
 /// current version
 ///
 /// ```text
-/// requires-python-version-less-than-current
+/// python-less-than-current
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2850,16 +2850,16 @@ fn requires_python_version_does_not_exist() {
 ///         └── requires python<=3.8 (incompatible with environment)
 /// ```
 #[test]
-fn requires_python_version_less_than_current() {
+fn python_less_than_current() {
     let context = TestContext::new("3.9");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-python-version-less-than-current-a", "albatross"));
-    filters.push((r"requires-python-version-less-than-current-", "pkg-"));
+    filters.push((r"python-less-than-current-a", "albatross"));
+    filters.push((r"python-less-than-current-", "pkg-"));
 
     uv_snapshot!(filters, command(&context)
-        .arg("requires-python-version-less-than-current-a==1.0.0")
+        .arg("python-less-than-current-a==1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -2873,7 +2873,7 @@ fn requires_python_version_less_than_current() {
 
     assert_not_installed(
         &context.venv,
-        "requires_python_version_less_than_current_a",
+        "python_less_than_current_a",
         &context.temp_dir,
     );
 }
@@ -2882,7 +2882,7 @@ fn requires_python_version_less_than_current() {
 /// current version
 ///
 /// ```text
-/// requires-python-version-greater-than-current
+/// python-greater-than-current
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -2893,19 +2893,16 @@ fn requires_python_version_less_than_current() {
 ///         └── requires python>=3.10 (incompatible with environment)
 /// ```
 #[test]
-fn requires_python_version_greater_than_current() {
+fn python_greater_than_current() {
     let context = TestContext::new("3.9");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((
-        r"requires-python-version-greater-than-current-a",
-        "albatross",
-    ));
-    filters.push((r"requires-python-version-greater-than-current-", "pkg-"));
+    filters.push((r"python-greater-than-current-a", "albatross"));
+    filters.push((r"python-greater-than-current-", "pkg-"));
 
     uv_snapshot!(filters, command(&context)
-        .arg("requires-python-version-greater-than-current-a==1.0.0")
+        .arg("python-greater-than-current-a==1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -2919,7 +2916,7 @@ fn requires_python_version_greater_than_current() {
 
     assert_not_installed(
         &context.venv,
-        "requires_python_version_greater_than_current_a",
+        "python_greater_than_current_a",
         &context.temp_dir,
     );
 }
@@ -2928,7 +2925,7 @@ fn requires_python_version_greater_than_current() {
 /// greater than the current patch version
 ///
 /// ```text
-/// requires-python-version-greater-than-current-patch
+/// python-greater-than-current-patch
 /// ├── environment
 /// │   └── python3.8.12
 /// ├── root
@@ -2939,22 +2936,16 @@ fn requires_python_version_greater_than_current() {
 ///         └── requires python>=3.8.14 (incompatible with environment)
 /// ```
 #[test]
-fn requires_python_version_greater_than_current_patch() {
+fn python_greater_than_current_patch() {
     let context = TestContext::new("3.8.12");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((
-        r"requires-python-version-greater-than-current-patch-a",
-        "albatross",
-    ));
-    filters.push((
-        r"requires-python-version-greater-than-current-patch-",
-        "pkg-",
-    ));
+    filters.push((r"python-greater-than-current-patch-a", "albatross"));
+    filters.push((r"python-greater-than-current-patch-", "pkg-"));
 
     uv_snapshot!(filters, command(&context)
-        .arg("requires-python-version-greater-than-current-patch-a==1.0.0")
+        .arg("python-greater-than-current-patch-a==1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -2968,7 +2959,7 @@ fn requires_python_version_greater_than_current_patch() {
 
     assert_not_installed(
         &context.venv,
-        "requires_python_version_greater_than_current_patch_a",
+        "python_greater_than_current_patch_a",
         &context.temp_dir,
     );
 }
@@ -2977,7 +2968,7 @@ fn requires_python_version_greater_than_current_patch() {
 /// version greater than the current version
 ///
 /// ```text
-/// requires-python-version-greater-than-current-many
+/// python-greater-than-current-many
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -3010,22 +3001,16 @@ fn requires_python_version_greater_than_current_patch() {
 ///         └── requires python>=3.11 (incompatible with environment)
 /// ```
 #[test]
-fn requires_python_version_greater_than_current_many() {
+fn python_greater_than_current_many() {
     let context = TestContext::new("3.9");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((
-        r"requires-python-version-greater-than-current-many-a",
-        "albatross",
-    ));
-    filters.push((
-        r"requires-python-version-greater-than-current-many-",
-        "pkg-",
-    ));
+    filters.push((r"python-greater-than-current-many-a", "albatross"));
+    filters.push((r"python-greater-than-current-many-", "pkg-"));
 
     uv_snapshot!(filters, command(&context)
-        .arg("requires-python-version-greater-than-current-many-a==1.0.0")
+        .arg("python-greater-than-current-many-a==1.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -3038,7 +3023,7 @@ fn requires_python_version_greater_than_current_many() {
 
     assert_not_installed(
         &context.venv,
-        "requires_python_version_greater_than_current_many_a",
+        "python_greater_than_current_many_a",
         &context.temp_dir,
     );
 }
@@ -3047,7 +3032,7 @@ fn requires_python_version_greater_than_current_many() {
 /// greater than the current version, but an older version is compatible.
 ///
 /// ```text
-/// requires-python-version-greater-than-current-backtrack
+/// python-greater-than-current-backtrack
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -3066,22 +3051,16 @@ fn requires_python_version_greater_than_current_many() {
 ///         └── requires python>=3.12 (incompatible with environment)
 /// ```
 #[test]
-fn requires_python_version_greater_than_current_backtrack() {
+fn python_greater_than_current_backtrack() {
     let context = TestContext::new("3.9");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((
-        r"requires-python-version-greater-than-current-backtrack-a",
-        "albatross",
-    ));
-    filters.push((
-        r"requires-python-version-greater-than-current-backtrack-",
-        "pkg-",
-    ));
+    filters.push((r"python-greater-than-current-backtrack-a", "albatross"));
+    filters.push((r"python-greater-than-current-backtrack-", "pkg-"));
 
     uv_snapshot!(filters, command(&context)
-        .arg("requires-python-version-greater-than-current-backtrack-a")
+        .arg("python-greater-than-current-backtrack-a")
         , @r###"
     success: true
     exit_code: 0
@@ -3096,7 +3075,7 @@ fn requires_python_version_greater_than_current_backtrack() {
 
     assert_installed(
         &context.venv,
-        "requires_python_version_greater_than_current_backtrack_a",
+        "python_greater_than_current_backtrack_a",
         "1.0.0",
         &context.temp_dir,
     );
@@ -3106,7 +3085,7 @@ fn requires_python_version_greater_than_current_backtrack() {
 /// greater than the current version, but an excluded older version is compatible.
 ///
 /// ```text
-/// requires-python-version-greater-than-current-excluded
+/// python-greater-than-current-excluded
 /// ├── environment
 /// │   └── python3.9
 /// ├── root
@@ -3124,22 +3103,16 @@ fn requires_python_version_greater_than_current_backtrack() {
 ///         └── requires python>=3.12 (incompatible with environment)
 /// ```
 #[test]
-fn requires_python_version_greater_than_current_excluded() {
+fn python_greater_than_current_excluded() {
     let context = TestContext::new("3.9");
 
     // In addition to the standard filters, swap out package names for more realistic messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((
-        r"requires-python-version-greater-than-current-excluded-a",
-        "albatross",
-    ));
-    filters.push((
-        r"requires-python-version-greater-than-current-excluded-",
-        "pkg-",
-    ));
+    filters.push((r"python-greater-than-current-excluded-a", "albatross"));
+    filters.push((r"python-greater-than-current-excluded-", "pkg-"));
 
     uv_snapshot!(filters, command(&context)
-        .arg("requires-python-version-greater-than-current-excluded-a>=2.0.0")
+        .arg("python-greater-than-current-excluded-a>=2.0.0")
         , @r###"
     success: false
     exit_code: 1
@@ -3169,7 +3142,7 @@ fn requires_python_version_greater_than_current_excluded() {
 
     assert_not_installed(
         &context.venv,
-        "requires_python_version_greater_than_current_excluded_a",
+        "python_greater_than_current_excluded_a",
         &context.temp_dir,
     );
 }
