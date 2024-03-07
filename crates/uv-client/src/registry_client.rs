@@ -24,14 +24,13 @@ use pep440_rs::Version;
 use pypi_types::{Metadata21, SimpleJson};
 use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket, WheelCache};
-use uv_keyring::get_keyring_auth;
 use uv_normalize::PackageName;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
-use crate::middleware::OfflineMiddleware;
+use crate::middleware::{KeyringMiddleware, OfflineMiddleware};
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{CachedClient, CachedClientError, Error, ErrorKind};
@@ -147,6 +146,14 @@ impl RegistryClientBuilder {
                     client
                 };
 
+                // Initialize keyring middleware.
+                // Note - this will overwrite netrc middleware if both are used
+                let client = if self.use_keyring {
+                    client.with_init(KeyringMiddleware)
+                } else {
+                    client
+                };
+
                 client.build()
             }
             Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client.clone())
@@ -159,7 +166,6 @@ impl RegistryClientBuilder {
 
         RegistryClient {
             index_urls: self.index_urls,
-            use_keyring: self.use_keyring,
             cache: self.cache,
             connectivity: self.connectivity,
             client,
@@ -173,8 +179,6 @@ impl RegistryClientBuilder {
 pub struct RegistryClient {
     /// The index URLs to use for fetching packages.
     index_urls: IndexUrls,
-    /// Whether to use keyring auth
-    use_keyring: bool,
     /// The underlying HTTP client.
     client: CachedClient,
     /// Used for the remote wheel METADATA cache.
@@ -256,14 +260,8 @@ impl RegistryClient {
         package_name: &PackageName,
         index: &IndexUrl,
     ) -> Result<Result<OwnedArchive<SimpleMetadata>, CachedClientError<Error>>, Error> {
-        let mut url: Url = index.clone().into();
-        let keyring_auth = if self.use_keyring {
-            let auth = get_keyring_auth(&url).map_err(|err| ErrorKind::KeyringError(err))?;
-            Some(auth)
-        } else {
-            None
-        };
         // Format the URL for PyPI.
+        let mut url: Url = index.clone().into();
         url.path_segments_mut()
             .unwrap()
             .pop_if_empty()
@@ -291,13 +289,10 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let simple_request = self.client.uncached().get(url.clone());
-        let simple_request = if let Some(auth) = keyring_auth {
-            simple_request.basic_auth(auth.username, Some(auth.password))
-        } else {
-            simple_request
-        };
-        let simple_request = simple_request
+        let simple_request = self
+            .client
+            .uncached()
+            .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
             .build()
@@ -498,19 +493,10 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let keyring_auth = if self.use_keyring {
-            let auth = get_keyring_auth(url).map_err(|err| ErrorKind::KeyringError(err))?;
-            Some(auth)
-        } else {
-            None
-        };
-        let req = self.client.uncached().head(url.clone());
-        let req = if let Some(auth) = keyring_auth {
-            req.basic_auth(auth.username, Some(auth.password))
-        } else {
-            req
-        };
-        let req = req
+        let req = self
+            .client
+            .uncached()
+            .head(url.clone())
             .header(
                 "accept-encoding",
                 http::HeaderValue::from_static("identity"),

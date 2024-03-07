@@ -60,10 +60,6 @@ pub enum ErrorKind {
     #[error("{0} isn't available locally, but making network requests to registries was banned.")]
     NoIndex(String),
 
-    /// Keyring error
-    #[error("Couldn't resolve keyring auth. {0}")]
-    KeyringError(anyhow::Error),
-
     /// The package was not found in the registry.
     ///
     /// Make sure the package name is spelled correctly and that you've

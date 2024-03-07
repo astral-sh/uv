@@ -19,7 +19,6 @@ use platform_tags::Tags;
 use pypi_types::{Hashes, Yanked};
 use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket};
-use uv_keyring::get_keyring_auth;
 use uv_normalize::PackageName;
 
 use crate::cached_client::{CacheControl, CachedClientError};
@@ -84,17 +83,12 @@ impl FlatIndexEntries {
 pub struct FlatIndexClient<'a> {
     client: &'a RegistryClient,
     cache: &'a Cache,
-    use_keyring: bool,
 }
 
 impl<'a> FlatIndexClient<'a> {
     /// Create a new [`FlatIndexClient`].
-    pub fn new(client: &'a RegistryClient, cache: &'a Cache, use_keyring: bool) -> Self {
-        Self {
-            client,
-            cache,
-            use_keyring,
-        }
+    pub fn new(client: &'a RegistryClient, cache: &'a Cache) -> Self {
+        Self { client, cache }
     }
 
     /// Read the directories and flat remote indexes from `--find-links`.
@@ -152,23 +146,13 @@ impl<'a> FlatIndexClient<'a> {
 
         let cached_client = self.client.cached_client();
 
-        let keyring_auth = if self.use_keyring {
-            let auth = get_keyring_auth(url).map_err(|err| ErrorKind::KeyringError(err))?;
-            Some(auth)
-        } else {
-            None
-        };
         let flat_index_request = cached_client
             .uncached()
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
-            .header("Accept", "text/html");
-        let flat_index_request = if let Some(auth) = keyring_auth {
-            flat_index_request.basic_auth(auth.username, Some(auth.password))
-        } else {
-            flat_index_request
-        };
-        let flat_index_request = flat_index_request.build().map_err(ErrorKind::from)?;
+            .header("Accept", "text/html")
+            .build()
+            .map_err(ErrorKind::from)?;
         let parse_simple_response = |response: Response| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.

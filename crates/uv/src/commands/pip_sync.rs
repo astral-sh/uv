@@ -127,7 +127,7 @@ pub(crate) async fn pip_sync(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, &cache, use_keyring);
+        let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
         FlatIndex::from_entries(entries, tags)
     };
