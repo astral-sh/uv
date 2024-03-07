@@ -8,7 +8,7 @@ use async_channel::{Receiver, SendError};
 use tempfile::tempdir_in;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{ChildStdin, ChildStdout, Command};
+use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::task::JoinError;
 use tracing::{debug, instrument};
 use walkdir::WalkDir;
@@ -149,36 +149,27 @@ async fn worker(
     fs_err::tokio::write(&pip_compileall_py, COMPILEALL_SCRIPT)
         .await
         .map_err(CompileError::TempFile)?;
-    // We input the paths through stdin and get the successful paths returned through stdout.
-    let mut bytecode_compiler = Command::new(&interpreter)
-        .arg(&pip_compileall_py)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .current_dir(dir)
-        // Otherwise stdout is buffered and we'll wait forever for a response
-        .env("PYTHONUNBUFFERED", "1")
-        .spawn()
-        .map_err(CompileError::PythonSubcommand)?;
 
-    // https://stackoverflow.com/questions/49218599/write-to-child-process-stdin-in-rust/49597789#comment120223107_49597789
-    // Unbuffered, we need to write immediately or the python process will get stuck waiting
-    let child_stdin = bytecode_compiler
-        .stdin
-        .take()
-        .expect("Child must have stdin");
-    let mut child_stdout = BufReader::new(
-        bytecode_compiler
-            .stdout
-            .take()
-            .expect("Child must have stdout"),
-    );
-    let mut child_stderr = BufReader::new(
-        bytecode_compiler
-            .stderr
-            .take()
-            .expect("Child must have stderr"),
-    );
+    // Sometimes, the first time we read from stdout, we get an empty string back (no newline). If
+    // we try to write to stdin, it will often be a broken pipe. In this case, we have to restart
+    // the child process
+    // https://github.com/astral-sh/uv/issues/2245
+    let wait_until_ready = async {
+        loop {
+            // If the interpreter started successful, return it, else retry.
+            if let Some(child) =
+                launch_bytecode_compiler(&dir, &interpreter, &pip_compileall_py).await?
+            {
+                break Ok::<_, CompileError>(child);
+            }
+        }
+    };
+    // Handle a broken `python` by using a timeout, one that's higher than any compilation
+    // should ever take.
+    let (mut bytecode_compiler, child_stdin, mut child_stdout, mut child_stderr) =
+        tokio::time::timeout(COMPILE_TIMEOUT, wait_until_ready)
+            .await
+            .map_err(|_| CompileError::Timeout(COMPILE_TIMEOUT))??;
 
     let stderr_reader = tokio::task::spawn(async move {
         let mut child_stderr_collected: Vec<u8> = Vec::new();
@@ -219,6 +210,78 @@ async fn worker(
     }
 
     result
+}
+
+/// Returns the child and stdin/stdout/stderr on a successful launch or `None` for a broken interpreter state.
+async fn launch_bytecode_compiler(
+    dir: &Path,
+    interpreter: &Path,
+    pip_compileall_py: &Path,
+) -> Result<
+    Option<(
+        Child,
+        ChildStdin,
+        BufReader<ChildStdout>,
+        BufReader<ChildStderr>,
+    )>,
+    CompileError,
+> {
+    // We input the paths through stdin and get the successful paths returned through stdout.
+    let mut bytecode_compiler = Command::new(interpreter)
+        .arg(pip_compileall_py)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .current_dir(dir)
+        // Otherwise stdout is buffered and we'll wait forever for a response
+        .env("PYTHONUNBUFFERED", "1")
+        .spawn()
+        .map_err(CompileError::PythonSubcommand)?;
+
+    // https://stackoverflow.com/questions/49218599/write-to-child-process-stdin-in-rust/49597789#comment120223107_49597789
+    // Unbuffered, we need to write immediately or the python process will get stuck waiting
+    let child_stdin = bytecode_compiler
+        .stdin
+        .take()
+        .expect("Child must have stdin");
+    let mut child_stdout = BufReader::new(
+        bytecode_compiler
+            .stdout
+            .take()
+            .expect("Child must have stdout"),
+    );
+    let child_stderr = BufReader::new(
+        bytecode_compiler
+            .stderr
+            .take()
+            .expect("Child must have stderr"),
+    );
+
+    // Check if the launch was successful.
+    let mut out_line = String::new();
+    child_stdout
+        .read_line(&mut out_line)
+        .await
+        .map_err(|err| CompileError::ChildStdio {
+            device: "stdout",
+            err,
+        })?;
+
+    if out_line.trim_end() == "Ready" {
+        // Success
+        Ok(Some((
+            bytecode_compiler,
+            child_stdin,
+            child_stdout,
+            child_stderr,
+        )))
+    } else if out_line.is_empty() {
+        // Failed to launch, try again
+        Ok(None)
+    } else {
+        // Not observed yet
+        Err(CompileError::WrongPath("Ready".to_string(), out_line))
+    }
 }
 
 /// We use stdin/stdout as a sort of bounded channel. We write one path to stdin, then wait until
