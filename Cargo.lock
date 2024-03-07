@@ -2237,7 +2237,7 @@ name = "pep508_rs"
 version = "0.4.2"
 dependencies = [
  "derivative",
- "indoc",
+ "insta",
  "log",
  "once_cell",
  "pep440_rs",
