@@ -133,6 +133,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
             AllowedYanks::from_manifest(&manifest, markers),
             options.exclude_newer,
             build_context.no_binary(),
+            build_context.no_build(),
         );
         Self::new_custom_io(
             manifest,
@@ -389,7 +390,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                                 }
                                 IncompatibleDist::Source(incompatibility) => {
                                     match incompatibility {
-                                        IncompatibleSource::NoBuild => "no wheels are available and building from source is disabled".to_string(),
+                                        IncompatibleSource::NoBuild => "no wheels are usable and building from source is disabled".to_string(),
                                         IncompatibleSource::Yanked(yanked) => match yanked {
                                             Yanked::Bool(_) => "it was yanked".to_string(),
                                             Yanked::Reason(reason) => format!(

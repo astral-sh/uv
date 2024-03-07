@@ -15,7 +15,7 @@ use pypi_types::Hashes;
 use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use uv_client::{FlatDistributions, OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_normalize::PackageName;
-use uv_traits::NoBinary;
+use uv_traits::{NoBinary, NoBuild};
 use uv_warnings::warn_user_once;
 
 use crate::{python_requirement::PythonRequirement, yanks::AllowedYanks};
@@ -48,6 +48,7 @@ impl VersionMap {
         exclude_newer: Option<&DateTime<Utc>>,
         flat_index: Option<FlatDistributions>,
         no_binary: &NoBinary,
+        no_build: &NoBuild,
     ) -> Self {
         let mut map = BTreeMap::new();
         // Create stubs for each entry in simple metadata. The full conversion
@@ -96,12 +97,18 @@ impl VersionMap {
             NoBinary::None => false,
             NoBinary::All => true,
             NoBinary::Packages(packages) => packages.contains(package_name),
+        }; // Check if source distributions are allowed for this package.
+        let no_build = match no_build {
+            NoBuild::None => false,
+            NoBuild::All => true,
+            NoBuild::Packages(packages) => packages.contains(package_name),
         };
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
                 simple_metadata,
                 no_binary,
+                no_build,
                 index: index.clone(),
                 tags: tags.clone(),
                 python_requirement: python_requirement.clone(),
@@ -269,6 +276,8 @@ struct VersionMapLazy {
     simple_metadata: OwnedArchive<SimpleMetadata>,
     /// When true, wheels aren't allowed.
     no_binary: bool,
+    /// When true, source dists aren't allowed.
+    no_build: bool,
     /// The URL of the index where this package came from.
     index: IndexUrl,
     /// The set of compatibility tags that determines whether a wheel is usable
@@ -414,7 +423,11 @@ impl VersionMapLazy {
                             file,
                             self.index.clone(),
                         );
-                        let mut compatibility = SourceDistCompatibility::Compatible;
+                        let mut compatibility = if self.no_build {
+                            SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild)
+                        } else {
+                            SourceDistCompatibility::Compatible
+                        };
 
                         if excluded {
                             // Treat as incompatible if after upload time cutoff
@@ -468,7 +481,7 @@ enum LazyPrioritizedDist {
     /// Represents a eagerly constructed distribution from a
     /// `FlatDistributions`.
     OnlyFlat(PrioritizedDist),
-    /// Represents a lazyily constructed distribution from an index into a
+    /// Represents a lazily constructed distribution from an index into a
     /// `VersionFiles` from `SimpleMetadata`.
     OnlySimple(SimplePrioritizedDist),
     /// Combines the above. This occurs when we have data from both a flat
