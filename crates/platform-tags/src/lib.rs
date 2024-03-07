@@ -72,7 +72,6 @@ impl Tags {
     /// Tags are prioritized based on their position in the given vector. Specifically, tags that
     /// appear earlier in the vector are given higher priority than tags that appear later.
     pub fn new(tags: Vec<(String, String, String)>) -> Self {
-        println!("{tags:#?}");
         let mut map = FxHashMap::default();
         for (index, (py, abi, platform)) in tags.into_iter().rev().enumerate() {
             map.entry(py.to_string())
