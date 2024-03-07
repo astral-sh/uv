@@ -92,10 +92,18 @@ if __name__ == "__main__":
         )
 
         logging.info("Installing into virtual environment...")
+
+        # Disable the `CONDA_PREFIX` and `VIRTUAL_ENV` environment variables, so that
+        # we only rely on virtual environment discovery via the `.venv` directory.
+        # Our "system Python" here might itself be a Conda environment!
+        env = os.environ.copy()
+        env["CONDA_PREFIX"] = ""
+        env["VIRTUAL_ENV"] = ""
         subprocess.run(
-            [uv, "pip", "install", "pylint"],
+            [uv, "pip", "install", "pylint", "--verbose"],
             cwd=temp_dir,
             check=True,
+            env=env,
         )
 
         # Ensure that the package (`pylint`) isn't installed globally.
