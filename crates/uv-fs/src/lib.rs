@@ -13,20 +13,6 @@ pub use crate::path::*;
 
 mod path;
 
-/// Reads the contents of the file path into memory.
-///
-/// If the file path is `-`, then contents are read from stdin instead.
-pub async fn read(path: impl AsRef<Path>) -> std::io::Result<Vec<u8>> {
-    let path = path.as_ref();
-    if path == Path::new("-") {
-        let mut buf = Vec::with_capacity(1024);
-        std::io::stdin().read_to_end(&mut buf)?;
-        Ok(buf)
-    } else {
-        fs_err::tokio::read(path).await
-    }
-}
-
 /// Reads the contents of the file path into memory as a `String`.
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
