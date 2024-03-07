@@ -24,7 +24,7 @@ use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder}
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{Downloader, NoBinary};
-use uv_interpreter::{Interpreter, PythonVersion};
+use uv_interpreter::{Interpreter, PythonEnvironment, PythonVersion};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
@@ -62,6 +62,7 @@ pub(crate) async fn pip_compile(
     setup_py: SetupPyStrategy,
     config_settings: ConfigSettings,
     connectivity: Connectivity,
+    no_build_isolation: bool,
     no_build: &NoBuild,
     python_version: Option<PythonVersion>,
     exclude_newer: Option<DateTime<Utc>>,
@@ -137,6 +138,7 @@ pub(crate) async fn pip_compile(
         interpreter.python_version(),
         interpreter.sys_executable().simplified_display().cyan()
     );
+
     if let Some(python_version) = python_version.as_ref() {
         // If the requested version does not match the version we're using warn the user
         // _unless_ they have not specified a patch version and that is the only difference
@@ -203,6 +205,15 @@ pub(crate) async fn pip_compile(
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
+    // Determine whether to enable build isolation.
+    let venv;
+    let build_isolation = if no_build_isolation {
+        venv = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::Shared(&venv)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -213,7 +224,7 @@ pub(crate) async fn pip_compile(
         &in_flight,
         setup_py,
         &config_settings,
-        BuildIsolation::Isolated,
+        build_isolation,
         no_build,
         &NoBinary::None,
     )

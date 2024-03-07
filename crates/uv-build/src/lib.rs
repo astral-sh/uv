@@ -417,19 +417,24 @@ impl SourceBuild {
             BuildIsolation::Shared(venv) => venv.clone(),
         };
 
-        // Setup the build environment.
-        let resolved_requirements = Self::get_resolved_requirements(
-            build_context,
-            source_build_context,
-            &default_backend,
-            pep517_backend.as_ref(),
-        )
-        .await?;
+        // Setup the build environment. If build isolation is disabled, we assume the build
+        // environment is already setup.
+        if build_isolation.is_isolated() {
+            let resolved_requirements = Self::get_resolved_requirements(
+                build_context,
+                source_build_context,
+                &default_backend,
+                pep517_backend.as_ref(),
+            )
+            .await?;
 
-        build_context
-            .install(&resolved_requirements, &venv)
-            .await
-            .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
+            build_context
+                .install(&resolved_requirements, &venv)
+                .await
+                .map_err(|err| {
+                    Error::RequirementsInstall("build-system.requires (install)", err)
+                })?;
+        }
 
         // Figure out what the modified path should be
         // Remove the PATH variable from the environment variables if it's there
@@ -461,19 +466,23 @@ impl SourceBuild {
             OsString::from(venv.scripts())
         };
 
-        if let Some(pep517_backend) = &pep517_backend {
-            create_pep517_build_environment(
-                &source_tree,
-                &venv,
-                pep517_backend,
-                build_context,
-                &package_id,
-                build_kind,
-                &config_settings,
-                &environment_variables,
-                &modified_path,
-            )
-            .await?;
+        // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
+        // environment is already setup.
+        if build_isolation.is_isolated() {
+            if let Some(pep517_backend) = &pep517_backend {
+                create_pep517_build_environment(
+                    &source_tree,
+                    &venv,
+                    pep517_backend,
+                    build_context,
+                    &package_id,
+                    build_kind,
+                    &config_settings,
+                    &environment_variables,
+                    &modified_path,
+                )
+                .await?;
+            }
         }
 
         Ok(Self {
@@ -925,10 +934,6 @@ async fn run_python_script(
     environment_variables: &FxHashMap<OsString, OsString>,
     modified_path: &OsString,
 ) -> Result<Output, Error> {
-    println!(
-        "Running python script: {}",
-        venv.python_executable().display()
-    );
     Command::new(venv.python_executable())
         .args(["-c", script])
         .current_dir(source_tree.simplified())

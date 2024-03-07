@@ -6,10 +6,8 @@ use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Arc;
 
 use anyhow::Result;
-use tokio::sync::{Mutex, MutexGuard};
 
 use distribution_types::{CachedDist, DistributionId, IndexLocations, Resolution, SourceDist};
 use once_map::OnceMap;
@@ -56,14 +54,8 @@ use uv_normalize::PackageName;
 /// `uv-build` to depend on `uv-resolver` which having actual crate dependencies between
 /// them.
 
-// TODO(konstin): Proper error types
 pub trait BuildContext: Sync {
     type SourceDistBuilder: SourceBuildTrait + Send + Sync;
-
-    /// Return a mutex that can be used to lock the build context.
-    fn mutex(&self) -> Arc<Mutex<()>>;
-
-    fn lock(&self) -> impl Future<Output = Option<MutexGuard<'_, ()>>> + Send;
 
     /// Return a reference to the cache.
     fn cache(&self) -> &Cache;
@@ -156,9 +148,9 @@ pub enum BuildIsolation<'a> {
 }
 
 impl<'a> BuildIsolation<'a> {
-    /// Returns `true` if build isolation is not enforced.
-    pub fn is_shared(&self) -> bool {
-        matches!(self, Self::Shared(_))
+    /// Returns `true` if build isolation is enforced.
+    pub fn is_isolated(&self) -> bool {
+        matches!(self, Self::Isolated)
     }
 }
 

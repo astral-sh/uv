@@ -2348,3 +2348,74 @@ requires-python = "<=3.8"
 
     Ok(())
 }
+
+/// Install with `--no-build-isolation`, to disable isolation during PEP 517 builds.
+#[test]
+fn no_build_isolation() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz")?;
+
+    // We expect the build to fail, because `setuptools` is not installed.
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, command(&context)
+        .arg("-r")
+        .arg("requirements.in")
+        .arg("--no-build-isolation"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz
+      Caused by: Failed to build: anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
+    --- stdout:
+
+    --- stderr:
+    Traceback (most recent call last):
+      File "<string>", line 8, in <module>
+    ModuleNotFoundError: No module named 'setuptools'
+    ---
+    "###
+    );
+
+    // Install `setuptools` and `wheel`.
+    uv_snapshot!(command(&context)
+        .arg("setuptools")
+        .arg("wheel"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + setuptools==68.2.2
+     + wheel==0.41.3
+    "###);
+
+    // We expect the build to succeed, since `setuptools` is now installed.
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.in")
+        .arg("--no-build-isolation"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==0.0.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    Ok(())
+}

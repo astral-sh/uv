@@ -59,6 +59,7 @@ pub(crate) async fn pip_install(
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
+    no_build_isolation: bool,
     no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
@@ -190,6 +191,13 @@ pub(crate) async fn pip_install(
         FlatIndex::from_entries(entries, tags)
     };
 
+    // Determine whether to enable build isolation.
+    let build_isolation = if no_build_isolation {
+        BuildIsolation::Shared(&venv)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     // Create a shared in-memory index.
     let index = InMemoryIndex::default();
 
@@ -206,7 +214,7 @@ pub(crate) async fn pip_install(
         &in_flight,
         setup_py,
         config_settings,
-        BuildIsolation::Shared(&venv),
+        build_isolation,
         no_build,
         no_binary,
     )
@@ -290,7 +298,7 @@ pub(crate) async fn pip_install(
             &in_flight,
             setup_py,
             config_settings,
-            BuildIsolation::Shared(&venv),
+            build_isolation,
             no_build,
             no_binary,
         )

@@ -4,14 +4,12 @@
 
 use std::ffi::OsStr;
 use std::path::Path;
-use std::sync::Arc;
 use std::{ffi::OsString, future::Future};
 
 use anyhow::{bail, Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use tokio::sync::{Mutex, MutexGuard};
 use tracing::{debug, instrument};
 
 use distribution_types::{IndexLocations, Name, Resolution, SourceDist};
@@ -44,7 +42,6 @@ pub struct BuildDispatch<'a> {
     source_build_context: SourceBuildContext,
     options: Options,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
-    mutex: Arc<Mutex<()>>,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -79,19 +76,12 @@ impl<'a> BuildDispatch<'a> {
             source_build_context: SourceBuildContext::default(),
             options: Options::default(),
             build_extra_env_vars: FxHashMap::default(),
-            mutex: Arc::new(Mutex::new(())),
         }
     }
 
     #[must_use]
     pub fn with_options(mut self, options: Options) -> Self {
         self.options = options;
-        self
-    }
-
-    #[must_use]
-    pub fn with_build_isolation(mut self, build_isolation: BuildIsolation<'a>) -> Self {
-        self.build_isolation = build_isolation;
         self
     }
 
@@ -113,17 +103,6 @@ impl<'a> BuildDispatch<'a> {
 
 impl<'a> BuildContext for BuildDispatch<'a> {
     type SourceDistBuilder = SourceBuild;
-
-    fn mutex(&self) -> Arc<Mutex<()>> {
-        self.mutex.clone()
-    }
-
-    fn lock(&self) -> impl Future<Output = Option<MutexGuard<'_, ()>>> + Send {
-        async move {
-            let guard = self.mutex.lock().await;
-            Some(guard)
-        }
-    }
 
     fn cache(&self) -> &Cache {
         self.cache
@@ -165,7 +144,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.client,
             self.flat_index,
             self.index,
-            self
+            self,
         )?;
         let graph = resolver.resolve().await.with_context(|| {
             format!(
@@ -258,7 +237,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
             // Remove any unnecessary packages.
             if !reinstalls.is_empty() {
-                for dist_info in reinstalls.iter() {
+                for dist_info in &reinstalls {
                     let summary = uv_installer::uninstall(dist_info)
                         .await
                         .context("Failed to uninstall build dependencies")?;

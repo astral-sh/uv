@@ -38,6 +38,7 @@ pub(crate) async fn pip_sync(
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
+    no_build_isolation: bool,
     no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
@@ -135,6 +136,13 @@ pub(crate) async fn pip_sync(
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
+    // Determine whether to enable build isolation.
+    let build_isolation = if no_build_isolation {
+        BuildIsolation::Shared(&venv)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     // Prep the build context.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -146,7 +154,7 @@ pub(crate) async fn pip_sync(
         &in_flight,
         setup_py,
         config_settings,
-        BuildIsolation::Isolated,
+        build_isolation,
         no_build,
         no_binary,
     );
