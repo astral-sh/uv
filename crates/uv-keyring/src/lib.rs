@@ -123,10 +123,10 @@ mod test {
         assert_eq!(found_res.username, "u");
         assert_eq!(found_res.password, "p");
 
-        let not_fount_res = get_keyring_auth(&not_found_second_url);
-        assert!(not_fount_res.is_err());
+        let not_found_res = get_keyring_auth(&not_found_second_url);
+        assert!(not_found_res.is_err());
         assert_eq!(
-            not_fount_res.unwrap_err().to_string(),
+            not_found_res.unwrap_err().to_string(),
             "Previously failed to find keyring password"
         )
     }
