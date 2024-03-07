@@ -112,14 +112,6 @@ impl InstalledDist {
 
     /// Read the `METADATA` file from a `.dist-info` directory.
     pub fn metadata(&self) -> Result<pypi_types::Metadata21> {
-        // Print the path.
-        println!("path: {}", self.path().simplified_display());
-        // Print everything in the path:
-        for entry in fs::read_dir(self.path())? {
-            let entry = entry?;
-            println!("entry: {}", entry.path().simplified_display());
-        }
-
         let path = self.path().join("METADATA");
         let contents = fs::read(&path)?;
         pypi_types::Metadata21::parse(&contents).with_context(|| {
