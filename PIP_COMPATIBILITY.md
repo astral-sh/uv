@@ -4,7 +4,7 @@ uv is designed as a drop-in replacement for common `pip` and `pip-tools` workflo
 
 Informally, the intent is such that existing `pip` and `pip-tools` users can switch to uv without
 making meaningful changes to their packaging workflows; and, in most cases, swapping out
-`pip install` for `uv install` should "just work".
+`pip install` for `uv pip install` should "just work".
 
 However, uv is _not_ intended to be an _exact_ clone of `pip`, and the further you stray from
 common `pip` workflows, the more likely you are to encounter differences in behavior. In some cases,
