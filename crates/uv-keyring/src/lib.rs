@@ -128,6 +128,6 @@ mod test {
         assert_eq!(
             not_found_res.unwrap_err().to_string(),
             "Previously failed to find keyring password"
-        )
+        );
     }
 }
