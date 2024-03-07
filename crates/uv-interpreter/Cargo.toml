@@ -35,6 +35,8 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 which = { workspace = true}
+
+[target.'cfg(target_os = "windows")'.dependencies]
 winapi = { workspace = true }
 
 [dev-dependencies]
