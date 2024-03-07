@@ -72,7 +72,18 @@ pub fn get_keyring_auth(url: &Url) -> Result<BasicAuthData> {
 mod test {
     use url::Url;
 
-    use crate::get_keyring_auth;
+    use crate::{get_keyring_auth, BasicAuthData, PASSWORDS};
+
+    #[test]
+    fn hostless_url_should_err() {
+        let url = Url::parse("file:/etc/bin/").unwrap();
+        let res = get_keyring_auth(&url);
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err().to_string(),
+            "Should only use keyring for urls with host"
+        );
+    }
 
     #[test]
     fn passworded_url_should_err() {
@@ -83,5 +94,40 @@ mod test {
             res.unwrap_err().to_string(),
             "Url already contains password - keyring not required"
         );
+    }
+
+    #[test]
+    fn memo_return_works() {
+        let found_first_url = Url::parse("https://example1.com/simple/first/").unwrap();
+        let not_found_first_url = Url::parse("https://example2.com/simple/first/").unwrap();
+
+        {
+            // simulate output memoization from keyring CLI result
+            let mut passwords = PASSWORDS.lock().unwrap();
+            passwords.insert(
+                found_first_url.host_str().unwrap().to_string(),
+                Some(BasicAuthData {
+                    username: "u".to_string(),
+                    password: "p".to_string(),
+                }),
+            );
+            passwords.insert(not_found_first_url.host_str().unwrap().to_string(), None);
+        }
+
+        let found_second_url = Url::parse("https://example1.com/simple/second/").unwrap();
+        let not_found_second_url = Url::parse("https://example2.com/simple/second/").unwrap();
+
+        let found_res = get_keyring_auth(&found_second_url);
+        assert!(found_res.is_ok());
+        let found_res = found_res.unwrap();
+        assert_eq!(found_res.username, "u");
+        assert_eq!(found_res.password, "p");
+
+        let not_fount_res = get_keyring_auth(&not_found_second_url);
+        assert!(not_fount_res.is_err());
+        assert_eq!(
+            not_fount_res.unwrap_err().to_string(),
+            "Previously failed to find keyring password"
+        )
     }
 }
