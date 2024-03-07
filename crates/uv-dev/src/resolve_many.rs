@@ -21,7 +21,7 @@ use uv_installer::NoBinary;
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_resolver::InMemoryIndex;
-use uv_traits::{BuildContext, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct ResolveManyArgs {
@@ -109,6 +109,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                     &in_flight,
                     setup_py,
                     &config_settings,
+                    BuildIsolation::Isolated,
                     &no_build,
                     &NoBinary::None,
                 );

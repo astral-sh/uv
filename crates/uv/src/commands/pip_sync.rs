@@ -20,7 +20,7 @@ use uv_installer::{
 };
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::InMemoryIndex;
-use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -146,6 +146,7 @@ pub(crate) async fn pip_sync(
         &in_flight,
         setup_py,
         config_settings,
+        BuildIsolation::Isolated,
         no_build,
         no_binary,
     );

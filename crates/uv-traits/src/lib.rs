@@ -64,6 +64,9 @@ pub trait BuildContext: Sync {
     /// it's metadata (e.g. wheel compatibility tags).
     fn interpreter(&self) -> &Interpreter;
 
+    /// Whether to enforce build isolation when building source distributions.
+    fn build_isolation(&self) -> BuildIsolation;
+
     /// Whether source distribution building is disabled. This [`BuildContext::setup_build`] calls
     /// will fail in this case. This method exists to avoid fetching source distributions if we know
     /// we can't build them
@@ -135,6 +138,13 @@ pub trait SourceBuildTrait {
 pub struct InFlight {
     /// The in-flight distribution downloads.
     pub downloads: OnceMap<DistributionId, Result<CachedDist, String>>,
+}
+
+/// Whether to enforce build isolation when building source distributions.
+#[derive(Debug, Copy, Clone)]
+pub enum BuildIsolation<'a> {
+    Isolated,
+    Shared(&'a PythonEnvironment),
 }
 
 /// The strategy to use when building source distributions that lack a `pyproject.toml`.

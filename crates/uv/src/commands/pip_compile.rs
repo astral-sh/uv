@@ -30,7 +30,7 @@ use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
     OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
-use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
@@ -213,6 +213,7 @@ pub(crate) async fn pip_compile(
         &in_flight,
         setup_py,
         &config_settings,
+        BuildIsolation::Isolated,
         no_build,
         &NoBinary::None,
     )

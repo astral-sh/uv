@@ -31,7 +31,9 @@ use distribution_types::Resolution;
 use pep508_rs::Requirement;
 use uv_fs::Simplified;
 use uv_interpreter::{Interpreter, PythonEnvironment};
-use uv_traits::{BuildContext, BuildKind, ConfigSettings, SetupPyStrategy, SourceBuildTrait};
+use uv_traits::{
+    BuildContext, BuildIsolation, BuildKind, ConfigSettings, SetupPyStrategy, SourceBuildTrait,
+};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
@@ -357,6 +359,7 @@ impl SourceBuild {
         package_id: String,
         setup_py: SetupPyStrategy,
         config_settings: ConfigSettings,
+        build_isolation: BuildIsolation<'_>,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
     ) -> Result<Self, Error> {
@@ -402,13 +405,17 @@ impl SourceBuild {
         let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)
             .map_err(|err| *err)?;
 
-        let venv = uv_virtualenv::create_venv(
-            &temp_dir.path().join(".venv"),
-            interpreter.clone(),
-            uv_virtualenv::Prompt::None,
-            false,
-            Vec::new(),
-        )?;
+        // Create a virtual environment, or install into the shared environment if requested.
+        let venv = match build_isolation {
+            BuildIsolation::Isolated => uv_virtualenv::create_venv(
+                &temp_dir.path().join(".venv"),
+                interpreter.clone(),
+                uv_virtualenv::Prompt::None,
+                false,
+                Vec::new(),
+            )?,
+            BuildIsolation::Shared(venv) => venv.clone(),
+        };
 
         // Setup the build environment.
         let resolved_requirements = Self::get_resolved_requirements(
@@ -918,6 +925,10 @@ async fn run_python_script(
     environment_variables: &FxHashMap<OsString, OsString>,
     modified_path: &OsString,
 ) -> Result<Output, Error> {
+    println!(
+        "Running python script: {}",
+        venv.python_executable().display()
+    );
     Command::new(venv.python_executable())
         .args(["-c", script])
         .current_dir(source_tree.simplified())

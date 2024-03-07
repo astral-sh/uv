@@ -32,7 +32,7 @@ use uv_resolver::{
     DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -206,6 +206,7 @@ pub(crate) async fn pip_install(
         &in_flight,
         setup_py,
         config_settings,
+        BuildIsolation::Shared(&venv),
         no_build,
         no_binary,
     )
@@ -289,6 +290,7 @@ pub(crate) async fn pip_install(
             &in_flight,
             setup_py,
             config_settings,
+            BuildIsolation::Shared(&venv),
             no_build,
             no_binary,
         )
