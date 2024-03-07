@@ -14,7 +14,7 @@ use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, info_span, instrument, trace, Instrument};
+use tracing::{debug, enabled, info_span, instrument, trace, Instrument, Level};
 use url::Url;
 
 use distribution_filename::WheelFilename;
@@ -197,15 +197,18 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         let requests_fut = self.fetch(request_stream).fuse();
 
         // Run the solver.
-        let resolve_fut = self.solve(request_sink).fuse();
+        let resolve_fut = self.solve(request_sink).boxed().fuse();
 
         // Wait for both to complete.
         match tokio::try_join!(requests_fut, resolve_fut) {
             Ok(((), resolution)) => {
+                self.provider.done().await;
                 self.on_complete();
                 Ok(resolution)
             }
             Err(err) => {
+                self.provider.done().await;
+
                 // Add version information to improve unsat error messages.
                 Err(if let ResolveError::NoSolution(err) = err {
                     ResolveError::NoSolution(
@@ -233,6 +236,23 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         request_sink: tokio::sync::mpsc::Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::Root(self.project.clone());
+        let mut tried_versions = FxHashMap::default();
+        let log_tried_versions = |tried_versions: FxHashMap<PubGrubPackage, usize>| {
+            if enabled!(Level::DEBUG) {
+                let total_versions: usize = tried_versions.values().sum();
+                let mut tried_versions: Vec<_> = tried_versions.iter().collect();
+                tried_versions.sort_by(|(p1, c1), (p2, c2)| {
+                    c1.cmp(c2)
+                        .reverse()
+                        .then(p1.to_string().cmp(&p2.to_string()))
+                });
+                let counts = tried_versions
+                    .iter()
+                    .map(|(package, count)| format!("{package} {count}"))
+                    .join(", ");
+                debug!("Tried {total_versions} versions: {counts}");
+            }
+        };
 
         // Keep track of the packages for which we've requested metadata.
         let mut pins = FilePins::default();
@@ -269,6 +289,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     })
             else {
                 let selection = state.partial_solution.extract_solution();
+                log_tried_versions(tried_versions);
                 return ResolutionGraph::from_state(
                     &selection,
                     &pins,
@@ -280,6 +301,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 );
             };
             next = highest_priority_pkg;
+
+            if enabled!(Level::DEBUG) {
+                *tried_versions.entry(next.clone()).or_default() += 1;
+            }
 
             let term_intersection = state
                 .partial_solution
@@ -456,6 +481,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             .iter()
                             .any(|(dependency, _)| dependency == package) =>
                     {
+                        log_tried_versions(tried_versions);
                         return Err(PubGrubError::SelfDependency {
                             package: package.clone(),
                             version: version.clone(),

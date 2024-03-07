@@ -4,9 +4,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use futures::{FutureExt, TryStreamExt};
+use itertools::Itertools;
+use rustc_hash::FxHashMap;
 use tokio::io::AsyncSeekExt;
+use tokio::sync::Mutex;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{info_span, instrument, warn, Instrument};
+use tracing::{debug, enabled, info_span, instrument, warn, Instrument, Level};
 use url::Url;
 
 use distribution_filename::WheelFilename;
@@ -18,6 +21,7 @@ use pypi_types::Metadata23;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
 use uv_git::GitSource;
+use uv_normalize::PackageName;
 use uv_traits::{BuildContext, NoBinary, NoBuild};
 
 use crate::download::{BuiltWheel, UnzippedWheel};
@@ -42,6 +46,8 @@ pub struct DistributionDatabase<'a, Context: BuildContext + Send + Sync> {
     reporter: Option<Arc<dyn Reporter>>,
     locks: Arc<Locks>,
     client: &'a RegistryClient,
+    wheel_metadata_counts: Mutex<FxHashMap<PackageName, usize>>,
+    build_metadata_counts: Mutex<FxHashMap<PackageName, usize>>,
     build_context: &'a Context,
     builder: SourceDistCachedBuilder<'a, Context>,
 }
@@ -58,6 +64,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             reporter: None,
             locks: Arc::new(Locks::default()),
             client,
+            wheel_metadata_counts: Mutex::new(FxHashMap::default()),
+            build_metadata_counts: Mutex::new(FxHashMap::default()),
             build_context,
             builder: SourceDistCachedBuilder::new(build_context, client, tags),
         }
@@ -321,6 +329,12 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     ) -> Result<(Metadata23, Option<Url>), Error> {
         match dist {
             Dist::Built(built_dist) => {
+                self.wheel_metadata_counts
+                    .lock()
+                    .await
+                    .entry(built_dist.name().clone())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
                 match self.client.wheel_metadata(built_dist).boxed().await {
                     Ok(metadata) => Ok((metadata, None)),
                     Err(err) if err.is_http_streaming_unsupported() => {
@@ -344,6 +358,13 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 if no_build {
                     return Err(Error::NoBuild);
                 }
+
+                self.build_metadata_counts
+                    .lock()
+                    .await
+                    .entry(source_dist.name().clone())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
 
                 let lock = self.locks.acquire(dist).await;
                 let _guard = lock.lock().await;
@@ -576,5 +597,36 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     /// Return the [`IndexLocations`] used by this resolver.
     pub fn index_locations(&self) -> &IndexLocations {
         self.build_context.index_locations()
+    }
+
+    /// Log how many package requests and source dist builds we processed per package.
+    pub async fn log_stats(&self) {
+        if !enabled!(Level::DEBUG) {
+            return;
+        }
+
+        let counter = [
+            ("wheel metadata requests", &self.wheel_metadata_counts),
+            ("source dist metadata requests", &self.build_metadata_counts),
+        ];
+        for (name, counts) in counter {
+            let counts = counts.lock().await;
+            let total_versions: usize = counts.values().sum();
+            let mut counts: Vec<_> = counts.iter().collect();
+            counts.sort_by(|(p1, c1), (p2, c2)| {
+                c1.cmp(c2)
+                    .reverse()
+                    .then(p1.to_string().cmp(&p2.to_string()))
+            });
+            if total_versions > 0 {
+                let counts = counts
+                    .iter()
+                    .map(|(package, count)| format!("{package} {count}"))
+                    .join(", ");
+                debug!("{total_versions} {name}: {counts}");
+            } else {
+                debug!("{total_versions} {name}");
+            }
+        }
     }
 }

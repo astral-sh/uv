@@ -4338,6 +4338,7 @@ dependencies = [
  "fs-err",
  "futures",
  "install-wheel-rs",
+ "itertools 0.12.1",
  "nanoid",
  "pep440_rs",
  "pep508_rs",
@@ -4360,6 +4361,7 @@ dependencies = [
  "uv-git",
  "uv-normalize",
  "uv-traits",
+ "uv-warnings",
  "zip",
 ]
 

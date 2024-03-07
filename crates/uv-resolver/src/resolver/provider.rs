@@ -54,6 +54,11 @@ pub trait ResolverProvider: Send + Sync {
     /// Set the [`uv_distribution::Reporter`] to use for this installer.
     #[must_use]
     fn with_reporter(self, reporter: impl uv_distribution::Reporter + 'static) -> Self;
+
+    /// Hook to log stats.
+    fn done(&self) -> impl Future<Output = ()> + Send {
+        async {}
+    }
 }
 
 /// The main IO backend for the resolver, which does cached requests network requests using the
@@ -170,5 +175,9 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
             fetcher: self.fetcher.with_reporter(reporter),
             ..self
         }
+    }
+
+    async fn done(&self) {
+        self.fetcher.log_stats().await;
     }
 }
