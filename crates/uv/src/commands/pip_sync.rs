@@ -20,7 +20,7 @@ use uv_installer::{
 };
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::InMemoryIndex;
-use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -38,6 +38,7 @@ pub(crate) async fn pip_sync(
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
+    no_build_isolation: bool,
     no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
@@ -135,6 +136,13 @@ pub(crate) async fn pip_sync(
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
+    // Determine whether to enable build isolation.
+    let build_isolation = if no_build_isolation {
+        BuildIsolation::Shared(&venv)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     // Prep the build context.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -146,6 +154,7 @@ pub(crate) async fn pip_sync(
         &in_flight,
         setup_py,
         config_settings,
+        build_isolation,
         no_build,
         no_binary,
     );

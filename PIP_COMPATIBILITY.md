@@ -307,7 +307,6 @@ the implementation, and tend to be tracked in individual issues. For example:
 
 - [`--trusted-host`](https://github.com/astral-sh/uv/issues/1339)
 - [`--user`](https://github.com/astral-sh/uv/issues/2077)
-- [`--no-build-isolation`](https://github.com/astral-sh/uv/issues/1715)
 
 If you encounter a missing option or subcommand, please search the issue tracker to see if it has
 already been reported, and if not, consider opening a new issue. Feel free to upvote any existing

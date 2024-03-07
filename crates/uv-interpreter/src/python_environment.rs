@@ -65,8 +65,11 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and root directory.
-    pub fn from_interpreter(interpreter: Interpreter, root: PathBuf) -> Self {
-        Self { root, interpreter }
+    pub fn from_interpreter(interpreter: Interpreter) -> Self {
+        Self {
+            root: interpreter.prefix().to_path_buf(),
+            interpreter,
+        }
     }
 
     /// Returns the location of the Python interpreter.
@@ -100,7 +103,7 @@ impl PythonEnvironment {
         self.interpreter.scripts()
     }
 
-    /// Lock the virtual environment to prevent concurrent writes.
+    /// Grab a file lock for the virtual environment to prevent concurrent writes across processes.
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
         if self.interpreter.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lock file.

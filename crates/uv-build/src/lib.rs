@@ -31,7 +31,9 @@ use distribution_types::Resolution;
 use pep508_rs::Requirement;
 use uv_fs::Simplified;
 use uv_interpreter::{Interpreter, PythonEnvironment};
-use uv_traits::{BuildContext, BuildKind, ConfigSettings, SetupPyStrategy, SourceBuildTrait};
+use uv_traits::{
+    BuildContext, BuildIsolation, BuildKind, ConfigSettings, SetupPyStrategy, SourceBuildTrait,
+};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
@@ -357,6 +359,7 @@ impl SourceBuild {
         package_id: String,
         setup_py: SetupPyStrategy,
         config_settings: ConfigSettings,
+        build_isolation: BuildIsolation<'_>,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
     ) -> Result<Self, Error> {
@@ -402,27 +405,36 @@ impl SourceBuild {
         let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)
             .map_err(|err| *err)?;
 
-        let venv = uv_virtualenv::create_venv(
-            &temp_dir.path().join(".venv"),
-            interpreter.clone(),
-            uv_virtualenv::Prompt::None,
-            false,
-            Vec::new(),
-        )?;
+        // Create a virtual environment, or install into the shared environment if requested.
+        let venv = match build_isolation {
+            BuildIsolation::Isolated => uv_virtualenv::create_venv(
+                &temp_dir.path().join(".venv"),
+                interpreter.clone(),
+                uv_virtualenv::Prompt::None,
+                false,
+                Vec::new(),
+            )?,
+            BuildIsolation::Shared(venv) => venv.clone(),
+        };
 
-        // Setup the build environment.
-        let resolved_requirements = Self::get_resolved_requirements(
-            build_context,
-            source_build_context,
-            &default_backend,
-            pep517_backend.as_ref(),
-        )
-        .await?;
+        // Setup the build environment. If build isolation is disabled, we assume the build
+        // environment is already setup.
+        if build_isolation.is_isolated() {
+            let resolved_requirements = Self::get_resolved_requirements(
+                build_context,
+                source_build_context,
+                &default_backend,
+                pep517_backend.as_ref(),
+            )
+            .await?;
 
-        build_context
-            .install(&resolved_requirements, &venv)
-            .await
-            .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
+            build_context
+                .install(&resolved_requirements, &venv)
+                .await
+                .map_err(|err| {
+                    Error::RequirementsInstall("build-system.requires (install)", err)
+                })?;
+        }
 
         // Figure out what the modified path should be
         // Remove the PATH variable from the environment variables if it's there
@@ -454,19 +466,23 @@ impl SourceBuild {
             OsString::from(venv.scripts())
         };
 
-        if let Some(pep517_backend) = &pep517_backend {
-            create_pep517_build_environment(
-                &source_tree,
-                &venv,
-                pep517_backend,
-                build_context,
-                &package_id,
-                build_kind,
-                &config_settings,
-                &environment_variables,
-                &modified_path,
-            )
-            .await?;
+        // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
+        // environment is already setup.
+        if build_isolation.is_isolated() {
+            if let Some(pep517_backend) = &pep517_backend {
+                create_pep517_build_environment(
+                    &source_tree,
+                    &venv,
+                    pep517_backend,
+                    build_context,
+                    &package_id,
+                    build_kind,
+                    &config_settings,
+                    &environment_variables,
+                    &modified_path,
+                )
+                .await?;
+            }
         }
 
         Ok(Self {

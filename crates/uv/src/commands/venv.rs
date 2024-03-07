@@ -21,7 +21,7 @@ use uv_fs::Simplified;
 use uv_installer::NoBinary;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{InMemoryIndex, OptionsBuilder};
-use uv_traits::{BuildContext, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -172,6 +172,7 @@ async fn venv_impl(
             &in_flight,
             SetupPyStrategy::default(),
             &config_settings,
+            BuildIsolation::Isolated,
             &NoBuild::All,
             &NoBinary::None,
         )

@@ -949,6 +949,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         editable_wheel_dir: &Path,
     ) -> Result<(Dist, String, WheelFilename, Metadata21), Error> {
         debug!("Building (editable) {editable}");
+
+        // Build the wheel.
         let disk_filename = self
             .build_context
             .setup_build(

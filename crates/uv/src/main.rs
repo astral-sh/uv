@@ -370,6 +370,12 @@ struct PipCompileArgs {
     #[clap(long)]
     legacy_setup_py: bool,
 
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    #[clap(long)]
+    no_build_isolation: bool,
+
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary code. The cached wheels of already-built
@@ -549,6 +555,12 @@ struct PipSyncArgs {
     /// `pyproject.toml`.
     #[clap(long)]
     legacy_setup_py: bool,
+
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    #[clap(long)]
+    no_build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -789,6 +801,12 @@ struct PipInstallArgs {
     /// `pyproject.toml`.
     #[clap(long)]
     legacy_setup_py: bool,
+
+    /// Disable isolation when building source distributions.
+    ///
+    /// Assumes that build dependencies specified by PEP 518 are already installed.
+    #[clap(long)]
+    no_build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -1358,6 +1376,7 @@ async fn run() -> Result<ExitStatus> {
                 } else {
                     Connectivity::Online
                 },
+                args.no_build_isolation,
                 &no_build,
                 args.python_version,
                 args.exclude_newer,
@@ -1411,6 +1430,7 @@ async fn run() -> Result<ExitStatus> {
                     Connectivity::Online
                 },
                 &config_settings,
+                args.no_build_isolation,
                 &no_build,
                 &no_binary,
                 args.strict,
@@ -1504,6 +1524,7 @@ async fn run() -> Result<ExitStatus> {
                     Connectivity::Online
                 },
                 &config_settings,
+                args.no_build_isolation,
                 &no_build,
                 &no_binary,
                 args.strict,

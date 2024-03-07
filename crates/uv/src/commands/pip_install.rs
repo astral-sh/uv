@@ -32,7 +32,7 @@ use uv_resolver::{
     DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -59,6 +59,7 @@ pub(crate) async fn pip_install(
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
+    no_build_isolation: bool,
     no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
@@ -190,6 +191,13 @@ pub(crate) async fn pip_install(
         FlatIndex::from_entries(entries, tags)
     };
 
+    // Determine whether to enable build isolation.
+    let build_isolation = if no_build_isolation {
+        BuildIsolation::Shared(&venv)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     // Create a shared in-memory index.
     let index = InMemoryIndex::default();
 
@@ -206,6 +214,7 @@ pub(crate) async fn pip_install(
         &in_flight,
         setup_py,
         config_settings,
+        build_isolation,
         no_build,
         no_binary,
     )
@@ -289,6 +298,7 @@ pub(crate) async fn pip_install(
             &in_flight,
             setup_py,
             config_settings,
+            build_isolation,
             no_build,
             no_binary,
         )
