@@ -1,6 +1,6 @@
 //! DO NOT EDIT
 //!
-//! Generated with /Users/mz/workspace/uv/scripts/scenarios/generate.py /Users/mz/workspace/uv/scripts/scenarios/scenarios
+//! Generated with ./scripts/scenarios/sync.sh
 //! Scenarios from <https://github.com/zanieb/packse/tree/0.3.5/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]

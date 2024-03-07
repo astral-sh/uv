@@ -171,7 +171,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
         data[
             "generated_from"
         ] = f"https://github.com/zanieb/packse/tree/{ref}/scenarios"
-        data["generated_with"] = " ".join(sys.argv)
+        data["generated_with"] = "./scripts/scenarios/sync.sh"
         data[
             "vendor_links"
         ] = f"https://raw.githubusercontent.com/zanieb/packse/{ref}/vendor/links.html"
