@@ -57,9 +57,14 @@ impl RequestInitialiser for KeyringMiddleware {
                 .unwrap()
                 .build()
                 .ok()
-                .map(|r| {
-                    let auth = get_keyring_auth(r.url()).unwrap_or_else(|e| panic!("{}", e));
-                    nr.basic_auth(auth.username, Some(auth.password))
+                .and_then(|r| {
+                    let url = r.url();
+                    match get_keyring_auth(url) {
+                        Ok(auth) => {
+                            Some(nr.basic_auth(auth.username.clone(), Some(auth.password.clone())))
+                        }
+                        _ => None,
+                    }
                 })
                 .unwrap_or(req),
             None => req,

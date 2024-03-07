@@ -4612,6 +4612,7 @@ name = "uv-keyring"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "lazy_static",
  "tracing",
  "url",
 ]

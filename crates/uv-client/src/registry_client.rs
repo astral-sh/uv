@@ -147,7 +147,8 @@ impl RegistryClientBuilder {
                 };
 
                 // Initialize keyring middleware.
-                // Note - this will overwrite netrc middleware if both are used
+                // Note - this will overwrite netrc middleware if both are used and a
+                // keyring password exists
                 let client = if self.use_keyring {
                     client.with_init(KeyringMiddleware)
                 } else {
