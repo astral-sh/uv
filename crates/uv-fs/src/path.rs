@@ -82,7 +82,9 @@ pub fn normalize_path(path: impl AsRef<Path>) -> PathBuf {
 /// Windows Store. For example, if you install Python via the Windows Store, then run `python`
 /// and print the `sys.executable` path, you'll get a path like:
 ///
-///     `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0\python.exe`.
+/// ```text
+/// C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0\python.exe
+/// ```
 ///
 /// Attempting to canonicalize this path will fail with `ErrorKind::Uncategorized`.
 pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
@@ -103,7 +105,9 @@ pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBu
 fn is_windows_store_python(path: &Path) -> bool {
     /// Returns `true` if this is a Python executable shim installed via the Windows Store, like:
     ///
-    ///     `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.exe`
+    /// ```text
+    /// C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.exe
+    /// ```
     fn is_windows_store_python_shim(path: &Path) -> bool {
         let mut components = path.components().rev();
 
@@ -137,7 +141,9 @@ fn is_windows_store_python(path: &Path) -> bool {
 
     /// Returns `true` if this is a Python executable installed via the Windows Store, like:
     ///
-    ///     `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0\python.exe`
+    /// ```text
+    /// C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0\python.exe
+    /// ```
     fn is_windows_store_python_executable(path: &Path) -> bool {
         let mut components = path.components().rev();
 
