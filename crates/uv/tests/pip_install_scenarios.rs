@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/sync.sh
-//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.5/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.6/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -46,9 +46,9 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.5/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.6/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.5/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.6/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -3486,18 +3486,16 @@ fn no_wheels_no_build() {
 
     uv_snapshot!(filters, command(&context)
         .arg("--only-binary")
-        .arg("a")
+        .arg("no-wheels-no-build-a")
         .arg("no-wheels-no-build-a")
         , @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + albatross==1.0.0
+    error: Failed to download and build: albatross==1.0.0
+      Caused by: Building source distributions is disabled
     "###);
 
     assert_not_installed(&context.venv, "no_wheels_no_build_a", &context.temp_dir);
@@ -3527,18 +3525,17 @@ fn only_wheels_no_binary() {
 
     uv_snapshot!(filters, command(&context)
         .arg("--no-binary")
-        .arg("a")
+        .arg("only-wheels-no-binary-a")
         .arg("only-wheels-no-binary-a")
         , @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + albatross==1.0.0
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no source distribution is available and using wheels is disabled, we can conclude that all versions of albatross cannot be used.
+          And because you require albatross, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(&context.venv, "only_wheels_no_binary_a", &context.temp_dir);
@@ -3568,7 +3565,7 @@ fn no_build() {
 
     uv_snapshot!(filters, command(&context)
         .arg("--only-binary")
-        .arg("a")
+        .arg("no-build-a")
         .arg("no-build-a")
         , @r###"
     success: true
@@ -3609,7 +3606,7 @@ fn no_binary() {
 
     uv_snapshot!(filters, command(&context)
         .arg("--no-binary")
-        .arg("a")
+        .arg("no-binary-a")
         .arg("no-binary-a")
         , @r###"
     success: true
