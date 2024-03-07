@@ -1070,7 +1070,7 @@ mod tests {
     use std::env;
     use std::str::FromStr;
 
-    use indoc::indoc;
+    use insta::assert_snapshot;
 
     use pep440_rs::{Operator, Version, VersionPattern, VersionSpecifier};
     use uv_normalize::{ExtraName, PackageName};
@@ -1081,8 +1081,8 @@ mod tests {
     };
     use crate::{Cursor, Requirement, VerbatimUrl, VersionOrUrl};
 
-    fn assert_err(input: &str, error: &str) {
-        assert_eq!(Requirement::from_str(input).unwrap_err().to_string(), error);
+    fn parse_err(input: &str) -> String {
+        Requirement::from_str(input).unwrap_err().to_string()
     }
 
     #[cfg(windows)]
@@ -1105,37 +1105,34 @@ mod tests {
 
     #[test]
     fn error_empty() {
-        assert_err(
-            "",
-            indoc! {"\
-            Empty field is not allowed for PEP508
+        assert_snapshot!(
+            parse_err(""),
+            @r"
+        Empty field is not allowed for PEP508
 
-            ^"
-            },
+        ^"
         );
     }
 
     #[test]
     fn error_start() {
-        assert_err(
-            "_name",
-            indoc! {"
-                Expected package name starting with an alphanumeric character, found '_'
-                _name
-                ^"
-            },
+        assert_snapshot!(
+            parse_err("_name"),
+            @"
+            Expected package name starting with an alphanumeric character, found '_'
+            _name
+            ^"
         );
     }
 
     #[test]
     fn error_end() {
-        assert_err(
-            "name_",
-            indoc! {"
-                Package name must end with an alphanumeric character, not '_'
-                name_
-                    ^"
-            },
+        assert_snapshot!(
+            parse_err("name_"),
+            @"
+            Package name must end with an alphanumeric character, not '_'
+            name_
+                ^"
         );
     }
 
@@ -1201,85 +1198,78 @@ mod tests {
 
     #[test]
     fn error_extras_eof1() {
-        assert_err(
-            "black[",
-            indoc! {"
-                Missing closing bracket (expected ']', found end of dependency specification)
-                black[
-                     ^"
-            },
+        assert_snapshot!(
+            parse_err("black["),
+            @"
+            Missing closing bracket (expected ']', found end of dependency specification)
+            black[
+                 ^"
         );
     }
 
     #[test]
     fn error_extras_eof2() {
-        assert_err(
-            "black[d",
-            indoc! {"
-                Missing closing bracket (expected ']', found end of dependency specification)
-                black[d
-                     ^"
-            },
+        assert_snapshot!(
+            parse_err("black[d"),
+            @"
+            Missing closing bracket (expected ']', found end of dependency specification)
+            black[d
+                 ^"
         );
     }
 
     #[test]
     fn error_extras_eof3() {
-        assert_err(
-            "black[d,",
-            indoc! {"
-                Missing closing bracket (expected ']', found end of dependency specification)
-                black[d,
-                     ^"
-            },
+        assert_snapshot!(
+            parse_err("black[d,"),
+            @"
+            Missing closing bracket (expected ']', found end of dependency specification)
+            black[d,
+                 ^"
         );
     }
 
     #[test]
     fn error_extras_illegal_start1() {
-        assert_err(
-            "black[ö]",
-            indoc! {"
-                Expected an alphanumeric character starting the extra name, found 'ö'
-                black[ö]
-                      ^"
-            },
+        assert_snapshot!(
+            parse_err("black[ö]"),
+            @"
+            Expected an alphanumeric character starting the extra name, found 'ö'
+            black[ö]
+                  ^"
         );
     }
 
     #[test]
     fn error_extras_illegal_start2() {
-        assert_err(
-            "black[_d]",
-            indoc! {"
-                Expected an alphanumeric character starting the extra name, found '_'
-                black[_d]
-                      ^"
-            },
+        assert_snapshot!(
+            parse_err("black[_d]"),
+            @"
+            Expected an alphanumeric character starting the extra name, found '_'
+            black[_d]
+                  ^"
         );
     }
 
     #[test]
     fn error_extras_illegal_start3() {
-        assert_err(
-            "black[,]",
-            indoc! {"
-                Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','
-                black[,]
-                      ^"
-            },
+        assert_snapshot!(
+            parse_err("black[,]"),
+            @"
+            Expected either alphanumerical character (starting the extra name) or ']' (ending the extras section), found ','
+            black[,]
+                  ^"
         );
     }
 
     #[test]
     fn error_extras_illegal_character() {
-        assert_err(
-            "black[jüpyter]",
-            indoc! {"
-                Invalid character in extras name, expected an alphanumeric character, '-', '_', '.', ',' or ']', found 'ü'
-                black[jüpyter]
-                       ^"
-            },
+        assert_snapshot!(
+            parse_err("black[jüpyter]"),
+            @"
+            Invalid character in extras name, expected an alphanumeric character, '-', '_', '.', ',' or ']', found 'ü'
+            black[jüpyter]
+                   ^"
         );
     }
 
@@ -1315,49 +1305,45 @@ mod tests {
 
     #[test]
     fn error_extra_with_trailing_comma() {
-        assert_err(
-            "black[d,]",
-            indoc! {"
-                Expected an alphanumeric character starting the extra name, found ']'
-                black[d,]
-                        ^"
-            },
+        assert_snapshot!(
+            parse_err("black[d,]"),
+            @"
+            Expected an alphanumeric character starting the extra name, found ']'
+            black[d,]
+                    ^"
         );
     }
 
     #[test]
     fn error_parenthesized_pep440() {
-        assert_err(
-            "numpy ( ><1.19 )",
-            indoc! {"
-                no such comparison operator \"><\", must be one of ~= == != <= >= < > ===
-                numpy ( ><1.19 )
-                        ^^^^^^^"
-            },
+        assert_snapshot!(
+            parse_err("numpy ( ><1.19 )"),
+            @"
+            no such comparison operator \"><\", must be one of ~= == != <= >= < > ===
+            numpy ( ><1.19 )
+                    ^^^^^^^"
         );
     }
 
     #[test]
     fn error_parenthesized_parenthesis() {
-        assert_err(
-            "numpy ( >=1.19",
-            indoc! {"
-                Missing closing parenthesis (expected ')', found end of dependency specification)
-                numpy ( >=1.19
-                      ^"
-            },
+        assert_snapshot!(
+            parse_err("numpy ( >=1.19"),
+            @"
+            Missing closing parenthesis (expected ')', found end of dependency specification)
+            numpy ( >=1.19
+                  ^"
         );
     }
 
     #[test]
     fn error_whats_that() {
-        assert_err(
-            "numpy % 1.16",
-            indoc! {"
-                Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `%`
-                numpy % 1.16
-                      ^"
-            },
+        assert_snapshot!(
+            parse_err("numpy % 1.16"),
+            @"
+            Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `%`
+            numpy % 1.16
+                  ^"
         );
     }
 
@@ -1418,274 +1404,255 @@ mod tests {
 
     #[test]
     fn error_marker_incomplete1() {
-        assert_err(
-            r"numpy; sys_platform",
-            indoc! {"
+        assert_snapshot!(
+            parse_err(r"numpy; sys_platform"),
+            @"
                 Expected a valid marker operator (such as '>=' or 'not in'), found ''
                 numpy; sys_platform
                                    ^"
-            },
         );
     }
 
     #[test]
     fn error_marker_incomplete2() {
-        assert_err(
-            r"numpy; sys_platform ==",
-            indoc! {"\
-                Expected marker value, found end of dependency specification
-                numpy; sys_platform ==
-                                      ^"
-            },
+        assert_snapshot!(
+            parse_err(r"numpy; sys_platform =="),
+            @r"
+            Expected marker value, found end of dependency specification
+            numpy; sys_platform ==
+                                  ^"
         );
     }
 
     #[test]
     fn error_marker_incomplete3() {
-        assert_err(
-            r#"numpy; sys_platform == "win32" or"#,
-            indoc! {"
-                Expected marker value, found end of dependency specification
-                numpy; sys_platform == \"win32\" or
-                                                 ^"},
+        assert_snapshot!(
+            parse_err(r#"numpy; sys_platform == "win32" or"#),
+            @r#"
+            Expected marker value, found end of dependency specification
+            numpy; sys_platform == "win32" or
+                                             ^"#
         );
     }
 
     #[test]
     fn error_marker_incomplete4() {
-        assert_err(
-            r#"numpy; sys_platform == "win32" or (os_name == "linux""#,
-            indoc! {r#"
-                Expected ')', found end of dependency specification
-                numpy; sys_platform == "win32" or (os_name == "linux"
-                                                  ^"#},
+        assert_snapshot!(
+            parse_err(r#"numpy; sys_platform == "win32" or (os_name == "linux""#),
+            @r#"
+            Expected ')', found end of dependency specification
+            numpy; sys_platform == "win32" or (os_name == "linux"
+                                              ^"#
         );
     }
 
     #[test]
     fn error_marker_incomplete5() {
-        assert_err(
-            r#"numpy; sys_platform == "win32" or (os_name == "linux" and"#,
-            indoc! {"
-                Expected marker value, found end of dependency specification
-                numpy; sys_platform == \"win32\" or (os_name == \"linux\" and
-                                                                         ^"},
+        assert_snapshot!(
+            parse_err(r#"numpy; sys_platform == "win32" or (os_name == "linux" and"#),
+            @r#"
+            Expected marker value, found end of dependency specification
+            numpy; sys_platform == "win32" or (os_name == "linux" and
+                                                                     ^"#
         );
     }
 
     #[test]
     fn error_pep440() {
-        assert_err(
-            r"numpy >=1.1.*",
-            indoc! {"
-                Operator >= cannot be used with a wildcard version specifier
-                numpy >=1.1.*
-                      ^^^^^^^"
-            },
+        assert_snapshot!(
+            parse_err(r"numpy >=1.1.*"),
+            @r"
+            Operator >= cannot be used with a wildcard version specifier
+            numpy >=1.1.*
+                  ^^^^^^^"
         );
     }
 
     #[test]
     fn error_no_name() {
-        assert_err(
-            r"==0.0",
-            indoc! {"
-                Expected package name starting with an alphanumeric character, found '='
-                ==0.0
-                ^"
-            },
+        assert_snapshot!(
+            parse_err(r"==0.0"),
+            @r"
+        Expected package name starting with an alphanumeric character, found '='
+        ==0.0
+        ^
+        "
         );
     }
 
     #[test]
     fn error_bare_url() {
-        assert_err(
-            r"git+https://github.com/pallets/flask.git",
-            indoc! {"
-                URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).
-                git+https://github.com/pallets/flask.git
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
-            },
+        assert_snapshot!(
+            parse_err(r"git+https://github.com/pallets/flask.git"),
+            @"
+            URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).
+            git+https://github.com/pallets/flask.git
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
         );
     }
 
     #[test]
     fn error_no_comma_between_extras() {
-        assert_err(
-            r"name[bar baz]",
-            indoc! {"
-                Expected either ',' (separating extras) or ']' (ending the extras section), found 'b'
-                name[bar baz]
-                         ^"
-            },
+        assert_snapshot!(
+            parse_err(r"name[bar baz]"),
+            @"
+            Expected either ',' (separating extras) or ']' (ending the extras section), found 'b'
+            name[bar baz]
+                     ^"
         );
     }
 
     #[test]
     fn error_extra_comma_after_extras() {
-        assert_err(
-            r"name[bar, baz,]",
-            indoc! {"
-                Expected an alphanumeric character starting the extra name, found ']'
-                name[bar, baz,]
-                              ^"
-            },
+        assert_snapshot!(
+            parse_err(r"name[bar, baz,]"),
+            @"
+            Expected an alphanumeric character starting the extra name, found ']'
+            name[bar, baz,]
+                          ^"
         );
     }
 
     #[test]
     fn error_extras_not_closed() {
-        assert_err(
-            r"name[bar, baz >= 1.0",
-            indoc! {"
-                Expected either ',' (separating extras) or ']' (ending the extras section), found '>'
-                name[bar, baz >= 1.0
-                              ^"
-            },
+        assert_snapshot!(
+            parse_err(r"name[bar, baz >= 1.0"),
+            @"
+            Expected either ',' (separating extras) or ']' (ending the extras section), found '>'
+            name[bar, baz >= 1.0
+                          ^"
         );
     }
 
     #[test]
     fn error_no_space_after_url() {
-        assert_err(
-            r"name @ https://example.com/; extra == 'example'",
-            indoc! {"
-                Missing space before ';', the end of the URL is ambiguous
-                name @ https://example.com/; extra == 'example'
-                                           ^"
-            },
+        assert_snapshot!(
+            parse_err(r"name @ https://example.com/; extra == 'example'"),
+            @"
+            Missing space before ';', the end of the URL is ambiguous
+            name @ https://example.com/; extra == 'example'
+                                       ^"
         );
     }
 
     #[test]
     fn error_name_at_nothing() {
-        assert_err(
-            r"name @",
-            indoc! {"
-                Expected URL
-                name @
-                      ^"
-            },
+        assert_snapshot!(
+            parse_err(r"name @"),
+            @"
+            Expected URL
+            name @
+                  ^"
         );
     }
 
     #[test]
     fn test_error_invalid_marker_key() {
-        assert_err(
-            r"name; invalid_name",
-            indoc! {"
-                Expected a valid marker name, found 'invalid_name'
-                name; invalid_name
-                      ^^^^^^^^^^^^"
-            },
+        assert_snapshot!(
+            parse_err(r"name; invalid_name"),
+            @"
+            Expected a valid marker name, found 'invalid_name'
+            name; invalid_name
+                  ^^^^^^^^^^^^"
         );
     }
 
     #[test]
     fn error_markers_invalid_order() {
-        assert_err(
-            "name; '3.7' <= invalid_name",
-            indoc! {"
-                Expected a valid marker name, found 'invalid_name'
-                name; '3.7' <= invalid_name
-                               ^^^^^^^^^^^^"
-            },
+        assert_snapshot!(
+            parse_err("name; '3.7' <= invalid_name"),
+            @"
+            Expected a valid marker name, found 'invalid_name'
+            name; '3.7' <= invalid_name
+                           ^^^^^^^^^^^^"
         );
     }
 
     #[test]
     fn error_markers_notin() {
-        assert_err(
-            "name; '3.7' notin python_version",
-            indoc! {"
-                Expected a valid marker operator (such as '>=' or 'not in'), found 'notin'
-                name; '3.7' notin python_version
-                            ^^^^^"
-            },
+        assert_snapshot!(
+            parse_err("name; '3.7' notin python_version"),
+            @"
+            Expected a valid marker operator (such as '>=' or 'not in'), found 'notin'
+            name; '3.7' notin python_version
+                        ^^^^^"
         );
     }
 
     #[test]
     fn error_markers_inpython_version() {
-        assert_err(
-            "name; '3.6'inpython_version",
-            indoc! {"
-                Expected a valid marker operator (such as '>=' or 'not in'), found 'inpython_version'
-                name; '3.6'inpython_version
-                           ^^^^^^^^^^^^^^^^"
-            },
+        assert_snapshot!(
+            parse_err("name; '3.6'inpython_version"),
+            @"
+            Expected a valid marker operator (such as '>=' or 'not in'), found 'inpython_version'
+            name; '3.6'inpython_version
+                       ^^^^^^^^^^^^^^^^"
         );
     }
 
     #[test]
     fn error_markers_not_python_version() {
-        assert_err(
-            "name; '3.7' not python_version",
-            indoc! {"
-                Expected 'i', found 'p'
-                name; '3.7' not python_version
-                                ^"
-            },
+        assert_snapshot!(
+            parse_err("name; '3.7' not python_version"),
+            @"
+            Expected 'i', found 'p'
+            name; '3.7' not python_version
+                            ^"
         );
     }
 
     #[test]
     fn error_markers_invalid_operator() {
-        assert_err(
-            "name; '3.7' ~ python_version",
-            indoc! {"
-                Expected a valid marker operator (such as '>=' or 'not in'), found '~'
-                name; '3.7' ~ python_version
-                            ^"
-            },
+        assert_snapshot!(
+            parse_err("name; '3.7' ~ python_version"),
+            @"
+            Expected a valid marker operator (such as '>=' or 'not in'), found '~'
+            name; '3.7' ~ python_version
+                        ^"
         );
     }
 
     #[test]
     fn error_invalid_prerelease() {
-        assert_err(
-            "name==1.0.org1",
-            indoc! {"
-                after parsing 1.0, found \".org1\" after it, which is not part of a valid version
-                name==1.0.org1
-                    ^^^^^^^^^^"
-            },
+        assert_snapshot!(
+            parse_err("name==1.0.org1"),
+            @"
+            after parsing 1.0, found \".org1\" after it, which is not part of a valid version
+            name==1.0.org1
+                ^^^^^^^^^^"
         );
     }
 
     #[test]
     fn error_no_version_value() {
-        assert_err(
-            "name==",
-            indoc! {"
-                Unexpected end of version specifier, expected version
-                name==
-                    ^^"
-            },
+        assert_snapshot!(
+            parse_err("name=="),
+            @"
+            Unexpected end of version specifier, expected version
+            name==
+                ^^"
         );
     }
 
     #[test]
     fn error_no_version_operator() {
-        assert_err(
-            "name 1.0",
-            indoc! {"
-                Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `1`
-                name 1.0
-                     ^"
-            },
+        assert_snapshot!(
+            parse_err("name 1.0"),
+            @"
+            Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `1`
+            name 1.0
+                 ^"
         );
     }
 
     #[test]
     fn error_random_char() {
-        assert_err(
-            "name >= 1.0 #",
-            indoc! {"
-                Trailing `#` is not allowed
-                name >= 1.0 #
-                     ^^^^^^^^"
-            },
+        assert_snapshot!(
+            parse_err("name >= 1.0 #"),
+            @"
+            Trailing `#` is not allowed
+            name >= 1.0 #
+                 ^^^^^^^^"
         );
     }
 
@@ -1709,5 +1676,11 @@ mod tests {
                 Requirement::parse(requirement, &cwd)
             );
         }
+    }
+
+    #[test]
+    fn no_space_after_operator() {
+        let requirement = Requirement::from_str("pytest;'4.0'>=python_version").unwrap();
+        assert_eq!(requirement.to_string(), "pytest ; '4.0' >= python_version");
     }
 }

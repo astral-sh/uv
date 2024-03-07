@@ -20,7 +20,9 @@ use uv_client::{FlatIndex, RegistryClient};
 use uv_installer::{Downloader, Installer, NoBinary, Plan, Planner, Reinstall, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use uv_traits::{BuildContext, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{
+    BuildContext, BuildIsolation, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy,
+};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -33,6 +35,7 @@ pub struct BuildDispatch<'a> {
     index: &'a InMemoryIndex,
     in_flight: &'a InFlight,
     setup_py: SetupPyStrategy,
+    build_isolation: BuildIsolation<'a>,
     no_build: &'a NoBuild,
     no_binary: &'a NoBinary,
     config_settings: &'a ConfigSettings,
@@ -53,6 +56,7 @@ impl<'a> BuildDispatch<'a> {
         in_flight: &'a InFlight,
         setup_py: SetupPyStrategy,
         config_settings: &'a ConfigSettings,
+        build_isolation: BuildIsolation<'a>,
         no_build: &'a NoBuild,
         no_binary: &'a NoBinary,
     ) -> Self {
@@ -66,6 +70,7 @@ impl<'a> BuildDispatch<'a> {
             in_flight,
             setup_py,
             config_settings,
+            build_isolation,
             no_build,
             no_binary,
             source_build_context: SourceBuildContext::default(),
@@ -105,6 +110,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     fn interpreter(&self) -> &Interpreter {
         self.interpreter
+    }
+
+    fn build_isolation(&self) -> BuildIsolation {
+        self.build_isolation
     }
 
     fn no_build(&self) -> &NoBuild {
@@ -180,7 +189,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 local,
                 remote,
                 reinstalls,
-                extraneous,
+                extraneous: _,
             } = Planner::with_requirements(&resolution.requirements()).build(
                 site_packages,
                 &Reinstall::None,
@@ -190,6 +199,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 venv,
                 tags,
             )?;
+
+            // Nothing to do.
+            if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
+                debug!("No build requirements to install for build");
+                return Ok(());
+            }
 
             // Resolve any registry-based requirements.
             let remote = remote
@@ -207,7 +222,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 vec![]
             } else {
                 // TODO(konstin): Check that there is no endless recursion.
-                let downloader = Downloader::new(self.cache(), tags, self.client, self);
+                let downloader = Downloader::new(self.cache, tags, self.client, self);
                 debug!(
                     "Downloading and building requirement{} for build: {}",
                     if remote.len() == 1 { "" } else { "s" },
@@ -221,8 +236,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             };
 
             // Remove any unnecessary packages.
-            if !extraneous.is_empty() || !reinstalls.is_empty() {
-                for dist_info in extraneous.iter().chain(reinstalls.iter()) {
+            if !reinstalls.is_empty() {
+                for dist_info in &reinstalls {
                     let summary = uv_installer::uninstall(dist_info)
                         .await
                         .context("Failed to uninstall build dependencies")?;
@@ -295,6 +310,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             package_id.to_string(),
             self.setup_py,
             self.config_settings.clone(),
+            self.build_isolation,
             build_kind,
             self.build_extra_env_vars.clone(),
         )

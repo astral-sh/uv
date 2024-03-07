@@ -98,13 +98,11 @@ fn list_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
+    let workspace_dir =
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?).unwrap();
+    let workspace_dir_re = regex::escape(workspace_dir.as_str());
 
-    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+    let filters = [(workspace_dir_re.as_str(), "file://[WORKSPACE_DIR]/")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect::<Vec<_>>();
@@ -159,7 +157,7 @@ fn list_editable() -> Result<()> {
     let find_whitespace = " ".repeat(25 + workspace_len_difference);
     let replace_whitespace = " ".repeat(57);
 
-    let search_workspace = workspace_dir.as_str().strip_prefix(prefix).unwrap();
+    let search_workspace = workspace_dir_re.as_str().strip_prefix(prefix).unwrap();
     let replace_workspace = "[WORKSPACE_DIR]/";
 
     let filters = INSTA_FILTERS
@@ -200,13 +198,11 @@ fn list_editable_only() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
+    let workspace_dir =
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?).unwrap();
+    let workspace_dir_re = regex::escape(workspace_dir.as_str());
 
-    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+    let filters = [(workspace_dir_re.as_str(), "file://[WORKSPACE_DIR]/")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect::<Vec<_>>();
@@ -254,7 +250,7 @@ fn list_editable_only() -> Result<()> {
     let find_whitespace = " ".repeat(25 + workspace_len_difference);
     let replace_whitespace = " ".repeat(57);
 
-    let search_workspace = workspace_dir.as_str().strip_prefix(prefix).unwrap();
+    let search_workspace = workspace_dir_re.as_str().strip_prefix(prefix).unwrap();
     let replace_workspace = "[WORKSPACE_DIR]/";
 
     let filters = INSTA_FILTERS
@@ -331,13 +327,11 @@ fn list_exclude() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
+    let workspace_dir =
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?).unwrap();
+    let workspace_dir_re = regex::escape(workspace_dir.as_str());
 
-    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+    let filters = [(workspace_dir_re.as_str(), "file://[WORKSPACE_DIR]/")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
         .collect::<Vec<_>>();
@@ -385,7 +379,7 @@ fn list_exclude() -> Result<()> {
     let find_whitespace = " ".repeat(25 + workspace_len_difference);
     let replace_whitespace = " ".repeat(57);
 
-    let search_workspace = workspace_dir.as_str().strip_prefix(prefix).unwrap();
+    let search_workspace = workspace_dir_re.as_str().strip_prefix(prefix).unwrap();
     let replace_workspace = "[WORKSPACE_DIR]/";
 
     let filters = INSTA_FILTERS

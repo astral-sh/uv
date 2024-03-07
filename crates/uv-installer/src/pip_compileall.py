@@ -14,6 +14,10 @@ import warnings
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore")
+
+    # Successful launch check
+    print("Ready")
+
     # In rust, we provide one line per file to compile.
     for path in sys.stdin:
         # Remove trailing newlines.

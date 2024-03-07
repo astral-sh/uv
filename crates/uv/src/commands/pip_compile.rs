@@ -16,7 +16,6 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{IndexLocations, LocalEditable, Verbatim};
-use pep508_rs::Requirement;
 use platform_host::Platform;
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
@@ -25,19 +24,21 @@ use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder}
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{Downloader, NoBinary};
-use uv_interpreter::{Interpreter, PythonVersion};
+use uv_interpreter::{Interpreter, PythonEnvironment, PythonVersion};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
     OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
-use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
+use crate::requirements::{
+    read_lockfile, ExtrasSpecification, RequirementsSource, RequirementsSpecification,
+};
 
 /// Resolve a set of requirements into a set of pinned versions.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
@@ -61,6 +62,7 @@ pub(crate) async fn pip_compile(
     setup_py: SetupPyStrategy,
     config_settings: ConfigSettings,
     connectivity: Connectivity,
+    no_build_isolation: bool,
     no_build: &NoBuild,
     python_version: Option<PythonVersion>,
     exclude_newer: Option<DateTime<Utc>>,
@@ -82,6 +84,11 @@ pub(crate) async fn pip_compile(
         ));
     }
 
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .connectivity(connectivity)
+        .build();
+
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project,
@@ -94,13 +101,16 @@ pub(crate) async fn pip_compile(
         no_index,
         find_links,
         extras: used_extras,
-    } = RequirementsSpecification::from_sources(requirements, constraints, overrides, &extras)?;
+    } = RequirementsSpecification::from_sources(
+        requirements,
+        constraints,
+        overrides,
+        &extras,
+        &client,
+    )
+    .await?;
 
-    // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
-
-    // Check that all provided extras are used
+    // Check that all provided extras are used.
     if let ExtrasSpecification::Some(extras) = extras {
         let mut unused_extras = extras
             .iter()
@@ -117,28 +127,8 @@ pub(crate) async fn pip_compile(
         }
     }
 
-    let preferences: Vec<Requirement> = output_file
-        // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
-        .filter(|_| !upgrade.is_all())
-        .filter(|output_file| output_file.exists())
-        .map(Path::to_path_buf)
-        .map(RequirementsSource::from_path)
-        .as_ref()
-        .map(|source| RequirementsSpecification::from_source(source, &extras))
-        .transpose()?
-        .map(|spec| spec.requirements)
-        .map(|requirements| match upgrade {
-            // Respect all pinned versions from the existing lockfile.
-            Upgrade::None => requirements,
-            // Ignore all pinned versions from the existing lockfile.
-            Upgrade::All => vec![],
-            // Ignore pinned versions for the specified packages.
-            Upgrade::Packages(packages) => requirements
-                .into_iter()
-                .filter(|requirement| !packages.contains(&requirement.name))
-                .collect(),
-        })
-        .unwrap_or_default();
+    // Read the lockfile, if present.
+    let preferences = read_lockfile(output_file, upgrade).await?;
 
     // Find an interpreter to use for building distributions
     let platform = Platform::current()?;
@@ -148,6 +138,7 @@ pub(crate) async fn pip_compile(
         interpreter.python_version(),
         interpreter.sys_executable().simplified_display().cyan()
     );
+
     if let Some(python_version) = python_version.as_ref() {
         // If the requested version does not match the version we're using warn the user
         // _unless_ they have not specified a patch version and that is the only difference
@@ -196,11 +187,13 @@ pub(crate) async fn pip_compile(
         |python_version| Cow::Owned(python_version.markers(interpreter.markers())),
     );
 
-    // Instantiate a client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_locations.index_urls())
-        .connectivity(connectivity)
-        .build();
+    // Incorporate any index locations from the provided sources.
+    let index_locations =
+        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+
+    // Update the index URLs on the client, to take into account any index URLs added by the
+    // sources (e.g., `--index-url` in a `requirements.txt` file).
+    let client = client.with_index_url(index_locations.index_urls());
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -212,6 +205,15 @@ pub(crate) async fn pip_compile(
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
+    // Determine whether to enable build isolation.
+    let venv;
+    let build_isolation = if no_build_isolation {
+        venv = PythonEnvironment::from_interpreter(interpreter.clone());
+        BuildIsolation::Shared(&venv)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -222,6 +224,7 @@ pub(crate) async fn pip_compile(
         &in_flight,
         setup_py,
         &config_settings,
+        build_isolation,
         no_build,
         &NoBinary::None,
     )

@@ -18,7 +18,7 @@ use uv_dispatch::BuildDispatch;
 use uv_installer::NoBinary;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {
@@ -85,6 +85,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         &in_flight,
         SetupPyStrategy::default(),
         &config_settings,
+        BuildIsolation::Isolated,
         &no_build,
         &NoBinary::None,
     );

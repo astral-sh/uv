@@ -34,7 +34,7 @@ use uv_resolver::{
     DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -61,17 +61,24 @@ pub(crate) async fn pip_install(
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
+    no_build_isolation: bool,
     no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
     exclude_newer: Option<DateTime<Utc>>,
     python: Option<String>,
     system: bool,
+    break_system_packages: bool,
     cache: Cache,
     dry_run: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .connectivity(connectivity)
+        .build();
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -85,11 +92,7 @@ pub(crate) async fn pip_install(
         no_index,
         find_links,
         extras: used_extras,
-    } = specification(requirements, constraints, overrides, extras)?;
-
-    // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+    } = specification(requirements, constraints, overrides, extras, &client).await?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {
@@ -125,18 +128,22 @@ pub(crate) async fn pip_install(
 
     // If the environment is externally managed, abort.
     if let Some(externally_managed) = venv.interpreter().is_externally_managed() {
-        return if let Some(error) = externally_managed.into_error() {
-            Err(anyhow::anyhow!(
-                "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
-                venv.root().simplified_display().cyan(),
-                textwrap::indent(&error, "  ").green(),
-            ))
+        if break_system_packages {
+            debug!("Ignoring externally managed environment due to `--break-system-packages`");
         } else {
-            Err(anyhow::anyhow!(
-                "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
-                venv.root().simplified_display().cyan()
-            ))
-        };
+            return if let Some(error) = externally_managed.into_error() {
+                Err(anyhow::anyhow!(
+                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
+                    venv.root().simplified_display().cyan(),
+                    textwrap::indent(&error, "  ").green(),
+                ))
+            } else {
+                Err(anyhow::anyhow!(
+                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
+                    venv.root().simplified_display().cyan()
+                ))
+            };
+        }
     }
 
     let _lock = venv.lock()?;
@@ -175,17 +182,26 @@ pub(crate) async fn pip_install(
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
 
-    // Instantiate a client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_locations.index_urls())
-        .connectivity(connectivity)
-        .build();
+    // Incorporate any index locations from the provided sources.
+    let index_locations =
+        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+
+    // Update the index URLs on the client, to take into account any index URLs added by the
+    // sources (e.g., `--index-url` in a `requirements.txt` file).
+    let client = client.with_index_url(index_locations.index_urls());
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
         FlatIndex::from_entries(entries, tags)
+    };
+
+    // Determine whether to enable build isolation.
+    let build_isolation = if no_build_isolation {
+        BuildIsolation::Shared(&venv)
+    } else {
+        BuildIsolation::Isolated
     };
 
     // Create a shared in-memory index.
@@ -204,6 +220,7 @@ pub(crate) async fn pip_install(
         &in_flight,
         setup_py,
         config_settings,
+        build_isolation,
         no_build,
         no_binary,
     )
@@ -287,6 +304,7 @@ pub(crate) async fn pip_install(
             &in_flight,
             setup_py,
             config_settings,
+            build_isolation,
             no_build,
             no_binary,
         )
@@ -323,11 +341,12 @@ pub(crate) async fn pip_install(
 }
 
 /// Consolidate the requirements for an installation.
-fn specification(
+async fn specification(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification<'_>,
+    client: &RegistryClient,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a pyproject toml source
     if !matches!(extras, ExtrasSpecification::None)
@@ -339,8 +358,14 @@ fn specification(
     }
 
     // Read all requirements from the provided sources.
-    let spec =
-        RequirementsSpecification::from_sources(requirements, constraints, overrides, extras)?;
+    let spec = RequirementsSpecification::from_sources(
+        requirements,
+        constraints,
+        overrides,
+        extras,
+        client,
+    )
+    .await?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {

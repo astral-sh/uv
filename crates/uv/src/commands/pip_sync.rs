@@ -20,7 +20,7 @@ use uv_installer::{
 };
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::InMemoryIndex;
-use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -28,7 +28,7 @@ use crate::printer::Printer;
 use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
 /// Install a set of locked requirements into the current Python environment.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_sync(
     sources: &[RequirementsSource],
     reinstall: &Reinstall,
@@ -38,15 +38,22 @@ pub(crate) async fn pip_sync(
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
+    no_build_isolation: bool,
     no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
     python: Option<String>,
     system: bool,
+    break_system_packages: bool,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .connectivity(connectivity)
+        .build();
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -60,17 +67,13 @@ pub(crate) async fn pip_sync(
         no_index,
         find_links,
         extras: _extras,
-    } = RequirementsSpecification::from_simple_sources(sources)?;
+    } = RequirementsSpecification::from_simple_sources(sources, &client).await?;
 
     let num_requirements = requirements.len() + editables.len();
     if num_requirements == 0 {
         writeln!(printer.stderr(), "No requirements found")?;
         return Ok(ExitStatus::Success);
     }
-
-    // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -89,18 +92,22 @@ pub(crate) async fn pip_sync(
 
     // If the environment is externally managed, abort.
     if let Some(externally_managed) = venv.interpreter().is_externally_managed() {
-        return if let Some(error) = externally_managed.into_error() {
-            Err(anyhow::anyhow!(
-                "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
-                venv.root().simplified_display().cyan(),
-                textwrap::indent(&error, "  ").green(),
-            ))
+        if break_system_packages {
+            debug!("Ignoring externally managed environment due to `--break-system-packages`");
         } else {
-            Err(anyhow::anyhow!(
-                "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
-                venv.root().simplified_display().cyan()
-            ))
-        };
+            return if let Some(error) = externally_managed.into_error() {
+                Err(anyhow::anyhow!(
+                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
+                    venv.root().simplified_display().cyan(),
+                    textwrap::indent(&error, "  ").green(),
+                ))
+            } else {
+                Err(anyhow::anyhow!(
+                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
+                    venv.root().simplified_display().cyan()
+                ))
+            };
+        }
     }
 
     let _lock = venv.lock()?;
@@ -108,11 +115,13 @@ pub(crate) async fn pip_sync(
     // Determine the current environment markers.
     let tags = venv.interpreter().tags()?;
 
-    // Prep the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_locations.index_urls())
-        .connectivity(connectivity)
-        .build();
+    // Incorporate any index locations from the provided sources.
+    let index_locations =
+        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+
+    // Update the index URLs on the client, to take into account any index URLs added by the
+    // sources (e.g., `--index-url` in a `requirements.txt` file).
+    let client = client.with_index_url(index_locations.index_urls());
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -127,6 +136,13 @@ pub(crate) async fn pip_sync(
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
+    // Determine whether to enable build isolation.
+    let build_isolation = if no_build_isolation {
+        BuildIsolation::Shared(&venv)
+    } else {
+        BuildIsolation::Isolated
+    };
+
     // Prep the build context.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -138,6 +154,7 @@ pub(crate) async fn pip_sync(
         &in_flight,
         setup_py,
         config_settings,
+        build_isolation,
         no_build,
         no_binary,
     );

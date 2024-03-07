@@ -7,6 +7,7 @@ use tracing::debug;
 use distribution_types::{InstalledMetadata, Name};
 use platform_host::Platform;
 use uv_cache::Cache;
+use uv_client::{Connectivity, RegistryClientBuilder};
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
 
@@ -19,10 +20,17 @@ pub(crate) async fn pip_uninstall(
     sources: &[RequirementsSource],
     python: Option<String>,
     system: bool,
+    break_system_packages: bool,
     cache: Cache,
+    connectivity: Connectivity,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+
+    // Initialize the registry client.
+    let client: uv_client::RegistryClient = RegistryClientBuilder::new(cache.clone())
+        .connectivity(connectivity)
+        .build();
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -36,7 +44,7 @@ pub(crate) async fn pip_uninstall(
         no_index: _no_index,
         find_links: _find_links,
         extras: _extras,
-    } = RequirementsSpecification::from_simple_sources(sources)?;
+    } = RequirementsSpecification::from_simple_sources(sources, &client).await?;
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
@@ -55,18 +63,22 @@ pub(crate) async fn pip_uninstall(
 
     // If the environment is externally managed, abort.
     if let Some(externally_managed) = venv.interpreter().is_externally_managed() {
-        return if let Some(error) = externally_managed.into_error() {
-            Err(anyhow::anyhow!(
-                "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
-                venv.root().simplified_display().cyan(),
-                textwrap::indent(&error, "  ").green(),
-            ))
+        if break_system_packages {
+            debug!("Ignoring externally managed environment due to `--break-system-packages`");
         } else {
-            Err(anyhow::anyhow!(
-                "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
-                venv.root().simplified_display().cyan()
-            ))
-        };
+            return if let Some(error) = externally_managed.into_error() {
+                Err(anyhow::anyhow!(
+                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
+                    venv.root().simplified_display().cyan(),
+                    textwrap::indent(&error, "  ").green(),
+                ))
+            } else {
+                Err(anyhow::anyhow!(
+                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
+                    venv.root().simplified_display().cyan()
+                ))
+            };
+        }
     }
 
     let _lock = venv.lock()?;

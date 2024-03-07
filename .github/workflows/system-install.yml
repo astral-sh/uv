@@ -231,3 +231,44 @@ jobs:
 
       - name: "Validate global Python install"
         run: python3.9 scripts/check_system_python.py --uv ./target/debug/uv
+
+  install-conda:
+    name: Install on Conda (${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+        python-version: ["3.8", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: "latest"
+          activate-environment: uv
+          python-version: ${{ matrix.python-version }}
+
+      - name: Conda info
+        shell: bash -el {0}
+        run: conda info
+
+      - name: Conda list
+        shell: pwsh
+        run: conda list
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Build"
+        run: cargo build
+
+      - name: "Print Python path"
+        shell: bash -el {0}
+        run: echo $(which python)
+
+      - name: "Validate global Python install"
+        shell: bash -el {0}
+        run: python ./scripts/check_system_python.py --uv ./target/debug/uv

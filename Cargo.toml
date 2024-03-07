@@ -3,7 +3,7 @@ members = ["crates/*"]
 exclude = [
   "scripts",
   # Needs nightly
-  "crates/uv-trampoline"
+  "crates/uv-trampoline",
 ]
 resolver = "2"
 
@@ -22,6 +22,7 @@ anyhow = { version = "1.0.80" }
 async-compression = { version = "0.4.6" }
 async-channel = { version = "2.2.0" }
 async-trait = { version = "0.1.77" }
+async-recursion = { version = "1.0.5" }
 async_http_range_reader = { version = "0.7.0" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "d76801da0943de985254fc6255c0e476b57c5836", features = ["deflate"] }
 base64 = { version = "0.21.7" }
@@ -66,7 +67,7 @@ pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.6.0" }
-pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "aab132a3d4d444dd8dd41d8c4e605abd69dacfe1" }
+pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "332f02b0e436ca8449c7ef5e15b992dd5f35908b" }
 pyo3 = { version = "0.20.3" }
 pyo3-log = { version = "0.9.0" }
 pyproject-toml = { version = "0.10.0" }
@@ -76,6 +77,7 @@ reflink-copy = { version = "0.1.14" }
 regex = { version = "1.10.2" }
 reqwest = { version = "0.11.23", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls-native-roots"] }
 reqwest-middleware = { version = "0.2.4" }
+reqwest-netrc = { version = "0.1.1" }
 reqwest-retry = { version = "0.3.0" }
 rkyv = { version = "0.7.43", features = ["strict", "validation"] }
 rmp-serde = { version = "1.1.2" }

@@ -24,7 +24,7 @@ use uv_installer::{Downloader, NoBinary};
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_resolver::{DistFinder, InMemoryIndex};
-use uv_traits::{BuildContext, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct InstallManyArgs {
@@ -81,6 +81,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
         &in_flight,
         setup_py,
         &config_settings,
+        BuildIsolation::Isolated,
         &no_build,
         &NoBinary::None,
     );

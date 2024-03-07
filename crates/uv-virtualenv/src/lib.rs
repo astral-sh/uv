@@ -64,6 +64,5 @@ pub fn create_venv(
 
     // Create the corresponding `PythonEnvironment`.
     let interpreter = interpreter.with_virtualenv(virtualenv);
-    let root = interpreter.prefix().to_path_buf();
-    Ok(PythonEnvironment::from_interpreter(interpreter, root))
+    Ok(PythonEnvironment::from_interpreter(interpreter))
 }
