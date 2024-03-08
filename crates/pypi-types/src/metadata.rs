@@ -76,24 +76,7 @@ pub enum Error {
 impl Metadata21 {
     /// Parse distribution metadata from metadata bytes
     pub fn parse(content: &[u8]) -> Result<Self, Error> {
-        let (headers, _) = mailparse::parse_headers(content)?;
-
-        let get_first_value = |name| {
-            headers.get_first_header(name).and_then(|header| {
-                let value = header.get_value();
-                if value == "UNKNOWN" {
-                    None
-                } else {
-                    Some(value)
-                }
-            })
-        };
-        let get_all_values = |name| {
-            headers
-                .get_all_values(name)
-                .into_iter()
-                .filter(|value| value != "UNKNOWN")
-        };
+        let headers = Headers::parse(content)?;
 
         let metadata_version = headers
             .get_first_value("Metadata-Version")
@@ -109,17 +92,20 @@ impl Metadata21 {
                 .ok_or(Error::FieldNotFound("Version"))?,
         )
         .map_err(Error::Pep440VersionError)?;
-        let requires_dist = get_all_values("Requires-Dist")
+        let requires_dist = headers
+            .get_all_values("Requires-Dist")
             .map(|requires_dist| {
                 LenientRequirement::from_str(&requires_dist).map(Requirement::from)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let requires_python = get_first_value("Requires-Python")
+        let requires_python = headers
+            .get_first_value("Requires-Python")
             .map(|requires_python| {
                 LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from)
             })
             .transpose()?;
-        let provides_extras = get_all_values("Provides-Extra")
+        let provides_extras = headers
+            .get_all_values("Provides-Extra")
             .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
                 Ok(extra_name) => Some(extra_name),
                 Err(err) => {
@@ -144,6 +130,38 @@ impl FromStr for Metadata21 {
     type Err = Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::parse(s.as_bytes())
+    }
+}
+
+/// The headers of a distribution metadata file.
+#[derive(Debug)]
+struct Headers<'a>(Vec<mailparse::MailHeader<'a>>);
+
+impl<'a> Headers<'a> {
+    /// Parse the headers from the given metadata file content.
+    fn parse(content: &'a [u8]) -> Result<Self, MailParseError> {
+        let (headers, _) = mailparse::parse_headers(content)?;
+        Ok(Self(headers))
+    }
+
+    /// Return the first value associated with the header with the given name.
+    fn get_first_value(&self, name: &str) -> Option<String> {
+        self.0.get_first_header(name).and_then(|header| {
+            let value = header.get_value();
+            if value == "UNKNOWN" {
+                None
+            } else {
+                Some(value)
+            }
+        })
+    }
+
+    /// Return all values associated with the header with the given name.
+    fn get_all_values(&self, name: &str) -> impl Iterator<Item = String> {
+        self.0
+            .get_all_values(name)
+            .into_iter()
+            .filter(|value| value != "UNKNOWN")
     }
 }
 
