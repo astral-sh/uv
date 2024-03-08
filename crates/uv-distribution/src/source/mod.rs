@@ -8,6 +8,7 @@ use anyhow::Result;
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::Response;
+use tempfile::TempDir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, Instrument};
 use url::Url;
@@ -113,6 +114,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }
                     FileLocation::Path(path) => {
+                        // Create a distribution to represent the local path.
                         let path_source_dist = PathSourceDist {
                             name: registry_source_dist.filename.name.clone(),
                             url: VerbatimUrl::unknown(
@@ -121,7 +123,14 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                             path: path.clone(),
                             editable: false,
                         };
-                        return self.path(source_dist, &path_source_dist).boxed().await;
+
+                        // If necessary, extract the archive.
+                        let extracted = self.extract_archive(&path_source_dist).await?;
+
+                        return self
+                            .path(source_dist, &path_source_dist, extracted.path())
+                            .boxed()
+                            .await;
                     }
                 };
 
@@ -147,7 +156,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 self.git(source_dist, git_source_dist).boxed().await?
             }
             SourceDist::Path(path_source_dist) => {
-                self.path(source_dist, path_source_dist).boxed().await?
+                // If necessary, extract the archive.
+                let extracted = self.extract_archive(path_source_dist).await?;
+
+                self.path(source_dist, path_source_dist, extracted.path())
+                    .boxed()
+                    .await?
             }
         };
 
@@ -194,6 +208,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }
                     FileLocation::Path(path) => {
+                        // Create a distribution to represent the local path.
                         let path_source_dist = PathSourceDist {
                             name: registry_source_dist.filename.name.clone(),
                             url: VerbatimUrl::unknown(
@@ -202,8 +217,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                             path: path.clone(),
                             editable: false,
                         };
+
+                        // If necessary, extract the archive.
+                        let extracted = self.extract_archive(&path_source_dist).await?;
+
                         return self
-                            .path_metadata(source_dist, &path_source_dist)
+                            .path_metadata(source_dist, &path_source_dist, extracted.path())
                             .boxed()
                             .await;
                     }
@@ -233,7 +252,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     .await?
             }
             SourceDist::Path(path_source_dist) => {
-                self.path_metadata(source_dist, path_source_dist)
+                // If necessary, extract the archive.
+                let extracted = self.extract_archive(path_source_dist).await?;
+
+                self.path_metadata(source_dist, path_source_dist, extracted.path())
                     .boxed()
                     .await?
             }
@@ -468,6 +490,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         &self,
         source_dist: &SourceDist,
         path_source_dist: &PathSourceDist,
+        source_root: &Path,
     ) -> Result<BuiltWheelMetadata, Error> {
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
@@ -510,7 +533,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source_dist));
 
         let (disk_filename, filename, metadata) = self
-            .build_source_dist(source_dist, &path_source_dist.path, None, &cache_shard)
+            .build_source_dist(source_dist, source_root, None, &cache_shard)
             .await?;
 
         if let Some(task) = task {
@@ -540,6 +563,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         &self,
         source_dist: &SourceDist,
         path_source_dist: &PathSourceDist,
+        source_root: &Path,
     ) -> Result<Metadata21, Error> {
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
@@ -586,7 +610,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_source_dist_metadata(source_dist, &path_source_dist.path, None)
+            .build_source_dist_metadata(source_dist, source_root, None)
             .boxed()
             .await?
         {
@@ -609,7 +633,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source_dist));
 
         let (_disk_filename, _filename, metadata) = self
-            .build_source_dist(source_dist, &path_source_dist.path, None, &cache_shard)
+            .build_source_dist(source_dist, source_root, None, &cache_shard)
             .await?;
 
         if let Some(task) = task {
@@ -834,6 +858,51 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         Ok((fetch, subdirectory))
     }
 
+    /// Extract a local source distribution, if it's stored as a `.tar.gz` or `.zip` archive.
+    ///
+    /// TODO(charlie): Consider storing the extracted source in the cache, to avoid re-extracting
+    /// on every invocation.
+    async fn extract_archive(
+        &self,
+        source_dist: &'a PathSourceDist,
+    ) -> Result<ExtractedSource<'a>, Error> {
+        // If necessary, unzip the source distribution.
+        let path = source_dist.path.as_path();
+
+        let metadata = match fs::metadata(&path).await {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Err(Error::NotFound(path.to_path_buf()));
+            }
+            Err(err) => return Err(Error::CacheRead(err)),
+        };
+
+        if metadata.is_dir() {
+            Ok(ExtractedSource::Directory(path))
+        } else {
+            debug!("Unpacking for build: {source_dist}");
+
+            let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
+                .map_err(Error::CacheWrite)?;
+
+            // Unzip the archive into the temporary directory.
+            let reader = fs_err::tokio::File::open(&path)
+                .await
+                .map_err(Error::CacheRead)?;
+            uv_extract::stream::archive(tokio::io::BufReader::new(reader), path, &temp_dir.path())
+                .await?;
+
+            // Extract the top-level directory from the archive.
+            let extracted = match uv_extract::strip_component(temp_dir.path()) {
+                Ok(top_level) => top_level,
+                Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
+                Err(err) => return Err(err.into()),
+            };
+
+            Ok(ExtractedSource::Archive(extracted, temp_dir))
+        }
+    }
+
     /// Build a source distribution, storing the built wheel in the cache.
     ///
     /// Returns the un-normalized disk filename, the parsed, normalized filename and the metadata
@@ -950,6 +1019,11 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     ) -> Result<(Dist, String, WheelFilename, Metadata21), Error> {
         debug!("Building (editable) {editable}");
 
+        // Verify that the editable exists.
+        if !editable.path.exists() {
+            return Err(Error::NotFound(editable.path.clone()));
+        }
+
         // Build the wheel.
         let disk_filename = self
             .build_context
@@ -977,6 +1051,26 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         debug!("Finished building (editable): {dist}");
         Ok((dist, disk_filename, filename, metadata))
+    }
+}
+
+#[derive(Debug)]
+enum ExtractedSource<'a> {
+    /// The source distribution was passed in as a directory, and so doesn't need to be extracted.
+    Directory(&'a Path),
+    /// The source distribution was passed in as an archive, and was extracted into a temporary
+    /// directory.
+    #[allow(dead_code)]
+    Archive(PathBuf, TempDir),
+}
+
+impl ExtractedSource<'_> {
+    /// Return the [`Path`] to the extracted source root.
+    fn path(&self) -> &Path {
+        match self {
+            ExtractedSource::Directory(path) => path,
+            ExtractedSource::Archive(path, _) => path,
+        }
     }
 }
 

@@ -3283,7 +3283,6 @@ fn missing_editable_requirement() -> Result<()> {
 
     ----- stderr -----
     error: Failed to build editables
-      Caused by: Failed to build editable: file://[TEMP_DIR]/django-3.2.8.tar.gz
       Caused by: Source distribution not found at: /[TEMP_DIR]/django-3.2.8.tar.gz
     "###);
 

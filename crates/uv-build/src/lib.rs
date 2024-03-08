@@ -62,10 +62,6 @@ static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
 pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
-    #[error("Failed to extract archive: {0}")]
-    Extraction(PathBuf, #[source] uv_extract::Error),
-    #[error("Unsupported archive format (extension not recognized): {0}")]
-    UnsupportedArchiveType(String),
     #[error("Invalid source distribution: {0}")]
     InvalidSourceDist(String),
     #[error("Invalid pyproject.toml")]
@@ -74,8 +70,6 @@ pub enum Error {
     EditableSetupPy,
     #[error("Failed to install requirements from {0}")]
     RequirementsInstall(&'static str, #[source] anyhow::Error),
-    #[error("Source distribution not found at: {0}")]
-    NotFound(PathBuf),
     #[error("Failed to create temporary virtualenv")]
     Virtualenv(#[from] uv_virtualenv::Error),
     #[error("Failed to run {0}")]
@@ -365,38 +359,10 @@ impl SourceBuild {
     ) -> Result<Self, Error> {
         let temp_dir = tempdir_in(build_context.cache().root())?;
 
-        let metadata = match fs::metadata(source) {
-            Ok(metadata) => metadata,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                return Err(Error::NotFound(source.to_path_buf()));
-            }
-            Err(err) => return Err(err.into()),
-        };
-
-        let source_root = if metadata.is_dir() {
-            source.to_path_buf()
-        } else {
-            debug!("Unpacking for build: {}", source.display());
-
-            let extracted = temp_dir.path().join("extracted");
-
-            // Unzip the archive into the temporary directory.
-            let reader = fs_err::tokio::File::open(source).await?;
-            uv_extract::stream::archive(tokio::io::BufReader::new(reader), source, &extracted)
-                .await
-                .map_err(|err| Error::Extraction(extracted.clone(), err))?;
-
-            // Extract the top-level directory from the archive.
-            match uv_extract::strip_component(&extracted) {
-                Ok(top_level) => top_level,
-                Err(uv_extract::Error::NonSingularArchive(_)) => extracted,
-                Err(err) => return Err(Error::Extraction(extracted.clone(), err)),
-            }
-        };
         let source_tree = if let Some(subdir) = subdirectory {
-            source_root.join(subdir)
+            source.join(subdir)
         } else {
-            source_root
+            source.to_path_buf()
         };
 
         let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();

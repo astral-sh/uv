@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use tokio::task::JoinError;
 use zip::result::ZipError;
 
@@ -56,6 +57,8 @@ pub enum Error {
     DirWithoutEntrypoint,
     #[error("Failed to extract source distribution")]
     Extract(#[from] uv_extract::Error),
+    #[error("Source distribution not found at: {0}")]
+    NotFound(PathBuf),
 
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
