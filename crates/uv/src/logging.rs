@@ -40,7 +40,7 @@ pub(crate) fn setup_logging(level: Level, duration: impl Layer<Registry> + Send 
                     tracing_subscriber::fmt::layer()
                         .without_time()
                         .with_target(false)
-                        .with_writer(std::io::sink),
+                        .with_writer(std::io::stderr),
                 )
                 .init();
         }
