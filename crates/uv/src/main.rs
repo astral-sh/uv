@@ -68,6 +68,9 @@ struct Cli {
     quiet: bool,
 
     /// Use verbose output.
+    ///
+    /// You can configure fine-grained logging using the `RUST_LOG` environment variable.
+    /// (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
     #[arg(global = true, long, short, conflicts_with = "quiet")]
     verbose: bool,
 
