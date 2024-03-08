@@ -1,11 +1,29 @@
 mod keyring;
 mod middleware;
+mod store;
 
 pub use middleware::AuthMiddleware;
 
 /// HTTP authentication utilities.
 use tracing::warn;
 use url::Url;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct NetLoc {
+    scheme: String,
+    host: Option<String>,
+    port: Option<u16>,
+}
+
+impl From<&Url> for NetLoc {
+    fn from(url: &Url) -> Self {
+        Self {
+            scheme: url.scheme().to_string(),
+            host: url.host_str().map(str::to_string),
+            port: url.port(),
+        }
+    }
+}
 
 /// Optimized version of [`safe_copy_url_auth`] which avoids parsing a string
 /// into a URL unless the given URL has authentication to copy. Useful for patterns
@@ -55,24 +73,14 @@ fn should_retain_auth(trusted_url: &Url, new_url: &Url) -> bool {
     // Note some clients such as Python's `requests` library allow an upgrade
     // from `http` to `https` but this is not spec-compliant.
     // <https://github.com/pypa/pip/blob/75f54cae9271179b8cc80435f92336c97e349f9d/src/pip/_vendor/requests/sessions.py#L133-L136>
-    if trusted_url.scheme() != new_url.scheme() {
-        return false;
-    }
 
     // The host must always be an exact match.
-    if trusted_url.host() != new_url.host() {
-        return false;
-    }
 
     // Check the port.
     // The port is only allowed to differ if it it matches the "default port" for the scheme.
     // However, `reqwest` sets the `port` to `None` if it matches the default port so we do
     // not need any special handling here.
-    if trusted_url.port() != new_url.port() {
-        return false;
-    }
-
-    true
+    NetLoc::from(trusted_url) == NetLoc::from(new_url)
 }
 
 #[cfg(test)]
