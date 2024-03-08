@@ -89,7 +89,15 @@ impl DistInfoMetadata {
 }
 
 #[derive(
-    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
 )]
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]

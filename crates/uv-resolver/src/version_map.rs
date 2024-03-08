@@ -2,20 +2,24 @@ use std::collections::btree_map::{BTreeMap, Entry};
 use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
+use rustc_hash::FxHashSet;
 use tracing::{instrument, warn};
 
-use distribution_filename::DistFilename;
-use distribution_types::{Dist, IncompatibleWheel, IndexUrl, PrioritizedDist, WheelCompatibility};
-use pep440_rs::Version;
+use distribution_filename::{DistFilename, WheelFilename};
+use distribution_types::{
+    Dist, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
+    SourceDistCompatibility, WheelCompatibility,
+};
+use pep440_rs::{Version, VersionSpecifiers};
 use platform_tags::Tags;
-use pypi_types::Hashes;
+use pypi_types::{Hashes, Yanked};
 use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use uv_client::{FlatDistributions, OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_normalize::PackageName;
-use uv_traits::NoBinary;
+use uv_traits::{NoBinary, NoBuild};
 use uv_warnings::warn_user_once;
 
-use crate::python_requirement::PythonRequirement;
+use crate::{python_requirement::PythonRequirement, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -25,6 +29,14 @@ pub struct VersionMap {
 
 impl VersionMap {
     /// Initialize a [`VersionMap`] from the given metadata.
+    ///
+    /// Note it is possible for files to have a different yank status per PEP 592 but in the official
+    /// PyPI warehouse this cannot happen.
+    ///
+    /// Here, we track if each file is yanked separately. If a release is partially yanked, the
+    /// unyanked distributions _can_ be used.
+    ///
+    /// PEP 592: <https://peps.python.org/pep-0592/#warehouse-pypi-implementation-notes>
     #[instrument(skip_all, fields(package_name))]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_metadata(
@@ -33,9 +45,11 @@ impl VersionMap {
         index: &IndexUrl,
         tags: &Tags,
         python_requirement: &PythonRequirement,
+        allowed_yanks: &AllowedYanks,
         exclude_newer: Option<&DateTime<Utc>>,
         flat_index: Option<FlatDistributions>,
         no_binary: &NoBinary,
+        no_build: &NoBuild,
     ) -> Self {
         let mut map = BTreeMap::new();
         // Create stubs for each entry in simple metadata. The full conversion
@@ -85,15 +99,27 @@ impl VersionMap {
             NoBinary::All => true,
             NoBinary::Packages(packages) => packages.contains(package_name),
         };
+        // Check if source distributions are allowed for this package.
+        let no_build = match no_build {
+            NoBuild::None => false,
+            NoBuild::All => true,
+            NoBuild::Packages(packages) => packages.contains(package_name),
+        };
+        let allowed_yanks = allowed_yanks
+            .allowed_versions(package_name)
+            .cloned()
+            .unwrap_or_default();
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
                 simple_metadata,
                 no_binary,
+                no_build,
                 index: index.clone(),
                 tags: tags.clone(),
                 python_requirement: python_requirement.clone(),
                 exclude_newer: exclude_newer.copied(),
+                allowed_yanks,
             }),
         }
     }
@@ -256,6 +282,8 @@ struct VersionMapLazy {
     simple_metadata: OwnedArchive<SimpleMetadata>,
     /// When true, wheels aren't allowed.
     no_binary: bool,
+    /// When true, source dists aren't allowed.
+    no_build: bool,
     /// The URL of the index where this package came from.
     index: IndexUrl,
     /// The set of compatibility tags that determines whether a wheel is usable
@@ -267,6 +295,8 @@ struct VersionMapLazy {
     python_requirement: PythonRequirement,
     /// Whether files newer than this timestamp should be excluded or not.
     exclude_newer: Option<DateTime<Utc>>,
+    /// Which yanked versions are allowed
+    allowed_yanks: FxHashSet<Version>,
 }
 
 impl VersionMapLazy {
@@ -319,69 +349,62 @@ impl VersionMapLazy {
                 .expect("archived version files should deserialize");
             let mut priority_dist = init.cloned().unwrap_or_default();
             for (filename, file) in files.all() {
-                if let Some(exclude_newer) = self.exclude_newer {
+                // Support resolving as if it were an earlier timestamp, at least as long files have
+                // upload time information.
+                let (excluded, upload_time) = if let Some(exclude_newer) = self.exclude_newer {
                     match file.upload_time_utc_ms.as_ref() {
                         Some(&upload_time) if upload_time >= exclude_newer.timestamp_millis() => {
-                            priority_dist.set_exclude_newer();
-                            continue;
+                            (true, Some(upload_time))
                         }
                         None => {
                             warn_user_once!(
                                 "{} is missing an upload date, but user provided: {exclude_newer}",
                                 file.filename,
                             );
-                            priority_dist.set_exclude_newer();
-                            continue;
+                            (true, None)
                         }
-                        _ => {}
+                        _ => (false, None),
                     }
-                }
-                let yanked = file.yanked.clone().unwrap_or_default();
+                } else {
+                    (false, None)
+                };
+
+                // Prioritize amongst all available files.
+                let version = filename.version().clone();
                 let requires_python = file.requires_python.clone();
+                let yanked = file.yanked.clone();
                 let hash = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
-                        // Determine a compatibility for the wheel based on tags
-                        let mut compatibility =
-                            WheelCompatibility::from(filename.compatibility(&self.tags));
-
-                        if compatibility.is_compatible() {
-                            // Check for Python version incompatibility
-                            if let Some(ref requires_python) = file.requires_python {
-                                if !requires_python.contains(self.python_requirement.target()) {
-                                    compatibility = WheelCompatibility::Incompatible(
-                                        IncompatibleWheel::RequiresPython,
-                                    );
-                                }
-                            }
-
-                            // Mark all wheels as incompatibility when binaries are disabled
-                            if self.no_binary {
-                                compatibility =
-                                    WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
-                            }
-                        };
-
+                        let compatibility = self.wheel_compatibility(
+                            &filename,
+                            &version,
+                            requires_python,
+                            yanked,
+                            excluded,
+                            upload_time,
+                        );
                         let dist = Dist::from_registry(
                             DistFilename::WheelFilename(filename),
                             file,
                             self.index.clone(),
                         );
-                        priority_dist.insert_built(
-                            dist,
-                            requires_python,
-                            yanked,
-                            Some(hash),
-                            compatibility,
-                        );
+                        priority_dist.insert_built(dist, Some(hash), compatibility);
                     }
                     DistFilename::SourceDistFilename(filename) => {
+                        let compatibility = self.source_dist_compatibility(
+                            &version,
+                            requires_python,
+                            yanked,
+                            excluded,
+                            upload_time,
+                        );
                         let dist = Dist::from_registry(
                             DistFilename::SourceDistFilename(filename),
                             file,
                             self.index.clone(),
                         );
-                        priority_dist.insert_source(dist, requires_python, yanked, Some(hash));
+                        priority_dist.insert_source(dist, Some(hash), compatibility);
                     }
                 }
             }
@@ -393,6 +416,88 @@ impl VersionMapLazy {
         };
         simple.dist.get_or_init(get_or_init).as_ref()
     }
+
+    fn source_dist_compatibility(
+        &self,
+        version: &Version,
+        requires_python: Option<VersionSpecifiers>,
+        yanked: Option<Yanked>,
+        excluded: bool,
+        upload_time: Option<i64>,
+    ) -> SourceDistCompatibility {
+        // Check if builds are disabled
+        if self.no_build {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
+        }
+
+        // Check if after upload time cutoff
+        if excluded {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::ExcludeNewer(
+                upload_time,
+            ));
+        }
+
+        // Check if yanked
+        if let Some(yanked) = yanked {
+            if yanked.is_yanked() && !self.allowed_yanks.contains(version) {
+                return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(yanked));
+            }
+        }
+
+        // Check if Python version is supported
+        // Source distributions must meet both the _target_ Python version and the
+        // _installed_ Python version (to build successfully)
+        if let Some(requires_python) = requires_python {
+            if !requires_python.contains(self.python_requirement.target())
+                || !requires_python.contains(self.python_requirement.installed())
+            {
+                return SourceDistCompatibility::Incompatible(IncompatibleSource::RequiresPython(
+                    requires_python,
+                ));
+            }
+        }
+
+        SourceDistCompatibility::Compatible
+    }
+
+    fn wheel_compatibility(
+        &self,
+        filename: &WheelFilename,
+        version: &Version,
+        requires_python: Option<VersionSpecifiers>,
+        yanked: Option<Yanked>,
+        excluded: bool,
+        upload_time: Option<i64>,
+    ) -> WheelCompatibility {
+        // Check if binaries are disabled
+        if self.no_binary {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
+        }
+
+        // Check if after upload time cutoff
+        if excluded {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
+        }
+
+        // Check if yanked
+        if let Some(yanked) = yanked {
+            if yanked.is_yanked() && !self.allowed_yanks.contains(version) {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked));
+            }
+        }
+
+        // Check for a Python version incompatibility`
+        if let Some(requires_python) = requires_python {
+            if !requires_python.contains(self.python_requirement.target()) {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
+                    requires_python,
+                ));
+            }
+        }
+
+        // Determine a compatibility for the wheel based on tags
+        WheelCompatibility::from(filename.compatibility(&self.tags))
+    }
 }
 
 /// Represents a possibly initialized [`PrioritizedDist`] for
@@ -402,7 +507,7 @@ enum LazyPrioritizedDist {
     /// Represents a eagerly constructed distribution from a
     /// `FlatDistributions`.
     OnlyFlat(PrioritizedDist),
-    /// Represents a lazyily constructed distribution from an index into a
+    /// Represents a lazily constructed distribution from an index into a
     /// `VersionFiles` from `SimpleMetadata`.
     OnlySimple(SimplePrioritizedDist),
     /// Combines the above. This occurs when we have data from both a flat
