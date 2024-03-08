@@ -105,7 +105,7 @@ impl PrioritizedDist {
     ) {
         // Track the highest-priority wheel.
         if let Some((.., existing_compatibility)) = &self.0.wheel {
-            if compatibility.is_higher_priority(existing_compatibility) {
+            if compatibility.is_more_compatible(existing_compatibility) {
                 self.0.wheel = Some((dist, compatibility));
             }
         } else {
@@ -126,7 +126,7 @@ impl PrioritizedDist {
     ) {
         // Track the highest-priority source.
         if let Some((.., existing_compatibility)) = &self.0.source {
-            if compatibility.is_higher_priority(existing_compatibility) {
+            if compatibility.is_more_compatible(existing_compatibility) {
                 self.0.source = Some((dist, compatibility));
             }
         } else {
@@ -250,7 +250,11 @@ impl WheelCompatibility {
         matches!(self, Self::Compatible(_))
     }
 
-    pub fn is_higher_priority(&self, other: &WheelCompatibility) -> bool {
+    /// Return `true` if the current compatibility is more compatible than another.
+    ///
+    /// Compatible wheels are always higher more compatible than incompatible wheels.
+    /// Compatible wheel ordering is determined by tag priority.
+    pub fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Compatible(_), Self::Incompatible(_)) => true,
             (Self::Compatible(tag_priority), Self::Compatible(other_tag_priority)) => {
@@ -265,7 +269,12 @@ impl WheelCompatibility {
 }
 
 impl SourceDistCompatibility {
-    pub fn is_higher_priority(&self, other: &SourceDistCompatibility) -> bool {
+    /// Return the higher priority compatibility.
+    ///
+    /// Compatible source distributions are always higher priority than incompatible source distributions.
+    /// Compatible source distribution priority is arbitrary.
+    /// Incompatible source distribution priority selects a source distribution that was "closest" to being usable.
+    pub fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Compatible, Self::Incompatible(_)) => true,
             (Self::Compatible, Self::Compatible) => false, // Arbitary
@@ -287,7 +296,7 @@ impl From<TagCompatibility> for WheelCompatibility {
 }
 
 impl IncompatibleSource {
-    fn is_more_compatible(&self, other: &IncompatibleSource) -> bool {
+    fn is_more_compatible(&self, other: &Self) -> bool {
         match self {
             Self::ExcludeNewer(timestamp_self) => match other {
                 // Smaller timestamps are closer to the cut-off time
@@ -312,7 +321,7 @@ impl IncompatibleSource {
 }
 
 impl IncompatibleWheel {
-    fn is_more_compatible(&self, other: &IncompatibleWheel) -> bool {
+    fn is_more_compatible(&self, other: &Self) -> bool {
         match self {
             Self::ExcludeNewer(timestamp_self) => match other {
                 // Smaller timestamps are closer to the cut-off time

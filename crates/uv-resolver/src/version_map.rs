@@ -5,14 +5,14 @@ use chrono::{DateTime, Utc};
 use rustc_hash::FxHashSet;
 use tracing::{instrument, warn};
 
-use distribution_filename::DistFilename;
+use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
     Dist, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
     SourceDistCompatibility, WheelCompatibility,
 };
-use pep440_rs::Version;
+use pep440_rs::{Version, VersionSpecifiers};
 use platform_tags::Tags;
-use pypi_types::Hashes;
+use pypi_types::{Hashes, Yanked};
 use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use uv_client::{FlatDistributions, OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_normalize::PackageName;
@@ -351,7 +351,6 @@ impl VersionMapLazy {
             for (filename, file) in files.all() {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
-
                 let (excluded, upload_time) = if let Some(exclude_newer) = self.exclude_newer {
                     match file.upload_time_utc_ms.as_ref() {
                         Some(&upload_time) if upload_time >= exclude_newer.timestamp_millis() => {
@@ -377,42 +376,14 @@ impl VersionMapLazy {
                 let hash = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
-                        let mut compatibility = if excluded {
-                            // Treat as incompatible if after upload time cutoff
-                            WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(
-                                upload_time,
-                            ))
-                        } else {
-                            // Determine a compatibility for the wheel based on tags
-                            WheelCompatibility::from(filename.compatibility(&self.tags))
-                        };
-
-                        if compatibility.is_compatible() {
-                            // Check for a Python version incompatibility`
-                            if let Some(ref requires_python) = requires_python {
-                                if !requires_python.contains(self.python_requirement.target()) {
-                                    compatibility = WheelCompatibility::Incompatible(
-                                        IncompatibleWheel::RequiresPython(requires_python.clone()),
-                                    );
-                                }
-                            }
-
-                            // Check if yanked
-                            if let Some(yanked) = yanked {
-                                if yanked.is_yanked() && !self.allowed_yanks.contains(&version) {
-                                    compatibility = WheelCompatibility::Incompatible(
-                                        IncompatibleWheel::Yanked(yanked.clone()),
-                                    );
-                                }
-                            }
-
-                            // Mark all wheels as incompatibility when binaries are disabled
-                            if self.no_binary {
-                                compatibility =
-                                    WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
-                            }
-                        };
-
+                        let compatibility = self.wheel_compatibility(
+                            &filename,
+                            &version,
+                            requires_python,
+                            yanked,
+                            excluded,
+                            upload_time,
+                        );
                         let dist = Dist::from_registry(
                             DistFilename::WheelFilename(filename),
                             file,
@@ -421,46 +392,18 @@ impl VersionMapLazy {
                         priority_dist.insert_built(dist, Some(hash), compatibility);
                     }
                     DistFilename::SourceDistFilename(filename) => {
+                        let compatibility = self.source_dist_compatibility(
+                            &version,
+                            requires_python,
+                            yanked,
+                            excluded,
+                            upload_time,
+                        );
                         let dist = Dist::from_registry(
                             DistFilename::SourceDistFilename(filename),
                             file,
                             self.index.clone(),
                         );
-                        let mut compatibility = if self.no_build {
-                            SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild)
-                        } else {
-                            SourceDistCompatibility::Compatible
-                        };
-
-                        if excluded {
-                            // Treat as incompatible if after upload time cutoff
-                            compatibility = SourceDistCompatibility::Incompatible(
-                                IncompatibleSource::ExcludeNewer(upload_time),
-                            );
-                        }
-
-                        // Check if yanked
-                        if let Some(yanked) = yanked {
-                            if yanked.is_yanked() && !self.allowed_yanks.contains(&version) {
-                                compatibility = SourceDistCompatibility::Incompatible(
-                                    IncompatibleSource::Yanked(yanked.clone()),
-                                );
-                            }
-                        }
-
-                        // Check if Python version is supported
-                        // Source distributions must meet both the _target_ Python version and the
-                        // _installed_ Python version (to build successfully)
-                        if let Some(ref requires_python) = requires_python {
-                            if !requires_python.contains(self.python_requirement.target())
-                                || !requires_python.contains(self.python_requirement.installed())
-                            {
-                                compatibility = SourceDistCompatibility::Incompatible(
-                                    IncompatibleSource::RequiresPython(requires_python.clone()),
-                                );
-                            }
-                        }
-
                         priority_dist.insert_source(dist, Some(hash), compatibility);
                     }
                 }
@@ -472,6 +415,88 @@ impl VersionMapLazy {
             }
         };
         simple.dist.get_or_init(get_or_init).as_ref()
+    }
+
+    fn source_dist_compatibility(
+        &self,
+        version: &Version,
+        requires_python: Option<VersionSpecifiers>,
+        yanked: Option<Yanked>,
+        excluded: bool,
+        upload_time: Option<i64>,
+    ) -> SourceDistCompatibility {
+        // Check if builds are disabled
+        if self.no_build {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
+        }
+
+        // Check if after upload time cutoff
+        if excluded {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::ExcludeNewer(
+                upload_time,
+            ));
+        }
+
+        // Check if yanked
+        if let Some(yanked) = yanked {
+            if yanked.is_yanked() && !self.allowed_yanks.contains(version) {
+                return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(yanked));
+            }
+        }
+
+        // Check if Python version is supported
+        // Source distributions must meet both the _target_ Python version and the
+        // _installed_ Python version (to build successfully)
+        if let Some(requires_python) = requires_python {
+            if !requires_python.contains(self.python_requirement.target())
+                || !requires_python.contains(self.python_requirement.installed())
+            {
+                return SourceDistCompatibility::Incompatible(IncompatibleSource::RequiresPython(
+                    requires_python,
+                ));
+            }
+        }
+
+        SourceDistCompatibility::Compatible
+    }
+
+    fn wheel_compatibility(
+        &self,
+        filename: &WheelFilename,
+        version: &Version,
+        requires_python: Option<VersionSpecifiers>,
+        yanked: Option<Yanked>,
+        excluded: bool,
+        upload_time: Option<i64>,
+    ) -> WheelCompatibility {
+        // Check if binaries are disabled
+        if self.no_binary {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
+        }
+
+        // Check if after upload time cutoff
+        if excluded {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
+        }
+
+        // Check if yanked
+        if let Some(yanked) = yanked {
+            if yanked.is_yanked() && !self.allowed_yanks.contains(version) {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked));
+            }
+        }
+
+        // Check for a Python version incompatibility`
+        if let Some(requires_python) = requires_python {
+            if !requires_python.contains(self.python_requirement.target()) {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
+                    requires_python,
+                ));
+            }
+        }
+
+        // Determine a compatibility for the wheel based on tags
+        WheelCompatibility::from(filename.compatibility(&self.tags))
     }
 }
 
