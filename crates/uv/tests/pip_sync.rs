@@ -2949,13 +2949,17 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    let mut filters = INSTA_FILTERS.to_vec();
-    let site_packages = regex::escape(&context.site_packages().display().to_string());
-    filters.push((&site_packages, "[SITE-PACKAGES]"));
-    filters.push((
-        r#"\[SITE-PACKAGES\]/.*.py", received: "#,
-        r#"[SITE-PACKAGES]/[FIRST-FILE]", received: "#,
-    ));
+    let site_packages = regex::escape(&context.site_packages().simplified_display().to_string());
+    let filters: Vec<_> = [
+        (site_packages.as_str(), "[SITE-PACKAGES]"),
+        (
+            r#"\[SITE-PACKAGES\].*.py", received: "#,
+            r#"[SITE-PACKAGES]/[FIRST-FILE]", received: "#
+        ),
+    ]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
 
     uv_snapshot!(filters, command(&context)
         .arg("requirements.txt")

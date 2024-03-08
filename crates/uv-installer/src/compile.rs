@@ -32,7 +32,7 @@ pub enum CompileError {
     PythonSubcommand(#[source] io::Error),
     #[error("Failed to create temporary script file")]
     TempFile(#[source] io::Error),
-    #[error("Bytecode compilation failed, expected {0:?}, received: {1:?}")]
+    #[error(r#"Bytecode compilation failed, expected "{0}", received: "{1}""#)]
     WrongPath(String, String),
     #[error("Failed to write to Python {device}")]
     ChildStdio {
