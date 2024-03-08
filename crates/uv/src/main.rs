@@ -347,7 +347,7 @@ struct PipCompileArgs {
     ///
     /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
     /// `uv` will try to use `keyring` via CLI when this flag is used.
-    #[clap(long, conflicts_with = "no_index")]
+    #[clap(long)]
     use_keyring: bool,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
