@@ -256,8 +256,10 @@ impl CandidateSelector {
 
             // If candidate is not compatible due to exclude newer, continue searching.
             // This is a special case — we pretend versions with exclude newer incompatibilities
-            // do not exist so that they are not present in error messages in our test suite
-            // We cannot
+            // do not exist so that they are not present in error messages in our test suite.
+            // TODO(zanieb): Now that `--exclude-newer` is user facing we may want to consider
+            // flagging this behavior such that we _will_ report filtered distributions due to
+            // exclude-newer in our error messages.
             if matches!(
                 candidate.dist(),
                 CandidateDist::Incompatible(
