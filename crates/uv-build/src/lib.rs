@@ -48,6 +48,10 @@ static LD_NOT_FOUND_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"/usr/bin/ld: cannot find -l([a-zA-Z10-9]+): No such file or directory").unwrap()
 });
 
+/// e.g. `error: invalid command 'bdist_wheel'`
+static WHEEL_NOT_FOUND_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"error: invalid command 'bdist_wheel'").unwrap());
+
 /// The default backend to use when PEP 517 is used without a `build-system` section.
 static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
     backend: "setuptools.build_meta:__legacy__".to_string(),
@@ -99,6 +103,7 @@ pub enum Error {
 pub enum MissingLibrary {
     Header(String),
     Linker(String),
+    PythonPackage(String),
 }
 
 #[derive(Debug, Error)]
@@ -125,6 +130,13 @@ impl Display for MissingHeaderCause {
                     library = library, package_id = self.package_id
                 )
             }
+            MissingLibrary::PythonPackage(package) => {
+                write!(
+                    f,
+                    "This error likely indicates that you need to `uv pip install {package}` into the build environment for {package_id}",
+                    package = package, package_id = self.package_id
+                )
+            }
         }
     }
 }
@@ -148,6 +160,8 @@ impl Error {
                 LD_NOT_FOUND_RE.captures(line.trim()).map(|c| c.extract())
             {
                 Some(MissingLibrary::Linker(library.to_string()))
+            } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
+                Some(MissingLibrary::PythonPackage("wheel".to_string()))
             } else {
                 None
             }
@@ -1023,6 +1037,52 @@ mod test {
         insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
             @"This error likely indicates that you need to install the library that provides a shared library for ncurses for pygraphviz-1.11 (e.g. libncurses-dev)"
+        );
+    }
+
+    #[test]
+    fn missing_wheel_package() {
+        let output = Output {
+            status: ExitStatus::default(), // This is wrong but `from_raw` is platform-gated.
+            stdout: Vec::new(),
+            stderr: indoc!(
+                r"
+            usage: setup.py [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+               or: setup.py --help [cmd1 cmd2 ...]
+               or: setup.py --help-commands
+               or: setup.py cmd --help
+
+            error: invalid command 'bdist_wheel'
+                "
+            )
+            .as_bytes()
+            .to_vec(),
+        };
+
+        let err = Error::from_command_output(
+            "Failed building wheel through setup.py".to_string(),
+            &output,
+            "pygraphviz-1.11",
+        );
+        assert!(matches!(err, Error::MissingHeader { .. }));
+        // Unix uses exit status, Windows uses exit code.
+        let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        insta::assert_snapshot!(formatted, @r###"
+        Failed building wheel through setup.py with exit code: 0
+        --- stdout:
+
+        --- stderr:
+        usage: setup.py [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+           or: setup.py --help [cmd1 cmd2 ...]
+           or: setup.py --help-commands
+           or: setup.py cmd --help
+
+        error: invalid command 'bdist_wheel'
+        ---
+        "###);
+        insta::assert_snapshot!(
+            std::error::Error::source(&err).unwrap(),
+            @"This error likely indicates that you need to `uv pip install wheel` into the build environment for pygraphviz-1.11"
         );
     }
 }
