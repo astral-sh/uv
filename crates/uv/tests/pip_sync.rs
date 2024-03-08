@@ -2954,12 +2954,12 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
         (site_packages.as_str(), "[SITE-PACKAGES]"),
         (
             r#"\[SITE-PACKAGES\].*.py", received: "#,
-            r#"[SITE-PACKAGES]/[FIRST-FILE]", received: "#
+            r#"[SITE-PACKAGES]/[FIRST-FILE]", received: "#,
         ),
     ]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    .into_iter()
+    .chain(INSTA_FILTERS.to_vec())
+    .collect();
 
     uv_snapshot!(filters, command(&context)
         .arg("requirements.txt")
