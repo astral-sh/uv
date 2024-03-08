@@ -341,8 +341,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         // Incompatible requires-python versions are special in that we track
                         // them as incompatible dependencies instead of marking the package version
                         // as unavailable directly
-                        UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(IncompatibleSource::RequiresPython(requires_python))
-| IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(requires_python))) => {
+                        UnavailableVersion::IncompatibleDist(
+                            IncompatibleDist::Source(IncompatibleSource::RequiresPython(requires_python))
+                            | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(requires_python))
+                        ) => {
                             let python_version = requires_python
                                 .iter()
                                 .map(PubGrubSpecifier::try_from)
