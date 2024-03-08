@@ -49,11 +49,12 @@ impl AllowedYanks {
         Self(allowed_yanks)
     }
 
-    /// Returns `true` if the given package version is allowed, even if it's marked as yanked by
-    /// the relevant index.
-    pub(crate) fn allowed(&self, package_name: &PackageName, version: &Version) -> bool {
-        self.0
-            .get(package_name)
-            .is_some_and(|allowed_yanks| allowed_yanks.contains(version))
+    /// Returns versions for the given package which are allowed even if marked as yanked by the
+    /// relevant index.
+    pub(crate) fn allowed_versions(
+        &self,
+        package_name: &PackageName,
+    ) -> Option<&FxHashSet<Version>> {
+        self.0.get(package_name)
     }
 }

@@ -2,6 +2,7 @@ use std::collections::btree_map::{BTreeMap, Entry};
 use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
+use rustc_hash::FxHashSet;
 use tracing::{instrument, warn};
 
 use distribution_filename::DistFilename;
@@ -97,12 +98,17 @@ impl VersionMap {
             NoBinary::None => false,
             NoBinary::All => true,
             NoBinary::Packages(packages) => packages.contains(package_name),
-        }; // Check if source distributions are allowed for this package.
+        };
+        // Check if source distributions are allowed for this package.
         let no_build = match no_build {
             NoBuild::None => false,
             NoBuild::All => true,
             NoBuild::Packages(packages) => packages.contains(package_name),
         };
+        let allowed_yanks = allowed_yanks
+            .allowed_versions(package_name)
+            .cloned()
+            .unwrap_or_default();
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
@@ -113,7 +119,7 @@ impl VersionMap {
                 tags: tags.clone(),
                 python_requirement: python_requirement.clone(),
                 exclude_newer: exclude_newer.copied(),
-                allowed_yanks: allowed_yanks.clone(),
+                allowed_yanks,
             }),
         }
     }
@@ -290,7 +296,7 @@ struct VersionMapLazy {
     /// Whether files newer than this timestamp should be excluded or not.
     exclude_newer: Option<DateTime<Utc>>,
     /// Which yanked versions are allowed
-    allowed_yanks: AllowedYanks,
+    allowed_yanks: FxHashSet<Version>,
 }
 
 impl VersionMapLazy {
@@ -365,7 +371,6 @@ impl VersionMapLazy {
                 };
 
                 // Prioritize amongst all available files.
-                let package_name = filename.name().clone();
                 let version = filename.version().clone();
                 let requires_python = file.requires_python.clone();
                 let yanked = file.yanked.clone();
@@ -394,9 +399,7 @@ impl VersionMapLazy {
 
                             // Check if yanked
                             if let Some(yanked) = yanked {
-                                if yanked.is_yanked()
-                                    && !self.allowed_yanks.allowed(&package_name, &version)
-                                {
+                                if yanked.is_yanked() && !self.allowed_yanks.contains(&version) {
                                     compatibility = WheelCompatibility::Incompatible(
                                         IncompatibleWheel::Yanked(yanked.clone()),
                                     );
@@ -438,9 +441,7 @@ impl VersionMapLazy {
 
                         // Check if yanked
                         if let Some(yanked) = yanked {
-                            if yanked.is_yanked()
-                                && !self.allowed_yanks.allowed(&package_name, &version)
-                            {
+                            if yanked.is_yanked() && !self.allowed_yanks.contains(&version) {
                                 compatibility = SourceDistCompatibility::Incompatible(
                                     IncompatibleSource::Yanked(yanked.clone()),
                                 );
