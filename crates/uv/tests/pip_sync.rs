@@ -2950,7 +2950,7 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     let mut filters = INSTA_FILTERS.to_vec();
-    let site_packages = context.site_packages().display().to_string();
+    let site_packages = regex::escape(&context.site_packages().display().to_string());
     filters.push((&site_packages, "[SITE-PACKAGES]"));
     filters.push((
         r#"\[SITE-PACKAGES\]/.*.py", received: "#,
