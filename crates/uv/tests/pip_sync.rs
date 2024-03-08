@@ -2949,7 +2949,14 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    let site_packages = regex::escape(&context.site_packages().simplified_display().to_string());
+    let site_packages = regex::escape(
+        &context
+            .site_packages()
+            .canonicalize()
+            .unwrap()
+            .simplified_display()
+            .to_string(),
+    );
     let filters: Vec<_> = [
         (site_packages.as_str(), "[SITE-PACKAGES]"),
         (
