@@ -21,7 +21,7 @@ use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
 use install_wheel_rs::{find_dist_info, is_metadata_entry};
 use pep440_rs::Version;
-use pypi_types::{Metadata21, SimpleJson};
+use pypi_types::{Metadata23, SimpleJson};
 use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
@@ -343,7 +343,7 @@ impl RegistryClient {
     /// 2. From a remote wheel by partial zip reading
     /// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
     #[instrument(skip_all, fields(% built_dist))]
-    pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
+    pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata23, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => match &wheel.file.url {
                 FileLocation::RelativeUrl(base, url) => {
@@ -399,7 +399,7 @@ impl RegistryClient {
         index: &IndexUrl,
         file: &File,
         url: &Url,
-    ) -> Result<Metadata21, Error> {
+    ) -> Result<Metadata23, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
         if file
@@ -428,7 +428,7 @@ impl RegistryClient {
                 let bytes = response.bytes().await.map_err(ErrorKind::from)?;
 
                 info_span!("parse_metadata21")
-                    .in_scope(|| Metadata21::parse_metadata(bytes.as_ref()))
+                    .in_scope(|| Metadata23::parse_metadata(bytes.as_ref()))
                     .map_err(|err| {
                         Error::from(ErrorKind::MetadataParseError(
                             filename,
@@ -462,7 +462,7 @@ impl RegistryClient {
         filename: &'data WheelFilename,
         url: &'data Url,
         cache_shard: WheelCache<'data>,
-    ) -> Result<Metadata21, Error> {
+    ) -> Result<Metadata23, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.remote_wheel_dir(filename.name.as_ref()),
@@ -507,14 +507,14 @@ impl RegistryClient {
                 .map_err(ErrorKind::AsyncHttpRangeReader)?;
                 trace!("Getting metadata for {filename} by range request");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
-                let metadata = Metadata21::parse_metadata(text.as_bytes()).map_err(|err| {
+                let metadata = Metadata23::parse_metadata(text.as_bytes()).map_err(|err| {
                     Error::from(ErrorKind::MetadataParseError(
                         filename.clone(),
                         url.to_string(),
                         Box::new(err),
                     ))
                 })?;
-                Ok::<Metadata21, CachedClientError<Error>>(metadata)
+                Ok::<Metadata23, CachedClientError<Error>>(metadata)
             }
             .boxed()
             .instrument(info_span!("read_metadata_range_request", wheel = %filename))
@@ -591,7 +591,7 @@ async fn read_metadata_async_seek(
     filename: &WheelFilename,
     debug_source: String,
     reader: impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
-) -> Result<Metadata21, Error> {
+) -> Result<Metadata23, Error> {
     let mut zip_reader = async_zip::tokio::read::seek::ZipFileReader::with_tokio(reader)
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
@@ -617,7 +617,7 @@ async fn read_metadata_async_seek(
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
-    let metadata = Metadata21::parse_metadata(&contents).map_err(|err| {
+    let metadata = Metadata23::parse_metadata(&contents).map_err(|err| {
         ErrorKind::MetadataParseError(filename.clone(), debug_source, Box::new(err))
     })?;
     Ok(metadata)
@@ -628,7 +628,7 @@ async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
     filename: &WheelFilename,
     debug_source: String,
     reader: R,
-) -> Result<Metadata21, Error> {
+) -> Result<Metadata23, Error> {
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(reader);
 
     while let Some(mut entry) = zip
@@ -649,7 +649,7 @@ async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
             let mut contents = Vec::new();
             reader.read_to_end(&mut contents).await.unwrap();
 
-            let metadata = Metadata21::parse_metadata(&contents).map_err(|err| {
+            let metadata = Metadata23::parse_metadata(&contents).map_err(|err| {
                 ErrorKind::MetadataParseError(filename.clone(), debug_source, Box::new(err))
             })?;
             return Ok(metadata);

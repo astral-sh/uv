@@ -4,7 +4,7 @@ use serde::Deserialize;
 use distribution_types::{
     CachedDist, InstalledDist, InstalledMetadata, InstalledVersion, LocalEditable, Name,
 };
-use pypi_types::Metadata21;
+use pypi_types::Metadata23;
 use requirements_txt::EditableRequirement;
 
 use uv_normalize::PackageName;
@@ -14,7 +14,7 @@ use uv_normalize::PackageName;
 pub struct BuiltEditable {
     pub editable: LocalEditable,
     pub wheel: CachedDist,
-    pub metadata: Metadata21,
+    pub metadata: Metadata23,
 }
 
 /// An editable distribution that has been resolved to a concrete distribution.

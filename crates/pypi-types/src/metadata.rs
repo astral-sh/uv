@@ -15,14 +15,16 @@ use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 use crate::lenient_requirement::LenientRequirement;
 use crate::LenientVersionSpecifiers;
 
-/// Python Package Metadata 2.1 as specified in
+/// Python Package Metadata 2.3 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.
 ///
 /// This is a subset of the full metadata specification, and only includes the
 /// fields that are relevant to dependency resolution.
+///
+/// At present, we support up to version 2.3 of the metadata specification.
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-pub struct Metadata21 {
+pub struct Metadata23 {
     // Mandatory fields
     pub metadata_version: String,
     pub name: PackageName,
@@ -70,6 +72,8 @@ pub enum Error {
     Pep508Error(#[from] Pep508Error),
     #[error(transparent)]
     InvalidName(#[from] InvalidNameError),
+    #[error("Invalid `Metadata-Version` field: {0}")]
+    InvalidMetadataVersion(String),
     #[error("Reading metadata from `PKG-INFO` requires Metadata 2.2 or later (found: {0})")]
     UnsupportedMetadataVersion(String),
     #[error("The following field was marked as dynamic: {0}")]
@@ -77,8 +81,8 @@ pub enum Error {
 }
 
 /// From <https://github.com/PyO3/python-pkginfo-rs/blob/d719988323a0cfea86d4737116d7917f30e819e2/src/metadata.rs#LL78C2-L91C26>
-impl Metadata21 {
-    /// Parse the [`Metadata21`] from a `METADATA` file, as included in a built distribution (wheel).
+impl Metadata23 {
+    /// Parse the [`Metadata23`] from a `METADATA` file, as included in a built distribution (wheel).
     pub fn parse_metadata(content: &[u8]) -> Result<Self, Error> {
         let headers = Headers::parse(content)?;
 
@@ -129,7 +133,7 @@ impl Metadata21 {
         })
     }
 
-    /// Read the [`Metadata21`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
+    /// Read the [`Metadata23`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
     /// or later _and_ none of the required fields (`Requires-Python`, `Requires-Dist`, and
     /// `Provides-Extra`) are marked as dynamic.
     pub fn parse_pkg_info(content: &[u8]) -> Result<Self, Error> {
@@ -140,7 +144,10 @@ impl Metadata21 {
         let metadata_version = headers
             .get_first_value("Metadata-Version")
             .ok_or(Error::FieldNotFound("Metadata-Version"))?;
-        if metadata_version != "2.2" && metadata_version != "2.3" {
+
+        // Parse the version into (major, minor).
+        let (major, minor) = parse_version(&metadata_version)?;
+        if (major, minor) < (2, 2) || (major, minor) >= (3, 0) {
             return Err(Error::UnsupportedMetadataVersion(metadata_version));
         }
 
@@ -203,6 +210,20 @@ impl Metadata21 {
     }
 }
 
+/// Parse a `Metadata-Version` field into a (major, minor) tuple.
+fn parse_version(metadata_version: &str) -> Result<(u8, u8), Error> {
+    let (major, minor) = metadata_version
+        .split_once('.')
+        .ok_or(Error::InvalidMetadataVersion(metadata_version.to_string()))?;
+    let major = major
+        .parse::<u8>()
+        .map_err(|_| Error::InvalidMetadataVersion(metadata_version.to_string()))?;
+    let minor = minor
+        .parse::<u8>()
+        .map_err(|_| Error::InvalidMetadataVersion(metadata_version.to_string()))?;
+    Ok((major, minor))
+}
+
 /// The headers of a distribution metadata file.
 #[derive(Debug)]
 struct Headers<'a>(Vec<mailparse::MailHeader<'a>>);
@@ -244,67 +265,67 @@ mod tests {
 
     use crate::Error;
 
-    use super::Metadata21;
+    use super::Metadata23;
 
     #[test]
     fn test_parse_metadata() {
         let s = "Metadata-Version: 1.0";
-        let meta = Metadata21::parse_metadata(s.as_bytes());
+        let meta = Metadata23::parse_metadata(s.as_bytes());
         assert!(matches!(meta, Err(Error::FieldNotFound("Name"))));
 
         let s = "Metadata-Version: 1.0\nName: asdf";
-        let meta = Metadata21::parse_metadata(s.as_bytes());
+        let meta = Metadata23::parse_metadata(s.as_bytes());
         assert!(matches!(meta, Err(Error::FieldNotFound("Version"))));
 
         let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0";
-        let meta = Metadata21::parse_metadata(s.as_bytes()).unwrap();
+        let meta = Metadata23::parse_metadata(s.as_bytes()).unwrap();
         assert_eq!(meta.metadata_version, "1.0");
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
 
         let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0\nAuthor: 中文\n\n一个 Python 包";
-        let meta = Metadata21::parse_metadata(s.as_bytes()).unwrap();
+        let meta = Metadata23::parse_metadata(s.as_bytes()).unwrap();
         assert_eq!(meta.metadata_version, "1.0");
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
 
         let s = "Metadata-Version: 1.0\nName: =?utf-8?q?foobar?=\nVersion: 1.0";
-        let meta = Metadata21::parse_metadata(s.as_bytes()).unwrap();
+        let meta = Metadata23::parse_metadata(s.as_bytes()).unwrap();
         assert_eq!(meta.metadata_version, "1.0");
         assert_eq!(meta.name, PackageName::from_str("foobar").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
 
         let s = "Metadata-Version: 1.0\nName: =?utf-8?q?=C3=A4_space?= <x@y.org>\nVersion: 1.0";
-        let meta = Metadata21::parse_metadata(s.as_bytes());
+        let meta = Metadata23::parse_metadata(s.as_bytes());
         assert!(matches!(meta, Err(Error::InvalidName(_))));
     }
 
     #[test]
     fn test_parse_pkg_info() {
         let s = "Metadata-Version: 2.1";
-        let meta = Metadata21::parse_pkg_info(s.as_bytes());
+        let meta = Metadata23::parse_pkg_info(s.as_bytes());
         assert!(matches!(meta, Err(Error::UnsupportedMetadataVersion(_))));
 
         let s = "Metadata-Version: 2.2\nName: asdf";
-        let meta = Metadata21::parse_pkg_info(s.as_bytes());
+        let meta = Metadata23::parse_pkg_info(s.as_bytes());
         assert!(matches!(meta, Err(Error::FieldNotFound("Version"))));
 
         let s = "Metadata-Version: 2.3\nName: asdf";
-        let meta = Metadata21::parse_pkg_info(s.as_bytes());
+        let meta = Metadata23::parse_pkg_info(s.as_bytes());
         assert!(matches!(meta, Err(Error::FieldNotFound("Version"))));
 
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0";
-        let meta = Metadata21::parse_pkg_info(s.as_bytes()).unwrap();
+        let meta = Metadata23::parse_pkg_info(s.as_bytes()).unwrap();
         assert_eq!(meta.metadata_version, "2.3");
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
 
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nDynamic: Requires-Dist";
-        let meta = Metadata21::parse_pkg_info(s.as_bytes()).unwrap_err();
+        let meta = Metadata23::parse_pkg_info(s.as_bytes()).unwrap_err();
         assert!(matches!(meta, Error::DynamicField("Requires-Dist")));
 
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nRequires-Dist: foo";
-        let meta = Metadata21::parse_pkg_info(s.as_bytes()).unwrap();
+        let meta = Metadata23::parse_pkg_info(s.as_bytes()).unwrap();
         assert_eq!(meta.metadata_version, "2.3");
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));

@@ -6,7 +6,7 @@ use url::Url;
 
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
-use pypi_types::Metadata21;
+use pypi_types::Metadata23;
 use uv_client::{FlatIndex, RegistryClient};
 use uv_distribution::DistributionDatabase;
 use uv_normalize::PackageName;
@@ -16,7 +16,7 @@ use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
-pub type WheelMetadataResult = Result<(Metadata21, Option<Url>), uv_distribution::Error>;
+pub type WheelMetadataResult = Result<(Metadata23, Option<Url>), uv_distribution::Error>;
 
 /// The response when requesting versions for a package
 #[derive(Debug)]

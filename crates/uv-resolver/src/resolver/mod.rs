@@ -25,7 +25,7 @@ use distribution_types::{
 use pep440_rs::{Version, VersionSpecifiers, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::{IncompatibleTag, Tags};
-use pypi_types::{Metadata21, Yanked};
+use pypi_types::{Metadata23, Yanked};
 pub(crate) use urls::Urls;
 use uv_client::{FlatIndex, RegistryClient};
 use uv_distribution::DistributionDatabase;
@@ -1133,7 +1133,7 @@ enum Response {
     /// The returned metadata for a distribution.
     Dist {
         dist: Dist,
-        metadata: Metadata21,
+        metadata: Metadata23,
         precise: Option<Url>,
     },
 }
