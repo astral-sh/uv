@@ -8,7 +8,6 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
-use reqwest_netrc::NetrcMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
@@ -22,7 +21,7 @@ use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Nam
 use install_wheel_rs::{find_dist_info, is_metadata_entry};
 use pep440_rs::Version;
 use pypi_types::{Metadata21, SimpleJson};
-use uv_auth::safe_copy_url_auth;
+use uv_auth::{safe_copy_url_auth, AuthMiddleware};
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
 use uv_version::version;
@@ -30,7 +29,7 @@ use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
-use crate::middleware::{KeyringMiddleware, OfflineMiddleware};
+use crate::middleware::OfflineMiddleware;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{CachedClient, CachedClientError, Error, ErrorKind};
@@ -139,21 +138,7 @@ impl RegistryClientBuilder {
                 let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
                 let client = client.with(retry_strategy);
 
-                // Initialize the netrc middleware.
-                let client = if let Ok(netrc) = NetrcMiddleware::new() {
-                    client.with_init(netrc)
-                } else {
-                    client
-                };
-
-                // Initialize keyring middleware.
-                // Note - this will overwrite netrc middleware's basic auth header if both are used and a
-                // keyring password exists
-                let client = if self.use_keyring {
-                    client.with_init(KeyringMiddleware)
-                } else {
-                    client
-                };
+                let client = client.with_init(AuthMiddleware::new(self.use_keyring));
 
                 client.build()
             }

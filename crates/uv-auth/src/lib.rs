@@ -1,3 +1,8 @@
+mod keyring;
+mod middleware;
+
+pub use middleware::AuthMiddleware;
+
 /// HTTP authentication utilities.
 use tracing::warn;
 use url::Url;

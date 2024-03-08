@@ -6,3 +6,12 @@ edition = "2021"
 [dependencies]
 url = { workspace = true }
 tracing = { workspace = true }
+thiserror = { workspace = true }
+lazy_static = { workspace = true }
+reqwest-middleware = { workspace = true }
+rust-netrc = { workspace = true }
+
+[dev-dependencies]
+reqwest = { workspace = true }
+wiremock = { workspace = true }
+tokio = { workspace = true }

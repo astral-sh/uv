@@ -1,10 +1,9 @@
 use std::fmt::Debug;
 
 use reqwest::{Request, Response};
-use reqwest_middleware::{Middleware, Next, RequestBuilder, RequestInitialiser};
+use reqwest_middleware::{Middleware, Next};
 use task_local_extensions::Extensions;
 use url::Url;
-use uv_keyring::get_keyring_auth;
 
 /// A custom error type for the offline middleware.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,30 +43,5 @@ impl Middleware for OfflineMiddleware {
             }
             .into(),
         ))
-    }
-}
-
-pub struct KeyringMiddleware;
-
-impl RequestInitialiser for KeyringMiddleware {
-    fn init(&self, req: RequestBuilder) -> RequestBuilder {
-        match req.try_clone() {
-            Some(nr) => req
-                .try_clone()
-                .unwrap()
-                .build()
-                .ok()
-                .and_then(|r| {
-                    let url = r.url();
-                    match get_keyring_auth(url) {
-                        Ok(auth) => {
-                            Some(nr.basic_auth(auth.username.clone(), Some(auth.password.clone())))
-                        }
-                        _ => None,
-                    }
-                })
-                .unwrap_or(req),
-            None => req,
-        }
     }
 }

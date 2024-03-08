@@ -78,7 +78,7 @@ reflink-copy = { version = "0.1.14" }
 regex = { version = "1.10.2" }
 reqwest = { version = "0.11.23", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls-native-roots"] }
 reqwest-middleware = { version = "0.2.4" }
-reqwest-netrc = { version = "0.1.1" }
+rust-netrc = { version = "0.1.1" }
 reqwest-retry = { version = "0.3.0" }
 rkyv = { version = "0.7.43", features = ["strict", "validation"] }
 rmp-serde = { version = "1.1.2" }
@@ -95,7 +95,7 @@ tempfile = { version = "3.9.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "1.0.56" }
 tl = { version = "0.7.7" }
-tokio = { version = "1.35.1", features = ["rt-multi-thread"] }
+tokio = { version = "1.35.1", features = ["rt-multi-thread", "macros"] }
 tokio-stream = { version = "0.1.14" }
 tokio-tar = { version = "0.3.1" }
 tokio-util = { version = "0.7.10", features = ["compat"] }
@@ -110,6 +110,7 @@ unscanny = { version = "0.1.0" }
 url = { version = "2.5.0" }
 urlencoding = { version = "2.1.3" }
 walkdir = { version = "2.4.0" }
+wiremock = { version = "0.5.22" }
 which = { version = "6.0.0" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 

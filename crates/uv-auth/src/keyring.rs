@@ -1,13 +1,26 @@
 use lazy_static::lazy_static;
 use std::{collections::HashMap, process::Command, sync::Mutex};
 
-use anyhow::{anyhow, bail, Result};
+use thiserror::Error;
 use tracing::debug;
 use url::Url;
 
+// TODO - migrate to AuthenticationStore used in middleware
 lazy_static! {
     static ref PASSWORDS: Mutex<HashMap<String, Option<BasicAuthData>>> =
         Mutex::new(HashMap::new());
+}
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("Url is not valid Keyring target: {0}")]
+    NotKeyringTarget(String),
+    #[error("Keyring did not resolve password: {0}")]
+    NotFound(String),
+    #[error(transparent)]
+    CLIError(#[from] std::io::Error),
+    #[error(transparent)]
+    ParseError(#[from] std::string::FromUtf8Error),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -16,22 +29,24 @@ pub struct BasicAuthData {
     pub password: String,
 }
 
-pub fn get_keyring_auth(url: &Url) -> Result<BasicAuthData> {
+pub fn get_keyring_auth(url: &Url) -> Result<BasicAuthData, Error> {
     let host = url.host_str();
     if host.is_none() {
-        bail!("Should only use keyring for urls with host");
+        return Err(Error::NotKeyringTarget(
+            "Should only use keyring for urls with host".to_string(),
+        ));
     }
     let host = host.unwrap();
     if url.password().is_some() {
-        bail!("Url already contains password - keyring not required")
+        return Err(Error::NotKeyringTarget(
+            "Url already contains password - keyring not required".to_string(),
+        ));
     }
     let mut passwords = PASSWORDS.lock().unwrap();
-    if passwords.contains_key(host) {
-        return passwords
-            .get(host)
-            .unwrap()
-            .clone()
-            .ok_or(anyhow!("Previously failed to find keyring password"));
+    if let Some(password) = passwords.get(host) {
+        return password.clone().ok_or(Error::NotFound(
+            "Previously failed to find keyring password".to_string(),
+        ));
     }
     let username = match url.username() {
         u if !u.is_empty() => u,
@@ -50,15 +65,13 @@ pub fn get_keyring_auth(url: &Url) -> Result<BasicAuthData> {
         .output()
     {
         Ok(output) if output.status.success() => Ok(String::from_utf8(output.stdout)
-            .expect("Keyring output should be valid utf8")
+            .map_err(|e| Error::ParseError(e))?
             .trim_end()
             .to_owned()),
-        Ok(output) => Err(anyhow!(
-            "Unable to get keyring password for {url}: {}",
-            String::from_utf8(output.stderr)
-                .unwrap_or(String::from("Unable to convert stderr to String")),
+        Ok(output) => Err(Error::NotFound(
+            String::from_utf8(output.stderr).map_err(|e| Error::ParseError(e))?,
         )),
-        Err(e) => Err(anyhow!(e)),
+        Err(e) => Err(Error::CLIError(e)),
     };
     let output = output.map(|password| BasicAuthData {
         username: username.to_string(),
@@ -72,17 +85,15 @@ pub fn get_keyring_auth(url: &Url) -> Result<BasicAuthData> {
 mod test {
     use url::Url;
 
-    use crate::{get_keyring_auth, BasicAuthData, PASSWORDS};
+    use super::{get_keyring_auth, BasicAuthData, Error, PASSWORDS};
 
     #[test]
     fn hostless_url_should_err() {
         let url = Url::parse("file:/etc/bin/").unwrap();
         let res = get_keyring_auth(&url);
         assert!(res.is_err());
-        assert_eq!(
-            res.unwrap_err().to_string(),
-            "Should only use keyring for urls with host"
-        );
+        assert!(matches!(res.unwrap_err(),
+                Error::NotKeyringTarget(s) if s == "Should only use keyring for urls with host"));
     }
 
     #[test]
@@ -90,10 +101,8 @@ mod test {
         let url = Url::parse("https://u:p@example.com").unwrap();
         let res = get_keyring_auth(&url);
         assert!(res.is_err());
-        assert_eq!(
-            res.unwrap_err().to_string(),
-            "Url already contains password - keyring not required"
-        );
+        assert!(matches!(res.unwrap_err(),
+                Error::NotKeyringTarget(s) if s == "Url already contains password - keyring not required"));
     }
 
     #[test]
@@ -125,9 +134,7 @@ mod test {
 
         let not_found_res = get_keyring_auth(&not_found_second_url);
         assert!(not_found_res.is_err());
-        assert_eq!(
-            not_found_res.unwrap_err().to_string(),
-            "Previously failed to find keyring password"
-        );
+        assert!(matches!(not_found_res.unwrap_err(),
+                Error::NotFound(s) if s == "Previously failed to find keyring password"));
     }
 }
