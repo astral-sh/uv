@@ -22,7 +22,7 @@ use distribution_types::{
 use install_wheel_rs::read_dist_info;
 use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
-use pypi_types::Metadata21;
+use pypi_types::Metadata23;
 use uv_cache::{
     ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness, WheelCache,
 };
@@ -174,7 +174,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     pub async fn download_and_build_metadata(
         &self,
         source_dist: &SourceDist,
-    ) -> Result<Metadata21, Error> {
+    ) -> Result<Metadata23, Error> {
         let metadata = match &source_dist {
             SourceDist::DirectUrl(direct_url_source_dist) => {
                 let filename = direct_url_source_dist
@@ -376,7 +376,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         url: &'data Url,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
-    ) -> Result<Metadata21, Error> {
+    ) -> Result<Metadata23, Error> {
         let cache_entry = cache_shard.entry(MANIFEST);
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(
@@ -564,7 +564,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &SourceDist,
         path_source_dist: &PathSourceDist,
         source_root: &Path,
-    ) -> Result<Metadata21, Error> {
+    ) -> Result<Metadata23, Error> {
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
             WheelCache::Path(&path_source_dist.url)
@@ -712,7 +712,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         &self,
         source_dist: &SourceDist,
         git_source_dist: &GitSourceDist,
-    ) -> Result<Metadata21, Error> {
+    ) -> Result<Metadata23, Error> {
         let (fetch, subdirectory) = self.download_source_dist_git(&git_source_dist.url).await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
@@ -913,7 +913,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &Path,
         subdirectory: Option<&Path>,
         cache_shard: &CacheShard,
-    ) -> Result<(String, WheelFilename, Metadata21), Error> {
+    ) -> Result<(String, WheelFilename, Metadata23), Error> {
         debug!("Building: {dist}");
 
         // Guard against build of source distributions when disabled
@@ -966,16 +966,37 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     async fn build_source_dist_metadata(
         &self,
         dist: &SourceDist,
-        source_dist: &Path,
+        source_tree: &Path,
         subdirectory: Option<&Path>,
-    ) -> Result<Option<Metadata21>, Error> {
+    ) -> Result<Option<Metadata23>, Error> {
         debug!("Preparing metadata for: {dist}");
+
+        // Attempt to read static metadata from the source distribution.
+        match read_pkg_info(source_tree).await {
+            Ok(metadata) => {
+                debug!("Found static metadata for: {dist}");
+
+                // Validate the metadata.
+                if &metadata.name != dist.name() {
+                    return Err(Error::NameMismatch {
+                        metadata: metadata.name,
+                        given: dist.name().clone(),
+                    });
+                }
+
+                return Ok(Some(metadata));
+            }
+            Err(err @ (Error::MissingPkgInfo | Error::DynamicPkgInfo(_))) => {
+                debug!("No static metadata available for: {dist} ({err:?})");
+            }
+            Err(err) => return Err(err),
+        }
 
         // Setup the builder.
         let mut builder = self
             .build_context
             .setup_build(
-                source_dist,
+                source_tree,
                 subdirectory,
                 &dist.to_string(),
                 Some(dist),
@@ -998,7 +1019,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let content = fs::read(dist_info.join("METADATA"))
             .await
             .map_err(Error::CacheRead)?;
-        let metadata = Metadata21::parse(&content)?;
+        let metadata = Metadata23::parse_metadata(&content)?;
 
         // Validate the metadata.
         if &metadata.name != dist.name() {
@@ -1016,7 +1037,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         &self,
         editable: &LocalEditable,
         editable_wheel_dir: &Path,
-    ) -> Result<(Dist, String, WheelFilename, Metadata21), Error> {
+    ) -> Result<(Dist, String, WheelFilename, Metadata23), Error> {
         debug!("Building (editable) {editable}");
 
         // Verify that the editable exists.
@@ -1072,6 +1093,25 @@ impl ExtractedSource<'_> {
             ExtractedSource::Archive(path, _) => path,
         }
     }
+}
+
+/// Read the [`Metadata23`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
+/// or later _and_ none of the required fields (`Requires-Python`, `Requires-Dist`, and
+/// `Provides-Extra`) are marked as dynamic.
+pub(crate) async fn read_pkg_info(source_tree: &Path) -> Result<Metadata23, Error> {
+    // Read the `PKG-INFO` file.
+    let content = match fs::read(source_tree.join("PKG-INFO")).await {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::MissingPkgInfo);
+        }
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    // Parse the metadata.
+    let metadata = Metadata23::parse_pkg_info(&content).map_err(Error::DynamicPkgInfo)?;
+
+    Ok(metadata)
 }
 
 /// Read an existing HTTP-cached [`Manifest`], if it exists.
@@ -1139,25 +1179,25 @@ pub(crate) async fn refresh_timestamp_manifest(
     Ok(manifest)
 }
 
-/// Read an existing cached [`Metadata21`], if it exists.
+/// Read an existing cached [`Metadata23`], if it exists.
 pub(crate) async fn read_cached_metadata(
     cache_entry: &CacheEntry,
-) -> Result<Option<Metadata21>, Error> {
+) -> Result<Option<Metadata23>, Error> {
     match fs::read(&cache_entry.path()).await {
-        Ok(cached) => Ok(Some(rmp_serde::from_slice::<Metadata21>(&cached)?)),
+        Ok(cached) => Ok(Some(rmp_serde::from_slice::<Metadata23>(&cached)?)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(Error::CacheRead(err)),
     }
 }
 
-/// Read the [`Metadata21`] from a built wheel.
+/// Read the [`Metadata23`] from a built wheel.
 fn read_wheel_metadata(
     filename: &WheelFilename,
     wheel: impl Into<PathBuf>,
-) -> Result<Metadata21, Error> {
+) -> Result<Metadata23, Error> {
     let file = fs_err::File::open(wheel).map_err(Error::CacheRead)?;
     let reader = std::io::BufReader::new(file);
     let mut archive = ZipArchive::new(reader)?;
     let dist_info = read_dist_info(filename, &mut archive)?;
-    Ok(Metadata21::parse(&dist_info)?)
+    Ok(Metadata23::parse_metadata(&dist_info)?)
 }

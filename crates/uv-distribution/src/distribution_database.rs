@@ -12,7 +12,7 @@ use distribution_types::{
     BuiltDist, DirectGitUrl, Dist, FileLocation, IndexLocations, LocalEditable, Name, SourceDist,
 };
 use platform_tags::Tags;
-use pypi_types::Metadata21;
+use pypi_types::Metadata23;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, WheelCache};
 use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
 
@@ -344,14 +344,14 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     /// Either fetch the only wheel metadata (directly from the index or with range requests) or
     /// fetch and build the source distribution.
     ///
-    /// Returns the [`Metadata21`], along with a "precise" URL for the source distribution, if
+    /// Returns the [`Metadata23`], along with a "precise" URL for the source distribution, if
     /// possible. For example, given a Git dependency with a reference to a branch or tag, return a
     /// URL with a precise reference to the current commit of that branch or tag.
     #[instrument(skip_all, fields(%dist))]
     pub async fn get_or_build_wheel_metadata(
         &self,
         dist: &Dist,
-    ) -> Result<(Metadata21, Option<Url>), Error> {
+    ) -> Result<(Metadata23, Option<Url>), Error> {
         match dist {
             Dist::Built(built_dist) => {
                 Ok((self.client.wheel_metadata(built_dist).boxed().await?, None))
@@ -393,7 +393,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         &self,
         editable: &LocalEditable,
         editable_wheel_dir: &Path,
-    ) -> Result<(LocalWheel, Metadata21), Error> {
+    ) -> Result<(LocalWheel, Metadata23), Error> {
         let (dist, disk_filename, filename, metadata) = self
             .builder
             .build_editable(editable, editable_wheel_dir)
