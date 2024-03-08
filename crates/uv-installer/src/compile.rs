@@ -82,7 +82,7 @@ pub async fn compile_tree(
     let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
     let pip_compileall_py = tempdir.path().join("pip_compileall.py");
 
-    // Start the workers.
+    debug!("Starting {} bytecode compilation workers", worker_count);
     let mut worker_handles = Vec::new();
     for _ in 0..worker_count.get() {
         worker_handles.push(tokio::task::spawn(worker(
@@ -92,6 +92,8 @@ pub async fn compile_tree(
             receiver.clone(),
         )));
     }
+    // Make sure the channel gets closed when all workers exit.
+    drop(receiver);
 
     // Start the producer, sending all `.py` files to workers.
     let mut source_files = 0;
@@ -191,9 +193,11 @@ async fn worker(
             device: "stderr",
             err,
         })?;
-    if !child_stderr_collected.is_empty() {
+    let result = if child_stderr_collected.is_empty() {
+        result
+    } else {
         let stderr = String::from_utf8_lossy(&child_stderr_collected);
-        return match result {
+        match result {
             Ok(()) => {
                 debug!(
                     "Bytecode compilation `python` at {} stderr:\n{}\n---",
@@ -203,11 +207,13 @@ async fn worker(
                 Ok(())
             }
             Err(err) => Err(CompileError::ErrorWithStderr {
-                stderr: stderr.to_string(),
+                stderr: stderr.trim().to_string(),
                 err: Box::new(err),
             }),
-        };
-    }
+        }
+    };
+
+    debug!("Bytecode compilation worker exiting: {:?}", result);
 
     result
 }
