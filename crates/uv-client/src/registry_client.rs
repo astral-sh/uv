@@ -428,7 +428,7 @@ impl RegistryClient {
                 let bytes = response.bytes().await.map_err(ErrorKind::from)?;
 
                 info_span!("parse_metadata21")
-                    .in_scope(|| Metadata21::parse(bytes.as_ref()))
+                    .in_scope(|| Metadata21::parse_metadata(bytes.as_ref()))
                     .map_err(|err| {
                         Error::from(ErrorKind::MetadataParseError(
                             filename,
@@ -507,7 +507,7 @@ impl RegistryClient {
                 .map_err(ErrorKind::AsyncHttpRangeReader)?;
                 trace!("Getting metadata for {filename} by range request");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
-                let metadata = Metadata21::parse(text.as_bytes()).map_err(|err| {
+                let metadata = Metadata21::parse_metadata(text.as_bytes()).map_err(|err| {
                     Error::from(ErrorKind::MetadataParseError(
                         filename.clone(),
                         url.to_string(),
@@ -617,7 +617,7 @@ async fn read_metadata_async_seek(
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
-    let metadata = Metadata21::parse(&contents).map_err(|err| {
+    let metadata = Metadata21::parse_metadata(&contents).map_err(|err| {
         ErrorKind::MetadataParseError(filename.clone(), debug_source, Box::new(err))
     })?;
     Ok(metadata)
@@ -649,7 +649,7 @@ async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
             let mut contents = Vec::new();
             reader.read_to_end(&mut contents).await.unwrap();
 
-            let metadata = Metadata21::parse(&contents).map_err(|err| {
+            let metadata = Metadata21::parse_metadata(&contents).map_err(|err| {
                 ErrorKind::MetadataParseError(filename.clone(), debug_source, Box::new(err))
             })?;
             return Ok(metadata);

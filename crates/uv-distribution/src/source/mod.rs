@@ -966,16 +966,35 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     async fn build_source_dist_metadata(
         &self,
         dist: &SourceDist,
-        source_dist: &Path,
+        source_tree: &Path,
         subdirectory: Option<&Path>,
     ) -> Result<Option<Metadata21>, Error> {
         debug!("Preparing metadata for: {dist}");
+
+        // Attempt to read static metadata from the source distribution.
+        match read_pkg_info(source_tree).await {
+            Ok(metadata) => {
+                debug!("Found static metadata for: {dist}");
+
+                // Validate the metadata.
+                if &metadata.name != dist.name() {
+                    return Err(Error::NameMismatch {
+                        metadata: metadata.name,
+                        given: dist.name().clone(),
+                    });
+                }
+
+                return Ok(Some(metadata));
+            }
+            Err(Error::MissingPkgInfo | Error::DynamicPkgInfo(_)) => {}
+            Err(err) => return Err(err),
+        }
 
         // Setup the builder.
         let mut builder = self
             .build_context
             .setup_build(
-                source_dist,
+                source_tree,
                 subdirectory,
                 &dist.to_string(),
                 Some(dist),
@@ -998,7 +1017,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let content = fs::read(dist_info.join("METADATA"))
             .await
             .map_err(Error::CacheRead)?;
-        let metadata = Metadata21::parse(&content)?;
+        let metadata = Metadata21::parse_metadata(&content)?;
 
         // Validate the metadata.
         if &metadata.name != dist.name() {
@@ -1072,6 +1091,25 @@ impl ExtractedSource<'_> {
             ExtractedSource::Archive(path, _) => path,
         }
     }
+}
+
+/// Read the [`Metadata21`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
+/// or later _and_ none of the required fields (`Requires-Python`, `Requires-Dist`, and
+/// `Provides-Extra`) are marked as dynamic.
+pub(crate) async fn read_pkg_info(source_tree: &Path) -> Result<Metadata21, Error> {
+    // Read the `PKG-INFO` file.
+    let content = match fs::read(source_tree.join("PKG-INFO")).await {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::MissingPkgInfo);
+        }
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    // Parse the metadata.
+    let metadata = Metadata21::parse_pkg_info(&content).map_err(Error::DynamicPkgInfo)?;
+
+    Ok(metadata)
 }
 
 /// Read an existing HTTP-cached [`Manifest`], if it exists.
@@ -1159,5 +1197,5 @@ fn read_wheel_metadata(
     let reader = std::io::BufReader::new(file);
     let mut archive = ZipArchive::new(reader)?;
     let dist_info = read_dist_info(filename, &mut archive)?;
-    Ok(Metadata21::parse(&dist_info)?)
+    Ok(Metadata21::parse_metadata(&dist_info)?)
 }
