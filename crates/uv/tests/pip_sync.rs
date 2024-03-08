@@ -2,7 +2,7 @@
 
 use fs_err as fs;
 use std::env::consts::EXE_SUFFIX;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::Result;
@@ -71,25 +71,6 @@ fn uninstall_command(context: &TestContext) -> Command {
     }
 
     command
-}
-
-/// Returns the site-packages folder inside the venv.
-fn site_packages(context: &TestContext) -> PathBuf {
-    if cfg!(unix) {
-        context
-            .venv
-            .join("lib")
-            .join(format!(
-                "{}{}",
-                context.python_kind(),
-                context.python_version
-            ))
-            .join("site-packages")
-    } else if cfg!(windows) {
-        context.venv.join("Lib").join("site-packages")
-    } else {
-        unimplemented!("Only Windows and Unix are supported")
-    }
 }
 
 #[test]
@@ -186,7 +167,8 @@ fn install() -> Result<()> {
     );
 
     // Counterpart for the `compile()` test.
-    assert!(!site_packages(&context)
+    assert!(!context
+        .site_packages()
         .join("markupsafe")
         .join("__pycache__")
         .join("__init__.cpython-312.pyc")
@@ -2946,13 +2928,65 @@ fn compile() -> Result<()> {
     "###
     );
 
-    assert!(site_packages(&context)
+    assert!(context
+        .site_packages()
         .join("markupsafe")
         .join("__pycache__")
         .join("__init__.cpython-312.pyc")
         .exists());
 
     context.assert_command("import markupsafe").success();
+
+    Ok(())
+}
+
+/// Test that the `PYC_INVALIDATION_MODE` option is recognized and that the error handling works.
+#[test]
+fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    let site_packages = regex::escape(
+        &context
+            .site_packages()
+            .canonicalize()
+            .unwrap()
+            .simplified_display()
+            .to_string(),
+    );
+    let filters: Vec<_> = [
+        (site_packages.as_str(), "[SITE-PACKAGES]"),
+        (
+            r#"\[SITE-PACKAGES\].*.py", received: "#,
+            r#"[SITE-PACKAGES]/[FIRST-FILE]", received: "#,
+        ),
+    ]
+    .into_iter()
+    .chain(INSTA_FILTERS.to_vec())
+    .collect();
+
+    uv_snapshot!(filters, command(&context)
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict")
+        .env("PYC_INVALIDATION_MODE", "bogus"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+    error: Failed to bytecode compile [SITE-PACKAGES]
+      Caused by: Python process stderr:
+    Invalid value for PYC_INVALIDATION_MODE "bogus", valid are "TIMESTAMP", "CHECKED_HASH", "UNCHECKED_HASH":
+      Caused by: Bytecode compilation failed, expected "[SITE-PACKAGES]/[FIRST-FILE]", received: ""
+    "###
+    );
 
     Ok(())
 }

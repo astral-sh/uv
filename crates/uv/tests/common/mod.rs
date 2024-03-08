@@ -174,6 +174,20 @@ impl TestContext {
     pub fn python_kind(&self) -> &str {
         "python"
     }
+
+    /// Returns the site-packages folder inside the venv.
+    pub fn site_packages(&self) -> PathBuf {
+        if cfg!(unix) {
+            self.venv
+                .join("lib")
+                .join(format!("{}{}", self.python_kind(), self.python_version))
+                .join("site-packages")
+        } else if cfg!(windows) {
+            self.venv.join("Lib").join("site-packages")
+        } else {
+            unimplemented!("Only Windows and Unix are supported")
+        }
+    }
 }
 
 pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
