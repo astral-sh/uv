@@ -23,8 +23,55 @@ env:
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
+  build-binaries:
+    if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'test-extra')
+    strategy:
+      matrix:
+        include:
+          # We use the large GitHub actions runners
+          # For Ubuntu and Windows, this requires Organization-level configuration
+          # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
+          - {
+              os: "linux-old",
+              runner: "ubuntu-latest-large",
+              container: "debian:bullseye",
+            }
+          - { os: "linux", runner: "ubuntu-latest-large", container: null }
+          - { os: "windows", runner: "windows-latest-large", container: null }
+          - { os: "macos", runner: "macos-latest", container: null }
+      fail-fast: false
+    container: ${{ matrix.container }}
+    runs-on:
+      labels: ${{ matrix.runner }}
+    name: "cargo build | ${{ matrix.os }}"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Rust toolchain"
+        if: ${{ matrix.container }}
+        run: |
+          apt-get update
+          apt-get install -y curl build-essential cmake
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "PATH=$PATH:$HOME/.cargo/bin" >> "$GITHUB_ENV"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Build"
+        run: cargo build
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: uv-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            ./target/debug/uv
+            ./target/debug/uv.exe
+          retention-days: 1
+
   install-debian:
     if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'test-extra')
+    needs: build-binaries
     name: "Install Python on Debian"
     runs-on: ubuntu-latest
     container: debian:bullseye
@@ -34,22 +81,23 @@ jobs:
       - name: "Install Python"
         run: apt-get update && apt-get install -y python3.9 python3-pip python3.9-venv
 
-      - name: "Install Rust toolchain"
-        run: apt-get update && apt-get install -y curl build-essential && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-old-${{ github.sha }}
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: $HOME/.cargo/bin/cargo build --no-default-features
+      - name: "Prepare binary"
+        run: chmod +x ./uv
 
       - name: "Print Python path"
         run: echo $(which python3.9)
 
       - name: "Validate global Python install"
-        run: python3.9 scripts/check_system_python.py --uv ./target/debug/uv
+        run: python3.9 scripts/check_system_python.py --uv ./uv
 
   install-ubuntu:
     if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'test-extra')
+    needs: build-binaries
     name: "Install Python on Ubuntu"
     runs-on: ubuntu-latest
     steps:
@@ -59,22 +107,23 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: "Install Rust toolchain"
-        run: rustup show
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: cargo build
+      - name: "Prepare binary"
+        run: chmod +x ./uv
 
       - name: "Print Python path"
         run: echo $(which python)
 
       - name: "Validate global Python install"
-        run: python scripts/check_system_python.py --uv ./target/debug/uv
+        run: python scripts/check_system_python.py --uv ./uv
 
   install-pypy:
     if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'test-extra')
+    needs: build-binaries
     name: "Install PyPy on Ubuntu"
     runs-on: ubuntu-latest
     steps:
@@ -84,44 +133,46 @@ jobs:
         with:
           python-version: "pypy3.9"
 
-      - name: "Install Rust toolchain"
-        run: rustup show
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: cargo build
+      - name: "Prepare binary"
+        run: chmod +x ./uv
 
       - name: "Print Python path"
         run: echo $(which pypy)
 
       - name: "Validate global Python install"
-        run: pypy scripts/check_system_python.py --uv ./target/debug/uv
+        run: pypy scripts/check_system_python.py --uv ./uv
 
   install-pyston:
     if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'test-extra')
+    needs: build-binaries
     name: "Install Pyston"
     runs-on: ubuntu-latest
     container: pyston/pyston:2.3.5
     steps:
       - uses: actions/checkout@v4
 
-      - name: "Install Rust toolchain"
-        run: apt-get update && apt-get install -y curl build-essential && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-old-${{ github.sha }}
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: $HOME/.cargo/bin/cargo build --no-default-features
+      - name: "Prepare binary"
+        run: chmod +x ./uv
 
       - name: "Print Python path"
         run: echo $(which pyston)
 
       - name: "Validate global Python install"
-        run: pyston scripts/check_system_python.py --uv ./target/debug/uv
+        run: pyston scripts/check_system_python.py --uv ./uv
 
   install-macos:
     if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'test-extra')
+    needs: build-binaries
     name: "Install Python on macOS"
     runs-on: macos-14
     steps:
@@ -130,22 +181,23 @@ jobs:
       - name: "Install Python"
         run: brew install python@3.8
 
-      - name: "Install Rust toolchain"
-        run: rustup show
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-macos-${{ github.sha }}
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: cargo build
+      - name: "Prepare binary"
+        run: chmod +x ./uv
 
       - name: "Print Python path"
         run: echo $(which python3.11)
 
       - name: "Validate global Python install"
-        run: python3.11 scripts/check_system_python.py --uv ./target/debug/uv
+        run: python3.11 scripts/check_system_python.py --uv ./uv
 
   install-windows-python-310:
     if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'test-extra')
+    needs: build-binaries
     name: "Install Python 3.10 on Windows"
     runs-on: windows-latest
     steps:
@@ -155,22 +207,20 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: cargo build
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
 
       - name: "Print Python path"
         run: echo $(which python)
 
       - name: "Validate global Python install"
-        run: py -3.10 ./scripts/check_system_python.py --uv ./target/debug/uv
+        run: py -3.10 ./scripts/check_system_python.py --uv ./uv.exe
 
   install-windows-python-313:
     if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'test-extra')
+    needs: build-binaries
     name: "Install Python 3.13 on Windows"
     runs-on: windows-latest
     steps:
@@ -182,22 +232,20 @@ jobs:
           allow-prereleases: true
           cache: pip
 
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: cargo build
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
 
       - name: "Print Python path"
         run: echo $(which python)
 
       - name: "Validate global Python install"
-        run: py -3.13 ./scripts/check_system_python.py --uv ./target/debug/uv
+        run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
 
   install-choco:
     if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'test-extra')
+    needs: build-binaries
     name: "Install Python 3.12 via Chocolatey"
     runs-on: windows-latest
     steps:
@@ -206,22 +254,20 @@ jobs:
       - name: "Install Python"
         run: choco install python3 --verbose --version=3.9.13
 
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: cargo build
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
 
       - name: "Print Python path"
         run: echo $(which python3)
 
       - name: "Validate global Python install"
-        run: py -3.9 ./scripts/check_system_python.py --uv ./target/debug/uv
+        run: py -3.9 ./scripts/check_system_python.py --uv ./uv.exe
 
   install-pyenv:
     if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'test-extra')
+    needs: build-binaries
     name: "Install Python via pyenv"
     runs-on: ubuntu-latest
     steps:
@@ -232,28 +278,32 @@ jobs:
         with:
           default: 3.9.7
 
-      - name: "Install Rust toolchain"
-        run: rustup show
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: cargo build
+      - name: "Prepare binary"
+        run: chmod +x ./uv
 
       - name: "Print Python path"
         run: echo $(which python3.9)
 
       - name: "Validate global Python install"
-        run: python3.9 scripts/check_system_python.py --uv ./target/debug/uv
+        run: python3.9 scripts/check_system_python.py --uv ./uv
 
   install-conda:
     if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'test-extra')
+    needs: build-binaries
     name: Install on Conda (${{ matrix.python-version }}, ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+        include:
+          - { os: "linux", runner: "ubuntu-latest" }
+          - { os: "windows", runner: "windows-latest" }
+          - { os: "macos", runner: "macos-latest" }
         python-version: ["3.8", "3.11"]
     steps:
       - uses: actions/checkout@v4
@@ -272,13 +322,14 @@ jobs:
         shell: pwsh
         run: conda list
 
-      - name: "Install Rust toolchain"
-        run: rustup show
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-${{ matrix.os }}-${{ github.sha }}
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: "Build"
-        run: cargo build
+      - name: "Prepare binary"
+        if: ${{ matrix.os != 'windows' }}
+        run: chmod +x ./uv
 
       - name: "Print Python path"
         shell: bash -el {0}
@@ -286,4 +337,4 @@ jobs:
 
       - name: "Validate global Python install"
         shell: bash -el {0}
-        run: python ./scripts/check_system_python.py --uv ./target/debug/uv
+        run: python ./scripts/check_system_python.py --uv ./uv
