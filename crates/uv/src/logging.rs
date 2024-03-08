@@ -1,12 +1,21 @@
-use anyhow::Context;
+use anstream::ColorChoice;
+use std::fmt;
 use std::str::FromStr;
+
+use anyhow::Context;
+use chrono::Utc;
+use owo_colors::OwoColorize;
 use tracing::level_filters::LevelFilter;
+use tracing::{Event, Subscriber};
 #[cfg(feature = "tracing-durations-export")]
 use tracing_durations_export::{
     plot::PlotConfig, DurationsLayer, DurationsLayerBuilder, DurationsLayerDropGuard,
 };
 use tracing_subscriber::filter::Directive;
+use tracing_subscriber::fmt::format::Writer;
+use tracing_subscriber::fmt::{FmtContext, FormatEvent, FormatFields};
 use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
 use tracing_tree::time::Uptime;
@@ -19,6 +28,83 @@ pub(crate) enum Level {
     Default,
     /// Show debug messages by default (overridable by `RUST_LOG`).
     Verbose,
+    /// Show messages in a hierarchical span tree. By default, debug messages are shown (overridable by `RUST_LOG`).
+    ExtraVerbose,
+}
+
+struct UvFormat {
+    display_timestamp: bool,
+    display_level: bool,
+    show_spans: bool,
+}
+
+/// See <https://docs.rs/tracing-subscriber/0.3.18/src/tracing_subscriber/fmt/format/mod.rs.html#1026-1156>
+impl<S, N> FormatEvent<S, N> for UvFormat
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    fn format_event(
+        &self,
+        ctx: &FmtContext<'_, S, N>,
+        mut writer: Writer<'_>,
+        event: &Event<'_>,
+    ) -> fmt::Result {
+        let meta = event.metadata();
+        let ansi = writer.has_ansi_escapes();
+
+        if self.display_timestamp {
+            if ansi {
+                write!(writer, "{} ", Utc::now().dimmed())?;
+            } else {
+                write!(writer, "{} ", Utc::now())?;
+            }
+        }
+
+        if self.display_level {
+            let level = meta.level();
+            // Same colors as tracing
+            if ansi {
+                match *level {
+                    tracing::Level::TRACE => write!(writer, "{} ", level.purple())?,
+                    tracing::Level::DEBUG => write!(writer, "{} ", level.blue())?,
+                    tracing::Level::INFO => write!(writer, "{} ", level.green())?,
+                    tracing::Level::WARN => write!(writer, "{} ", level.yellow())?,
+                    tracing::Level::ERROR => write!(writer, "{} ", level.red())?,
+                }
+            } else {
+                write!(writer, "{level} ")?;
+            }
+        }
+
+        if self.show_spans {
+            let span = event.parent();
+            let mut seen = false;
+
+            let span = span
+                .and_then(|id| ctx.span(id))
+                .or_else(|| ctx.lookup_current());
+
+            let scope = span.into_iter().flat_map(|span| span.scope().from_root());
+
+            for span in scope {
+                seen = true;
+                if ansi {
+                    write!(writer, "{}:", span.metadata().name().bold())?;
+                } else {
+                    write!(writer, "{}:", span.metadata().name())?;
+                }
+            }
+
+            if seen {
+                writer.write_char(' ')?;
+            }
+        }
+
+        ctx.field_format().format_fields(writer.by_ref(), event)?;
+
+        writeln!(writer)
+    }
 }
 
 /// Configure `tracing` based on the given [`Level`], taking into account the `RUST_LOG` environment
@@ -31,33 +117,48 @@ pub(crate) fn setup_logging(
     level: Level,
     duration: impl Layer<Registry> + Send + Sync,
 ) -> anyhow::Result<()> {
-    match level {
+    let default_directive = match level {
         Level::Default => {
             // Show nothing, but allow `RUST_LOG` to override.
-            let filter = EnvFilter::builder()
-                .with_default_directive(LevelFilter::OFF.into())
-                .from_env()
-                .context("Invalid RUST_LOG directives")?;
+            LevelFilter::OFF.into()
+        }
+        Level::Verbose | Level::ExtraVerbose => {
+            // Show `DEBUG` messages from the CLI crate, but allow `RUST_LOG` to override.
+            Directive::from_str("uv=debug").unwrap()
+        }
+    };
 
+    let filter = EnvFilter::builder()
+        .with_default_directive(default_directive)
+        .from_env()
+        .context("Invalid RUST_LOG directives")?;
+
+    match level {
+        Level::Default | Level::Verbose => {
             // Regardless of the tracing level, show messages without any adornment.
+            let format = UvFormat {
+                display_timestamp: false,
+                display_level: true,
+                show_spans: false,
+            };
+            let ansi = match anstream::Stderr::choice(&std::io::stderr()) {
+                ColorChoice::Always | ColorChoice::AlwaysAnsi => true,
+                ColorChoice::Never => false,
+                // We just asked anstream for a choice, that can't be auto
+                ColorChoice::Auto => unreachable!(),
+            };
             tracing_subscriber::registry()
                 .with(duration)
                 .with(filter)
                 .with(
                     tracing_subscriber::fmt::layer()
-                        .without_time()
-                        .with_target(false)
-                        .with_writer(std::io::stderr),
+                        .event_format(format)
+                        .with_writer(std::io::stderr)
+                        .with_ansi(ansi),
                 )
                 .init();
         }
-        Level::Verbose => {
-            // Show `DEBUG` messages from the CLI crate, but allow `RUST_LOG` to override.
-            let filter = EnvFilter::builder()
-                .with_default_directive(Directive::from_str("uv=debug").unwrap())
-                .from_env()
-                .context("Invalid RUST_LOG directives")?;
-
+        Level::ExtraVerbose => {
             // Regardless of the tracing level, include the uptime and target for each message.
             tracing_subscriber::registry()
                 .with(duration)
