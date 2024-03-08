@@ -4282,7 +4282,6 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
- "uv-extract",
  "uv-fs",
  "uv-interpreter",
  "uv-traits",
