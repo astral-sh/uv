@@ -1,8 +1,11 @@
+use anyhow::Context;
+use std::str::FromStr;
 use tracing::level_filters::LevelFilter;
 #[cfg(feature = "tracing-durations-export")]
 use tracing_durations_export::{
     plot::PlotConfig, DurationsLayer, DurationsLayerBuilder, DurationsLayerDropGuard,
 };
+use tracing_subscriber::filter::Directive;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
@@ -24,13 +27,17 @@ pub(crate) enum Level {
 /// The [`Level`] is used to dictate the default filters (which can be overridden by the `RUST_LOG`
 /// environment variable) along with the formatting of the output. For example, [`Level::Verbose`]
 /// includes targets and timestamps, along with all `uv=debug` messages by default.
-pub(crate) fn setup_logging(level: Level, duration: impl Layer<Registry> + Send + Sync) {
+pub(crate) fn setup_logging(
+    level: Level,
+    duration: impl Layer<Registry> + Send + Sync,
+) -> anyhow::Result<()> {
     match level {
         Level::Default => {
             // Show nothing, but allow `RUST_LOG` to override.
             let filter = EnvFilter::builder()
                 .with_default_directive(LevelFilter::OFF.into())
-                .from_env_lossy();
+                .from_env()
+                .context("Invalid RUST_LOG directives")?;
 
             // Regardless of the tracing level, show messages without any adornment.
             tracing_subscriber::registry()
@@ -46,9 +53,10 @@ pub(crate) fn setup_logging(level: Level, duration: impl Layer<Registry> + Send 
         }
         Level::Verbose => {
             // Show `DEBUG` messages from the CLI crate, but allow `RUST_LOG` to override.
-            let filter = EnvFilter::try_from_default_env()
-                .or_else(|_| EnvFilter::try_new("uv=debug"))
-                .unwrap();
+            let filter = EnvFilter::builder()
+                .with_default_directive(Directive::from_str("uv=debug").unwrap())
+                .from_env()
+                .context("Invalid RUST_LOG directives")?;
 
             // Regardless of the tracing level, include the uptime and target for each message.
             tracing_subscriber::registry()
@@ -63,6 +71,8 @@ pub(crate) fn setup_logging(level: Level, duration: impl Layer<Registry> + Send 
                 .init();
         }
     }
+
+    Ok(())
 }
 
 /// Setup the `TRACING_DURATIONS_FILE` environment variable to enable tracing durations.

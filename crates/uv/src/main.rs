@@ -1261,7 +1261,7 @@ async fn run() -> Result<ExitStatus> {
             logging::Level::Default
         },
         duration_layer,
-    );
+    )?;
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = if cli.quiet {
