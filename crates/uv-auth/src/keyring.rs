@@ -18,9 +18,9 @@ pub enum Error {
     #[error("Keyring did not resolve password: {0}")]
     NotFound(String),
     #[error(transparent)]
-    CLIError(#[from] std::io::Error),
+    CliFailure(#[from] std::io::Error),
     #[error(transparent)]
-    ParseError(#[from] std::string::FromUtf8Error),
+    ParseFailed(#[from] std::string::FromUtf8Error),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -65,13 +65,13 @@ pub fn get_keyring_auth(url: &Url) -> Result<BasicAuthData, Error> {
         .output()
     {
         Ok(output) if output.status.success() => Ok(String::from_utf8(output.stdout)
-            .map_err(|e| Error::ParseError(e))?
+            .map_err(Error::ParseFailed)?
             .trim_end()
             .to_owned()),
         Ok(output) => Err(Error::NotFound(
-            String::from_utf8(output.stderr).map_err(|e| Error::ParseError(e))?,
+            String::from_utf8(output.stderr).map_err(Error::ParseFailed)?,
         )),
-        Err(e) => Err(Error::CLIError(e)),
+        Err(e) => Err(Error::CliFailure(e)),
     };
     let output = output.map(|password| BasicAuthData {
         username: username.to_string(),
