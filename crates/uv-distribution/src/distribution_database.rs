@@ -180,7 +180,19 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .instrument(info_span!("download", wheel = %wheel))
                 };
 
-                let req = self.client.cached_client().uncached().get(url).build()?;
+                let req = self
+                    .client
+                    .cached_client()
+                    .uncached()
+                    .get(url)
+                    .header(
+                        // `reqwest` defaults to accepting compressed responses.
+                        // Specify identity encoding to get consistent .whl downloading
+                        // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
+                        "accept-encoding",
+                        reqwest::header::HeaderValue::from_static("identity"),
+                    )
+                    .build()?;
                 let cache_control = match self.client.connectivity() {
                     Connectivity::Online => CacheControl::from(
                         self.cache
