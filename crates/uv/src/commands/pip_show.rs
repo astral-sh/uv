@@ -62,6 +62,9 @@ pub(crate) fn pip_show(
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&venv)?;
 
+    // Determine the markers to use for resolution.
+    let markers = venv.interpreter().markers();
+
     // Sort and deduplicate the packages, which are keyed by name.
     packages.sort_unstable();
     packages.dedup();
@@ -116,6 +119,17 @@ pub(crate) fn pip_show(
                 .expect("package path is not root")
                 .simplified_display()
         )?;
+
+        let mut requires = distribution
+            .metadata()
+            .unwrap()
+            .requires_dist
+            .into_iter()
+            .filter(|req| req.evaluate_markers(markers, &[]))
+            .map(|req| req.name.to_string())
+            .collect::<Vec<_>>();
+        requires.sort();
+        writeln!(printer.stdout(), "Requires: {}", requires.join(", "))?;
     }
 
     // Validate that the environment is consistent.
