@@ -36,7 +36,7 @@ pub fn get_keyring_auth(url: &Url) -> Result<Credential, Error> {
         _ => "oauth2accesstoken",
     };
     debug!(
-        "Running `keyring get` for `{:?}` with username `{}`",
+        "Running `keyring get` for `{}` with username `{}`",
         url.to_string(),
         username
     );
@@ -55,7 +55,7 @@ pub fn get_keyring_auth(url: &Url) -> Result<Credential, Error> {
         )),
         Err(e) => Err(Error::CliFailure(e)),
     };
-    
+
     output.map(|password| {
         Credential::Basic(BasicAuthData {
             username: username.to_string(),

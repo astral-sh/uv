@@ -7,8 +7,8 @@ use url::Url;
 
 use crate::NetLoc;
 
-// TODO - migrate to AuthenticationStore used in middleware
 lazy_static! {
+    // Store credentials for NetLoc
     static ref PASSWORDS: Mutex<HashMap<NetLoc, Option<Credential>>> = Mutex::new(HashMap::new());
 }
 
@@ -42,14 +42,26 @@ impl From<&Authenticator> for Credential {
     }
 }
 
-// Used for URL encoded auth
+// Used for URL encoded auth in User info
+// <https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.1>
 #[derive(Clone, Debug, PartialEq)]
 pub struct UrlAuthData {
     pub username: String,
     pub password: Option<String>,
 }
 
-// Used for netrc and keyring auth
+impl UrlAuthData {
+    pub fn apply_to_url(&self, mut url: Url) -> Url {
+        url.set_username(&self.username)
+            .unwrap_or_else(|()| warn!("Failed to set username"));
+        url.set_password(self.password.as_deref())
+            .unwrap_or_else(|()| warn!("Failed to set password"));
+        url
+    }
+}
+
+// HttpBasicAuth - Used for netrc and keyring auth
+// <https://datatracker.ietf.org/doc/html/rfc7617>
 #[derive(Clone, Debug, PartialEq)]
 pub struct BasicAuthData {
     pub username: String,
@@ -71,16 +83,12 @@ impl AuthenticationStore {
         passwords.insert(netloc, auth);
     }
 
+    /// Copy authentication from one URL to another URL if applicable.
     pub fn with_url_encoded_auth(url: Url) -> Url {
         let netloc = NetLoc::from(&url);
         let passwords = PASSWORDS.lock().unwrap();
-        if let Some(Some(Credential::UrlEncoded(auth))) = passwords.get(&netloc) {
-            let mut url = url.clone();
-            url.set_username(&auth.username)
-                .unwrap_or_else(|()| warn!("Failed to transfer username to URL: {url}"));
-            url.set_password(auth.password.as_deref())
-                .unwrap_or_else(|()| warn!("Failed to transfer password to URL: {url}"));
-            url
+        if let Some(Some(Credential::UrlEncoded(url_auth))) = passwords.get(&netloc) {
+            url_auth.apply_to_url(url)
         } else {
             url
         }

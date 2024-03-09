@@ -33,13 +33,17 @@ impl RequestInitialiser for AuthMiddleware {
         match req.try_clone() {
             Some(nr) => req
                 .try_clone()
-                .unwrap()
+                .unwrap() // Safe to unwrap because we just checked for Some
                 .build()
                 .ok()
                 .and_then(|r| {
                     let url = r.url();
                     if let Some(auth) = AuthenticationStore::get(url) {
-                        return auth.map(|auth| nr.basic_auth(auth.username(), auth.password()));
+                        return auth.map(|auth| match auth {
+                            Credential::Basic(_) => nr.basic_auth(auth.username(), auth.password()),
+                            // Url must already have auth if before middleware runs - see `AuthenticationStore::with_url_encoded_auth`
+                            Credential::UrlEncoded(_) => nr,
+                        });
                     }
                     let nrc_auth = if let Some(nrc) = self.nrc.as_ref() {
                         url.host_str().and_then(|host| {
@@ -49,6 +53,7 @@ impl RequestInitialiser for AuthMiddleware {
                         None
                     };
                     if let Some(auth) = nrc_auth {
+                        // Netrc auth found - save it and return the request
                         let auth = Credential::from(auth);
                         let req = Some(nr.basic_auth(auth.username(), auth.password()));
                         AuthenticationStore::set(url, Some(auth));
@@ -56,13 +61,17 @@ impl RequestInitialiser for AuthMiddleware {
                     };
                     if self.use_keyring {
                         if let Ok(auth) = get_keyring_auth(url) {
+                            // Keyring auth found - save it and return the request
                             let req = Some(nr.basic_auth(auth.username(), auth.password()));
                             AuthenticationStore::set(url, Some(auth));
                             return req;
                         }
                     }
-                    // TODO - url encoded auth
-                    AuthenticationStore::set(url, None);
+                    if !url.username().is_empty() {
+                        AuthenticationStore::save_from_url(url);
+                    } else {
+                        AuthenticationStore::set(url, None);
+                    }
                     None
                 })
                 .unwrap_or(req),
