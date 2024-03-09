@@ -5,7 +5,6 @@
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::io;
-use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Output};
 use std::str::FromStr;
@@ -460,6 +459,7 @@ impl SourceBuild {
                     &config_settings,
                     &environment_variables,
                     &modified_path,
+                    &temp_dir,
                 )
                 .await?;
             }
@@ -592,6 +592,12 @@ impl SourceBuild {
         let metadata_directory = self.temp_dir.path().join("metadata_directory");
         fs::create_dir(&metadata_directory)?;
 
+        // Write the hook output to a file so that we can read it back reliably.
+        let outfile = self
+            .temp_dir
+            .path()
+            .join("prepare_metadata_for_build_wheel.txt");
+
         debug!(
             "Calling `{}.prepare_metadata_for_build_wheel()`",
             pep517_backend.backend
@@ -603,13 +609,17 @@ impl SourceBuild {
 
             prepare_metadata_for_build_wheel = getattr(backend, "prepare_metadata_for_build_wheel", None)
             if prepare_metadata_for_build_wheel:
-                print(prepare_metadata_for_build_wheel("{}", config_settings={}))
+                dirname = prepare_metadata_for_build_wheel("{}", config_settings={})
             else:
-                print()
+                dirname = None
+
+            with open("{}", "w") as fp:
+                fp.write(dirname or "")
             "#,
             pep517_backend.backend_import(),
             escape_path_for_python(&metadata_directory),
             self.config_settings.escape_for_python(),
+            escape_path_for_python(&outfile),
         };
         let span = info_span!(
             "run_python_script",
@@ -632,26 +642,12 @@ impl SourceBuild {
                 &self.package_id,
             ));
         }
-        let message = output
-            .stdout
-            .lines()
-            .last()
-            .transpose()
-            .map_err(|err| err.to_string())
-            .and_then(|last_line| last_line.ok_or("Missing message".to_string()))
-            .map_err(|err| {
-                Error::from_command_output(
-                    format!(
-                        "Build backend failed to return metadata directory with `prepare_metadata_for_build_wheel`: {err}"
-                    ),
-                    &output,
-                    &self.package_id,
-                )
-            })?;
-        if message.is_empty() {
+
+        let dirname = fs::read_to_string(&outfile)?;
+        if dirname.is_empty() {
             return Ok(None);
         }
-        self.metadata_directory = Some(metadata_directory.join(message));
+        self.metadata_directory = Some(metadata_directory.join(dirname));
         Ok(self.metadata_directory.clone())
     }
 
@@ -732,22 +728,31 @@ impl SourceBuild {
             .map_or("None".to_string(), |path| {
                 format!(r#""{}""#, escape_path_for_python(path))
             });
+
+        // Write the hook output to a file so that we can read it back reliably.
+        let outfile = self
+            .temp_dir
+            .path()
+            .join(format!("build_{}.txt", self.build_kind));
+
         debug!(
             "Calling `{}.build_{}(metadata_directory={})`",
             pep517_backend.backend, self.build_kind, metadata_directory
         );
-        let escaped_wheel_dir = escape_path_for_python(wheel_dir);
         let script = formatdoc! {
             r#"
             {}
 
-            print(backend.build_{}("{}", metadata_directory={}, config_settings={}))
+            wheel_filename = backend.build_{}("{}", metadata_directory={}, config_settings={})
+            with open("{}", "w") as fp:
+                fp.write(wheel_filename)
             "#,
             pep517_backend.backend_import(),
             self.build_kind,
-            escaped_wheel_dir,
+            escape_path_for_python(wheel_dir),
             metadata_directory,
-            self.config_settings.escape_for_python()
+            self.config_settings.escape_for_python(),
+            escape_path_for_python(&outfile)
         };
         let span = info_span!(
             "run_python_script",
@@ -773,21 +778,19 @@ impl SourceBuild {
                 &self.package_id,
             ));
         }
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let distribution_filename = stdout.lines().last();
-        let Some(distribution_filename) =
-            distribution_filename.filter(|wheel| wheel_dir.join(wheel).is_file())
-        else {
+
+        let distribution_filename = fs::read_to_string(&outfile)?;
+        if !wheel_dir.join(&distribution_filename).is_file() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to build wheel through `build_{}()`",
+                    "Build backend failed to produce wheel through `build_{}()`: `{distribution_filename}` not found",
                     self.build_kind
                 ),
                 &output,
                 &self.package_id,
             ));
-        };
-        Ok(distribution_filename.to_string())
+        }
+        Ok(distribution_filename)
     }
 }
 
@@ -819,11 +822,18 @@ async fn create_pep517_build_environment(
     config_settings: &ConfigSettings,
     environment_variables: &FxHashMap<OsString, OsString>,
     modified_path: &OsString,
+    temp_dir: &TempDir,
 ) -> Result<(), Error> {
+    // Write the hook output to a file so that we can read it back reliably.
+    let outfile = temp_dir
+        .path()
+        .join(format!("get_requires_for_build_{build_kind}.txt"));
+
     debug!(
         "Calling `{}.get_requires_for_build_{}()`",
         pep517_backend.backend, build_kind
     );
+
     let script = formatdoc! {
         r#"
             {}
@@ -834,8 +844,14 @@ async fn create_pep517_build_environment(
                 requires = get_requires_for_build(config_settings={})
             else:
                 requires = []
-            print(json.dumps(requires))
-        "#, pep517_backend.backend_import(), build_kind, config_settings.escape_for_python()
+
+            with open("{}", "w") as fp:
+                json.dump(requires, fp)
+        "#,
+        pep517_backend.backend_import(),
+        build_kind,
+        config_settings.escape_for_python(),
+        escape_path_for_python(&outfile)
     };
     let span = info_span!(
         "run_python_script",
@@ -858,16 +874,20 @@ async fn create_pep517_build_environment(
             package_id,
         ));
     }
-    let extra_requires = output
-        .stdout
-        .lines()
-        .last()
-        .transpose()
-        .map_err(|err| err.to_string())
-        .and_then(|last_line| last_line.ok_or("Missing message".to_string()))
-        .and_then(|message| serde_json::from_str(&message).map_err(|err| err.to_string()));
 
-    let extra_requires: Vec<Requirement> = extra_requires.map_err(|err| {
+    // Read the requirements from the output file.
+    let contents = fs_err::read(&outfile).map_err(|err| {
+        Error::from_command_output(
+            format!(
+                "Build backend failed to read extra requires from `get_requires_for_build_{build_kind}`: {err}"
+            ),
+            &output,
+            package_id,
+        )
+    })?;
+
+    // Deserialize the requirements from the output file.
+    let extra_requires: Vec<Requirement> = serde_json::from_slice(&contents).map_err(|err| {
         Error::from_command_output(
             format!(
                 "Build backend failed to return extra requires with `get_requires_for_build_{build_kind}`: {err}"
