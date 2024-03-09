@@ -4431,6 +4431,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "rust-netrc",
+ "tempfile",
  "thiserror",
  "tokio",
  "tracing",

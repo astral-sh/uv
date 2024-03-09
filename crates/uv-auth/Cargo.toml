@@ -13,5 +13,6 @@ rust-netrc = { workspace = true }
 
 [dev-dependencies]
 reqwest = { workspace = true }
-wiremock = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
+wiremock = { workspace = true }

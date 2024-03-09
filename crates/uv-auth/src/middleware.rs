@@ -85,23 +85,15 @@ mod tests {
     use super::*;
     use reqwest::Client;
     use reqwest_middleware::ClientBuilder;
-    use std::io;
-    use std::path::PathBuf;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
     use wiremock::matchers::{basic_auth, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     const NETRC: &str = r#"default login myuser password mypassword"#;
 
-    fn create_netrc_file() -> Result<PathBuf, io::Error> {
-        let dest = std::env::temp_dir().join("netrc");
-        if !dest.exists() {
-            std::fs::write(&dest, NETRC)?;
-        }
-        Ok(dest)
-    }
-
     #[tokio::test]
-    async fn test_init() {
+    async fn test_init() -> Result<(), std::io::Error> {
         let server = MockServer::start().await;
 
         Mock::given(method("GET"))
@@ -121,12 +113,11 @@ mod tests {
 
         assert_eq!(status, 404);
 
-        let file = create_netrc_file();
-        assert!(file.is_ok());
-        let file = file.unwrap();
+        let mut netrc_file = NamedTempFile::new()?;
+        writeln!(netrc_file, "{}", NETRC)?;
 
         let status = ClientBuilder::new(Client::builder().build().unwrap())
-            .with_init(AuthMiddleware::from_netrc_file(file.as_path(), false))
+            .with_init(AuthMiddleware::from_netrc_file(netrc_file.path(), false))
             .build()
             .get(format!("{}/hello", &server.uri()))
             .send()
@@ -135,5 +126,6 @@ mod tests {
             .status();
 
         assert_eq!(status, 200);
+        Ok(())
     }
 }
