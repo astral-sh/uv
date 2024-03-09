@@ -3,7 +3,7 @@ use url::Url;
 
 use distribution_types::PackageId;
 use once_map::OnceMap;
-use pypi_types::Metadata21;
+use pypi_types::Metadata23;
 use uv_normalize::PackageName;
 
 use super::provider::VersionsResponse;
@@ -16,7 +16,7 @@ pub struct InMemoryIndex {
     pub(crate) packages: OnceMap<PackageName, VersionsResponse>,
 
     /// A map from package ID to metadata for that distribution.
-    pub(crate) distributions: OnceMap<PackageId, Metadata21>,
+    pub(crate) distributions: OnceMap<PackageId, Metadata23>,
 
     /// A map from source URL to precise URL. For example, the source URL
     /// `git+https://github.com/pallets/flask.git` could be redirected to

@@ -15,7 +15,7 @@ use url::Url;
 use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim};
 use once_map::OnceMap;
 use pep440_rs::Version;
-use pypi_types::{Hashes, Metadata21};
+use pypi_types::{Hashes, Metadata23};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::editables::Editables;
@@ -57,7 +57,7 @@ impl ResolutionGraph {
         selection: &SelectedDependencies<PubGrubPackage, Version>,
         pins: &FilePins,
         packages: &OnceMap<PackageName, VersionsResponse>,
-        distributions: &OnceMap<PackageId, Metadata21>,
+        distributions: &OnceMap<PackageId, Metadata23>,
         redirects: &DashMap<Url, Url>,
         state: &State<PubGrubPackage, Range<Version>, PubGrubPriority>,
         editables: Editables,

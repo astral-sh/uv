@@ -28,7 +28,7 @@ pub(crate) struct BuildArgs {
     /// Directory to story the built wheel in
     #[clap(short, long)]
     wheels: Option<PathBuf>,
-    /// The source distribution to build, either a directory or a source archive.
+    /// The source distribution to build, as a directory.
     sdist: PathBuf,
     /// The subdirectory to build within the source distribution.
     subdirectory: Option<PathBuf>,

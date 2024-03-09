@@ -48,6 +48,10 @@ static LD_NOT_FOUND_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"/usr/bin/ld: cannot find -l([a-zA-Z10-9]+): No such file or directory").unwrap()
 });
 
+/// e.g. `error: invalid command 'bdist_wheel'`
+static WHEEL_NOT_FOUND_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"error: invalid command 'bdist_wheel'").unwrap());
+
 /// The default backend to use when PEP 517 is used without a `build-system` section.
 static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
     backend: "setuptools.build_meta:__legacy__".to_string(),
@@ -62,10 +66,6 @@ static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
 pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
-    #[error("Failed to extract archive: {0}")]
-    Extraction(PathBuf, #[source] uv_extract::Error),
-    #[error("Unsupported archive format (extension not recognized): {0}")]
-    UnsupportedArchiveType(String),
     #[error("Invalid source distribution: {0}")]
     InvalidSourceDist(String),
     #[error("Invalid pyproject.toml")]
@@ -74,8 +74,6 @@ pub enum Error {
     EditableSetupPy,
     #[error("Failed to install requirements from {0}")]
     RequirementsInstall(&'static str, #[source] anyhow::Error),
-    #[error("Source distribution not found at: {0}")]
-    NotFound(PathBuf),
     #[error("Failed to create temporary virtualenv")]
     Virtualenv(#[from] uv_virtualenv::Error),
     #[error("Failed to run {0}")]
@@ -105,6 +103,7 @@ pub enum Error {
 pub enum MissingLibrary {
     Header(String),
     Linker(String),
+    PythonPackage(String),
 }
 
 #[derive(Debug, Error)]
@@ -131,6 +130,13 @@ impl Display for MissingHeaderCause {
                     library = library, package_id = self.package_id
                 )
             }
+            MissingLibrary::PythonPackage(package) => {
+                write!(
+                    f,
+                    "This error likely indicates that you need to `uv pip install {package}` into the build environment for {package_id}",
+                    package = package, package_id = self.package_id
+                )
+            }
         }
     }
 }
@@ -154,6 +160,8 @@ impl Error {
                 LD_NOT_FOUND_RE.captures(line.trim()).map(|c| c.extract())
             {
                 Some(MissingLibrary::Linker(library.to_string()))
+            } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
+                Some(MissingLibrary::PythonPackage("wheel".to_string()))
             } else {
                 None
             }
@@ -365,38 +373,10 @@ impl SourceBuild {
     ) -> Result<Self, Error> {
         let temp_dir = tempdir_in(build_context.cache().root())?;
 
-        let metadata = match fs::metadata(source) {
-            Ok(metadata) => metadata,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                return Err(Error::NotFound(source.to_path_buf()));
-            }
-            Err(err) => return Err(err.into()),
-        };
-
-        let source_root = if metadata.is_dir() {
-            source.to_path_buf()
-        } else {
-            debug!("Unpacking for build: {}", source.display());
-
-            let extracted = temp_dir.path().join("extracted");
-
-            // Unzip the archive into the temporary directory.
-            let reader = fs_err::tokio::File::open(source).await?;
-            uv_extract::stream::archive(tokio::io::BufReader::new(reader), source, &extracted)
-                .await
-                .map_err(|err| Error::Extraction(extracted.clone(), err))?;
-
-            // Extract the top-level directory from the archive.
-            match uv_extract::strip_component(&extracted) {
-                Ok(top_level) => top_level,
-                Err(uv_extract::Error::NonSingularArchive(_)) => extracted,
-                Err(err) => return Err(Error::Extraction(extracted.clone(), err)),
-            }
-        };
         let source_tree = if let Some(subdir) = subdirectory {
-            source_root.join(subdir)
+            source.join(subdir)
         } else {
-            source_root
+            source.to_path_buf()
         };
 
         let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
@@ -1057,6 +1037,52 @@ mod test {
         insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
             @"This error likely indicates that you need to install the library that provides a shared library for ncurses for pygraphviz-1.11 (e.g. libncurses-dev)"
+        );
+    }
+
+    #[test]
+    fn missing_wheel_package() {
+        let output = Output {
+            status: ExitStatus::default(), // This is wrong but `from_raw` is platform-gated.
+            stdout: Vec::new(),
+            stderr: indoc!(
+                r"
+            usage: setup.py [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+               or: setup.py --help [cmd1 cmd2 ...]
+               or: setup.py --help-commands
+               or: setup.py cmd --help
+
+            error: invalid command 'bdist_wheel'
+                "
+            )
+            .as_bytes()
+            .to_vec(),
+        };
+
+        let err = Error::from_command_output(
+            "Failed building wheel through setup.py".to_string(),
+            &output,
+            "pygraphviz-1.11",
+        );
+        assert!(matches!(err, Error::MissingHeader { .. }));
+        // Unix uses exit status, Windows uses exit code.
+        let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        insta::assert_snapshot!(formatted, @r###"
+        Failed building wheel through setup.py with exit code: 0
+        --- stdout:
+
+        --- stderr:
+        usage: setup.py [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+           or: setup.py --help [cmd1 cmd2 ...]
+           or: setup.py --help-commands
+           or: setup.py cmd --help
+
+        error: invalid command 'bdist_wheel'
+        ---
+        "###);
+        insta::assert_snapshot!(
+            std::error::Error::source(&err).unwrap(),
+            @"This error likely indicates that you need to `uv pip install wheel` into the build environment for pygraphviz-1.11"
         );
     }
 }

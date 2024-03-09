@@ -36,6 +36,9 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 which = { workspace = true}
 
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = { workspace = true }
+
 [dev-dependencies]
 anyhow = { version = "1.0.80" }
 indoc = { version = "2.0.4" }

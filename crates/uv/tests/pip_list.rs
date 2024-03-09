@@ -84,7 +84,7 @@ fn list_single_no_editable() -> Result<()> {
     ----- stdout -----
     Package    Version
     ---------- -------
-    markupsafe 2.1.3  
+    markupsafe 2.1.3
 
     ----- stderr -----
     "###
@@ -181,9 +181,9 @@ fn list_editable() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location                                
+    Package         Version Editable project location
     --------------- ------- ---------------------------------------------------------
-    numpy           1.26.2                                                           
+    numpy           1.26.2
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
     ----- stderr -----
@@ -275,7 +275,7 @@ fn list_editable_only() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location                                
+    Package         Version Editable project location
     --------------- ------- ---------------------------------------------------------
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
@@ -296,7 +296,7 @@ fn list_editable_only() -> Result<()> {
     ----- stdout -----
     Package Version
     ------- -------
-    numpy   1.26.2 
+    numpy   1.26.2
 
     ----- stderr -----
     "###
@@ -405,7 +405,7 @@ fn list_exclude() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location                                
+    Package         Version Editable project location
     --------------- ------- ---------------------------------------------------------
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
 
@@ -427,7 +427,7 @@ fn list_exclude() -> Result<()> {
     ----- stdout -----
     Package Version
     ------- -------
-    numpy   1.26.2 
+    numpy   1.26.2
 
     ----- stderr -----
     "###

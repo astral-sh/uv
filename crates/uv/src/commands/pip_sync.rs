@@ -222,9 +222,15 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let wheel_finder =
-            uv_resolver::DistFinder::new(tags, &client, venv.interpreter(), &flat_index, no_binary)
-                .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
+        let wheel_finder = uv_resolver::DistFinder::new(
+            tags,
+            &client,
+            venv.interpreter(),
+            &flat_index,
+            no_binary,
+            no_build,
+        )
+        .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
         let resolution = wheel_finder.resolve(&remote).await?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };

@@ -25,6 +25,7 @@ uv-normalize = { path = "../uv-normalize" }
 pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
+chrono = { workspace = true }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }

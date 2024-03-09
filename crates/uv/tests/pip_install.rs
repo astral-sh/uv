@@ -2419,3 +2419,77 @@ fn no_build_isolation() -> Result<()> {
 
     Ok(())
 }
+
+/// This tests that `uv` can read UTF-16LE encoded requirements.txt files.
+///
+/// Ref: <https://github.com/astral-sh/uv/issues/2276>
+#[test]
+fn install_utf16le_requirements() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli"))?;
+
+    uv_snapshot!(command_without_exclude_newer(&context)
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==2.0.1
+    "###
+    );
+    Ok(())
+}
+
+/// This tests that `uv` can read UTF-16BE encoded requirements.txt files.
+///
+/// Ref: <https://github.com/astral-sh/uv/issues/2276>
+#[test]
+fn install_utf16be_requirements() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli"))?;
+
+    uv_snapshot!(command_without_exclude_newer(&context)
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==2.0.1
+    "###
+    );
+    Ok(())
+}
+
+fn utf8_to_utf16_with_bom_le(s: &str) -> Vec<u8> {
+    use byteorder::ByteOrder;
+
+    let mut u16s = vec![0xFEFF];
+    u16s.extend(s.encode_utf16());
+    let mut u8s = vec![0; u16s.len() * 2];
+    byteorder::LittleEndian::write_u16_into(&u16s, &mut u8s);
+    u8s
+}
+
+fn utf8_to_utf16_with_bom_be(s: &str) -> Vec<u8> {
+    use byteorder::ByteOrder;
+
+    let mut u16s = vec![0xFEFF];
+    u16s.extend(s.encode_utf16());
+    let mut u8s = vec![0; u16s.len() * 2];
+    byteorder::BigEndian::write_u16_into(&u16s, &mut u8s);
+    u8s
+}

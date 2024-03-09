@@ -122,6 +122,7 @@ async fn install_chunk(
         venv.interpreter(),
         &FlatIndex::default(),
         &NoBinary::None,
+        &NoBuild::None,
     )
     .resolve_stream(requirements)
     .collect()

@@ -16,13 +16,15 @@ workspace = true
 uv-warnings = { path = "../uv-warnings" }
 
 dunce = { workspace = true }
+encoding_rs_io = { workspace = true }
 fs-err = { workspace = true }
 fs2 = { workspace = true }
 junction = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
 urlencoding = { workspace = true }
 
 [features]
 default = []
-tokio = ["fs-err/tokio"]
+tokio = ["fs-err/tokio", "dep:tokio"]
