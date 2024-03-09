@@ -251,6 +251,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: "Configure choco cache"
+        run: choco config set cacheLocation ./.choco-cache
+
+      - uses: actions/cache@v4
+        with:
+          path: ./.choco-cache
+          key: choco-cache
+
       - name: "Install Python"
         run: choco install python3 --verbose --version=3.9.13
 
