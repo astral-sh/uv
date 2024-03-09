@@ -65,6 +65,7 @@ pub(crate) async fn pip_install(
     exclude_newer: Option<DateTime<Utc>>,
     python: Option<String>,
     system: bool,
+    user: bool,
     cache: Cache,
     mut printer: Printer,
 ) -> Result<ExitStatus> {
@@ -107,13 +108,18 @@ pub(crate) async fn pip_install(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
-    let venv = if let Some(python) = python.as_ref() {
+    let detected_env = if let Some(python) = python.as_ref() {
         PythonEnvironment::from_requested_python(python, &platform, &cache)?
     } else if system {
         PythonEnvironment::from_default_python(&platform, &cache)?
     } else {
         PythonEnvironment::from_virtualenv(platform, &cache)?
     };
+
+    let venv = if user {
+        PythonEnvironment::from_interpreter_with_user_scheme(detected_env.interpreter().clone())?
+    } else { detected_env };
+
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),

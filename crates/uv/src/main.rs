@@ -752,6 +752,14 @@ struct PipInstallArgs {
     #[clap(long, conflicts_with = "python")]
     system: bool,
 
+    /// Install packages into user site-packages directory
+    ///
+    /// The `--user` option allows `uv` to install packages to a location that is specific to a
+    /// user. The user scheme can be customized by setting the `PYTHONUSERBASE` environment
+    /// variable.
+    #[clap(long, conflicts_with = "system")]
+    user: bool,
+
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[clap(long)]
@@ -1385,6 +1393,7 @@ async fn run() -> Result<ExitStatus> {
                 args.exclude_newer,
                 args.python,
                 args.system,
+                args.user,
                 cache,
                 printer,
             )

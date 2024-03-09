@@ -18,6 +18,14 @@ pub struct PythonEnvironment {
 }
 
 impl PythonEnvironment {
+    /// Create a [`PythonEnvironment`] from an existing interpreter with user scheme.
+    pub fn from_interpreter_with_user_scheme(interpreter: Interpreter) -> Result<Self, Error> {
+        Ok(Self {
+            root: interpreter.prefix().to_path_buf(),
+            interpreter: interpreter.with_user_scheme()?,
+        })
+    }
+
     /// Create a [`PythonEnvironment`] for an existing virtual environment.
     pub fn from_virtualenv(platform: Platform, cache: &Cache) -> Result<Self, Error> {
         let Some(venv) = detect_virtual_env()? else {

@@ -1,6 +1,6 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 
 use configparser::ini::Ini;
 use fs_err as fs;
@@ -104,6 +104,15 @@ impl Interpreter {
         }
     }
 
+    /// Return a new [`Interpreter`] with user scheme.
+    pub fn with_user_scheme(self) -> Result<Self, Error> {
+        let info = InterpreterInfo::query_user_scheme_info(self.sys_executable())?;
+        Ok(Self {
+            scheme: info.scheme,
+            ..self
+        })
+    }
+
     /// Find the best available Python interpreter to use.
     ///
     /// If no Python version is provided, we will use the first available interpreter.
@@ -114,7 +123,7 @@ impl Interpreter {
     /// the first available version.
     ///
     /// See [`Self::find_version`] for details on the precedence of Python lookup locations.
-    #[instrument(skip_all, fields(?python_version))]
+    #[instrument(skip_all, fields(? python_version))]
     pub fn find_best(
         python_version: Option<&PythonVersion>,
         platform: &Platform,
@@ -450,67 +459,8 @@ impl InterpreterInfo {
     /// Return the resolved [`InterpreterInfo`] for the given Python executable.
     pub(crate) fn query(interpreter: &Path) -> Result<Self, Error> {
         let script = include_str!("get_interpreter_info.py");
-        let output = if cfg!(windows)
-            && interpreter
-                .extension()
-                .is_some_and(|extension| extension == "bat")
-        {
-            // Multiline arguments aren't well-supported in batch files and `pyenv-win`, for example, trips over it.
-            // We work around this batch limitation by passing the script via stdin instead.
-            // This is somewhat more expensive because we have to spawn a new thread to write the
-            // stdin to avoid deadlocks in case the child process waits for the parent to read stdout.
-            // The performance overhead is the reason why we only applies this to batch files.
-            // https://github.com/pyenv-win/pyenv-win/issues/589
-            let mut child = Command::new(interpreter)
-                .arg("-")
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::piped())
-                .spawn()
-                .map_err(|err| Error::PythonSubcommandLaunch {
-                    interpreter: interpreter.to_path_buf(),
-                    err,
-                })?;
 
-            let mut stdin = child.stdin.take().unwrap();
-
-            // From the Rust documentation:
-            // If the child process fills its stdout buffer, it may end up
-            // waiting until the parent reads the stdout, and not be able to
-            // read stdin in the meantime, causing a deadlock.
-            // Writing from another thread ensures that stdout is being read
-            // at the same time, avoiding the problem.
-            std::thread::spawn(move || {
-                stdin
-                    .write_all(script.as_bytes())
-                    .expect("failed to write to stdin");
-            });
-
-            child.wait_with_output()
-        } else {
-            Command::new(interpreter).arg("-c").arg(script).output()
-        }
-        .map_err(|err| Error::PythonSubcommandLaunch {
-            interpreter: interpreter.to_path_buf(),
-            err,
-        })?;
-
-        // stderr isn't technically a criterion for success, but i don't know of any cases where there
-        // should be stderr output and if there is, we want to know
-        if !output.status.success() || !output.stderr.is_empty() {
-            if output.status.code() == Some(3) {
-                return Err(Error::Python2OrOlder);
-            }
-
-            return Err(Error::PythonSubcommandOutput {
-                message: format!(
-                    "Querying Python at `{}` failed with status {}",
-                    interpreter.display(),
-                    output.status,
-                ),
-                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            });
-        }
+        let output = Self::execute_script(interpreter, script, None)?;
 
         let data: Self = serde_json::from_slice(&output.stdout).map_err(|err| {
             Error::PythonSubcommandOutput {
@@ -598,6 +548,104 @@ impl InterpreterInfo {
         }
 
         Ok(info)
+    }
+
+    /// Return the [`InterpreterInfo`] for the given Python interpreter with user scheme.
+    pub(crate) fn query_user_scheme_info(interpreter: &Path) -> Result<Self, Error> {
+        let script = include_str!("get_interpreter_info.py");
+        let envs = vec![("_UV_USE_USER_SCHEME", "1")];
+        let output = Self::execute_script(interpreter, script, Some(envs))?;
+
+        let data: Self = serde_json::from_slice(&output.stdout).map_err(|err| {
+            Error::PythonSubcommandOutput {
+                message: format!(
+                    "Querying Python at `{}` did not return the expected data: {err}",
+                    interpreter.display(),
+                ),
+                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            }
+        })?;
+
+        Ok(data)
+    }
+
+    /// Execute the given Python script using an interpreter.
+    fn execute_script(
+        interpreter: &Path,
+        script: &str,
+        envs: Option<Vec<(&str, &str)>>,
+    ) -> Result<Output, Error> {
+        let mut command = Command::new(interpreter);
+
+        if let Some(env_variables) = envs {
+            command.envs(env_variables);
+        }
+
+        let script_clone = script.to_string();
+        let output = if cfg!(windows)
+            && interpreter
+                .extension()
+                .is_some_and(|extension| extension == "bat")
+        {
+            // Multiline arguments aren't well-supported in batch files and `pyenv-win`, for example, trips over it.
+            // We work around this batch limitation by passing the script via stdin instead.
+            // This is somewhat more expensive because we have to spawn a new thread to write the
+            // stdin to avoid deadlocks in case the child process waits for the parent to read stdout.
+            // The performance overhead is the reason why we only applies this to batch files.
+            // https://github.com/pyenv-win/pyenv-win/issues/589
+            let mut child = command
+                .arg("-")
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|err| Error::PythonSubcommandLaunch {
+                    interpreter: interpreter.to_path_buf(),
+                    err,
+                })?;
+
+            let mut stdin = child.stdin.take().unwrap();
+
+            // From the Rust documentation:
+            // If the child process fills its stdout buffer, it may end up
+            // waiting until the parent reads the stdout, and not be able to
+            // read stdin in the meantime, causing a deadlock.
+            // Writing from another thread ensures that stdout is being read
+            // at the same time, avoiding the problem.
+            std::thread::spawn(move || {
+                stdin
+                    .write_all(script_clone.as_bytes())
+                    .expect("failed to write to stdin");
+            });
+
+            child.wait_with_output()
+        } else {
+            command.arg("-c").arg(script_clone).output()
+        }
+        .map_err(|err| Error::PythonSubcommandLaunch {
+            interpreter: interpreter.to_path_buf(),
+            err,
+        })?;
+
+        // stderr isn't technically a criterion for success, but i don't know of any cases where there
+        // should be stderr output and if there is, we want to know
+        if !output.status.success() || !output.stderr.is_empty() {
+            if output.status.code() == Some(3) {
+                return Err(Error::Python2OrOlder);
+            }
+
+            return Err(Error::PythonSubcommandOutput {
+                message: format!(
+                    "Querying Python at `{}` failed with status {}",
+                    interpreter.display(),
+                    output.status,
+                ),
+                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            });
+        }
+
+        Ok(output)
     }
 }
 
