@@ -1,3 +1,4 @@
+use std::env::current_dir;
 use std::process::Command;
 
 use anyhow::Result;
@@ -13,7 +14,7 @@ use crate::common::{get_bin, TestContext, EXCLUDE_NEWER};
 mod common;
 
 /// Create a `pip install` command with options shared across scenarios.
-fn command(context: &TestContext) -> Command {
+fn install_command(context: &TestContext) -> Command {
     let mut command = Command::new(get_bin());
     command
         .arg("pip")
@@ -24,6 +25,13 @@ fn command(context: &TestContext) -> Command {
         .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
     command
 }
 
@@ -56,7 +64,7 @@ fn show_found_single_package() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    uv_snapshot!(command(&context)
+    uv_snapshot!(install_command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -113,7 +121,7 @@ fn show_found_multiple_packages() -> Result<()> {
     "
     })?;
 
-    uv_snapshot!(command(&context)
+    uv_snapshot!(install_command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -178,7 +186,7 @@ fn show_found_one_out_of_two() -> Result<()> {
     "
     })?;
 
-    uv_snapshot!(command(&context)
+    uv_snapshot!(install_command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -240,7 +248,7 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
     "
     })?;
 
-    uv_snapshot!(command(&context)
+    uv_snapshot!(install_command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -293,7 +301,7 @@ fn show_empty_quiet() -> Result<()> {
     "
     })?;
 
-    uv_snapshot!(command(&context)
+    uv_snapshot!(install_command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -334,21 +342,14 @@ fn show_empty_quiet() -> Result<()> {
 }
 
 #[test]
-fn show_editable() {
+fn show_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Install the editable package.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    install_command(&context)
         .arg("-e")
         .arg("../../scripts/editable-installs/poetry_editable")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(current_dir()?)
         .env(
             "CARGO_TARGET_DIR",
             "../../../target/target_install_editable",
@@ -381,4 +382,6 @@ fn show_editable() {
     ----- stderr -----
     "###
     );
+
+    Ok(())
 }
