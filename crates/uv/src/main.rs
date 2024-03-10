@@ -979,6 +979,10 @@ struct PipFreezeArgs {
     /// should be used with caution.
     #[clap(long, conflicts_with = "python", group = "discovery")]
     system: bool,
+
+    /// Use packages installed in user site.
+    #[clap(long, conflicts_with = "system", group = "discovery")]
+    user: bool,
 }
 
 #[derive(Args)]
@@ -1591,6 +1595,7 @@ async fn run() -> Result<ExitStatus> {
             args.strict,
             args.python.as_deref(),
             args.system,
+            args.user,
             &cache,
             printer,
         ),
