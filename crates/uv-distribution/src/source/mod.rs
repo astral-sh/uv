@@ -307,6 +307,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .cached_client()
             .uncached()
             .get(url.clone())
+            .header(
+                // `reqwest` defaults to accepting compressed responses.
+                // Specify identity encoding to get consistent .whl downloading
+                // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
+                "accept-encoding",
+                reqwest::header::HeaderValue::from_static("identity"),
+            )
             .build()?;
         let manifest = self
             .client
@@ -410,6 +417,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .cached_client()
             .uncached()
             .get(url.clone())
+            .header(
+                // `reqwest` defaults to accepting compressed responses.
+                // Specify identity encoding to get consistent .whl downloading
+                // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
+                "accept-encoding",
+                reqwest::header::HeaderValue::from_static("identity"),
+            )
             .build()?;
         let manifest = self
             .client
