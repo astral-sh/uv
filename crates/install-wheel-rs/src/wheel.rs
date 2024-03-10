@@ -603,12 +603,6 @@ pub(crate) fn extra_dist_info(
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
     let dist_info_dir = PathBuf::from(format!("{dist_info_prefix}.dist-info"));
-    write_file_recorded(
-        site_packages,
-        &dist_info_dir.join("INSTALLER"),
-        env!("CARGO_PKG_NAME"),
-        record,
-    )?;
     if requested {
         write_file_recorded(site_packages, &dist_info_dir.join("REQUESTED"), "", record)?;
     }

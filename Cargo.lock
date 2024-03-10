@@ -4498,6 +4498,7 @@ dependencies = [
  "async-trait",
  "async_http_range_reader",
  "async_zip",
+ "base64 0.21.7",
  "cache-key",
  "chrono",
  "distribution-filename",

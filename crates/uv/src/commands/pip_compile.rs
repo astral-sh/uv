@@ -24,7 +24,7 @@ use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder}
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{Downloader, NoBinary};
-use uv_interpreter::{Interpreter, PythonEnvironment, PythonVersion};
+use uv_interpreter::{find_best_python, PythonEnvironment, PythonVersion};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
@@ -134,7 +134,7 @@ pub(crate) async fn pip_compile(
 
     // Find an interpreter to use for building distributions
     let platform = Platform::current()?;
-    let interpreter = Interpreter::find_best(python_version.as_ref(), &platform, &cache)?;
+    let interpreter = find_best_python(python_version.as_ref(), &platform, &cache)?;
     debug!(
         "Using Python {} interpreter at {} for builds",
         interpreter.python_version(),

@@ -516,17 +516,10 @@ fn install_editable() -> Result<()> {
         .collect::<Vec<_>>();
 
     // Install the editable package.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(filters, command(&context)
         .arg("-e")
         .arg("../../scripts/editable-installs/poetry_editable")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -618,16 +611,9 @@ fn install_editable_and_registry() -> Result<()> {
         .collect();
 
     // Install the registry-based version of Black.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(filters, command(&context)
         .arg("black")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -647,17 +633,10 @@ fn install_editable_and_registry() -> Result<()> {
     );
 
     // Install the editable version of Black. This should remove the registry-based version.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(filters, command(&context)
         .arg("-e")
         .arg("../../scripts/editable-installs/black_editable")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -674,16 +653,10 @@ fn install_editable_and_registry() -> Result<()> {
 
     // Re-install the registry-based version of Black. This should be a no-op, since we have a
     // version of Black installed (the editable version) that satisfies the requirements.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(filters, command(&context)
         .arg("black")
         .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -703,16 +676,9 @@ fn install_editable_and_registry() -> Result<()> {
         .collect();
 
     // Re-install Black at a specific version. This should replace the editable version.
-    uv_snapshot!(filters2, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(filters2, command(&context)
         .arg("black==23.10.0")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -855,7 +821,9 @@ fn install_extra_index_url_has_priority() {
         // find it, but then not find a compatible version. After
         // the fix, `uv` will check pypi.org first since it is given
         // priority via --extra-index-url.
-        .arg("black==24.2.0"), @r###"
+        .arg("black==24.2.0")
+        .arg("--exclude-newer")
+        .arg("2024-03-09"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

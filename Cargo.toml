@@ -79,10 +79,14 @@ reflink-copy = { version = "0.1.14" }
 regex = { version = "1.10.2" }
 reqwest = { version = "0.11.23", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls-native-roots"] }
 reqwest-middleware = { version = "0.2.4" }
+<<<<<<< HEAD
 rust-netrc = { version = "0.1.1" }
+=======
+>>>>>>> upstream/main
 reqwest-retry = { version = "0.3.0" }
 rkyv = { version = "0.7.43", features = ["strict", "validation"] }
 rmp-serde = { version = "1.1.2" }
+rust-netrc = { version = "0.1.1" }
 rustc-hash = { version = "1.1.0" }
 same-file = { version = "1.0.6" }
 seahash = { version = "4.1.0" }

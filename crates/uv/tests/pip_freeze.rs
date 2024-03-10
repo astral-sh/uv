@@ -23,6 +23,26 @@ fn command(context: &TestContext) -> Command {
     command
 }
 
+/// Create a `pip install` command with options shared across scenarios.
+fn sync_command(context: &TestContext) -> Command {
+    let mut command = Command::new(get_bin());
+    command
+        .arg("pip")
+        .arg("sync")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    command
+}
+
 /// List multiple installed packages in a virtual environment.
 #[test]
 fn freeze_many() -> Result<()> {
@@ -32,13 +52,8 @@ fn freeze_many() -> Result<()> {
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
     // Run `pip sync`.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    sync_command(&context)
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
         .assert()
         .success();
 
@@ -70,13 +85,8 @@ fn freeze_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==21.3.1")?;
 
     // Run `pip sync`.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    sync_command(&context1)
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context1.cache_dir.path())
-        .env("VIRTUAL_ENV", context1.venv.as_os_str())
         .assert()
         .success();
 
@@ -86,13 +96,8 @@ fn freeze_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==22.1.1")?;
 
     // Run `pip sync`.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    sync_command(&context2)
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context2.cache_dir.path())
-        .env("VIRTUAL_ENV", context2.venv.as_os_str())
         .assert()
         .success();
 
@@ -148,13 +153,8 @@ fn freeze_url() -> Result<()> {
     requirements_txt.write_str("anyio\niniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")?;
 
     // Run `pip sync`.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    sync_command(&context)
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
         .assert()
         .success();
 

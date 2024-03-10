@@ -29,7 +29,7 @@ use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
-use crate::middleware::OfflineMiddleware;
+use crate::middleware::{NetrcMiddleware, OfflineMiddleware};
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{CachedClient, CachedClientError, Error, ErrorKind};
@@ -138,7 +138,16 @@ impl RegistryClientBuilder {
                 let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
                 let client = client.with(retry_strategy);
 
+<<<<<<< HEAD
                 let client = client.with_init(AuthMiddleware::new(self.use_keyring));
+=======
+                // Initialize the netrc middleware.
+                let client = if let Ok(netrc) = NetrcMiddleware::new() {
+                    client.with(netrc)
+                } else {
+                    client
+                };
+>>>>>>> upstream/main
 
                 client.build()
             }
@@ -536,7 +545,7 @@ impl RegistryClient {
         match result {
             Ok(metadata) => return Ok(metadata),
             Err(err) => {
-                if err.kind().is_http_range_requests_unsupported() {
+                if err.is_http_range_requests_unsupported() {
                     // The range request version failed. Fall back to streaming the file to search
                     // for the METADATA file.
                     warn!("Range requests not supported for {filename}; streaming wheel");
@@ -551,6 +560,13 @@ impl RegistryClient {
             .client
             .uncached()
             .get(url.clone())
+            .header(
+                // `reqwest` defaults to accepting compressed responses.
+                // Specify identity encoding to get consistent .whl downloading
+                // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
+                "accept-encoding",
+                reqwest::header::HeaderValue::from_static("identity"),
+            )
             .build()
             .map_err(ErrorKind::from)?;
 
