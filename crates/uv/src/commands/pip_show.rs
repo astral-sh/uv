@@ -42,7 +42,7 @@ pub(crate) fn pip_show(
     let platform = Platform::current()?;
     let venv = if user {
         PythonEnvironment::from_user_scheme(python, platform, cache)?
-    } else if let Some(python) = python.as_ref() {
+    } else if let Some(python) = python {
         PythonEnvironment::from_requested_python(python, &platform, cache)?
     } else if system {
         PythonEnvironment::from_default_python(&platform, cache)?
