@@ -1073,7 +1073,7 @@ struct PipShowArgs {
     )]
     python: Option<String>,
 
-    /// List packages for the system Python.
+    /// Show packages for the system Python.
     ///
     /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
     /// environment (`.venv`) located in the current working directory or any parent directory,
@@ -1084,6 +1084,10 @@ struct PipShowArgs {
     /// should be used with caution.
     #[clap(long, conflicts_with = "python", group = "discovery")]
     system: bool,
+
+    /// Show packages installed in user site.
+    #[clap(long, conflicts_with = "system", group = "discovery")]
+    user: bool,
 }
 
 #[derive(Args)]
@@ -1611,6 +1615,7 @@ async fn run() -> Result<ExitStatus> {
             args.strict,
             args.python.as_deref(),
             args.system,
+            args.user,
             &cache,
             printer,
         ),
