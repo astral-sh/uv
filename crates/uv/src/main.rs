@@ -799,9 +799,11 @@ struct PipInstallArgs {
 
     /// Install packages into user directory.
     ///
-    /// Install to the Python user install directory for your platform.
-    /// Typically ~/.local/, or %APPDATA%\Python on Windows. The install location can be customized by
-    /// setting the `PYTHONUSERBASE` environment variable.
+    /// This option allows `uv` to install packages to user install directory for your platform.
+    /// The installation location can be customized by setting the `PYTHONUSERBASE` environment variable.
+    ///
+    /// Note: It is generally recommended to manage Python packages using a virtual environment
+    /// instead of installing them into the user or system Python directories.
     #[clap(long, conflicts_with = "system", group = "discovery")]
     user: bool,
 
@@ -1034,6 +1036,10 @@ struct PipListArgs {
     /// should be used with caution.
     #[clap(long, conflicts_with = "python", group = "discovery")]
     system: bool,
+
+    /// List packages installed in user site.
+    #[clap(long, conflicts_with = "system", group = "discovery")]
+    user: bool,
 }
 
 #[derive(Args)]
@@ -1594,6 +1600,7 @@ async fn run() -> Result<ExitStatus> {
             &args.format,
             args.python.as_deref(),
             args.system,
+            args.user,
             &cache,
             printer,
         ),

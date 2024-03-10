@@ -73,7 +73,7 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] with user scheme.
-    pub fn from_user_scheme(python: Option<&String>, platform: Platform, cache: &Cache) -> Result<Self, Error> {
+    pub fn from_user_scheme(python: Option<&str>, platform: Platform, cache: &Cache) -> Result<Self, Error> {
         // Attempt to determine the interpreter based on the provided criteria
         let interpreter = if let Some(requested_python) = python {
             // If a specific Python version is requested
