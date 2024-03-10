@@ -55,10 +55,15 @@ static WHEEL_NOT_FOUND_RE: Lazy<Regex> =
 static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
     backend: "setuptools.build_meta:__legacy__".to_string(),
     backend_path: None,
-    requirements: vec![
-        Requirement::from_str("wheel").unwrap(),
+    requirements: vec![Requirement::from_str("setuptools >= 40.8.0").unwrap()],
+});
+
+/// The requirements for `--legacy-setup-py` builds.
+static SETUP_PY_REQUIREMENTS: Lazy<[Requirement; 2]> = Lazy::new(|| {
+    [
         Requirement::from_str("setuptools >= 40.8.0").unwrap(),
-    ],
+        Requirement::from_str("wheel").unwrap(),
+    ]
 });
 
 #[derive(Error, Debug)]
@@ -310,11 +315,12 @@ impl Pep517Backend {
     }
 }
 
-/// Uses an [`Arc`] internally, clone freely
+/// Uses an [`Arc`] internally, clone freely.
 #[derive(Debug, Default, Clone)]
 pub struct SourceBuildContext {
-    /// Cache the first resolution of `pip`, `setuptools` and `wheel` we made for setup.py (and
-    /// some PEP 517) builds so we can reuse it.
+    /// An in-memory resolution of the default backend's requirements for PEP 517 builds.
+    default_resolution: Arc<Mutex<Option<Resolution>>>,
+    /// An in-memory resolution of the build requirements for `--legacy-setup-py` builds.
     setup_py_resolution: Arc<Mutex<Option<Resolution>>>,
 }
 
@@ -487,7 +493,7 @@ impl SourceBuild {
     ) -> Result<Resolution, Error> {
         Ok(if let Some(pep517_backend) = pep517_backend {
             if pep517_backend.requirements == default_backend.requirements {
-                let mut resolution = source_build_context.setup_py_resolution.lock().await;
+                let mut resolution = source_build_context.default_resolution.lock().await;
                 if let Some(resolved_requirements) = &*resolution {
                     resolved_requirements.clone()
                 } else {
@@ -515,7 +521,7 @@ impl SourceBuild {
                 resolved_requirements.clone()
             } else {
                 let resolved_requirements = build_context
-                    .resolve(&default_backend.requirements)
+                    .resolve(&*SETUP_PY_REQUIREMENTS)
                     .await
                     .map_err(|err| Error::RequirementsInstall("setup.py build (resolve)", err))?;
                 *resolution = Some(resolved_requirements.clone());
