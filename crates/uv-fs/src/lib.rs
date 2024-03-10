@@ -12,26 +12,11 @@ pub use crate::path::*;
 
 mod path;
 
-/// Reads the contents of the file path given into memory.
+/// Reads data from the path and requires that it be valid UTF-8.
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
-pub fn read(path: impl AsRef<Path>) -> std::io::Result<Vec<u8>> {
-    use std::io::Read;
-
-    let path = path.as_ref();
-    if path == Path::new("-") {
-        let mut buf = Vec::with_capacity(1024);
-        std::io::stdin().read_to_end(&mut buf)?;
-        Ok(buf)
-    } else {
-        fs::read(path)
-    }
-}
-
-/// Reads the contents of the file path given into memory as a `String`.
-///
-/// If the file path is `-`, then contents are read from stdin instead.
-pub fn read_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
+#[cfg(feature = "tokio")]
+pub async fn read_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
     use std::io::Read;
 
     let path = path.as_ref();
@@ -40,8 +25,41 @@ pub fn read_to_string(path: impl AsRef<Path>) -> std::io::Result<String> {
         std::io::stdin().read_to_string(&mut buf)?;
         Ok(buf)
     } else {
-        fs::read_to_string(path)
+        fs_err::tokio::read_to_string(path).await
     }
+}
+
+/// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
+///
+/// This uses BOM sniffing to determine if the data should be transcoded
+/// from UTF-16 to Rust's `String` type (which uses UTF-8).
+///
+/// This should generally only be used when one specifically wants to support
+/// reading UTF-16 transparently.
+///
+/// If the file path is `-`, then contents are read from stdin instead.
+#[cfg(feature = "tokio")]
+pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result<String> {
+    use std::io::Read;
+
+    use encoding_rs_io::DecodeReaderBytes;
+
+    let path = path.as_ref();
+    let raw = if path == Path::new("-") {
+        let mut buf = Vec::with_capacity(1024);
+        std::io::stdin().read_to_end(&mut buf)?;
+        buf
+    } else {
+        fs_err::tokio::read(path).await?
+    };
+    let mut buf = String::with_capacity(1024);
+    DecodeReaderBytes::new(&*raw)
+        .read_to_string(&mut buf)
+        .map_err(|err| {
+            let path = path.display();
+            std::io::Error::other(format!("failed to decode file {path}: {err}"))
+        })?;
+    Ok(buf)
 }
 
 /// Create a symlink from `src` to `dst`, replacing any existing symlink.

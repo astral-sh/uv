@@ -15,7 +15,9 @@ use uv_dispatch::BuildDispatch;
 use uv_installer::NoBinary;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::InMemoryIndex;
-use uv_traits::{BuildContext, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{
+    BuildContext, BuildIsolation, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy,
+};
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {
@@ -26,7 +28,7 @@ pub(crate) struct BuildArgs {
     /// Directory to story the built wheel in
     #[clap(short, long)]
     wheels: Option<PathBuf>,
-    /// The source distribution to build, either a directory or a source archive.
+    /// The source distribution to build, as a directory.
     sdist: PathBuf,
     /// The subdirectory to build within the source distribution.
     subdirectory: Option<PathBuf>,
@@ -74,6 +76,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         &in_flight,
         setup_py,
         &config_settings,
+        BuildIsolation::Isolated,
         &NoBuild::None,
         &NoBinary::None,
     );
@@ -87,6 +90,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         args.sdist.display().to_string(),
         setup_py,
         config_settings.clone(),
+        BuildIsolation::Isolated,
         build_kind,
         FxHashMap::default(),
     )

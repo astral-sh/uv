@@ -204,6 +204,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-recursion"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fd55a5ba1179988837d24ab4c7cc8ed6efdeff578ede0416b4225a5fca35bd0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.48",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.77"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -904,6 +915,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "cache-key",
+ "chrono",
  "data-encoding",
  "distribution-filename",
  "fs-err",
@@ -959,6 +971,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7268b386296a025e474d5140678f75d6de9493ae55a5d709eeb9dd08149945e1"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "encoding_rs_io"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cc3c5651fb62ab8aa3103998dade57efdd028544bd300516baa31840c252a83"
+dependencies = [
+ "encoding_rs",
 ]
 
 [[package]]
@@ -2226,7 +2247,7 @@ name = "pep508_rs"
 version = "0.4.2"
 dependencies = [
  "derivative",
- "indoc",
+ "insta",
  "log",
  "once_cell",
  "pep440_rs",
@@ -2472,7 +2493,7 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/zanieb/pubgrub?rev=aab132a3d4d444dd8dd41d8c4e605abd69dacfe1#aab132a3d4d444dd8dd41d8c4e605abd69dacfe1"
+source = "git+https://github.com/zanieb/pubgrub?rev=332f02b0e436ca8449c7ef5e15b992dd5f35908b#332f02b0e436ca8449c7ef5e15b992dd5f35908b"
 dependencies = [
  "indexmap 2.2.3",
  "log",
@@ -2785,6 +2806,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "assert_fs",
+ "async-recursion",
  "fs-err",
  "indoc",
  "insta",
@@ -2793,14 +2815,18 @@ dependencies = [
  "pep440_rs",
  "pep508_rs",
  "regex",
+ "reqwest",
+ "reqwest-middleware",
  "serde",
  "serde_json",
  "tempfile",
  "test-case",
  "thiserror",
+ "tokio",
  "tracing",
  "unscanny",
  "url",
+ "uv-client",
  "uv-fs",
  "uv-normalize",
  "uv-warnings",
@@ -2864,6 +2890,16 @@ dependencies = [
  "serde",
  "task-local-extensions",
  "thiserror",
+]
+
+[[package]]
+name = "reqwest-netrc"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eca0c58cd4b2978f9697dea94302e772399f559cd175356eb631cb6daaa0b6db"
+dependencies = [
+ "reqwest-middleware",
+ "rust-netrc",
 ]
 
 [[package]]
@@ -3020,6 +3056,15 @@ name = "roxmltree"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3cd14fd5e3b777a7422cca79358c57a8f6e3a703d9ac187448d0daf220c2407f"
+
+[[package]]
+name = "rust-netrc"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32662f97cbfdbad9d5f78f1338116f06871e7dae4fd37e9f59a0f57cf2044868"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "rustc-demangle"
@@ -4144,13 +4189,14 @@ checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
 
 [[package]]
 name = "uv"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "anstream",
  "anyhow",
  "assert_cmd",
  "assert_fs",
  "base64 0.21.7",
+ "byteorder",
  "chrono",
  "clap",
  "clap_complete_command",
@@ -4247,7 +4293,6 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
- "uv-extract",
  "uv-fs",
  "uv-interpreter",
  "uv-traits",
@@ -4300,6 +4345,7 @@ dependencies = [
  "pypi-types",
  "reqwest",
  "reqwest-middleware",
+ "reqwest-netrc",
  "reqwest-retry",
  "rkyv",
  "rmp-serde",
@@ -4464,10 +4510,12 @@ name = "uv-fs"
 version = "0.0.1"
 dependencies = [
  "dunce",
+ "encoding_rs_io",
  "fs-err",
  "fs2",
  "junction",
  "tempfile",
+ "tokio",
  "tracing",
  "urlencoding",
  "uv-warnings",
@@ -4568,6 +4616,7 @@ dependencies = [
  "uv-cache",
  "uv-fs",
  "which",
+ "winapi",
 ]
 
 [[package]]
@@ -4651,7 +4700,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.1.15"
+version = "0.1.16"
 
 [[package]]
 name = "uv-virtualenv"

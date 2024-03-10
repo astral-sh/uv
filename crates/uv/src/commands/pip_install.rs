@@ -32,7 +32,7 @@ use uv_resolver::{
     DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_traits::{ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -42,7 +42,7 @@ use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsS
 use super::Upgrade;
 
 /// Install packages into the current environment.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -59,17 +59,24 @@ pub(crate) async fn pip_install(
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
+    no_build_isolation: bool,
     no_build: &NoBuild,
     no_binary: &NoBinary,
     strict: bool,
     exclude_newer: Option<DateTime<Utc>>,
     python: Option<String>,
     system: bool,
+    break_system_packages: bool,
     user: bool,
     cache: Cache,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .connectivity(connectivity)
+        .build();
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -83,11 +90,7 @@ pub(crate) async fn pip_install(
         no_index,
         find_links,
         extras: used_extras,
-    } = specification(requirements, constraints, overrides, extras)?;
-
-    // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+    } = specification(requirements, constraints, overrides, extras, &client).await?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {
@@ -133,18 +136,22 @@ pub(crate) async fn pip_install(
 
     // If the environment is externally managed, abort.
     if let Some(externally_managed) = venv.interpreter().is_externally_managed() {
-        return if let Some(error) = externally_managed.into_error() {
-            Err(anyhow::anyhow!(
-                "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
-                venv.root().simplified_display().cyan(),
-                textwrap::indent(&error, "  ").green(),
-            ))
+        if break_system_packages {
+            debug!("Ignoring externally managed environment due to `--break-system-packages`");
         } else {
-            Err(anyhow::anyhow!(
-                "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
-                venv.root().simplified_display().cyan()
-            ))
-        };
+            return if let Some(error) = externally_managed.into_error() {
+                Err(anyhow::anyhow!(
+                    "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
+                    venv.root().simplified_display().cyan(),
+                    textwrap::indent(&error, "  ").green(),
+                ))
+            } else {
+                Err(anyhow::anyhow!(
+                    "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
+                    venv.root().simplified_display().cyan()
+                ))
+            };
+        }
     }
 
     let _lock = venv.lock()?;
@@ -163,7 +170,7 @@ pub(crate) async fn pip_install(
         let num_requirements = requirements.len() + editables.len();
         let s = if num_requirements == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Audited {} in {}",
@@ -180,17 +187,26 @@ pub(crate) async fn pip_install(
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
 
-    // Instantiate a client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_locations.index_urls())
-        .connectivity(connectivity)
-        .build();
+    // Incorporate any index locations from the provided sources.
+    let index_locations =
+        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+
+    // Update the index URLs on the client, to take into account any index URLs added by the
+    // sources (e.g., `--index-url` in a `requirements.txt` file).
+    let client = client.with_index_url(index_locations.index_urls());
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
         FlatIndex::from_entries(entries, tags)
+    };
+
+    // Determine whether to enable build isolation.
+    let build_isolation = if no_build_isolation {
+        BuildIsolation::Shared(&venv)
+    } else {
+        BuildIsolation::Isolated
     };
 
     // Create a shared in-memory index.
@@ -209,6 +225,7 @@ pub(crate) async fn pip_install(
         &in_flight,
         setup_py,
         config_settings,
+        build_isolation,
         no_build,
         no_binary,
     )
@@ -292,6 +309,7 @@ pub(crate) async fn pip_install(
             &in_flight,
             setup_py,
             config_settings,
+            build_isolation,
             no_build,
             no_binary,
         )
@@ -327,11 +345,12 @@ pub(crate) async fn pip_install(
 }
 
 /// Consolidate the requirements for an installation.
-fn specification(
+async fn specification(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification<'_>,
+    client: &RegistryClient,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a pyproject toml source
     if !matches!(extras, ExtrasSpecification::None)
@@ -343,8 +362,14 @@ fn specification(
     }
 
     // Read all requirements from the provided sources.
-    let spec =
-        RequirementsSpecification::from_sources(requirements, constraints, overrides, extras)?;
+    let spec = RequirementsSpecification::from_sources(
+        requirements,
+        constraints,
+        overrides,
+        extras,
+        client,
+    )
+    .await?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {
@@ -377,7 +402,7 @@ async fn build_editables(
     tags: &Tags,
     client: &RegistryClient,
     build_dispatch: &BuildDispatch<'_>,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<Vec<BuiltEditable>, Error> {
     let start = std::time::Instant::now();
 
@@ -420,7 +445,7 @@ async fn build_editables(
 
     let s = if editables.len() == 1 { "" } else { "s" };
     writeln!(
-        printer,
+        printer.stderr(),
         "{}",
         format!(
             "Built {} in {}",
@@ -452,7 +477,7 @@ async fn resolve(
     index: &InMemoryIndex,
     build_dispatch: &BuildDispatch<'_>,
     options: Options,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
@@ -515,7 +540,7 @@ async fn resolve(
 
     let s = if resolution.len() == 1 { "" } else { "s" };
     writeln!(
-        printer,
+        printer.stderr(),
         "{}",
         format!(
             "Resolved {} in {}",
@@ -545,7 +570,7 @@ async fn install(
     build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
     venv: &PythonEnvironment,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<(), Error> {
     let start = std::time::Instant::now();
 
@@ -581,7 +606,7 @@ async fn install(
     if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Audited {} in {}",
@@ -621,7 +646,7 @@ async fn install(
 
         let s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Downloaded {} in {}",
@@ -660,7 +685,7 @@ async fn install(
 
         let s = if wheels.len() == 1 { "" } else { "s" };
         writeln!(
-            printer,
+            printer.stderr(),
             "{}",
             format!(
                 "Installed {} in {}",
@@ -696,7 +721,7 @@ async fn install(
         match event.kind {
             ChangeEventKind::Added => {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     " {} {}{}",
                     "+".green(),
                     event.dist.name().as_ref().bold(),
@@ -705,7 +730,7 @@ async fn install(
             }
             ChangeEventKind::Removed => {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     " {} {}{}",
                     "-".red(),
                     event.dist.name().as_ref().bold(),
@@ -725,7 +750,7 @@ async fn install(
             None | Some(Yanked::Bool(false)) => {}
             Some(Yanked::Bool(true)) => {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     "{}{} {dist} is yanked.",
                     "warning".yellow().bold(),
                     ":".bold(),
@@ -733,7 +758,7 @@ async fn install(
             }
             Some(Yanked::Reason(reason)) => {
                 writeln!(
-                    printer,
+                    printer.stderr(),
                     "{}{} {dist} is yanked (reason: \"{reason}\").",
                     "warning".yellow().bold(),
                     ":".bold(),
@@ -749,7 +774,7 @@ async fn install(
 fn validate(
     resolution: &Resolution,
     venv: &PythonEnvironment,
-    mut printer: Printer,
+    printer: Printer,
 ) -> Result<(), Error> {
     let site_packages = SitePackages::from_executable(venv)?;
     let diagnostics = site_packages.diagnostics()?;
@@ -760,7 +785,7 @@ fn validate(
             .any(|package| diagnostic.includes(package))
         {
             writeln!(
-                printer,
+                printer.stderr(),
                 "{}{} {}",
                 "warning".yellow().bold(),
                 ":".bold(),

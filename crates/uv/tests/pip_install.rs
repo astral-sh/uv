@@ -100,7 +100,7 @@ fn missing_requirements_txt() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to open file `requirements.txt`
+    error: failed to read from file `requirements.txt`
       Caused by: No such file or directory (os error 2)
     "###
     );
@@ -1509,6 +1509,73 @@ fn install_constraints_inline() -> Result<()> {
     Ok(())
 }
 
+/// Install a package from a `constraints.txt` file on a remote http server.
+#[test]
+fn install_constraints_remote() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+            .arg("-c")
+            .arg("https://raw.githubusercontent.com/apache/airflow/constraints-2-6/constraints-3.11.txt")
+            .arg("typing_extensions>=4.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.7.1
+    "###
+    ); // would yield typing-extensions==4.8.2 without constraint file
+}
+
+/// Install a package from a `requirements.txt` file, with an inline constraint, which points
+/// to a remote http server.
+#[test]
+fn install_constraints_inline_remote() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirementstxt = context.temp_dir.child("requirements.txt");
+    requirementstxt.write_str("typing-extensions>=4.0\n-c https://raw.githubusercontent.com/apache/airflow/constraints-2-6/constraints-3.11.txt")?;
+
+    uv_snapshot!(command(&context)
+            .arg("-r")
+            .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.7.1
+    "### // would yield typing-extensions==4.8.2 without constraint file
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_constraints_respects_offline_mode() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+            .arg("--offline")
+            .arg("-r")
+            .arg("http://example.com/requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while accessing remote requirements file http://example.com/requirements.txt: Middleware error: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://example.com/requirements.txt`
+      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://example.com/requirements.txt`
+    "###
+    );
+}
+
 /// Tests that we can install `polars==0.14.0`, which has this odd dependency
 /// requirement in its wheel metadata: `pyarrow>=4.0.*; extra == 'pyarrow'`.
 ///
@@ -2280,4 +2347,149 @@ requires-python = "<=3.8"
     );
 
     Ok(())
+}
+
+/// Install with `--no-build-isolation`, to disable isolation during PEP 517 builds.
+#[test]
+fn no_build_isolation() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz")?;
+
+    // We expect the build to fail, because `setuptools` is not installed.
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, command(&context)
+        .arg("-r")
+        .arg("requirements.in")
+        .arg("--no-build-isolation"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz
+      Caused by: Failed to build: anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz
+      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
+    --- stdout:
+
+    --- stderr:
+    Traceback (most recent call last):
+      File "<string>", line 8, in <module>
+    ModuleNotFoundError: No module named 'setuptools'
+    ---
+    "###
+    );
+
+    // Install `setuptools` and `wheel`.
+    uv_snapshot!(command(&context)
+        .arg("setuptools")
+        .arg("wheel"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + setuptools==68.2.2
+     + wheel==0.41.3
+    "###);
+
+    // We expect the build to succeed, since `setuptools` is now installed.
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.in")
+        .arg("--no-build-isolation"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==0.0.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// This tests that `uv` can read UTF-16LE encoded requirements.txt files.
+///
+/// Ref: <https://github.com/astral-sh/uv/issues/2276>
+#[test]
+fn install_utf16le_requirements() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli"))?;
+
+    uv_snapshot!(command_without_exclude_newer(&context)
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==2.0.1
+    "###
+    );
+    Ok(())
+}
+
+/// This tests that `uv` can read UTF-16BE encoded requirements.txt files.
+///
+/// Ref: <https://github.com/astral-sh/uv/issues/2276>
+#[test]
+fn install_utf16be_requirements() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli"))?;
+
+    uv_snapshot!(command_without_exclude_newer(&context)
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==2.0.1
+    "###
+    );
+    Ok(())
+}
+
+fn utf8_to_utf16_with_bom_le(s: &str) -> Vec<u8> {
+    use byteorder::ByteOrder;
+
+    let mut u16s = vec![0xFEFF];
+    u16s.extend(s.encode_utf16());
+    let mut u8s = vec![0; u16s.len() * 2];
+    byteorder::LittleEndian::write_u16_into(&u16s, &mut u8s);
+    u8s
+}
+
+fn utf8_to_utf16_with_bom_be(s: &str) -> Vec<u8> {
+    use byteorder::ByteOrder;
+
+    let mut u16s = vec![0xFEFF];
+    u16s.extend(s.encode_utf16());
+    let mut u8s = vec![0; u16s.len() * 2];
+    byteorder::BigEndian::write_u16_into(&u16s, &mut u8s);
+    u8s
 }

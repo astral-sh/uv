@@ -21,7 +21,9 @@ use uv_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_traits::{BuildContext, BuildKind, NoBinary, NoBuild, SetupPyStrategy, SourceBuildTrait};
+use uv_traits::{
+    BuildContext, BuildIsolation, BuildKind, NoBinary, NoBuild, SetupPyStrategy, SourceBuildTrait,
+};
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
@@ -55,6 +57,10 @@ impl BuildContext for DummyContext {
 
     fn interpreter(&self) -> &Interpreter {
         &self.interpreter
+    }
+
+    fn build_isolation(&self) -> BuildIsolation {
+        BuildIsolation::Isolated
     }
 
     fn no_build(&self) -> &NoBuild {

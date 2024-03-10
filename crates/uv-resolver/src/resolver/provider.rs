@@ -6,17 +6,18 @@ use url::Url;
 
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
-use pypi_types::Metadata21;
+use pypi_types::Metadata23;
 use uv_client::{FlatIndex, RegistryClient};
 use uv_distribution::DistributionDatabase;
 use uv_normalize::PackageName;
-use uv_traits::{BuildContext, NoBinary};
+use uv_traits::{BuildContext, NoBinary, NoBuild};
 
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
+use crate::yanks::AllowedYanks;
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
-pub type WheelMetadataResult = Result<(Metadata21, Option<Url>), uv_distribution::Error>;
+pub type WheelMetadataResult = Result<(Metadata23, Option<Url>), uv_distribution::Error>;
 
 /// The response when requesting versions for a package
 #[derive(Debug)]
@@ -66,8 +67,10 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     flat_index: FlatIndex,
     tags: Tags,
     python_requirement: PythonRequirement,
+    allowed_yanks: AllowedYanks,
     exclude_newer: Option<DateTime<Utc>>,
     no_binary: NoBinary,
+    no_build: NoBuild,
 }
 
 impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Context> {
@@ -79,8 +82,10 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
         flat_index: &'a FlatIndex,
         tags: &'a Tags,
         python_requirement: PythonRequirement,
+        allowed_yanks: AllowedYanks,
         exclude_newer: Option<DateTime<Utc>>,
         no_binary: &'a NoBinary,
+        no_build: &'a NoBuild,
     ) -> Self {
         Self {
             fetcher,
@@ -88,8 +93,10 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
             flat_index: flat_index.clone(),
             tags: tags.clone(),
             python_requirement,
+            allowed_yanks,
             exclude_newer,
             no_binary: no_binary.clone(),
+            no_build: no_build.clone(),
         }
     }
 }
@@ -113,9 +120,11 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                 &index,
                 &self.tags,
                 &self.python_requirement,
+                &self.allowed_yanks,
                 self.exclude_newer.as_ref(),
                 self.flat_index.get(package_name).cloned(),
                 &self.no_binary,
+                &self.no_build,
             ))),
             Err(err) => match err.into_kind() {
                 uv_client::ErrorKind::PackageNotFound(_) => {

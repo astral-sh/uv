@@ -1150,9 +1150,15 @@ impl Display for MarkerTree {
 /// version_cmp   = wsp* <'<=' | '<' | '!=' | '==' | '>=' | '>' | '~=' | '==='>
 /// marker_op     = version_cmp | (wsp* 'in') | (wsp* 'not' wsp+ 'in')
 /// ```
+/// The `wsp*` has already been consumed by the caller.
 fn parse_marker_operator(cursor: &mut Cursor) -> Result<MarkerOperator, Pep508Error> {
-    let (start, len) =
-        cursor.take_while(|char| !char.is_whitespace() && char != '\'' && char != '"');
+    let (start, len) = if cursor.peek_char().is_some_and(|c| c.is_alphabetic()) {
+        // "in" or "not"
+        cursor.take_while(|char| !char.is_whitespace() && char != '\'' && char != '"')
+    } else {
+        // A mathematical operator
+        cursor.take_while(|char| matches!(char, '<' | '=' | '>' | '~' | '!'))
+    };
     let operator = cursor.slice(start, len);
     if operator == "not" {
         // 'not' wsp+ 'in'
@@ -1363,11 +1369,11 @@ fn parse_markers(markers: &str) -> Result<MarkerTree, Pep508Error> {
 mod test {
     use crate::marker::{MarkerEnvironment, StringVersion};
     use crate::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString};
-    use indoc::indoc;
+    use insta::assert_snapshot;
     use std::str::FromStr;
 
-    fn assert_err(input: &str, error: &str) {
-        assert_eq!(MarkerTree::from_str(input).unwrap_err().to_string(), error);
+    fn parse_err(input: &str) -> String {
+        MarkerTree::from_str(input).unwrap_err().to_string()
     }
 
     fn env37() -> MarkerEnvironment {
@@ -1548,21 +1554,19 @@ mod test {
 
     #[test]
     fn wrong_quotes_dot_star() {
-        assert_err(
-            r#"python_version == "3.8".* and python_version >= "3.8""#,
-            indoc! {r#"
-                Unexpected character '.', expected 'and', 'or' or end of input
-                python_version == "3.8".* and python_version >= "3.8"
-                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"#
-            },
+        assert_snapshot!(
+            parse_err(r#"python_version == "3.8".* and python_version >= "3.8""#),
+            @r#"
+            Unexpected character '.', expected 'and', 'or' or end of input
+            python_version == "3.8".* and python_version >= "3.8"
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"#
         );
-        assert_err(
-            r#"python_version == "3.8".*"#,
-            indoc! {r#"
-                Unexpected character '.', expected 'and', 'or' or end of input
-                python_version == "3.8".*
-                                       ^"#
-            },
+        assert_snapshot!(
+            parse_err(r#"python_version == "3.8".*"#),
+            @r#"
+            Unexpected character '.', expected 'and', 'or' or end of input
+            python_version == "3.8".*
+                                   ^"#
         );
     }
 
@@ -1580,15 +1584,15 @@ mod test {
 
     #[test]
     fn test_marker_expression_to_long() {
-        assert_eq!(
-            MarkerExpression::from_str(r#"os_name == "nt" and python_version >= "3.8""#)
-                .unwrap_err()
-                .to_string(),
-            indoc! {r#"
-                Unexpected character 'a', expected end of input
-                os_name == "nt" and python_version >= "3.8"
-                                ^^^^^^^^^^^^^^^^^^^^^^^^^^"#
-            },
+        let err = MarkerExpression::from_str(r#"os_name == "nt" and python_version >= "3.8""#)
+            .unwrap_err()
+            .to_string();
+        assert_snapshot!(
+            err,
+            @r#"
+            Unexpected character 'a', expected end of input
+            os_name == "nt" and python_version >= "3.8"
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^"#
         );
     }
 

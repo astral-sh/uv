@@ -8,6 +8,7 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
+use reqwest_netrc::NetrcMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
@@ -20,7 +21,7 @@ use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
 use install_wheel_rs::{find_dist_info, is_metadata_entry};
 use pep440_rs::Version;
-use pypi_types::{Metadata21, SimpleJson};
+use pypi_types::{Metadata23, SimpleJson};
 use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
@@ -108,7 +109,8 @@ impl RegistryClientBuilder {
             .unwrap_or(default_timeout);
         debug!("Using registry request timeout of {}s", timeout);
 
-        let client_raw = self.client.unwrap_or_else(|| {
+        // Initialize the base client.
+        let client = self.client.unwrap_or_else(|| {
             // Disallow any connections.
             let client_core = ClientBuilder::new()
                 .user_agent(user_agent_string)
@@ -118,26 +120,39 @@ impl RegistryClientBuilder {
             client_core.build().expect("Failed to build HTTP client.")
         });
 
-        let uncached_client = match self.connectivity {
+        // Wrap in any relevant middleware.
+        let client = match self.connectivity {
             Connectivity::Online => {
+                let client = reqwest_middleware::ClientBuilder::new(client.clone());
+
+                // Initialize the retry strategy.
                 let retry_policy =
                     ExponentialBackoff::builder().build_with_max_retries(self.retries);
                 let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
-                reqwest_middleware::ClientBuilder::new(client_raw.clone())
-                    .with(retry_strategy)
-                    .build()
+                let client = client.with(retry_strategy);
+
+                // Initialize the netrc middleware.
+                let client = if let Ok(netrc) = NetrcMiddleware::new() {
+                    client.with_init(netrc)
+                } else {
+                    client
+                };
+
+                client.build()
             }
-            Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client_raw.clone())
+            Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client.clone())
                 .with(OfflineMiddleware)
                 .build(),
         };
+
+        // Wrap in the cache middleware.
+        let client = CachedClient::new(client);
 
         RegistryClient {
             index_urls: self.index_urls,
             cache: self.cache,
             connectivity: self.connectivity,
-            client_raw,
-            client: CachedClient::new(uncached_client),
+            client,
             timeout,
         }
     }
@@ -150,9 +165,6 @@ pub struct RegistryClient {
     index_urls: IndexUrls,
     /// The underlying HTTP client.
     client: CachedClient,
-    /// Don't use this client, it only exists because `async_http_range_reader` needs.
-    /// [`reqwest::Client] instead of [`reqwest_middleware::Client`]
-    client_raw: Client,
     /// Used for the remote wheel METADATA cache.
     cache: Cache,
     /// The connectivity mode to use.
@@ -175,6 +187,12 @@ impl RegistryClient {
     /// Return the timeout this client is configured with, in seconds.
     pub fn timeout(&self) -> u64 {
         self.timeout
+    }
+
+    /// Set the index URLs to use for fetching packages.
+    #[must_use]
+    pub fn with_index_url(self, index_urls: IndexUrls) -> Self {
+        Self { index_urls, ..self }
     }
 
     /// Fetch a package from the `PyPI` simple API.
@@ -325,7 +343,7 @@ impl RegistryClient {
     /// 2. From a remote wheel by partial zip reading
     /// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
     #[instrument(skip_all, fields(% built_dist))]
-    pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
+    pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata23, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => match &wheel.file.url {
                 FileLocation::RelativeUrl(base, url) => {
@@ -381,7 +399,7 @@ impl RegistryClient {
         index: &IndexUrl,
         file: &File,
         url: &Url,
-    ) -> Result<Metadata21, Error> {
+    ) -> Result<Metadata23, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
         if file
@@ -410,7 +428,7 @@ impl RegistryClient {
                 let bytes = response.bytes().await.map_err(ErrorKind::from)?;
 
                 info_span!("parse_metadata21")
-                    .in_scope(|| Metadata21::parse(bytes.as_ref()))
+                    .in_scope(|| Metadata23::parse_metadata(bytes.as_ref()))
                     .map_err(|err| {
                         Error::from(ErrorKind::MetadataParseError(
                             filename,
@@ -444,7 +462,7 @@ impl RegistryClient {
         filename: &'data WheelFilename,
         url: &'data Url,
         cache_shard: WheelCache<'data>,
-    ) -> Result<Metadata21, Error> {
+    ) -> Result<Metadata23, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.remote_wheel_dir(filename.name.as_ref()),
@@ -459,7 +477,6 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let client = self.client_raw.clone();
         let req = self
             .client
             .uncached()
@@ -481,20 +498,23 @@ impl RegistryClient {
         // fetch the file from the remote zip.
         let read_metadata_range_request = |response: Response| {
             async {
-                let mut reader =
-                    AsyncHttpRangeReader::from_head_response(client, response, headers)
-                        .await
-                        .map_err(ErrorKind::AsyncHttpRangeReader)?;
+                let mut reader = AsyncHttpRangeReader::from_head_response(
+                    self.client.uncached(),
+                    response,
+                    headers,
+                )
+                .await
+                .map_err(ErrorKind::AsyncHttpRangeReader)?;
                 trace!("Getting metadata for {filename} by range request");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
-                let metadata = Metadata21::parse(text.as_bytes()).map_err(|err| {
+                let metadata = Metadata23::parse_metadata(text.as_bytes()).map_err(|err| {
                     Error::from(ErrorKind::MetadataParseError(
                         filename.clone(),
                         url.to_string(),
                         Box::new(err),
                     ))
                 })?;
-                Ok::<Metadata21, CachedClientError<Error>>(metadata)
+                Ok::<Metadata23, CachedClientError<Error>>(metadata)
             }
             .boxed()
             .instrument(info_span!("read_metadata_range_request", wheel = %filename))
@@ -515,38 +535,54 @@ impl RegistryClient {
             Ok(metadata) => return Ok(metadata),
             Err(err) => {
                 if err.kind().is_http_range_requests_unsupported() {
-                    // The range request version failed. Fall back to downloading the entire file
-                    // and the reading the file from the zip the regular way.
-                    warn!("Range requests not supported for {filename}; downloading wheel");
+                    // The range request version failed. Fall back to streaming the file to search
+                    // for the METADATA file.
+                    warn!("Range requests not supported for {filename}; streaming wheel");
                 } else {
                     return Err(err);
                 }
             }
-        }
+        };
+
+        // Create a request to stream the file.
+        let req = self
+            .client
+            .uncached()
+            .get(url.clone())
+            .build()
+            .map_err(ErrorKind::from)?;
 
         // Stream the file, searching for the METADATA.
-        let reader = self.stream_external(url).await?;
-        read_metadata_async_stream(filename, url.to_string(), reader).await
+        let read_metadata_stream = |response: Response| {
+            async {
+                let reader = response
+                    .bytes_stream()
+                    .map_err(|err| self.handle_response_errors(err))
+                    .into_async_read();
+
+                read_metadata_async_stream(filename, url.to_string(), reader).await
+            }
+            .instrument(info_span!("read_metadata_stream", wheel = %filename))
+        };
+
+        self.client
+            .get_serde(req, &cache_entry, cache_control, read_metadata_stream)
+            .await
+            .map_err(crate::Error::from)
     }
 
-    /// Stream a file from an external URL.
-    pub async fn stream_external(
-        &self,
-        url: &Url,
-    ) -> Result<Box<dyn futures::AsyncRead + Unpin + Send + Sync>, Error> {
-        Ok(Box::new(
-            self.client
-                .uncached()
-                .get(url.to_string())
-                .send()
-                .await
-                .map_err(ErrorKind::from)?
-                .error_for_status()
-                .map_err(ErrorKind::from)?
-                .bytes_stream()
-                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
-                .into_async_read(),
-        ))
+    /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
+    fn handle_response_errors(&self, err: reqwest::Error) -> std::io::Error {
+        if err.is_timeout() {
+            std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                format!(
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",  self.timeout()
+                ),
+            )
+        } else {
+            std::io::Error::new(std::io::ErrorKind::Other, err)
+        }
     }
 }
 
@@ -555,7 +591,7 @@ async fn read_metadata_async_seek(
     filename: &WheelFilename,
     debug_source: String,
     reader: impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
-) -> Result<Metadata21, Error> {
+) -> Result<Metadata23, Error> {
     let mut zip_reader = async_zip::tokio::read::seek::ZipFileReader::with_tokio(reader)
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
@@ -581,7 +617,7 @@ async fn read_metadata_async_seek(
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
-    let metadata = Metadata21::parse(&contents).map_err(|err| {
+    let metadata = Metadata23::parse_metadata(&contents).map_err(|err| {
         ErrorKind::MetadataParseError(filename.clone(), debug_source, Box::new(err))
     })?;
     Ok(metadata)
@@ -592,7 +628,7 @@ async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
     filename: &WheelFilename,
     debug_source: String,
     reader: R,
-) -> Result<Metadata21, Error> {
+) -> Result<Metadata23, Error> {
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(reader);
 
     while let Some(mut entry) = zip
@@ -613,7 +649,7 @@ async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
             let mut contents = Vec::new();
             reader.read_to_end(&mut contents).await.unwrap();
 
-            let metadata = Metadata21::parse(&contents).map_err(|err| {
+            let metadata = Metadata23::parse_metadata(&contents).map_err(|err| {
                 ErrorKind::MetadataParseError(filename.clone(), debug_source, Box::new(err))
             })?;
             return Ok(metadata);

@@ -123,7 +123,7 @@ impl Interpreter {
     /// the first available version.
     ///
     /// See [`Self::find_version`] for details on the precedence of Python lookup locations.
-    #[instrument(skip_all, fields(? python_version))]
+    #[instrument(skip_all, fields(?python_version))]
     pub fn find_best(
         python_version: Option<&PythonVersion>,
         platform: &Platform,
@@ -468,6 +468,7 @@ impl InterpreterInfo {
                     "Querying Python at `{}` did not return the expected data: {err}",
                     interpreter.display(),
                 ),
+                exit_code: output.status,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             }
@@ -626,24 +627,6 @@ impl InterpreterInfo {
             interpreter: interpreter.to_path_buf(),
             err,
         })?;
-
-        // stderr isn't technically a criterion for success, but i don't know of any cases where there
-        // should be stderr output and if there is, we want to know
-        if !output.status.success() || !output.stderr.is_empty() {
-            if output.status.code() == Some(3) {
-                return Err(Error::Python2OrOlder);
-            }
-
-            return Err(Error::PythonSubcommandOutput {
-                message: format!(
-                    "Querying Python at `{}` failed with status {}",
-                    interpreter.display(),
-                    output.status,
-                ),
-                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            });
-        }
 
         Ok(output)
     }

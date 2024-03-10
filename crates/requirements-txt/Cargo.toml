@@ -15,13 +15,17 @@ workspace = true
 [dependencies]
 pep440_rs = { path = "../pep440-rs", features = ["rkyv", "serde"] }
 pep508_rs = { path = "../pep508-rs", features = ["rkyv", "serde", "non-pep508-extensions"] }
+uv-client = { path = "../uv-client" }
 uv-fs = { path = "../uv-fs" }
 uv-normalize = { path = "../uv-normalize" }
 uv-warnings = { path = "../uv-warnings" }
 
+async-recursion = { workspace = true }
 fs-err = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
+reqwest = { workspace = true, optional = true }
+reqwest-middleware = { workspace = true, optional = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -37,3 +41,8 @@ itertools = { version = "0.12.1" }
 serde_json = { version = "1.0.114" }
 tempfile = { version = "3.9.0" }
 test-case = { version = "3.3.1" }
+tokio = { version = "1.35.1", features = ["macros"] }
+
+[features]
+default = []
+reqwest = ["dep:reqwest", "dep:reqwest-middleware"]

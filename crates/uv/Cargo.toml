@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.1.15"
+version = "0.1.16"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -22,7 +22,7 @@ pep508_rs = { path = "../pep508-rs" }
 platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
 pypi-types = { path = "../pypi-types" }
-requirements-txt = { path = "../requirements-txt" }
+requirements-txt = { path = "../requirements-txt", features = ["reqwest"] }
 uv-build = { path = "../uv-build" }
 uv-cache = { path = "../uv-cache", features = ["clap"] }
 uv-client = { path = "../uv-client" }
@@ -74,14 +74,15 @@ url = { workspace = true }
 which = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-mimalloc = "0.1.39"
+mimalloc = { version = "0.1.39" }
 
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
-tikv-jemallocator = "0.5.4"
+tikv-jemallocator = { version = "0.5.4" }
 
 [dev-dependencies]
 assert_cmd = { version = "2.0.14" }
 assert_fs = { version = "1.1.0" }
+byteorder = { version = "1.5.0" }
 filetime = { version = "0.2.23" }
 indoc = { version = "2.0.4" }
 insta = { version = "1.36.1", features = ["filters", "json"] }

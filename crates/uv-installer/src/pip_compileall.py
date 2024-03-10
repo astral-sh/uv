@@ -9,11 +9,34 @@ which contains some vendored Python 2 code which fails to compile.
 """
 
 import compileall
+import os
+import py_compile
 import sys
 import warnings
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore")
+
+    # Successful launch check
+    print("Ready")
+
+    # https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode
+    # TIMESTAMP, CHECKED_HASH, UNCHECKED_HASH
+    invalidation_mode = os.environ.get("PYC_INVALIDATION_MODE")
+    if invalidation_mode is not None:
+        try:
+            invalidation_mode = py_compile.PycInvalidationMode[invalidation_mode]
+        except KeyError:
+            invalidation_modes = ", ".join(
+                '"' + x.name + '"' for x in py_compile.PycInvalidationMode
+            )
+            print(
+                f'Invalid value for PYC_INVALIDATION_MODE "{invalidation_mode}", '
+                f"valid are {invalidation_modes}: ",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
     # In rust, we provide one line per file to compile.
     for path in sys.stdin:
         # Remove trailing newlines.
@@ -23,6 +46,8 @@ with warnings.catch_warnings():
         # Unlike pip, we set quiet=2, so we don't have to capture stdout.
         # We'd like to show those errors, but given that pip thinks that's totally fine,
         # we can't really change that.
-        success = compileall.compile_file(path, force=True, quiet=2)
+        success = compileall.compile_file(
+            path, invalidation_mode=invalidation_mode, force=True, quiet=2
+        )
         # We're ready for the next file.
         print(path)

@@ -31,9 +31,6 @@ pub(crate) struct PipCompileCompatArgs {
     build_isolation: bool,
 
     #[clap(long, hide = true)]
-    no_build_isolation: bool,
-
-    #[clap(long, hide = true)]
     resolver: Option<Resolver>,
 
     #[clap(long, hide = true)]
@@ -115,12 +112,6 @@ impl CompatArgs for PipCompileCompatArgs {
             warn_user!(
                 "pip-compile's `--build-isolation` has no effect (uv always uses build isolation)."
             );
-        }
-
-        if self.no_build_isolation {
-            return Err(anyhow!(
-                "pip-compile's `--no-build-isolation` is unsupported (uv always uses build isolation)."
-            ));
         }
 
         if let Some(resolver) = self.resolver {

@@ -8,7 +8,7 @@
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
 
 An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in
-replacement for `pip` and `pip-compile`.
+replacement for common `pip` and `pip-tools` workflows.
 
 uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://github.com/astral-sh/ruff).
 
@@ -98,18 +98,11 @@ installs), `--index-url`, and more.
 
 ## Limitations
 
-uv does not support the entire `pip` feature set. Namely, uv does not (and does not plan to)
-support the following `pip` features:
+While uv supports a large subset of the `pip` interface, it does not support the entire feature set.
+In some cases, those differences are intentional; in others, they're a result of uv's early stage of
+development.
 
-- `.egg` dependencies
-- Editable installs for Git and direct URL dependencies (editable installs _are_ supported for local
-  dependencies)
-
-On the other hand, uv plans to (but does not currently) support:
-
-- [Hash-checking mode](https://github.com/astral-sh/uv/issues/474)
-- [URL requirements without package names](https://github.com/astral-sh/uv/issues/313)
-  (e.g., `https://...` instead of `package @ https://...`)
+For details, see our [`pip` compatibility guide](./PIP_COMPATIBILITY.md).
 
 Like `pip-compile`, uv generates a platform-specific `requirements.txt` file (unlike, e.g.,
 `poetry` and `pdm`, which generate platform-agnostic `poetry.lock` and `pdm.lock` files). As such,
@@ -182,13 +175,13 @@ install into the environment linked to the `/path/to/python` interpreter.
 For convenience, `uv pip install --system` will install into the system Python environment, as an
 approximate shorthand for, e.g., `uv pip install --python=$(which python3)`. Though we generally
 recommend the use of virtual environments for dependency management, `--system` is intended to
-enable the use of `uv` in continuous integration and containerized environments.
+enable the use of uv in continuous integration and containerized environments.
 
-Installing into system Python across platforms and distributions is notoriously difficult. `uv`
+Installing into system Python across platforms and distributions is notoriously difficult. uv
 supports the common cases, but will not work in all cases. For example, installing into system
 Python on Debian prior to Python 3.10 is unsupported due to the [distribution's patching
 of `distutils` (but not `sysconfig`)](https://ffy00.github.io/blog/02-python-debian-and-the-install-locations/).
-While we always recommend the use of virtual environments, `uv` considers them to be required in
+While we always recommend the use of virtual environments, uv considers them to be required in
 these non-standard environments.
 
 ### Git authentication
@@ -313,8 +306,10 @@ dependency.
 
 Pre-releases are [notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions)
 to model, and are a frequent source of bugs in other packaging tools. uv's pre-release handling
-is _intentionally_ limited and _intentionally_ requires user intervention to opt in to pre-releases
-to ensure correctness, though pre-release handling will be revisited in future releases.
+is _intentionally_ limited and _intentionally_ requires user opt-in for pre-releases, to ensure
+correctness.
+
+For more, see ["Pre-release compatibility"](./PIP_COMPATIBILITY.md#pre-release-compatibility)
 
 ### Dependency overrides
 
@@ -392,12 +387,12 @@ uv supports and is tested against Python 3.8, 3.9, 3.10, 3.11, and 3.12.
 
 ## Custom CA Certificates
 
-`uv` supports custom CA certificates (such as those needed by corporate proxies) by utilizing the
+uv supports custom CA certificates (such as those needed by corporate proxies) by utilizing the
 system's trust store. To ensure this works out of the box, ensure your certificates are added to the
 system's trust store.
 
 If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT_FILE` environment
-variable to the path of the certificate bundle, to instruct `uv` to use that file instead of the
+variable to the path of the certificate bundle, to instruct uv to use that file instead of the
 system's trust store.
 
 ## Acknowledgements

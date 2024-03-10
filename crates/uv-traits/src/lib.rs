@@ -54,15 +54,18 @@ use uv_normalize::PackageName;
 /// `uv-build` to depend on `uv-resolver` which having actual crate dependencies between
 /// them.
 
-// TODO(konstin): Proper error types
 pub trait BuildContext: Sync {
     type SourceDistBuilder: SourceBuildTrait + Send + Sync;
 
+    /// Return a reference to the cache.
     fn cache(&self) -> &Cache;
 
     /// All (potentially nested) source distribution builds use the same base python and can reuse
     /// it's metadata (e.g. wheel compatibility tags).
     fn interpreter(&self) -> &Interpreter;
+
+    /// Whether to enforce build isolation when building source distributions.
+    fn build_isolation(&self) -> BuildIsolation;
 
     /// Whether source distribution building is disabled. This [`BuildContext::setup_build`] calls
     /// will fail in this case. This method exists to avoid fetching source distributions if we know
@@ -135,6 +138,20 @@ pub trait SourceBuildTrait {
 pub struct InFlight {
     /// The in-flight distribution downloads.
     pub downloads: OnceMap<DistributionId, Result<CachedDist, String>>,
+}
+
+/// Whether to enforce build isolation when building source distributions.
+#[derive(Debug, Copy, Clone)]
+pub enum BuildIsolation<'a> {
+    Isolated,
+    Shared(&'a PythonEnvironment),
+}
+
+impl<'a> BuildIsolation<'a> {
+    /// Returns `true` if build isolation is enforced.
+    pub fn is_isolated(&self) -> bool {
+        matches!(self, Self::Isolated)
+    }
 }
 
 /// The strategy to use when building source distributions that lack a `pyproject.toml`.
