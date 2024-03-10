@@ -4,15 +4,18 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-url = { workspace = true }
-tracing = { workspace = true }
-thiserror = { workspace = true }
+async-trait = { workspace = true }
+base64 = { workspace = true }
 lazy_static = { workspace = true }
+reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rust-netrc = { workspace = true }
+task-local-extensions = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
-reqwest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 wiremock = { workspace = true }

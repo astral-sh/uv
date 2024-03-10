@@ -4427,10 +4427,13 @@ dependencies = [
 name = "uv-auth"
 version = "0.0.1"
 dependencies = [
+ "async-trait",
+ "base64 0.21.7",
  "lazy_static",
  "reqwest",
  "reqwest-middleware",
  "rust-netrc",
+ "task-local-extensions",
  "tempfile",
  "thiserror",
  "tokio",
@@ -4498,7 +4501,6 @@ dependencies = [
  "async-trait",
  "async_http_range_reader",
  "async_zip",
- "base64 0.21.7",
  "cache-key",
  "chrono",
  "distribution-filename",
@@ -4519,7 +4521,6 @@ dependencies = [
  "reqwest-retry",
  "rkyv",
  "rmp-serde",
- "rust-netrc",
  "rustc-hash",
  "serde",
  "serde_json",

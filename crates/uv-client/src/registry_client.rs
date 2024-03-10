@@ -29,7 +29,7 @@ use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
-use crate::middleware::{NetrcMiddleware, OfflineMiddleware};
+use crate::middleware::{OfflineMiddleware};
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{CachedClient, CachedClientError, Error, ErrorKind};
@@ -138,16 +138,9 @@ impl RegistryClientBuilder {
                 let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
                 let client = client.with(retry_strategy);
 
-<<<<<<< HEAD
-                let client = client.with_init(AuthMiddleware::new(self.use_keyring));
-=======
-                // Initialize the netrc middleware.
-                let client = if let Ok(netrc) = NetrcMiddleware::new() {
-                    client.with(netrc)
-                } else {
-                    client
-                };
->>>>>>> upstream/main
+                // Initialize the authentication middleware to set headers.
+                let client = client.with(AuthMiddleware::new(self.use_keyring));
+
 
                 client.build()
             }
