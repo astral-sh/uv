@@ -799,11 +799,16 @@ struct PipInstallArgs {
 
     /// Install packages into user directory.
     ///
-    /// This option allows `uv` to install packages to user install directory for your platform.
-    /// The installation location can be customized by setting the `PYTHONUSERBASE` environment variable.
+    /// When enabled, this option instructs `uv` to install to install packages to user install
+    /// directory specific to the platform. The installation location can be overriden by the
+    /// `PYTHONUSERBASE` environment variable.
     ///
-    /// Note: It is generally recommended to manage Python packages using a virtual environment
-    /// instead of installing them into the user or system Python directories.
+    /// Searches for an interpreter in this order: `--python`/`-p` argument, active virtual
+    /// environment or the first Python in the system `PATH`.
+    ///
+    /// WARNING: `--user` is intended for use in continuous integration (CI) or multi-user machine.
+    /// It is generally recommended to manage Python packages using a virtual environment to
+    /// isolate pacakges.
     #[clap(long, conflicts_with = "system", group = "discovery")]
     user: bool,
 
