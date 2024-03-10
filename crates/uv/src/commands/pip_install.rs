@@ -108,6 +108,7 @@ pub(crate) async fn pip_install(
 
     // Detect the current Python interpreter.
     let platform = Platform::current()?;
+
     let detected_env = if let Some(python) = python.as_ref() {
         PythonEnvironment::from_requested_python(python, &platform, &cache)?
     } else if system {
@@ -119,6 +120,10 @@ pub(crate) async fn pip_install(
     let venv = if user {
         PythonEnvironment::from_interpreter_with_user_scheme(detected_env.interpreter().clone())?
     } else { detected_env };
+
+    if user {
+        venv.ensure_scheme_directories_exist()?;
+    }
 
     debug!(
         "Using Python {} environment at {}",

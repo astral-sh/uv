@@ -1,5 +1,5 @@
-use std::env;
 use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 use tracing::debug;
 
@@ -120,6 +120,23 @@ impl PythonEnvironment {
                 self.root.simplified_display(),
             )
         }
+    }
+
+    /// Ensure interpreter scheme directories exist.
+    /// Model for the scheme in pip: <https://github.com/pypa/pip/blob/db99b5be855c261361df5a44806eadcff96dc039/src/pip/_internal/models/scheme.py#L12>
+    pub fn ensure_scheme_directories_exist(&self) -> Result<(), Error> {
+        let directories = vec![
+            self.interpreter.platlib(),
+            self.interpreter.purelib(),
+            self.interpreter.scripts(),
+            self.interpreter.data(),
+        ];
+        for path in directories {
+            if !Path::new(path).exists() {
+                fs::create_dir_all(path)?;
+            };
+        }
+        Ok(())
     }
 }
 
