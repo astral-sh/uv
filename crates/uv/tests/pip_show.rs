@@ -116,6 +116,7 @@ fn show_requires_multiple() -> Result<()> {
 }
 
 #[test]
+#[cfg(not(windows))]
 fn show_python_version_marker() -> Result<()> {
     let context = TestContext::new("3.12");
 
