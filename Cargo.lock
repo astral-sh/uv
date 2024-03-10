@@ -4483,6 +4483,7 @@ dependencies = [
  "uv-git",
  "uv-normalize",
  "uv-traits",
+ "uv-warnings",
  "zip",
 ]
 

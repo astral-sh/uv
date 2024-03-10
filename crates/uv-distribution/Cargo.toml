@@ -27,6 +27,7 @@ uv-fs = { path = "../uv-fs", features = ["tokio"] }
 uv-git = { path = "../uv-git", features = ["vendored-openssl"] }
 uv-normalize = { path = "../uv-normalize" }
 uv-traits = { path = "../uv-traits" }
+uv-warnings = { path = "../uv-warnings" }
 pypi-types = { path = "../pypi-types" }
 
 anyhow = { workspace = true }
