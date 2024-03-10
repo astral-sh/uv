@@ -69,14 +69,18 @@ impl Middleware for NetrcMiddleware {
         _extensions: &mut Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
+        // If the request already has an authorization header, we don't need to do anything.
+        // This gives in-URL credentials precedence over the netrc file.
+        if req.headers().contains_key(reqwest::header::AUTHORIZATION) {
+            return next.run(req, _extensions).await;
+        }
+
         if let Some(auth) = req.url().host_str().and_then(|host| {
             self.nrc
                 .hosts
                 .get(host)
                 .or_else(|| self.nrc.hosts.get("default"))
         }) {
-            // Remove the existing `Authorization` header, if any.
-            req.headers_mut().remove(reqwest::header::AUTHORIZATION);
             req.headers_mut().insert(
                 reqwest::header::AUTHORIZATION,
                 basic_auth(
