@@ -2216,14 +2216,9 @@ fn sync_editable() -> Result<()> {
         .collect::<Vec<_>>();
 
     // Install the editable packages.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    uv_snapshot!(filters, command(&context)
         .arg(requirements_txt.path())
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -2242,16 +2237,11 @@ fn sync_editable() -> Result<()> {
     );
 
     // Reinstall the editable packages.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    uv_snapshot!(filters, command(&context)
         .arg(requirements_txt.path())
         .arg("--reinstall-package")
         .arg("poetry-editable")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -2304,14 +2294,9 @@ fn sync_editable() -> Result<()> {
     // Don't create a git diff.
     fs_err::write(python_source_file, python_version_1)?;
 
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    uv_snapshot!(filters, command(&context)
         .arg(requirements_txt.path())
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -2352,14 +2337,10 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, Command::new(get_bin())
-            .arg("pip")
-            .arg("sync")
+    uv_snapshot!(filters, command(&context)
         .arg(requirements_txt.path())
         .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -2395,14 +2376,9 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, Command::new(get_bin())
-            .arg("pip")
-            .arg("sync")
+    uv_snapshot!(filters, command(&context)
         .arg(requirements_txt.path())
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -2434,14 +2410,9 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, Command::new(get_bin())
-            .arg("pip")
-            .arg("sync")
+    uv_snapshot!(filters, command(&context)
         .arg(requirements_txt.path())
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -2468,14 +2439,10 @@ fn sync_editable_and_registry() -> Result<()> {
         ])
         .copied()
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, Command::new(get_bin())
-            .arg("pip")
-            .arg("sync")
+    uv_snapshot!(filters, command(&context)
         .arg(requirements_txt.path())
         .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0

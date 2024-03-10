@@ -12,6 +12,46 @@ use crate::common::{get_bin, venv_to_interpreter, TestContext};
 
 mod common;
 
+/// Create a `pip uninstall` command with options shared across scenarios.
+fn uninstall_command(context: &TestContext) -> Command {
+    let mut command = Command::new(get_bin());
+    command
+        .arg("pip")
+        .arg("uninstall")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+    }
+
+    command
+}
+
+/// Create a `pip sync` command with options shared across scenarios.
+fn sync_command(context: &TestContext) -> Command {
+    let mut command = Command::new(get_bin());
+    command
+        .arg("pip")
+        .arg("sync")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir);
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
+    }
+
+    command
+}
+
 #[test]
 fn no_arguments() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -238,14 +278,8 @@ fn uninstall() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    sync_command(&context)
         .arg("requirements.txt")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
@@ -256,14 +290,8 @@ fn uninstall() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("uninstall")
-        .arg("MarkupSafe")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(uninstall_command(&context)
+        .arg("MarkupSafe"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -292,14 +320,8 @@ fn missing_record() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    sync_command(&context)
         .arg("requirements.txt")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .current_dir(&context.temp_dir)
         .assert()
         .success();
 
@@ -342,14 +364,8 @@ fn missing_record() -> Result<()> {
     .chain(INSTA_FILTERS.to_vec())
     .collect();
 
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("uninstall")
-        .arg("MarkupSafe")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(filters, uninstall_command(&context)
+        .arg("MarkupSafe"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -382,13 +398,9 @@ fn uninstall_editable_by_name() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
 
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    sync_command(&context)
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .assert()
         .success();
 
@@ -399,13 +411,8 @@ fn uninstall_editable_by_name() -> Result<()> {
         .success();
 
     // Uninstall the editable by name.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("uninstall")
-        .arg("poetry-editable")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str()), @r###"
+    uv_snapshot!(filters, uninstall_command(&context)
+        .arg("poetry-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -445,13 +452,9 @@ fn uninstall_editable_by_path() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
 
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    sync_command(&context)
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .assert()
         .success();
 
@@ -462,14 +465,10 @@ fn uninstall_editable_by_path() -> Result<()> {
         .success();
 
     // Uninstall the editable by path.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("uninstall")
+    uv_snapshot!(filters, uninstall_command(&context)
         .arg("-e")
         .arg("../../scripts/editable-installs/poetry_editable")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str()), @r###"
+        .current_dir(&current_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -509,13 +508,9 @@ fn uninstall_duplicate_editable() -> Result<()> {
     requirements_txt.touch()?;
     requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
 
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    sync_command(&context)
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .assert()
         .success();
 
@@ -526,15 +521,11 @@ fn uninstall_duplicate_editable() -> Result<()> {
         .success();
 
     // Uninstall the editable by both path and name.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("uninstall")
+    uv_snapshot!(filters, uninstall_command(&context)
         .arg("poetry-editable")
         .arg("-e")
         .arg("../../scripts/editable-installs/poetry_editable")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str()), @r###"
+        .current_dir(&current_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -567,13 +558,8 @@ fn uninstall_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==21.3.1")?;
 
     // Run `pip sync`.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    sync_command(&context1)
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context1.cache_dir.path())
-        .env("VIRTUAL_ENV", context1.venv.as_os_str())
         .assert()
         .success();
 
@@ -584,13 +570,8 @@ fn uninstall_duplicate() -> Result<()> {
     requirements_txt.write_str("pip==22.1.1")?;
 
     // Run `pip sync`.
-    Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
+    sync_command(&context2)
         .arg(requirements_txt.path())
-        .arg("--cache-dir")
-        .arg(context2.cache_dir.path())
-        .env("VIRTUAL_ENV", context2.venv.as_os_str())
         .assert()
         .success();
 
@@ -605,14 +586,8 @@ fn uninstall_duplicate() -> Result<()> {
     )?;
 
     // Run `pip uninstall`.
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("uninstall")
-        .arg("pip")
-        .arg("--cache-dir")
-        .arg(context1.cache_dir.path())
-        .env("VIRTUAL_ENV", context1.venv.as_os_str())
-        .current_dir(&context1.temp_dir), @r###"
+    uv_snapshot!(uninstall_command(&context1)
+        .arg("pip"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
