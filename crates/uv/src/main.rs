@@ -797,12 +797,12 @@ struct PipInstallArgs {
     #[clap(long, requires = "discovery")]
     break_system_packages: bool,
 
-    /// Install packages into user site-packages directory
+    /// Install packages into user directory.
     ///
-    /// The `--user` option allows `uv` to install packages to a location that is specific to a
-    /// user. The user scheme can be customized by setting the `PYTHONUSERBASE` environment
-    /// variable.
-    #[clap(long, conflicts_with = "system")]
+    /// Install to the Python user install directory for your platform.
+    /// Typically ~/.local/, or %APPDATA%\Python on Windows. The install location can be customized by
+    /// setting the `PYTHONUSERBASE` environment variable.
+    #[clap(long, conflicts_with = "system", group = "discovery")]
     user: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
