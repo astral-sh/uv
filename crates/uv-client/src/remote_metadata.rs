@@ -3,7 +3,7 @@ use async_zip::tokio::read::seek::ZipFileReader;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
 use distribution_filename::WheelFilename;
-use install_wheel_rs::find_dist_info;
+use install_wheel_rs::metadata::find_archive_dist_info;
 
 use crate::{Error, ErrorKind};
 
@@ -65,7 +65,7 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
-    let ((metadata_idx, metadata_entry), _dist_info_prefix) = find_dist_info(
+    let ((metadata_idx, metadata_entry), _dist_info_prefix) = find_archive_dist_info(
         filename,
         reader
             .file()

@@ -19,7 +19,7 @@ use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
-use install_wheel_rs::{find_dist_info, is_metadata_entry};
+use install_wheel_rs::metadata::{find_archive_dist_info, is_metadata_entry};
 use pep440_rs::Version;
 use pypi_types::{Metadata23, SimpleJson};
 use uv_auth::safe_copy_url_auth;
@@ -603,7 +603,7 @@ async fn read_metadata_async_seek(
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
-    let (metadata_idx, _dist_info_prefix) = find_dist_info(
+    let (metadata_idx, _dist_info_prefix) = find_archive_dist_info(
         filename,
         zip_reader
             .file()
