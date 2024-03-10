@@ -4406,6 +4406,7 @@ dependencies = [
  "tracing-tree",
  "unicode-width",
  "url",
+ "uv-auth",
  "uv-build",
  "uv-cache",
  "uv-client",
@@ -4429,6 +4430,7 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "base64 0.21.7",
+ "clap",
  "lazy_static",
  "reqwest",
  "reqwest-middleware",

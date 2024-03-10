@@ -14,6 +14,7 @@ use thiserror::Error;
 use distribution_types::{DistributionMetadata, IndexLocations, Name};
 use pep508_rs::Requirement;
 use platform_host::Platform;
+use uv_auth::KeyringProvider;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -33,7 +34,7 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
-    use_keyring: bool,
+    keyring_provider: KeyringProvider,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -46,7 +47,7 @@ pub(crate) async fn venv(
         path,
         python_request,
         index_locations,
-        use_keyring,
+        keyring_provider,
         prompt,
         system_site_packages,
         connectivity,
@@ -90,7 +91,7 @@ async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
-    use_keyring: bool,
+    keyring_provider: KeyringProvider,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -141,7 +142,7 @@ async fn venv_impl(
         // Instantiate a client.
         let client = RegistryClientBuilder::new(cache.clone())
             .index_urls(index_locations.index_urls())
-            .use_keyring(use_keyring)
+            .keyring_provider(keyring_provider)
             .connectivity(connectivity)
             .build();
 

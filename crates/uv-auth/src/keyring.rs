@@ -6,6 +6,21 @@ use url::Url;
 
 use crate::store::{BasicAuthData, Credential};
 
+/// Keyring provider to use for authentication
+///
+/// See <https://pip.pypa.io/en/stable/topics/authentication/#keyring-support>
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+pub enum KeyringProvider {
+    // Will not use keyring for authentication
+    #[default]
+    Disabled,
+    // Will use keyring CLI command for authentication
+    Subprocess,
+    // Auto, - not yet implemented
+    // Import, - will probably never be implemented
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Url is not valid Keyring target: {0}")]

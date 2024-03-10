@@ -11,6 +11,7 @@ use platform_host::Platform;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
+use uv_auth::KeyringProvider;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -35,7 +36,7 @@ pub(crate) async fn pip_sync(
     link_mode: LinkMode,
     compile: bool,
     index_locations: IndexLocations,
-    use_keyring: bool,
+    keyring_provider: KeyringProvider,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -54,7 +55,7 @@ pub(crate) async fn pip_sync(
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .connectivity(connectivity)
-        .use_keyring(use_keyring)
+        .keyring_provider(keyring_provider)
         .build();
 
     // Read all requirements from the provided sources.

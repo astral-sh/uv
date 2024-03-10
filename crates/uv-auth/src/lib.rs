@@ -2,6 +2,7 @@ mod keyring;
 mod middleware;
 mod store;
 
+pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
 pub use store::AuthenticationStore;
 

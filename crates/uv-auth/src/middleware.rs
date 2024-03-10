@@ -5,7 +5,7 @@ use std::path::Path;
 use task_local_extensions::Extensions;
 
 use crate::{
-    keyring::get_keyring_auth,
+    keyring::{get_keyring_auth, KeyringProvider},
     store::{AuthenticationStore, Credential},
 };
 
@@ -14,21 +14,21 @@ use crate::{
 /// Netrc support Based on: <https://github.com/gribouille/netrc>.
 pub struct AuthMiddleware {
     nrc: Option<Netrc>,
-    use_keyring: bool,
+    keyring_provider: KeyringProvider,
 }
 
 impl AuthMiddleware {
-    pub fn new(use_keyring: bool) -> Self {
-        AuthMiddleware {
+    pub fn new(keyring_provider: KeyringProvider) -> Self {
+        Self {
             nrc: Netrc::new().ok(),
-            use_keyring,
+            keyring_provider,
         }
     }
 
-    pub fn from_netrc_file(file: &Path, use_keyring: bool) -> Self {
+    pub fn from_netrc_file(file: &Path, keyring_provider: KeyringProvider) -> Self {
         Self {
             nrc: Netrc::from_file(file).ok(),
-            use_keyring,
+            keyring_provider,
         }
     }
 }
@@ -77,7 +77,7 @@ impl Middleware for AuthMiddleware {
                 basic_auth(auth.username(), auth.password()),
             );
             AuthenticationStore::set(&url, Some(auth));
-        } else if self.use_keyring {
+        } else if matches!(self.keyring_provider, KeyringProvider::Subprocess) {
             // If we have keyring support enabled, we check there as well
             if let Ok(auth) = get_keyring_auth(&url) {
                 // Keyring auth found - save it and return the request
@@ -160,7 +160,10 @@ mod tests {
         writeln!(netrc_file, "{}", NETRC)?;
 
         let status = ClientBuilder::new(Client::builder().build().unwrap())
-            .with(AuthMiddleware::from_netrc_file(netrc_file.path(), false))
+            .with(AuthMiddleware::from_netrc_file(
+                netrc_file.path(),
+                KeyringProvider::Disabled,
+            ))
             .build()
             .get(format!("{}/hello", &server.uri()))
             .send()

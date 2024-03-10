@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 async-trait = { workspace = true }
 base64 = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"], optional = true }
 lazy_static = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }

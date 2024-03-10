@@ -14,6 +14,7 @@ use tracing::instrument;
 
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use requirements::ExtrasSpecification;
+use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheArgs, Refresh};
 use uv_client::Connectivity;
 use uv_installer::{NoBinary, Reinstall};
@@ -345,10 +346,10 @@ struct PipCompileArgs {
 
     /// Attempt to use `keyring` for authentication for index urls
     ///
-    /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
-    /// `uv` will try to use `keyring` via CLI when this flag is used.
-    #[clap(long)]
-    use_keyring: bool,
+    /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
+    /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
+    #[clap(long, default_value_t, value_enum)]
+    keyring_provider: KeyringProvider,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -521,8 +522,8 @@ struct PipSyncArgs {
     ///
     /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
     /// `uv` will try to use `keyring` via CLI when this flag is used.
-    #[clap(long, conflicts_with = "no_index")]
-    use_keyring: bool,
+    #[clap(long, default_value_t, value_enum)]
+    keyring_provider: KeyringProvider,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -772,10 +773,10 @@ struct PipInstallArgs {
 
     /// Attempt to use `keyring` for authentication for index urls
     ///
-    /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
-    /// `uv` will try to use `keyring` via CLI when this flag is used.
-    #[clap(long, conflicts_with = "no_index")]
-    use_keyring: bool,
+    /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
+    /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
+    #[clap(long, default_value_t, value_enum)]
+    keyring_provider: KeyringProvider,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -1186,10 +1187,10 @@ struct VenvArgs {
 
     /// Attempt to use `keyring` for authentication for index urls
     ///
-    /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
-    /// `uv` will try to use `keyring` via CLI when this flag is used.
-    #[clap(long, conflicts_with = "no_index")]
-    use_keyring: bool,
+    /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
+    /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
+    #[clap(long, default_value_t, value_enum)]
+    keyring_provider: uv_auth::KeyringProvider,
 
     /// Run offline, i.e., without accessing the network.
     #[arg(global = true, long)]
@@ -1397,7 +1398,7 @@ async fn run() -> Result<ExitStatus> {
                 args.emit_index_url,
                 args.emit_find_links,
                 index_urls,
-                args.use_keyring,
+                args.keyring_provider,
                 setup_py,
                 config_settings,
                 if args.offline {
@@ -1452,7 +1453,7 @@ async fn run() -> Result<ExitStatus> {
                 args.link_mode,
                 args.compile,
                 index_urls,
-                args.use_keyring,
+                args.keyring_provider,
                 setup_py,
                 if args.offline {
                     Connectivity::Offline
@@ -1544,7 +1545,7 @@ async fn run() -> Result<ExitStatus> {
                 dependency_mode,
                 upgrade,
                 index_urls,
-                args.use_keyring,
+                args.keyring_provider,
                 &reinstall,
                 args.link_mode,
                 args.compile,
@@ -1666,7 +1667,7 @@ async fn run() -> Result<ExitStatus> {
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
-                args.use_keyring,
+                args.keyring_provider,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 if args.offline {
