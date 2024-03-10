@@ -2893,16 +2893,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "reqwest-netrc"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eca0c58cd4b2978f9697dea94302e772399f559cd175356eb631cb6daaa0b6db"
-dependencies = [
- "reqwest-middleware",
- "rust-netrc",
-]
-
-[[package]]
 name = "reqwest-retry"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4328,6 +4318,7 @@ dependencies = [
  "async-trait",
  "async_http_range_reader",
  "async_zip",
+ "base64 0.21.7",
  "cache-key",
  "chrono",
  "distribution-filename",
@@ -4345,10 +4336,10 @@ dependencies = [
  "pypi-types",
  "reqwest",
  "reqwest-middleware",
- "reqwest-netrc",
  "reqwest-retry",
  "rkyv",
  "rmp-serde",
+ "rust-netrc",
  "rustc-hash",
  "serde",
  "serde_json",
