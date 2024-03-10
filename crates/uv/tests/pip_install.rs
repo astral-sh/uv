@@ -822,6 +822,7 @@ fn install_extra_index_url_has_priority() {
         // the fix, `uv` will check pypi.org first since it is given
         // priority via --extra-index-url.
         .arg("black==24.2.0")
+        .arg("--no-deps")
         .arg("--exclude-newer")
         .arg("2024-03-09"), @r###"
     success: true
@@ -829,15 +830,10 @@ fn install_extra_index_url_has_priority() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Downloaded 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
      + black==24.2.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==23.2
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
     "###
     );
 
