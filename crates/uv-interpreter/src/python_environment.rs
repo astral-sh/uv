@@ -10,7 +10,7 @@ use uv_fs::{LockedFile, Simplified};
 use crate::cfg::PyVenvConfiguration;
 use crate::{find_default_python, find_requested_python, Error, Interpreter};
 
-/// A Python environment, consisting of a Python [`Interpreter`] and a root directory.
+/// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
 #[derive(Debug, Clone)]
 pub struct PythonEnvironment {
     root: PathBuf,

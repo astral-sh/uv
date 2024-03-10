@@ -1,3 +1,12 @@
+//! Find matching Python interpreter and query information about python interpreter.
+//!
+//! * The `venv` subcommand uses [`find_requested_python`] if `-p`/`--python` is used and
+//!   `find_default_python` otherwise.
+//! * The `compile` subcommand uses [`find_best_python`].
+//! * The `sync`, `install`, `uninstall`, `freeze`, `list` and `show` subcommands use
+//!   [`find_default_python`] when `--python` is used, [`find_default_python`] when `--system` is used
+//!   and the current venv by default.
+
 use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
@@ -6,16 +15,16 @@ use std::process::ExitStatus;
 use thiserror::Error;
 
 pub use crate::cfg::PyVenvConfiguration;
+pub use crate::find_python::{find_best_python, find_default_python, find_requested_python};
 pub use crate::interpreter::Interpreter;
 pub use crate::python_environment::PythonEnvironment;
-pub use crate::python_query::{find_default_python, find_requested_python};
 pub use crate::python_version::PythonVersion;
 pub use crate::virtualenv::Virtualenv;
 
 mod cfg;
+mod find_python;
 mod interpreter;
 mod python_environment;
-mod python_query;
 mod python_version;
 mod virtualenv;
 

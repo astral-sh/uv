@@ -6,7 +6,7 @@ use configparser::ini::Ini;
 use fs_err as fs;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, instrument, warn};
+use tracing::{debug, warn};
 
 use cache_key::digest;
 use install_wheel_rs::Layout;
@@ -18,9 +18,8 @@ use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::write_atomic_sync;
 
-use crate::python_environment::{detect_python_executable, detect_virtual_env};
-use crate::python_query::try_find_default_python;
-use crate::{find_requested_python, Error, PythonVersion, Virtualenv};
+use crate::Error;
+use crate::Virtualenv;
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -40,8 +39,12 @@ pub struct Interpreter {
 
 impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
-    pub fn query(executable: &Path, platform: Platform, cache: &Cache) -> Result<Self, Error> {
-        let info = InterpreterInfo::query_cached(executable, cache)?;
+    pub fn query(
+        executable: impl AsRef<Path>,
+        platform: Platform,
+        cache: &Cache,
+    ) -> Result<Self, Error> {
+        let info = InterpreterInfo::query_cached(executable.as_ref(), cache)?;
 
         debug_assert!(
             info.sys_executable.is_absolute(),
@@ -111,112 +114,6 @@ impl Interpreter {
             scheme: info.scheme,
             ..self
         })
-    }
-
-    /// Find the best available Python interpreter to use.
-    ///
-    /// If no Python version is provided, we will use the first available interpreter.
-    ///
-    /// If a Python version is provided, we will first try to find an exact match. If
-    /// that cannot be found and a patch version was requested, we will look for a match
-    /// without comparing the patch version number. If that cannot be found, we fall back to
-    /// the first available version.
-    ///
-    /// See [`Self::find_version`] for details on the precedence of Python lookup locations.
-    #[instrument(skip_all, fields(?python_version))]
-    pub fn find_best(
-        python_version: Option<&PythonVersion>,
-        platform: &Platform,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
-        if let Some(python_version) = python_version {
-            debug!(
-                "Starting interpreter discovery for Python {}",
-                python_version
-            );
-        } else {
-            debug!("Starting interpreter discovery for active Python");
-        }
-
-        // First, check for an exact match (or the first available version if no Python version was provided)
-        if let Some(interpreter) = Self::find_version(python_version, platform, cache)? {
-            return Ok(interpreter);
-        }
-
-        if let Some(python_version) = python_version {
-            // If that fails, and a specific patch version was requested try again allowing a
-            // different patch version
-            if python_version.patch().is_some() {
-                if let Some(interpreter) =
-                    Self::find_version(Some(&python_version.without_patch()), platform, cache)?
-                {
-                    return Ok(interpreter);
-                }
-            }
-
-            // If a Python version was requested but cannot be fulfilled, just take any version
-            if let Some(interpreter) = Self::find_version(None, platform, cache)? {
-                return Ok(interpreter);
-            }
-        }
-
-        Err(Error::PythonNotFound)
-    }
-
-    /// Find a Python interpreter.
-    ///
-    /// We check, in order, the following locations:
-    ///
-    /// - `VIRTUAL_ENV` and `CONDA_PREFIX`
-    /// - A `.venv` folder
-    /// - If a python version is given: `pythonx.y`
-    /// - `python3` (unix) or `python.exe` (windows)
-    ///
-    /// If `UV_TEST_PYTHON_PATH` is set, we will not check for Python versions in the
-    /// global PATH, instead we will search using the provided path. Virtual environments
-    /// will still be respected.
-    ///
-    /// If a version is provided and an interpreter cannot be found with the given version,
-    /// we will return [`None`].
-    pub(crate) fn find_version(
-        python_version: Option<&PythonVersion>,
-        platform: &Platform,
-        cache: &Cache,
-    ) -> Result<Option<Self>, Error> {
-        let version_matches = |interpreter: &Self| -> bool {
-            if let Some(python_version) = python_version {
-                // If a patch version was provided, check for an exact match
-                python_version.is_satisfied_by(interpreter)
-            } else {
-                // The version always matches if one was not provided
-                true
-            }
-        };
-
-        // Check if the venv Python matches.
-        if let Some(venv) = detect_virtual_env()? {
-            let executable = detect_python_executable(venv);
-            let interpreter = Self::query(&executable, platform.clone(), cache)?;
-
-            if version_matches(&interpreter) {
-                return Ok(Some(interpreter));
-            }
-        };
-
-        // Look for the requested version with by search for `python{major}.{minor}` in `PATH` on
-        // Unix and `py --list-paths` on Windows.
-        let interpreter = if let Some(python_version) = python_version {
-            find_requested_python(&python_version.string, platform, cache)?
-        } else {
-            try_find_default_python(platform, cache)?
-        };
-
-        if let Some(interpreter) = interpreter {
-            debug_assert!(version_matches(&interpreter));
-            Ok(Some(interpreter))
-        } else {
-            Ok(None)
-        }
     }
 
     /// Returns the path to the Python virtual environment.

@@ -8,7 +8,6 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
-use reqwest_netrc::NetrcMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
@@ -19,7 +18,7 @@ use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
-use install_wheel_rs::{find_dist_info, is_metadata_entry};
+use install_wheel_rs::metadata::{find_archive_dist_info, is_metadata_entry};
 use pep440_rs::Version;
 use pypi_types::{Metadata23, SimpleJson};
 use uv_auth::safe_copy_url_auth;
@@ -30,7 +29,7 @@ use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
-use crate::middleware::OfflineMiddleware;
+use crate::middleware::{NetrcMiddleware, OfflineMiddleware};
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{CachedClient, CachedClientError, Error, ErrorKind};
@@ -133,7 +132,7 @@ impl RegistryClientBuilder {
 
                 // Initialize the netrc middleware.
                 let client = if let Ok(netrc) = NetrcMiddleware::new() {
-                    client.with_init(netrc)
+                    client.with(netrc)
                 } else {
                     client
                 };
@@ -534,7 +533,7 @@ impl RegistryClient {
         match result {
             Ok(metadata) => return Ok(metadata),
             Err(err) => {
-                if err.kind().is_http_range_requests_unsupported() {
+                if err.is_http_range_requests_unsupported() {
                     // The range request version failed. Fall back to streaming the file to search
                     // for the METADATA file.
                     warn!("Range requests not supported for {filename}; streaming wheel");
@@ -549,6 +548,13 @@ impl RegistryClient {
             .client
             .uncached()
             .get(url.clone())
+            .header(
+                // `reqwest` defaults to accepting compressed responses.
+                // Specify identity encoding to get consistent .whl downloading
+                // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
+                "accept-encoding",
+                reqwest::header::HeaderValue::from_static("identity"),
+            )
             .build()
             .map_err(ErrorKind::from)?;
 
@@ -596,7 +602,7 @@ async fn read_metadata_async_seek(
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
-    let (metadata_idx, _dist_info_prefix) = find_dist_info(
+    let (metadata_idx, _dist_info_prefix) = find_archive_dist_info(
         filename,
         zip_reader
             .file()
