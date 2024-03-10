@@ -534,7 +534,7 @@ impl RegistryClient {
         match result {
             Ok(metadata) => return Ok(metadata),
             Err(err) => {
-                if err.kind().is_http_range_requests_unsupported() {
+                if err.is_http_range_requests_unsupported() {
                     // The range request version failed. Fall back to streaming the file to search
                     // for the METADATA file.
                     warn!("Range requests not supported for {filename}; streaming wheel");
