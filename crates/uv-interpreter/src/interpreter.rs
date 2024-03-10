@@ -563,6 +563,7 @@ impl InterpreterInfo {
                     "Querying Python at `{}` did not return the expected data: {err}",
                     interpreter.display(),
                 ),
+                exit_code: output.status,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             }
@@ -627,6 +628,25 @@ impl InterpreterInfo {
             interpreter: interpreter.to_path_buf(),
             err,
         })?;
+
+        // stderr isn't technically a criterion for success, but i don't know of any cases where there
+        // should be stderr output and if there is, we want to know
+        if !output.status.success() || !output.stderr.is_empty() {
+            if output.status.code() == Some(3) {
+                return Err(Error::Python2OrOlder);
+            }
+
+            return Err(Error::PythonSubcommandOutput {
+                message: format!(
+                    "Querying Python at `{}` failed with status {}",
+                    interpreter.display(),
+                    output.status,
+                ),
+                exit_code: output.status,
+                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            });
+        }
 
         Ok(output)
     }

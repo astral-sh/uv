@@ -788,6 +788,15 @@ struct PipInstallArgs {
     #[clap(long, conflicts_with = "python", group = "discovery")]
     system: bool,
 
+    /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
+    ///
+    /// WARNING: `--break-system-packages` is intended for use in continuous integration (CI)
+    /// environments, when installing into Python installations that are managed by an external
+    /// package manager, like `apt`. It should be used with caution, as such Python installations
+    /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
+    #[clap(long, requires = "discovery")]
+    break_system_packages: bool,
+
     /// Install packages into user site-packages directory
     ///
     /// The `--user` option allows `uv` to install packages to a location that is specific to a
@@ -1531,6 +1540,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.system,
                 args.break_system_packages,
+                args.user,
                 cache,
                 printer,
             )
