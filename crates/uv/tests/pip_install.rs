@@ -5,12 +5,12 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use base64::{prelude::BASE64_STANDARD as base64, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD as base64};
 use indoc::indoc;
 use itertools::Itertools;
 use url::Url;
 
-use common::{uv_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
+use common::{EXCLUDE_NEWER, INSTA_FILTERS, TestContext, uv_snapshot};
 
 use crate::common::get_bin;
 
