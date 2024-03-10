@@ -19,6 +19,10 @@ pub struct CacheArgs {
     no_cache: bool,
 
     /// Path to the cache directory.
+    ///
+    /// Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on
+    /// Linux, and `$HOME/.cache/<project_path> {FOLDERID_LocalAppData}/<project_path>/cache/uv`
+    /// on Windows.
     #[arg(global = true, long, env = "UV_CACHE_DIR")]
     cache_dir: Option<PathBuf>,
 }
