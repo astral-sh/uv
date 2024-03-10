@@ -8,7 +8,6 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
-use reqwest_netrc::NetrcMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
@@ -30,7 +29,7 @@ use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
-use crate::middleware::OfflineMiddleware;
+use crate::middleware::{NetrcMiddleware, OfflineMiddleware};
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{CachedClient, CachedClientError, Error, ErrorKind};
@@ -133,7 +132,7 @@ impl RegistryClientBuilder {
 
                 // Initialize the netrc middleware.
                 let client = if let Ok(netrc) = NetrcMiddleware::new() {
-                    client.with_init(netrc)
+                    client.with(netrc)
                 } else {
                     client
                 };

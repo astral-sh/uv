@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use http::HeaderValue;
+use netrc::{Netrc, Result};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use task_local_extensions::Extensions;
@@ -44,4 +46,74 @@ impl Middleware for OfflineMiddleware {
             .into(),
         ))
     }
+}
+
+/// A middleware with support for netrc files.
+///
+/// Based on: <https://github.com/gribouille/netrc>.
+pub(crate) struct NetrcMiddleware {
+    nrc: Netrc,
+}
+
+impl NetrcMiddleware {
+    pub(crate) fn new() -> Result<Self> {
+        Netrc::new().map(|nrc| NetrcMiddleware { nrc })
+    }
+}
+
+#[async_trait::async_trait]
+impl Middleware for NetrcMiddleware {
+    async fn handle(
+        &self,
+        mut req: Request,
+        _extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> reqwest_middleware::Result<Response> {
+        if let Some(auth) = req.url().host_str().and_then(|host| {
+            self.nrc
+                .hosts
+                .get(host)
+                .or_else(|| self.nrc.hosts.get("default"))
+        }) {
+            // Remove the existing `Authorization` header, if any.
+            req.headers_mut().remove(reqwest::header::AUTHORIZATION);
+            req.headers_mut().insert(
+                reqwest::header::AUTHORIZATION,
+                basic_auth(
+                    &auth.login,
+                    if auth.password.is_empty() {
+                        None
+                    } else {
+                        Some(&auth.password)
+                    },
+                ),
+            );
+        }
+        next.run(req, _extensions).await
+    }
+}
+
+/// Create a `HeaderValue` for basic authentication.
+///
+/// Source: <https://github.com/seanmonstar/reqwest/blob/2c11ef000b151c2eebeed2c18a7b81042220c6b0/src/util.rs#L3>
+fn basic_auth<U, P>(username: U, password: Option<P>) -> HeaderValue
+where
+    U: std::fmt::Display,
+    P: std::fmt::Display,
+{
+    use base64::prelude::BASE64_STANDARD;
+    use base64::write::EncoderWriter;
+    use std::io::Write;
+
+    let mut buf = b"Basic ".to_vec();
+    {
+        let mut encoder = EncoderWriter::new(&mut buf, &BASE64_STANDARD);
+        let _ = write!(encoder, "{}:", username);
+        if let Some(password) = password {
+            let _ = write!(encoder, "{}", password);
+        }
+    }
+    let mut header = HeaderValue::from_bytes(&buf).expect("base64 is always valid HeaderValue");
+    header.set_sensitive(true);
+    header
 }
