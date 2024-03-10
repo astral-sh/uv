@@ -855,7 +855,9 @@ fn install_extra_index_url_has_priority() {
         // find it, but then not find a compatible version. After
         // the fix, `uv` will check pypi.org first since it is given
         // priority via --extra-index-url.
-        .arg("black==24.2.0"), @r###"
+        .arg("black==24.2.0")
+        .arg("--exclude-newer")
+        .arg("2024-03-09"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
