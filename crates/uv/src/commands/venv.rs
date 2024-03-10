@@ -102,7 +102,7 @@ async fn venv_impl(
             .ok_or(Error::NoSuchPython(python_request.to_string()))
             .into_diagnostic()?
     } else {
-        find_default_python(cache).into_diagnostic()?
+        find_default_python(cache, false).into_diagnostic()?
     };
 
     writeln!(

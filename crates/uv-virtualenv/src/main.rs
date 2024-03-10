@@ -39,7 +39,7 @@ fn run() -> Result<(), uv_virtualenv::Error> {
             uv_interpreter::Error::NoSuchPython(python_request.to_string()),
         )?
     } else {
-        find_default_python(&cache)?
+        find_default_python(&cache, false)?
     };
     create_bare_venv(
         &location,

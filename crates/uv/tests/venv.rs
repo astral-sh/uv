@@ -1,5 +1,6 @@
 #![cfg(feature = "python")]
 
+use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::Result;
@@ -728,6 +729,64 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
 
     // Check that both directories point to the same home.
     assert_eq!(sub_venv_home, venv_home);
+
+    Ok(())
+}
+
+#[test]
+fn uv_default_python() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    // The path to a Python 3.12 interpreter
+    let bin312 =
+        create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
+    // The path to a Python 3.10 interpreter
+    let bin310 =
+        create_bin_with_executables(&temp_dir, &["3.10"]).expect("Failed to create bin dir");
+    let python310 = PathBuf::from(bin310).join(if cfg!(unix) {
+        "python3"
+    } else if cfg!(windows) {
+        "python.exe"
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    });
+    let venv = temp_dir.child(".venv");
+
+    // Create a virtual environment at `.venv`.
+    let filter_venv = regex::escape(&venv.simplified_display().to_string());
+    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
+    let filters = &[
+        (r"interpreter at: .+", "interpreter at: [PATH]"),
+        (&filter_venv, "/home/ferris/project/.venv"),
+        (
+            filter_prompt,
+            "Activate with: source /home/ferris/project/.venv/bin/activate",
+        ),
+    ];
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        // Simulate a PATH the user may have with Python 3.12 being the default.
+        .env("UV_TEST_PYTHON_PATH", bin312.clone())
+        // Simulate `python3.10 -m uv`.
+        .env("UV_DEFAULT_PYTHON", python310)
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.10.13 interpreter at: [PATH]
+    Creating virtualenv at: /home/ferris/project/.venv
+    Activate with: source /home/ferris/project/.venv/bin/activate
+    "###
+    );
+
+    venv.assert(predicates::path::is_dir());
 
     Ok(())
 }

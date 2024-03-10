@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use tracing::{debug, instrument};
 
 use uv_cache::Cache;
-use uv_fs::normalize_path;
+use uv_fs::{normalize_path, Simplified};
 
 use crate::interpreter::InterpreterInfoError;
 use crate::python_environment::{detect_python_executable, detect_virtual_env};
@@ -61,21 +61,22 @@ pub fn find_requested_python(request: &str, cache: &Cache) -> Result<Option<Inte
 ///
 /// We prefer the test overwrite `UV_TEST_PYTHON_PATH` if it is set, otherwise `python3`/`python` or
 /// `python.exe` respectively.
+///
+/// When `system` is set, we ignore the `python -m uv` due to the `--system` flag.
 #[instrument(skip_all)]
-pub fn find_default_python(cache: &Cache) -> Result<Interpreter, Error> {
-    debug!("Starting interpreter discovery for default Python");
-    try_find_default_python(cache)?.ok_or(if cfg!(windows) {
+pub fn find_default_python(cache: &Cache, system: bool) -> Result<Interpreter, Error> {
+    let selector = if system {
+        PythonVersionSelector::System
+    } else {
+        PythonVersionSelector::Default
+    };
+    find_python(selector, cache)?.ok_or(if cfg!(windows) {
         Error::NoPythonInstalledWindows
     } else if cfg!(unix) {
         Error::NoPythonInstalledUnix
     } else {
         unreachable!("Only Unix and Windows are supported")
     })
-}
-
-/// Same as [`find_default_python`] but returns `None` if no python is found instead of returning an `Err`.
-pub(crate) fn try_find_default_python(cache: &Cache) -> Result<Option<Interpreter>, Error> {
-    find_python(PythonVersionSelector::Default, cache)
 }
 
 /// Find a Python version matching `selector`.
@@ -95,6 +96,20 @@ fn find_python(
     selector: PythonVersionSelector,
     cache: &Cache,
 ) -> Result<Option<Interpreter>, Error> {
+    if selector != PythonVersionSelector::System {
+        // `python -m uv` passes `sys.executable` as `UV_DEFAULT_PYTHON`. Users expect that this Python
+        // version is used as it is the recommended or sometimes even only way to use tools, e.g. pip
+        // (`python3.10 -m pip`) and venv (`python3.10 -m venv`).
+        if let Some(default_python) = env::var_os("UV_DEFAULT_PYTHON") {
+            debug!(
+                "Trying UV_DEFAULT_PYTHON at {}",
+                default_python.simplified_display()
+            );
+            let interpreter = Interpreter::query(default_python, cache)?;
+            return Ok(Some(interpreter));
+        }
+    }
+
     #[allow(non_snake_case)]
     let UV_TEST_PYTHON_PATH = env::var_os("UV_TEST_PYTHON_PATH");
 
@@ -299,7 +314,7 @@ impl PythonInstallation {
         cache: &Cache,
     ) -> Result<Option<Interpreter>, Error> {
         let selected = match selector {
-            PythonVersionSelector::Default => true,
+            PythonVersionSelector::Default | PythonVersionSelector::System => true,
 
             PythonVersionSelector::Major(major) => self.major() == major,
 
@@ -339,9 +354,11 @@ impl PythonInstallation {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum PythonVersionSelector {
     Default,
+    /// Like default, but skip over the `python` from `python -m uv`.
+    System,
     Major(u8),
     MajorMinor(u8, u8),
     MajorMinorPatch(u8, u8, u8),
@@ -360,7 +377,7 @@ impl PythonVersionSelector {
         };
 
         match self {
-            Self::Default => [Some(python3), Some(python), None, None],
+            Self::Default | Self::System => [Some(python3), Some(python), None, None],
             Self::Major(major) => [
                 Some(Cow::Owned(format!("python{major}{extension}"))),
                 Some(python),
@@ -386,7 +403,7 @@ impl PythonVersionSelector {
 
     fn major(self) -> Option<u8> {
         match self {
-            Self::Default => None,
+            Self::Default | Self::System => None,
             Self::Major(major) => Some(major),
             Self::MajorMinor(major, _) => Some(major),
             Self::MajorMinorPatch(major, _, _) => Some(major),
@@ -471,6 +488,21 @@ fn find_version(
         }
     };
 
+    // `python -m uv` passes `sys.executable` as `UV_DEFAULT_PYTHON`. Users expect that this Python
+    // version is used as it is the recommended or sometimes even only way to use tools, e.g. pip
+    // (`python3.10 -m pip`) and venv (`python3.10 -m venv`). This is duplicated in
+    // `find_requested_python`, but we need to do it here to take precedence over the active venv.
+    if let Some(default_python) = env::var_os("UV_DEFAULT_PYTHON") {
+        debug!(
+            "Trying UV_DEFAULT_PYTHON at {}",
+            default_python.simplified_display()
+        );
+        let interpreter = Interpreter::query(default_python, cache)?;
+        if version_matches(&interpreter) {
+            return Ok(Some(interpreter));
+        }
+    }
+
     // Check if the venv Python matches.
     if let Some(venv) = detect_virtual_env()? {
         let executable = detect_python_executable(venv);
@@ -486,7 +518,7 @@ fn find_version(
     let interpreter = if let Some(python_version) = python_version {
         find_requested_python(&python_version.string, cache)?
     } else {
-        try_find_default_python(cache)?
+        find_python(PythonVersionSelector::Default, cache)?
     };
 
     if let Some(interpreter) = interpreter {

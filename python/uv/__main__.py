@@ -22,6 +22,7 @@ def _detect_virtualenv() -> str:
 
     return ""
 
+
 def _run() -> None:
     uv = os.fsdecode(find_uv_bin())
 
@@ -30,6 +31,9 @@ def _run() -> None:
     if venv:
         env.setdefault("VIRTUAL_ENV", venv)
 
+    # When running with `python -m uv`, use this `python` as default.
+    env.setdefault("UV_DEFAULT_PYTHON", sys.executable)
+
     if sys.platform == "win32":
         import subprocess
 
@@ -37,7 +41,6 @@ def _run() -> None:
         sys.exit(completed_process.returncode)
     else:
         os.execvpe(uv, [uv, *sys.argv[1:]], env=env)
-
 
 
 if __name__ == "__main__":

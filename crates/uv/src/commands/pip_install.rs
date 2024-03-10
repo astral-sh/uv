@@ -110,7 +110,7 @@ pub(crate) async fn pip_install(
     let venv = if let Some(python) = python.as_ref() {
         PythonEnvironment::from_requested_python(python, &cache)?
     } else if system {
-        PythonEnvironment::from_default_python(&cache)?
+        PythonEnvironment::from_default_python(&cache, true)?
     } else {
         PythonEnvironment::from_virtualenv(&cache)?
     };

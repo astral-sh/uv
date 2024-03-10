@@ -120,8 +120,8 @@ async fn resolve(
     let flat_index = FlatIndex::default();
     let index = InMemoryIndex::default();
     // TODO(konstin): Should we also use the bootstrapped pythons here?
-    let real_interpreter =
-        find_default_python(&Cache::temp().unwrap()).expect("Expected a python to be installed");
+    let real_interpreter = find_default_python(&Cache::temp().unwrap(), false)
+        .expect("Expected a python to be installed");
     let interpreter = Interpreter::artificial(real_interpreter.platform().clone(), markers.clone());
     let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
     let resolver = Resolver::new(

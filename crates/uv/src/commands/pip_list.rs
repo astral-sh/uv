@@ -37,12 +37,12 @@ pub(crate) fn pip_list(
     let venv = if let Some(python) = python {
         PythonEnvironment::from_requested_python(python, cache)?
     } else if system {
-        PythonEnvironment::from_default_python(cache)?
+        PythonEnvironment::from_default_python(cache, true)?
     } else {
         match PythonEnvironment::from_virtualenv(cache) {
             Ok(venv) => venv,
             Err(uv_interpreter::Error::VenvNotFound) => {
-                PythonEnvironment::from_default_python(cache)?
+                PythonEnvironment::from_default_python(cache, false)?
             }
             Err(err) => return Err(err.into()),
         }
