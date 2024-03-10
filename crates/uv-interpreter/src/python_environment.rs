@@ -18,14 +18,6 @@ pub struct PythonEnvironment {
 }
 
 impl PythonEnvironment {
-    /// Create a [`PythonEnvironment`] from an existing interpreter with user scheme.
-    pub fn from_interpreter_with_user_scheme(interpreter: Interpreter) -> Result<Self, Error> {
-        Ok(Self {
-            root: interpreter.prefix().to_path_buf(),
-            interpreter: interpreter.with_user_scheme()?,
-        })
-    }
-
     /// Create a [`PythonEnvironment`] for an existing virtual environment.
     pub fn from_virtualenv(platform: Platform, cache: &Cache) -> Result<Self, Error> {
         let Some(venv) = detect_virtual_env()? else {
@@ -80,6 +72,44 @@ impl PythonEnvironment {
         }
     }
 
+    /// Create a [`PythonEnvironment`] with user scheme.
+    pub fn from_user_scheme(python: Option<&String>, platform: Platform, cache: &Cache) -> Result<Self, Error> {
+        // Attempt to determine the interpreter based on the provided criteria
+        let interpreter = if let Some(requested_python) = python {
+            // If a specific Python version is requested
+            Self::from_requested_python(requested_python, &platform, cache)?.interpreter
+        } else if let Some(_venv) = detect_virtual_env()? {
+            // If a virtual environment is detected
+            Self::from_virtualenv(platform, cache)?.interpreter
+        } else {
+            // Fallback to the default Python interpreter
+            Self::from_default_python(&platform, cache)?.interpreter
+        };
+
+        // Apply the user scheme to the determined interpreter
+        let interpreter_with_user_scheme = interpreter.with_user_scheme()?;
+
+        // Ensure interpreter scheme directories exist, as per the model in pip
+        // <https://github.com/pypa/pip/blob/main/src/pip/_internal/models/scheme.py#L12>
+        let directories = vec![
+            interpreter_with_user_scheme.platlib(),
+            interpreter_with_user_scheme.purelib(),
+            interpreter_with_user_scheme.scripts(),
+            interpreter_with_user_scheme.data(),
+        ];
+
+        for path in directories {
+            if !Path::new(path).exists() {
+                fs::create_dir_all(path)?;
+            }
+        }
+
+        Ok(Self {
+            root: interpreter_with_user_scheme.prefix().to_path_buf(),
+            interpreter: interpreter_with_user_scheme,
+        })
+    }
+
     /// Returns the location of the Python interpreter.
     pub fn root(&self) -> &Path {
         &self.root
@@ -123,23 +153,6 @@ impl PythonEnvironment {
                 self.root.simplified_display(),
             )
         }
-    }
-
-    /// Ensure interpreter scheme directories exist.
-    /// Model for the scheme in pip: <https://github.com/pypa/pip/blob/db99b5be855c261361df5a44806eadcff96dc039/src/pip/_internal/models/scheme.py#L12>
-    pub fn ensure_scheme_directories_exist(&self) -> Result<(), Error> {
-        let directories = vec![
-            self.interpreter.platlib(),
-            self.interpreter.purelib(),
-            self.interpreter.scripts(),
-            self.interpreter.data(),
-        ];
-        for path in directories {
-            if !Path::new(path).exists() {
-                fs::create_dir_all(path)?;
-            };
-        }
-        Ok(())
     }
 }
 
