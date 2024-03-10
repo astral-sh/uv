@@ -268,9 +268,9 @@ def get_scheme(user: bool = False):
             or our own, and we deal with this special case in ``get_scheme()`` instead.
             """
             return (
-                    "osx_framework_library" in _AVAILABLE_SCHEMES
-                    and not running_under_virtualenv()
-                    and is_osx_framework()
+                "osx_framework_library" in _AVAILABLE_SCHEMES
+                and not running_under_virtualenv()
+                and is_osx_framework()
             )
 
         def _infer_user() -> str:
