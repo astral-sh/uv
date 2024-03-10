@@ -385,6 +385,40 @@ to build on aarch64 Windows, but does not consider either platform to be support
 
 uv supports and is tested against Python 3.8, 3.9, 3.10, 3.11, and 3.12.
 
+## Environment variables
+
+uv accepts the following command-line arguments as environment variables:
+
+- `UV_INDEX_URL`: Equivalent to the `--index-url` command-line argument. If set, uv will use this
+  URL as the base index for searching for packages.
+- `UV_EXTRA_INDEX_URL`: Equivalent to the `--extra-index-url` command-line argument. If set, uv
+  will use this space-separated list of URLs as additional indexes when searching for packages.
+- `UV_CACHE_DIR`: Equivalent to the `--cache-dir` command-line argument. If set, uv will use this
+  directory for caching instead of the default cache directory.
+- `UV_NO_CACHE`: Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
+  cache for any operations.
+- `UV_PRERELEASE`: Equivalent to the `--prerelease` command-line argument. If set to `allow`, uv
+  will allow pre-release versions for all dependencies.
+
+In each case, the corresponding command-line argument takes precedence over an environment variable.
+
+In addition, uv respects the following environment variables:
+
+- `SSL_CERT_FILE`: If set, uv will use this file as the certificate bundle instead of the system's
+  trust store.
+- `RUST_LOG`: If set, uv will use this value as the log level for its `--verbose` output. Accepts
+  any filter compatible with the `tracing_subscriber` crate. For example, `RUST_LOG=trace` will
+  enable trace-level logging. See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
+  for more.
+- `HTTP_TIMEOUT` (or `UV_HTTP_TIMEOUT`): If set, uv will use this value (in seconds) as the timeout
+  for HTTP requests.
+- `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`.
+  See: [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
+- `VIRTUAL_ENV`: Used to detect an activated virtual environment.
+- `CONDA_PREFIX`: Used to detect an activated Conda environment.
+- `PROMPT`: Used to detect the appropriate activation script after generating a virtual environment.
+- `NU_VERSION`: Used to detect the appropriate activation script after generating a virtual environment.
+
 ## Custom CA Certificates
 
 uv supports custom CA certificates (such as those needed by corporate proxies) by utilizing the
