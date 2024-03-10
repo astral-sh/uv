@@ -404,7 +404,6 @@ fn uninstall_editable_by_name() -> Result<()> {
         .assert()
         .success();
 
-
     Command::new(venv_to_interpreter(&context.venv))
         .arg("-c")
         .arg("import poetry_editable")
