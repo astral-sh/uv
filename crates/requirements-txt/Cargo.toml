@@ -25,7 +25,6 @@ fs-err = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, optional = true }
-reqwest-middleware = { workspace = true, optional = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -42,7 +41,3 @@ serde_json = { version = "1.0.114" }
 tempfile = { version = "3.9.0" }
 test-case = { version = "3.3.1" }
 tokio = { version = "1.35.1", features = ["macros"] }
-
-[features]
-default = []
-reqwest = ["dep:reqwest", "dep:reqwest-middleware"]

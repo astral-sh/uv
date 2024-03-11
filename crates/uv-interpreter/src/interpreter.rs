@@ -16,7 +16,7 @@ use platform_host::Platform;
 use platform_tags::{Tags, TagsError};
 use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
-use uv_fs::write_atomic_sync;
+use uv_fs::{write_atomic_sync, Simplified};
 
 use crate::Error;
 use crate::Virtualenv;
@@ -402,20 +402,20 @@ impl InterpreterInfo {
                             debug!(
                                 "Cached interpreter info for Python {}, skipping probing: {}",
                                 cached.data.markers.python_full_version,
-                                executable.display()
+                                executable.simplified_display()
                             );
                             return Ok(cached.data);
                         }
 
                         debug!(
                             "Ignoring stale cached markers for: {}",
-                            executable.display()
+                            executable.simplified_display()
                         );
                     }
                     Err(err) => {
                         warn!(
                             "Broken cache entry at {}, removing: {err}",
-                            cache_entry.path().display()
+                            cache_entry.path().simplified_display()
                         );
                         let _ = fs_err::remove_file(cache_entry.path());
                     }

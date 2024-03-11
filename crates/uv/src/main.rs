@@ -68,8 +68,11 @@ struct Cli {
     quiet: bool,
 
     /// Use verbose output.
-    #[arg(global = true, long, short, conflicts_with = "quiet")]
-    verbose: bool,
+    ///
+    /// You can configure fine-grained logging using the `RUST_LOG` environment variable.
+    /// (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
+    #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with = "quiet")]
+    verbose: u8,
 
     /// Disable colors; provided for compatibility with `pip`.
     #[arg(global = true, long, hide = true, conflicts_with = "color")]
@@ -1282,18 +1285,18 @@ async fn run() -> Result<ExitStatus> {
     #[cfg(not(feature = "tracing-durations-export"))]
     let duration_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(
-        if cli.verbose {
-            logging::Level::Verbose
-        } else {
-            logging::Level::Default
+        match cli.verbose {
+            0 => logging::Level::Default,
+            1 => logging::Level::Verbose,
+            2.. => logging::Level::ExtraVerbose,
         },
         duration_layer,
-    );
+    )?;
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = if cli.quiet {
         printer::Printer::Quiet
-    } else if cli.verbose {
+    } else if cli.verbose > 0 {
         printer::Printer::Verbose
     } else {
         printer::Printer::Default
