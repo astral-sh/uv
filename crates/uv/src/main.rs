@@ -545,7 +545,7 @@ struct PipSyncArgs {
     #[clap(
         long,
         conflicts_with = "python",
-        env = "UV_SYSTEM",
+        env = "UV_SYSTEM_PYTHON",
         group = "discovery"
     )]
     system: bool,
@@ -796,7 +796,7 @@ struct PipInstallArgs {
     #[clap(
         long,
         conflicts_with = "python",
-        env = "UV_SYSTEM",
+        env = "UV_SYSTEM_PYTHON",
         group = "discovery"
     )]
     system: bool,
@@ -929,7 +929,7 @@ struct PipUninstallArgs {
     #[clap(
         long,
         conflicts_with = "python",
-        env = "UV_SYSTEM",
+        env = "UV_SYSTEM_PYTHON",
         group = "discovery"
     )]
     system: bool,
@@ -988,7 +988,7 @@ struct PipFreezeArgs {
     #[clap(
         long,
         conflicts_with = "python",
-        env = "UV_SYSTEM",
+        env = "UV_SYSTEM_PYTHON",
         group = "discovery"
     )]
     system: bool,
@@ -1050,7 +1050,7 @@ struct PipListArgs {
     #[clap(
         long,
         conflicts_with = "python",
-        env = "UV_SYSTEM",
+        env = "UV_SYSTEM_PYTHON",
         group = "discovery"
     )]
     system: bool,
@@ -1099,7 +1099,7 @@ struct PipShowArgs {
     #[clap(
         long,
         conflicts_with = "python",
-        env = "UV_SYSTEM",
+        env = "UV_SYSTEM_PYTHON",
         group = "discovery"
     )]
     system: bool,
@@ -1138,7 +1138,7 @@ struct VenvArgs {
     #[clap(
         long,
         conflicts_with = "python",
-        env = "UV_SYSTEM",
+        env = "UV_SYSTEM_PYTHON",
         group = "discovery"
     )]
     system: bool,
