@@ -399,6 +399,10 @@ uv accepts the following command-line arguments as environment variables:
   cache for any operations.
 - `UV_PRERELEASE`: Equivalent to the `--prerelease` command-line argument. If set to `allow`, uv
   will allow pre-release versions for all dependencies.
+- `UV_SYSTEM_PYTHON`:  Equivalent to the `--system` command-line argument. If set to `true`, uv
+  will use the first Python interpreter found in the system `PATH`.
+  WARNING: `UV_SYSTEM=true` is intended for use in continuous integration (CI) environments and
+  should be used with caution, as it can modify the system Python installation.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
