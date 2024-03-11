@@ -542,7 +542,7 @@ struct PipSyncArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(long, conflicts_with = "python", env="UV_SYSTEM", group = "discovery")]
     system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -788,7 +788,7 @@ struct PipInstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(long, conflicts_with = "python", env="UV_SYSTEM", group = "discovery")]
     system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -916,7 +916,7 @@ struct PipUninstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(long, conflicts_with = "python", env="UV_SYSTEM", group = "discovery")]
     system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -970,7 +970,7 @@ struct PipFreezeArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(long, conflicts_with = "python", env="UV_SYSTEM", group = "discovery")]
     system: bool,
 }
 
@@ -1027,7 +1027,7 @@ struct PipListArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(long, conflicts_with = "python", env="UV_SYSTEM", group = "discovery")]
     system: bool,
 }
 
@@ -1071,7 +1071,7 @@ struct PipShowArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(long, conflicts_with = "python", env="UV_SYSTEM", group = "discovery")]
     system: bool,
 }
 
@@ -1105,7 +1105,7 @@ struct VenvArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(long, conflicts_with = "python", env="UV_SYSTEM", group = "discovery")]
     system: bool,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
