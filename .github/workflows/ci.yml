@@ -291,6 +291,31 @@ jobs:
       - name: "Validate global Python install"
         run: pyston scripts/check_system_python.py --uv ./uv
 
+  system-test-alpine:
+    needs: build-binary-linux
+    name: "check system | alpine"
+    runs-on: ubuntu-latest
+    container: alpine:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: apk add --update --no-cache python3 py3-pip
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv
+
   system-test-macos:
     needs: build-binary-macos-aarch64
     name: "check system | python on macos"
