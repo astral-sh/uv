@@ -97,8 +97,8 @@ impl AuthenticationStore {
     pub fn save_from_url(url: &Url) {
         let netloc = NetLoc::from(url);
         let mut passwords = PASSWORDS.lock().unwrap();
-        if passwords.get(&netloc).is_some() {
-            // URL encoded auth is lower priority than basic auth
+        if url.username().is_empty() {
+            // No cerdentials to save
             return;
         }
         let auth = UrlAuthData {
