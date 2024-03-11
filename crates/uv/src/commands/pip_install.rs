@@ -74,12 +74,6 @@ pub(crate) async fn pip_install(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
-    // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .connectivity(connectivity)
-        .keyring_provider(keyring_provider)
-        .build();
-
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project,
@@ -92,7 +86,7 @@ pub(crate) async fn pip_install(
         no_index,
         find_links,
         extras: used_extras,
-    } = specification(requirements, constraints, overrides, extras, &client).await?;
+    } = specification(requirements, constraints, overrides, extras, connectivity).await?;
 
     // Check that all provided extras are used
     if let ExtrasSpecification::Some(extras) = extras {
@@ -183,9 +177,12 @@ pub(crate) async fn pip_install(
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
-    // Update the index URLs on the client, to take into account any index URLs added by the
-    // sources (e.g., `--index-url` in a `requirements.txt` file).
-    let client = client.with_index_url(index_locations.index_urls());
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .connectivity(connectivity)
+        .index_urls(index_locations.index_urls())
+        .keyring_provider(keyring_provider)
+        .build();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -342,7 +339,7 @@ async fn specification(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification<'_>,
-    client: &RegistryClient,
+    connectivity: Connectivity,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a pyproject toml source
     if !matches!(extras, ExtrasSpecification::None)
@@ -359,7 +356,7 @@ async fn specification(
         constraints,
         overrides,
         extras,
-        client,
+        connectivity,
     )
     .await?;
 

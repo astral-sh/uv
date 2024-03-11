@@ -2994,3 +2994,33 @@ requires-python = "<=3.5"
 
     Ok(())
 }
+
+/// Install packages from an index that "doesn't support" zip file streaming (by way of using
+/// data descriptors).
+#[test]
+fn no_stream() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write to a requirements file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("hashb_foxglove_protocolbuffers_python==25.3.0.1.20240226043130+465630478360")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--index-url")
+        .arg("https://buf.build/gen/python"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + hashb-foxglove-protocolbuffers-python==25.3.0.1.20240226043130+465630478360
+    "###
+    );
+
+    Ok(())
+}

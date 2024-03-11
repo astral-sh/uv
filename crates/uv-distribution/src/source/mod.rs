@@ -19,7 +19,7 @@ use distribution_types::{
     DirectArchiveUrl, DirectGitUrl, Dist, FileLocation, GitSourceDist, LocalEditable, Name,
     PathSourceDist, RemoteSource, SourceDist,
 };
-use install_wheel_rs::read_dist_info;
+use install_wheel_rs::metadata::read_archive_metadata;
 use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use pypi_types::Metadata23;
@@ -903,7 +903,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             let reader = fs_err::tokio::File::open(&path)
                 .await
                 .map_err(Error::CacheRead)?;
-            uv_extract::stream::archive(tokio::io::BufReader::new(reader), path, &temp_dir.path())
+            uv_extract::seek::archive(tokio::io::BufReader::new(reader), path, &temp_dir.path())
                 .await?;
 
             // Extract the top-level directory from the archive.
@@ -1212,6 +1212,6 @@ fn read_wheel_metadata(
     let file = fs_err::File::open(wheel).map_err(Error::CacheRead)?;
     let reader = std::io::BufReader::new(file);
     let mut archive = ZipArchive::new(reader)?;
-    let dist_info = read_dist_info(filename, &mut archive)?;
+    let dist_info = read_archive_metadata(filename, &mut archive)?;
     Ok(Metadata23::parse_metadata(&dist_info)?)
 }

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.17
+
+### Enhancements
+
+- Allow more-precise Git URLs to override less-precise Git URLs ([#2285](https://github.com/astral-sh/uv/pull/2285))
+- Add support for Metadata 2.2 ([#2293](https://github.com/astral-sh/uv/pull/2293))
+- Added ability to select bytecode invalidation mode of generated `.pyc` files ([#2297](https://github.com/astral-sh/uv/pull/2297))
+- Add `Seek` fallback for zip files with data descriptors ([#2320](https://github.com/astral-sh/uv/pull/2320))
+
+### Bug fixes
+
+- Support reading UTF-16 requirements files ([#2283](https://github.com/astral-sh/uv/pull/2283))
+- Trim rows in `pip list` ([#2298](https://github.com/astral-sh/uv/pull/2298))
+- Avoid using setuptools shim of distutils ([#2305](https://github.com/astral-sh/uv/pull/2305))
+- Communicate PEP 517 hook results via files ([#2314](https://github.com/astral-sh/uv/pull/2314))
+- Increase default buffer size for wheel and source downloads ([#2319](https://github.com/astral-sh/uv/pull/2319))
+- Add `Accept-Encoding: identity` to remaining stream paths ([#2321](https://github.com/astral-sh/uv/pull/2321))
+- Avoid duplicating authorization header with netrc ([#2325](https://github.com/astral-sh/uv/pull/2325))
+- Remove duplicate `INSTALLER` in `RECORD` ([#2336](https://github.com/astral-sh/uv/pull/2336))
+
+### Documentation
+
+- Add a custom suggestion to install wheel into the build environment ([#2307](https://github.com/astral-sh/uv/pull/2307))
+- Document the environment variables that uv respects ([#2318](https://github.com/astral-sh/uv/pull/2318))
+
 ## 0.1.16
 
 ### Enhancements

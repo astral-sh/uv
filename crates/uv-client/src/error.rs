@@ -182,7 +182,7 @@ pub enum ErrorKind {
         metadata: PackageName,
     },
 
-    #[error("The wheel {0} is not a valid zip file")]
+    #[error("Failed to unzip wheel: {0}")]
     Zip(WheelFilename, #[source] ZipError),
 
     #[error("Failed to write to the client cache")]

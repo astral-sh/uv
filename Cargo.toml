@@ -104,7 +104,7 @@ toml = { version = "0.8.8" }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.2.0", features = ["plot"] }
 tracing-indicatif = { version = "0.3.6" }
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
 tracing-tree = { version = "0.3.0" }
 unicode-width = { version = "0.1.11" }
 unscanny = { version = "0.1.0" }
