@@ -2816,7 +2816,6 @@ dependencies = [
  "pep508_rs",
  "regex",
  "reqwest",
- "reqwest-middleware",
  "serde",
  "serde_json",
  "tempfile",
