@@ -34,7 +34,7 @@ clap_complete_command = { version = "0.5.1" }
 configparser = { version = "3.0.4" }
 console = { version = "0.15.8", default-features = false }
 csv = { version = "1.3.0" }
-ctrlc = { version = "3.4.2" }
+ctrlc = { version = "3.4.4" }
 dashmap = { version = "5.5.3" }
 data-encoding = { version = "2.5.0" }
 derivative = { version = "2.2.0" }
