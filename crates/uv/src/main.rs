@@ -88,6 +88,18 @@ struct Cli {
     )]
     color: ColorChoice,
 
+    /// Whether to load TLS certificates from the platform's native certificate store.
+    ///
+    /// By default, `uv` loads certificates from the bundled `webpki-roots` crate. The
+    /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in `uv`
+    /// improves portability and performance (especially on macOS).
+    ///
+    /// However, in some cases, you may want to use the platform's native certificate store,
+    /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
+    /// included in your system's certificate store.
+    #[arg(global = true, long)]
+    native_tls: bool,
+
     #[command(flatten)]
     cache_args: CacheArgs,
 }
@@ -1419,6 +1431,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python_version,
                 args.exclude_newer,
                 args.annotation_style,
+                cli.native_tls,
                 cli.quiet,
                 cache,
                 printer,
@@ -1475,6 +1488,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.system,
                 args.break_system_packages,
+                cli.native_tls,
                 cache,
                 printer,
             )
@@ -1570,6 +1584,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.system,
                 args.break_system_packages,
+                cli.native_tls,
                 cache,
                 printer,
             )

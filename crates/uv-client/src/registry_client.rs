@@ -33,13 +33,13 @@ use crate::middleware::{NetrcMiddleware, OfflineMiddleware};
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::tls::Roots;
-use crate::{CachedClient, CachedClientError, Error, ErrorKind};
+use crate::{tls, CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder {
     index_urls: IndexUrls,
-    native_roots: bool,
+    native_tls: bool,
     retries: u32,
     connectivity: Connectivity,
     cache: Cache,
@@ -50,7 +50,7 @@ impl RegistryClientBuilder {
     pub fn new(cache: Cache) -> Self {
         Self {
             index_urls: IndexUrls::default(),
-            native_roots: false,
+            native_tls: false,
             cache,
             connectivity: Connectivity::Online,
             retries: 3,
@@ -79,8 +79,8 @@ impl RegistryClientBuilder {
     }
 
     #[must_use]
-    pub fn native_roots(mut self, native_roots: bool) -> Self {
-        self.native_roots = native_roots;
+    pub fn native_tls(mut self, native_tls: bool) -> Self {
+        self.native_tls = native_tls;
         self
     }
 
@@ -120,12 +120,12 @@ impl RegistryClientBuilder {
         // Initialize the base client.
         let client = self.client.unwrap_or_else(|| {
             // Load the TLS configuration.
-            let roots = if self.native_roots {
+            let tls = tls::load(if self.native_tls {
                 Roots::Native
             } else {
                 Roots::Webpki
-            };
-            let tls = roots.load().expect("Failed to load TLS configuration.");
+            })
+            .expect("Failed to load TLS configuration.");
 
             let client_core = ClientBuilder::new()
                 .user_agent(user_agent_string)
