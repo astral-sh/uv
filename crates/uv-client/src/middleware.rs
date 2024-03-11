@@ -1,8 +1,10 @@
+use std::ffi::OsStr;
 use std::fmt::Debug;
+use std::io::Read;
 
 use http::HeaderValue;
-use netrc::{Netrc, Result};
-use reqwest::{Request, Response};
+use netrc::Netrc;
+use reqwest::{Certificate, Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use task_local_extensions::Extensions;
 use url::Url;
@@ -56,7 +58,7 @@ pub(crate) struct NetrcMiddleware {
 }
 
 impl NetrcMiddleware {
-    pub(crate) fn new() -> Result<Self> {
+    pub(crate) fn new() -> netrc::Result<Self> {
         Netrc::new().map(|nrc| NetrcMiddleware { nrc })
     }
 }
@@ -120,4 +122,19 @@ where
     let mut header = HeaderValue::from_bytes(&buf).expect("base64 is always valid HeaderValue");
     header.set_sensitive(true);
     header
+}
+
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum CertificateError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Reqwest(#[from] reqwest::Error),
+}
+
+/// Return the `Certificate` from the provided file.
+pub(crate) fn read_certificate(ssl_cert_file: &OsStr) -> Result<Certificate, CertificateError> {
+    let mut buf = Vec::new();
+    fs_err::File::open(ssl_cert_file)?.read_to_end(&mut buf)?;
+    Ok(Certificate::from_pem(&buf)?)
 }

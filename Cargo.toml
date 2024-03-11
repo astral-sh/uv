@@ -76,7 +76,7 @@ rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.14" }
 regex = { version = "1.10.2" }
-reqwest = { version = "0.11.23", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls-native-roots"] }
+reqwest = { version = "0.11.23", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls"] }
 reqwest-middleware = { version = "0.2.4" }
 reqwest-retry = { version = "0.3.0" }
 rkyv = { version = "0.7.43", features = ["strict", "validation"] }

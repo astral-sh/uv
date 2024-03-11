@@ -29,7 +29,7 @@ use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
-use crate::middleware::{NetrcMiddleware, OfflineMiddleware};
+use crate::middleware::{read_certificate, NetrcMiddleware, OfflineMiddleware};
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{CachedClient, CachedClientError, Error, ErrorKind};
@@ -111,12 +111,25 @@ impl RegistryClientBuilder {
         // Initialize the base client.
         let client = self.client.unwrap_or_else(|| {
             // Disallow any connections.
-            let client_core = ClientBuilder::new()
+            let builder = ClientBuilder::new()
                 .user_agent(user_agent_string)
                 .pool_max_idle_per_host(20)
                 .timeout(std::time::Duration::from_secs(timeout));
 
-            client_core.build().expect("Failed to build HTTP client.")
+            // Add the `SSL_CERT_FILE`, if set.
+            let builder = if let Some(ssl_cert_file) = env::var_os("SSL_CERT_FILE") {
+                match read_certificate(&ssl_cert_file) {
+                    Ok(certificate) => builder.add_root_certificate(certificate),
+                    Err(err) => {
+                        warn!("Failed to read SSL certificate file: {err}");
+                        builder
+                    }
+                }
+            } else {
+                builder
+            };
+
+            builder.build().expect("Failed to build HTTP client.")
         });
 
         // Wrap in any relevant middleware.
