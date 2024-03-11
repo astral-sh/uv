@@ -1,5 +1,6 @@
+use fs_err as fs;
+use std::env;
 use std::path::{Path, PathBuf};
-use std::{env, fs};
 
 use tracing::debug;
 
@@ -105,7 +106,7 @@ impl PythonEnvironment {
 
         for path in directories {
             if !Path::new(path).exists() {
-                fs_err::create_dir_all(path)?;
+                fs::create_dir_all(path)?;
             }
         }
 
