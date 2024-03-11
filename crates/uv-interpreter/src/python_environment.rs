@@ -96,6 +96,7 @@ impl PythonEnvironment {
             interpreter_with_user_scheme.purelib(),
             interpreter_with_user_scheme.scripts(),
             interpreter_with_user_scheme.data(),
+            interpreter_with_user_scheme.include(),
         ];
 
         for path in directories {
