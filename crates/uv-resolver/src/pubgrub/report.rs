@@ -357,7 +357,21 @@ impl PubGrubReportFormatter<'_> {
                 External::NoVersions(package, set, _) => {
                     // Check for no versions due to pre-release options
                     if let Some(selector) = selector {
-                        if set.bounds().any(Version::any_prerelease) {
+                        let any_prerelease = set.iter().any(|(start, end)| {
+                            let is_pre1 = match start {
+                                Bound::Included(v) => v.any_prerelease(),
+                                Bound::Excluded(v) => v.any_prerelease(),
+                                Bound::Unbounded => false,
+                            };
+                            let is_pre2 = match end {
+                                Bound::Included(v) => v.any_prerelease(),
+                                Bound::Excluded(v) => v.any_prerelease(),
+                                Bound::Unbounded => false,
+                            };
+                            is_pre1 || is_pre2
+                        });
+
+                        if any_prerelease {
                             // A pre-release marker appeared in the version requirements.
                             if !allowed_prerelease(package, selector) {
                                 hints.insert(PubGrubHint::PreReleaseRequested {
