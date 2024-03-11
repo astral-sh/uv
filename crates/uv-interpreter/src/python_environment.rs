@@ -105,7 +105,7 @@ impl PythonEnvironment {
 
         for path in directories {
             if !Path::new(path).exists() {
-                fs::create_dir_all(path)?;
+                fs_err::create_dir_all(path)?;
             }
         }
 
