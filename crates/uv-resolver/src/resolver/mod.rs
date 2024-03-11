@@ -809,11 +809,11 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         self.markers,
                     )?;
 
-                    for (package, version) in constraints.iter() {
-                        debug!("Adding transitive dependency: {package}{version}");
+                    for (dep_package, dep_version) in constraints.iter() {
+                        debug!("Adding transitive dependency for {package}{version}: {dep_package}{dep_version}");
 
                         // Emit a request to fetch the metadata for this package.
-                        self.visit_package(package, priorities, request_sink)
+                        self.visit_package(dep_package, priorities, request_sink)
                             .await?;
                     }
 
