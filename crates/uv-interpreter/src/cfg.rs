@@ -43,7 +43,11 @@ impl PyVenvConfiguration {
             }
         }
 
-        Ok(Self { virtualenv, uv, include_system_site_packages })
+        Ok(Self {
+            virtualenv,
+            uv,
+            include_system_site_packages,
+        })
     }
 
     /// Returns true if the virtual environment was created with the `virtualenv` package.
@@ -57,7 +61,9 @@ impl PyVenvConfiguration {
     }
 
     /// Return true if the virtual environment has access to system site packages.
-    pub fn include_system_site_packages(&self) -> bool { self.include_system_site_packages }
+    pub fn include_system_site_packages(&self) -> bool {
+        self.include_system_site_packages
+    }
 }
 
 #[derive(Debug, Error)]
