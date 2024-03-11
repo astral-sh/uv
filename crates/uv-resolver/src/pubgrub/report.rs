@@ -359,13 +359,13 @@ impl PubGrubReportFormatter<'_> {
                     if let Some(selector) = selector {
                         let any_prerelease = set.iter().any(|(start, end)| {
                             let is_pre1 = match start {
-                                Bound::Included(v) => v.any_prerelease(),
-                                Bound::Excluded(v) => v.any_prerelease(),
+                                Bound::Included(version) => version.any_prerelease(),
+                                Bound::Excluded(version) => version.any_prerelease(),
                                 Bound::Unbounded => false,
                             };
                             let is_pre2 = match end {
-                                Bound::Included(v) => v.any_prerelease(),
-                                Bound::Excluded(v) => v.any_prerelease(),
+                                Bound::Included(version) => version.any_prerelease(),
+                                Bound::Excluded(version) => version.any_prerelease(),
                                 Bound::Unbounded => false,
                             };
                             is_pre1 || is_pre2
