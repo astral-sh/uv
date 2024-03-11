@@ -283,6 +283,8 @@ def get_scheme(user: bool = False):
                 suffixed = f"{os.name}_user"
             if suffixed in _AVAILABLE_SCHEMES:
                 return suffixed
+            # Fall back to posix_user if user scheme is unavailable.
+            # `pip` would raise exeception when "posix_user" not in _AVAILABLE_SCHEMES
             return "posix_user"
 
         def _infer_prefix() -> str:
