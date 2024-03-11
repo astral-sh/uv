@@ -37,7 +37,7 @@ impl PyVenvConfiguration {
                     uv = true;
                 }
                 "include-system-site-packages" => {
-                    include_system_site_packages = value.trim() == "true"
+                    include_system_site_packages = value.trim() == "true";
                 }
                 _ => {}
             }
