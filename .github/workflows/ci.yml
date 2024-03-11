@@ -244,6 +244,31 @@ jobs:
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./uv
 
+  system-test-rhel:
+    needs: build-binary-linux
+    name: "check system | python on rhel"
+    runs-on: ubuntu-latest
+    container: registry.access.redhat.com/rhel7/rhel
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: dnf install python3 python3-pip
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv
+
   system-test-pypy:
     needs: build-binary-linux
     name: "check system | pypy on ubuntu"
