@@ -32,12 +32,14 @@ use crate::html::SimpleHtml;
 use crate::middleware::{NetrcMiddleware, OfflineMiddleware};
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
+use crate::tls::Roots;
 use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder {
     index_urls: IndexUrls,
+    native_roots: bool,
     retries: u32,
     connectivity: Connectivity,
     cache: Cache,
@@ -48,6 +50,7 @@ impl RegistryClientBuilder {
     pub fn new(cache: Cache) -> Self {
         Self {
             index_urls: IndexUrls::default(),
+            native_roots: false,
             cache,
             connectivity: Connectivity::Online,
             retries: 3,
@@ -76,6 +79,12 @@ impl RegistryClientBuilder {
     }
 
     #[must_use]
+    pub fn native_roots(mut self, native_roots: bool) -> Self {
+        self.native_roots = native_roots;
+        self
+    }
+
+    #[must_use]
     pub fn cache<T>(mut self, cache: Cache) -> Self {
         self.cache = cache;
         self
@@ -85,138 +94,6 @@ impl RegistryClientBuilder {
     pub fn client(mut self, client: Client) -> Self {
         self.client = Some(client);
         self
-    }
-
-    fn tls(&self) {
-        use crate::tls::NoVerifier;
-
-        // Set root certificates.
-        let mut root_cert_store = rustls::RootCertStore::empty();
-        for cert in config.root_certs {
-            cert.add_to_rustls(&mut root_cert_store)?;
-        }
-
-        #[cfg(feature = "rustls-tls-webpki-roots")]
-        if config.tls_built_in_root_certs {
-            use rustls::OwnedTrustAnchor;
-
-            let trust_anchors = webpki_roots::TLS_SERVER_ROOTS.iter().map(|trust_anchor| {
-                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                    trust_anchor.subject,
-                    trust_anchor.spki,
-                    trust_anchor.name_constraints,
-                )
-            });
-
-            root_cert_store.add_trust_anchors(trust_anchors);
-        }
-
-        #[cfg(feature = "rustls-tls-native-roots")]
-        if config.tls_built_in_root_certs {
-            let mut valid_count = 0;
-            let mut invalid_count = 0;
-            for cert in rustls_native_certs::load_native_certs().map_err(crate::error::builder)? {
-                let cert = rustls::Certificate(cert.0);
-                // Continue on parsing errors, as native stores often include ancient or syntactically
-                // invalid certificates, like root certificates without any X509 extensions.
-                // Inspiration: https://github.com/rustls/rustls/blob/633bf4ba9d9521a95f68766d04c22e2b01e68318/rustls/src/anchors.rs#L105-L112
-                match root_cert_store.add(&cert) {
-                    Ok(_) => valid_count += 1,
-                    Err(err) => {
-                        invalid_count += 1;
-                        log::warn!(
-                            "rustls failed to parse DER certificate {:?} {:?}",
-                            &err,
-                            &cert
-                        );
-                    }
-                }
-            }
-            if valid_count == 0 && invalid_count > 0 {
-                return Err(crate::error::builder(
-                    "zero valid certificates found in native root store",
-                ));
-            }
-        }
-
-        // Set TLS versions.
-        let mut versions = rustls::ALL_VERSIONS.to_vec();
-
-        if let Some(min_tls_version) = config.min_tls_version {
-            versions.retain(|&supported_version| {
-                match tls::Version::from_rustls(supported_version.version) {
-                    Some(version) => version >= min_tls_version,
-                    // Assume it's so new we don't know about it, allow it
-                    // (as of writing this is unreachable)
-                    None => true,
-                }
-            });
-        }
-
-        if let Some(max_tls_version) = config.max_tls_version {
-            versions.retain(|&supported_version| {
-                match tls::Version::from_rustls(supported_version.version) {
-                    Some(version) => version <= max_tls_version,
-                    None => false,
-                }
-            });
-        }
-
-        // Build TLS config
-        let config_builder = rustls::ClientConfig::builder()
-            .with_safe_default_cipher_suites()
-            .with_safe_default_kx_groups()
-            .with_protocol_versions(&versions)
-            .map_err(crate::error::builder)?
-            .with_root_certificates(root_cert_store);
-
-        // Finalize TLS config
-        let mut tls = if let Some(id) = config.identity {
-            id.add_to_rustls(config_builder)?
-        } else {
-            config_builder.with_no_client_auth()
-        };
-
-        // Certificate verifier
-        if !config.certs_verification {
-            tls.dangerous()
-                .set_certificate_verifier(Arc::new(NoVerifier));
-        }
-
-        tls.enable_sni = config.tls_sni;
-
-        // ALPN protocol
-        match config.http_version_pref {
-            HttpVersionPref::Http1 => {
-                tls.alpn_protocols = vec!["http/1.1".into()];
-            }
-            HttpVersionPref::Http2 => {
-                tls.alpn_protocols = vec!["h2".into()];
-            }
-            #[cfg(feature = "http3")]
-            HttpVersionPref::Http3 => {
-                tls.alpn_protocols = vec!["h3".into()];
-            }
-            HttpVersionPref::All => {
-                tls.alpn_protocols = vec!["h2".into(), "http/1.1".into()];
-            }
-        }
-
-        #[cfg(feature = "http3")]
-        {
-            tls.enable_early_data = config.tls_enable_early_data;
-
-            h3_connector = build_h3_connector(
-                resolver,
-                tls.clone(),
-                config.quic_max_idle_timeout,
-                config.quic_stream_receive_window,
-                config.quic_receive_window,
-                config.quic_send_window,
-                config.local_address,
-                &config.http_version_pref,
-            )?;
-        }
     }
 
     pub fn build(self) -> RegistryClient {
@@ -242,12 +119,19 @@ impl RegistryClientBuilder {
 
         // Initialize the base client.
         let client = self.client.unwrap_or_else(|| {
-            // Disallow any connections.
+            // Load the TLS configuration.
+            let roots = if self.native_roots {
+                Roots::Native
+            } else {
+                Roots::Webpki
+            };
+            let tls = roots.load().expect("Failed to load TLS configuration.");
+
             let client_core = ClientBuilder::new()
                 .user_agent(user_agent_string)
                 .pool_max_idle_per_host(20)
                 .timeout(std::time::Duration::from_secs(timeout))
-                .tls_built_in_root_certs(false);
+                .use_preconfigured_tls(tls);
 
             client_core.build().expect("Failed to build HTTP client.")
         });

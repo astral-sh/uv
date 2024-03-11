@@ -4361,6 +4361,8 @@ dependencies = [
  "rmp-serde",
  "rust-netrc",
  "rustc-hash",
+ "rustls",
+ "rustls-native-certs",
  "serde",
  "serde_json",
  "sha2",
@@ -4379,6 +4381,7 @@ dependencies = [
  "uv-normalize",
  "uv-version",
  "uv-warnings",
+ "webpki-roots",
 ]
 
 [[package]]
