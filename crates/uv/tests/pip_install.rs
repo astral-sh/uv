@@ -1499,8 +1499,7 @@ fn install_constraints_respects_offline_mode() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Error while accessing remote requirements file http://example.com/requirements.txt: Middleware error: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://example.com/requirements.txt`
-      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://example.com/requirements.txt`
+    error: Network connectivity is disabled, but a remote requirements file was requested: http://example.com/requirements.txt
     "###
     );
 }

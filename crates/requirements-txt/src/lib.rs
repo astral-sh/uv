@@ -49,7 +49,7 @@ use pep508_rs::{
     expand_path_vars, split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, Scheme,
     VerbatimUrl,
 };
-use uv_client::RegistryClient;
+use uv_client::Connectivity;
 use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
 use uv_warnings::warn_user;
@@ -326,7 +326,7 @@ impl RequirementsTxt {
     pub async fn parse(
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
-        client: Option<&RegistryClient>,
+        connectivity: Connectivity,
     ) -> Result<Self, RequirementsTxtFileError> {
         let requirements_txt = requirements_txt.as_ref();
         let working_dir = working_dir.as_ref();
@@ -346,17 +346,18 @@ impl RequirementsTxt {
 
                 #[cfg(feature = "reqwest")]
                 {
-                    let Some(client) = client else {
-                        return Err(RequirementsTxtFileError {
-                            file: requirements_txt.to_path_buf(),
-                            error: RequirementsTxtParserError::IO(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                "No client provided for remote file",
-                            )),
-                        });
-                    };
-
-                    read_url_to_string(&requirements_txt, client).await
+                    match connectivity {
+                        Connectivity::Online => read_url_to_string(&requirements_txt).await,
+                        Connectivity::Offline => {
+                            return Err(RequirementsTxtFileError {
+                                file: requirements_txt.to_path_buf(),
+                                error: RequirementsTxtParserError::IO(io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    format!("Network connectivity is disabled, but a remote requirements file was requested: {}", requirements_txt.display()),
+                                )),
+                            });
+                        }
+                    }
                 }
             } else {
                 uv_fs::read_to_string_transcode(&requirements_txt)
@@ -369,7 +370,7 @@ impl RequirementsTxt {
             })?;
 
         let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
-        let data = Self::parse_inner(&content, working_dir, requirements_dir, client)
+        let data = Self::parse_inner(&content, working_dir, requirements_dir, connectivity)
             .await
             .map_err(|err| RequirementsTxtFileError {
                 file: requirements_txt.to_path_buf(),
@@ -396,7 +397,7 @@ impl RequirementsTxt {
         content: &str,
         working_dir: &Path,
         requirements_dir: &Path,
-        client: Option<&'async_recursion RegistryClient>,
+        connectivity: Connectivity,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
@@ -415,7 +416,7 @@ impl RequirementsTxt {
                         } else {
                             requirements_dir.join(filename.as_ref())
                         };
-                    let sub_requirements = Self::parse(&sub_file, working_dir, client)
+                    let sub_requirements = Self::parse(&sub_file, working_dir, connectivity)
                         .await
                         .map_err(|err| RequirementsTxtParserError::Subfile {
                             source: Box::new(err),
@@ -453,13 +454,13 @@ impl RequirementsTxt {
                         } else {
                             requirements_dir.join(filename.as_ref())
                         };
-                    let sub_constraints = Self::parse(&sub_file, working_dir, client)
+                    let sub_constraints = Self::parse(&sub_file, working_dir, connectivity)
                         .await
                         .map_err(|err| RequirementsTxtParserError::Subfile {
-                            source: Box::new(err),
-                            start,
-                            end,
-                        })?;
+                        source: Box::new(err),
+                        start,
+                        end,
+                    })?;
                     // Treat any nested requirements or constraints as constraints. This differs
                     // from `pip`, which seems to treat `-r` requirements in constraints files as
                     // _requirements_, but we don't want to support that.
@@ -819,10 +820,7 @@ fn parse_value<'a, T>(
 
 /// Fetch the contents of a URL and return them as a string.
 #[cfg(feature = "reqwest")]
-async fn read_url_to_string(
-    path: impl AsRef<Path>,
-    client: &RegistryClient,
-) -> Result<String, RequirementsTxtParserError> {
+async fn read_url_to_string(path: impl AsRef<Path>) -> Result<String, RequirementsTxtParserError> {
     // pip would URL-encode the non-UTF-8 bytes of the string; we just don't support them.
     let path_utf8 =
         path.as_ref()
@@ -830,17 +828,11 @@ async fn read_url_to_string(
             .ok_or_else(|| RequirementsTxtParserError::NonUnicodeUrl {
                 url: path.as_ref().to_owned(),
             })?;
-    Ok(client
-        .cached_client()
-        .uncached()
-        .get(path_utf8)
-        .send()
+    Ok(reqwest::get(path_utf8)
         .await?
-        .error_for_status()
-        .map_err(reqwest_middleware::Error::Reqwest)?
+        .error_for_status()?
         .text()
-        .await
-        .map_err(reqwest_middleware::Error::Reqwest)?)
+        .await?)
 }
 
 /// Error parsing requirements.txt, wrapper with filename
@@ -888,7 +880,7 @@ pub enum RequirementsTxtParserError {
         url: PathBuf,
     },
     #[cfg(feature = "reqwest")]
-    Reqwest(reqwest_middleware::Error),
+    Reqwest(reqwest::Error),
 }
 
 impl RequirementsTxtParserError {
@@ -1119,8 +1111,8 @@ impl From<io::Error> for RequirementsTxtParserError {
 }
 
 #[cfg(feature = "reqwest")]
-impl From<reqwest_middleware::Error> for RequirementsTxtParserError {
-    fn from(err: reqwest_middleware::Error) -> Self {
+impl From<reqwest::Error> for RequirementsTxtParserError {
+    fn from(err: reqwest::Error) -> Self {
         Self::Reqwest(err)
     }
 }
@@ -1177,6 +1169,7 @@ mod test {
     use tempfile::tempdir;
     use test_case::test_case;
     use unscanny::Scanner;
+    use uv_client::Connectivity;
 
     use uv_fs::Simplified;
 
@@ -1201,7 +1194,7 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual = RequirementsTxt::parse(requirements_txt, &working_dir, None)
+        let actual = RequirementsTxt::parse(requirements_txt, &working_dir, Connectivity::Offline)
             .await
             .unwrap();
 
@@ -1245,7 +1238,7 @@ mod test {
         let requirements_txt = temp_dir.path().join(path);
         fs::write(&requirements_txt, contents).unwrap();
 
-        let actual = RequirementsTxt::parse(&requirements_txt, &working_dir, None)
+        let actual = RequirementsTxt::parse(&requirements_txt, &working_dir, Connectivity::Offline)
             .await
             .unwrap();
 
@@ -1262,9 +1255,13 @@ mod test {
             -r missing.txt
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), None)
-            .await
-            .unwrap_err();
+        let error = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            Connectivity::Offline,
+        )
+        .await
+        .unwrap_err();
         let errors = anyhow::Error::new(error)
             .chain()
             // The last error is operating-system specific.
@@ -1299,9 +1296,13 @@ mod test {
             numpy[ö]==1.29
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), None)
-            .await
-            .unwrap_err();
+        let error = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            Connectivity::Offline,
+        )
+        .await
+        .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
@@ -1332,9 +1333,13 @@ mod test {
             -e http://localhost:8080/
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), None)
-            .await
-            .unwrap_err();
+        let error = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            Connectivity::Offline,
+        )
+        .await
+        .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
@@ -1360,9 +1365,13 @@ mod test {
             -e black[,abcdef]
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), None)
-            .await
-            .unwrap_err();
+        let error = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            Connectivity::Offline,
+        )
+        .await
+        .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
@@ -1390,9 +1399,13 @@ mod test {
             --index-url 123
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), None)
-            .await
-            .unwrap_err();
+        let error = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            Connectivity::Offline,
+        )
+        .await
+        .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
@@ -1426,9 +1439,13 @@ mod test {
             file.txt
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), None)
-            .await
-            .unwrap_err();
+        let error = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            Connectivity::Offline,
+        )
+        .await
+        .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
@@ -1469,9 +1486,10 @@ mod test {
             -r subdir/child.txt
         "})?;
 
-        let requirements = RequirementsTxt::parse(parent_txt.path(), temp_dir.path(), None)
-            .await
-            .unwrap();
+        let requirements =
+            RequirementsTxt::parse(parent_txt.path(), temp_dir.path(), Connectivity::Offline)
+                .await
+                .unwrap();
         insta::assert_debug_snapshot!(requirements, @r###"
         RequirementsTxt {
             requirements: [
@@ -1521,9 +1539,13 @@ mod test {
             --no-index
         "})?;
 
-        let requirements = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), None)
-            .await
-            .unwrap();
+        let requirements = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            Connectivity::Offline,
+        )
+        .await
+        .unwrap();
 
         insta::assert_debug_snapshot!(requirements, @r###"
             RequirementsTxt {
@@ -1581,9 +1603,13 @@ mod test {
             --index-url https://fake.pypi.org/simple
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), None)
-            .await
-            .unwrap_err();
+        let error = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            Connectivity::Offline,
+        )
+        .await
+        .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
@@ -1631,9 +1657,13 @@ mod test {
             tqdm
         "})?;
 
-        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path(), None)
-            .await
-            .unwrap_err();
+        let error = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            Connectivity::Offline,
+        )
+        .await
+        .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt =
