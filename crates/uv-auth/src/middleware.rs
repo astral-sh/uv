@@ -3,6 +3,7 @@ use reqwest::{header::HeaderValue, Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use std::path::Path;
 use task_local_extensions::Extensions;
+use tracing::{debug, warn};
 
 use crate::{
     keyring::{get_keyring_subprocess_auth, KeyringProvider},
@@ -79,13 +80,20 @@ impl Middleware for AuthMiddleware {
             AuthenticationStore::set(&url, Some(auth));
         } else if matches!(self.keyring_provider, KeyringProvider::Subprocess) {
             // If we have keyring support enabled, we check there as well
-            if let Ok(Some(auth)) = get_keyring_subprocess_auth(&url) {
-                // Keyring auth found - save it and return the request
-                req.headers_mut().insert(
-                    reqwest::header::AUTHORIZATION,
-                    basic_auth(auth.username(), auth.password()),
-                );
-                AuthenticationStore::set(&url, Some(auth));
+            match get_keyring_subprocess_auth(&url) {
+                Ok(Some(auth)) => {
+                    req.headers_mut().insert(
+                        reqwest::header::AUTHORIZATION,
+                        basic_auth(auth.username(), auth.password()),
+                    );
+                    AuthenticationStore::set(&url, Some(auth));
+                }
+                Ok(None) => {
+                    debug!("No keyring credentials found for {}", url);
+                }
+                Err(e) => {
+                    warn!("Failed to get keyring credentials for {}: {}", url, e);
+                }
             }
         }
 
