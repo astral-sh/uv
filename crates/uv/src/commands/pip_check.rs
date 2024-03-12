@@ -1,18 +1,14 @@
-use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
-use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::Name;
 use platform_host::Platform;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
-use uv_normalize::PackageName;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -59,6 +55,6 @@ pub(crate) fn pip_check(
         return Ok(ExitStatus::Failure);
     }
 
-    writeln!(printer.stdout(), "No broken requirements found.");
+    writeln!(printer.stdout(), "No broken requirements found.").unwrap();
     Ok(ExitStatus::Success)
 }
