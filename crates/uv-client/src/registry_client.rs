@@ -32,12 +32,14 @@ use crate::html::SimpleHtml;
 use crate::middleware::{NetrcMiddleware, OfflineMiddleware};
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
-use crate::{CachedClient, CachedClientError, Error, ErrorKind};
+use crate::tls::Roots;
+use crate::{tls, CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder {
     index_urls: IndexUrls,
+    native_tls: bool,
     retries: u32,
     connectivity: Connectivity,
     cache: Cache,
@@ -48,6 +50,7 @@ impl RegistryClientBuilder {
     pub fn new(cache: Cache) -> Self {
         Self {
             index_urls: IndexUrls::default(),
+            native_tls: false,
             cache,
             connectivity: Connectivity::Online,
             retries: 3,
@@ -72,6 +75,12 @@ impl RegistryClientBuilder {
     #[must_use]
     pub fn retries(mut self, retries: u32) -> Self {
         self.retries = retries;
+        self
+    }
+
+    #[must_use]
+    pub fn native_tls(mut self, native_tls: bool) -> Self {
+        self.native_tls = native_tls;
         self
     }
 
@@ -110,11 +119,19 @@ impl RegistryClientBuilder {
 
         // Initialize the base client.
         let client = self.client.unwrap_or_else(|| {
-            // Disallow any connections.
+            // Load the TLS configuration.
+            let tls = tls::load(if self.native_tls {
+                Roots::Native
+            } else {
+                Roots::Webpki
+            })
+            .expect("Failed to load TLS configuration.");
+
             let client_core = ClientBuilder::new()
                 .user_agent(user_agent_string)
                 .pool_max_idle_per_host(20)
-                .timeout(std::time::Duration::from_secs(timeout));
+                .timeout(std::time::Duration::from_secs(timeout))
+                .use_preconfigured_tls(tls);
 
             client_core.build().expect("Failed to build HTTP client.")
         });

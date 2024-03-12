@@ -1,6 +1,8 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
@@ -65,6 +67,9 @@ pub(crate) fn pip_show(
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&venv)?;
 
+    // Determine the markers to use for resolution.
+    let markers = venv.interpreter().markers();
+
     // Sort and deduplicate the packages, which are keyed by name.
     packages.sort_unstable();
     packages.dedup();
@@ -119,6 +124,25 @@ pub(crate) fn pip_show(
                 .expect("package path is not root")
                 .simplified_display()
         )?;
+
+        // If available, print the requirements.
+        if let Ok(metadata) = distribution.metadata() {
+            let requires_dist = metadata
+                .requires_dist
+                .into_iter()
+                .filter(|req| req.evaluate_markers(markers, &[]))
+                .map(|req| req.name)
+                .collect::<BTreeSet<_>>();
+            if requires_dist.is_empty() {
+                writeln!(printer.stdout(), "Requires:")?;
+            } else {
+                writeln!(
+                    printer.stdout(),
+                    "Requires: {}",
+                    requires_dist.into_iter().join(", ")
+                )?;
+            }
+        }
     }
 
     // Validate that the environment is consistent.

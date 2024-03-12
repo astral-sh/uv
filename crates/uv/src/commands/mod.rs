@@ -1,6 +1,5 @@
-use std::fmt::Write;
-use std::process::ExitCode;
 use std::time::Duration;
+use std::{fmt::Display, fmt::Write, process::ExitCode};
 
 use anyhow::Context;
 use owo_colors::OwoColorize;
@@ -19,6 +18,7 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::compile_tree;
 use uv_interpreter::PythonEnvironment;
+use uv_normalize::PackageName;
 pub(crate) use venv::venv;
 pub(crate) use version::version;
 
@@ -86,6 +86,13 @@ pub(super) enum ChangeEventKind {
 #[derive(Debug)]
 pub(super) struct ChangeEvent<T: InstalledMetadata> {
     dist: T,
+    kind: ChangeEventKind,
+}
+
+#[derive(Debug)]
+pub(super) struct DryRunEvent<T: Display> {
+    name: PackageName,
+    version: T,
     kind: ChangeEventKind,
 }
 

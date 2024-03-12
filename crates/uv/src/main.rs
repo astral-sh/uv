@@ -88,6 +88,18 @@ struct Cli {
     )]
     color: ColorChoice,
 
+    /// Whether to load TLS certificates from the platform's native certificate store.
+    ///
+    /// By default, `uv` loads certificates from the bundled `webpki-roots` crate. The
+    /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in `uv`
+    /// improves portability and performance (especially on macOS).
+    ///
+    /// However, in some cases, you may want to use the platform's native certificate store,
+    /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
+    /// included in your system's certificate store.
+    #[arg(global = true, long)]
+    native_tls: bool,
+
     #[command(flatten)]
     cache_args: CacheArgs,
 }
@@ -542,7 +554,12 @@ struct PipSyncArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -788,7 +805,12 @@ struct PipInstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -884,6 +906,11 @@ struct PipInstallArgs {
     /// format (e.g., `2006-12-02`).
     #[arg(long, value_parser = date_or_datetime)]
     exclude_newer: Option<DateTime<Utc>>,
+
+    /// Perform a dry run, i.e., don't actually install anything but resolve the dependencies and
+    /// print the resulting plan.
+    #[clap(long)]
+    dry_run: bool,
 }
 
 #[derive(Args)]
@@ -931,7 +958,12 @@ struct PipUninstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -985,7 +1017,12 @@ struct PipFreezeArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 
     /// Use packages installed in user site.
@@ -1046,7 +1083,12 @@ struct PipListArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 
     /// List packages installed in user site.
@@ -1094,7 +1136,12 @@ struct PipShowArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 
     /// Show packages installed in user site.
@@ -1132,7 +1179,12 @@ struct VenvArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
@@ -1411,6 +1463,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python_version,
                 args.exclude_newer,
                 args.annotation_style,
+                cli.native_tls,
                 cli.quiet,
                 cache,
                 printer,
@@ -1467,6 +1520,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.system,
                 args.break_system_packages,
+                cli.native_tls,
                 cache,
                 printer,
             )
@@ -1563,6 +1617,8 @@ async fn run() -> Result<ExitStatus> {
                 args.system,
                 args.break_system_packages,
                 args.user,
+                cli.native_tls,
+                args.dry_run,
                 cache,
                 printer,
             )
