@@ -1,8 +1,9 @@
-use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, StringVersion};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
+
+use pep440_rs::Version;
+use pep508_rs::{MarkerEnvironment, StringVersion};
 
 use crate::Interpreter;
 
@@ -59,16 +60,49 @@ impl PythonVersion {
 
         // Ex) `implementation_version == "3.12.0"`
         if markers.implementation_name == "cpython" {
-            markers.implementation_version = self.0.clone();
+            let python_full_version = self.python_full_version();
+            markers.implementation_version = StringVersion {
+                string: python_full_version.to_string(),
+                version: python_full_version,
+            };
         }
 
         // Ex) `python_full_version == "3.12.0"`
-        markers.python_full_version = self.0.clone();
+        let python_full_version = self.python_full_version();
+        markers.python_full_version = StringVersion {
+            string: python_full_version.to_string(),
+            version: python_full_version,
+        };
 
         // Ex) `python_version == "3.12"`
-        markers.python_version = self.0;
+        let python_version = self.python_version();
+        markers.python_version = StringVersion {
+            string: python_version.to_string(),
+            version: python_version,
+        };
 
         markers
+    }
+
+    /// Return the `python_version` marker corresponding to this Python version.
+    ///
+    /// Ex) `python_version == "3.12"`
+    pub fn python_version(&self) -> Version {
+        let major = self.release().first().copied().unwrap_or(0);
+        let minor = self.release().get(1).copied().unwrap_or(0);
+        Version::new([major, minor])
+    }
+
+    /// Return the `python_full_version` marker corresponding to this Python version.
+    ///
+    /// Ex) `python_full_version == "3.12.0b1"`
+    pub fn python_full_version(&self) -> Version {
+        let major = self.release().first().copied().unwrap_or(0);
+        let minor = self.release().get(1).copied().unwrap_or(0);
+        let patch = self.release().get(2).copied().unwrap_or(0);
+        Version::new([major, minor, patch])
+            .with_pre(self.0.pre())
+            .with_post(self.0.post())
     }
 
     /// Return the full parsed Python version.
@@ -78,24 +112,12 @@ impl PythonVersion {
 
     /// Return the major version of this Python version.
     pub fn major(&self) -> u8 {
-        u8::try_from(self.0.release()[0]).expect("invalid major version")
+        u8::try_from(self.0.release().first().copied().unwrap_or(0)).expect("invalid major version")
     }
 
     /// Return the minor version of this Python version.
     pub fn minor(&self) -> u8 {
-        u8::try_from(self.0.release()[1]).expect("invalid minor version")
-    }
-
-    /// Check if this Python version is satisfied by the given interpreter.
-    ///
-    /// If a patch version is present, we will require an exact match.
-    /// Otherwise, just the major and minor version numbers need to match.
-    pub fn is_satisfied_by(&self, interpreter: &Interpreter) -> bool {
-        if self.patch().is_some() {
-            self.version() == interpreter.python_version()
-        } else {
-            (self.major(), self.minor()) == interpreter.python_tuple()
-        }
+        u8::try_from(self.0.release().get(1).copied().unwrap_or(0)).expect("invalid minor version")
     }
 
     /// Return the patch version of this Python version, if set.
@@ -112,5 +134,53 @@ impl PythonVersion {
     pub fn without_patch(&self) -> Self {
         Self::from_str(format!("{}.{}", self.major(), self.minor()).as_str())
             .expect("dropping a patch should always be valid")
+    }
+
+    /// Check if this Python version is satisfied by the given interpreter.
+    ///
+    /// If a patch version is present, we will require an exact match.
+    /// Otherwise, just the major and minor version numbers need to match.
+    pub fn is_satisfied_by(&self, interpreter: &Interpreter) -> bool {
+        if self.patch().is_some() {
+            self.version() == interpreter.python_version()
+        } else {
+            (self.major(), self.minor()) == interpreter.python_tuple()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use pep440_rs::{PreRelease, PreReleaseKind, Version};
+
+    use crate::PythonVersion;
+
+    #[test]
+    fn python_markers() {
+        let version = PythonVersion::from_str("3.11.0").expect("valid python version");
+        assert_eq!(version.python_version(), Version::new([3, 11]));
+        assert_eq!(version.python_version().to_string(), "3.11");
+        assert_eq!(version.python_full_version(), Version::new([3, 11, 0]));
+        assert_eq!(version.python_full_version().to_string(), "3.11.0");
+
+        let version = PythonVersion::from_str("3.11").expect("valid python version");
+        assert_eq!(version.python_version(), Version::new([3, 11]));
+        assert_eq!(version.python_version().to_string(), "3.11");
+        assert_eq!(version.python_full_version(), Version::new([3, 11, 0]));
+        assert_eq!(version.python_full_version().to_string(), "3.11.0");
+
+        let version = PythonVersion::from_str("3.11.8a1").expect("valid python version");
+        assert_eq!(version.python_version(), Version::new([3, 11]));
+        assert_eq!(version.python_version().to_string(), "3.11");
+        assert_eq!(
+            version.python_full_version(),
+            Version::new([3, 11, 8]).with_pre(Some(PreRelease {
+                kind: PreReleaseKind::Alpha,
+                number: 1
+            }))
+        );
+        assert_eq!(version.python_full_version().to_string(), "3.11.8a1");
     }
 }
