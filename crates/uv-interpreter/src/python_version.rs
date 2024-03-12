@@ -62,7 +62,8 @@ impl PythonVersion {
         if markers.implementation_name == "cpython" {
             let python_full_version = self.python_full_version();
             markers.implementation_version = StringVersion {
-                string: python_full_version.to_string(),
+                // Retain the verbatim representation, provided by the user.
+                string: self.0.to_string(),
                 version: python_full_version,
             };
         }
@@ -70,7 +71,8 @@ impl PythonVersion {
         // Ex) `python_full_version == "3.12.0"`
         let python_full_version = self.python_full_version();
         markers.python_full_version = StringVersion {
-            string: python_full_version.to_string(),
+            // Retain the verbatim representation, provided by the user.
+            string: self.0.to_string(),
             version: python_full_version,
         };
 
@@ -86,6 +88,8 @@ impl PythonVersion {
 
     /// Return the `python_version` marker corresponding to this Python version.
     ///
+    /// This should include exactly a major and minor version, but no patch version.
+    ///
     /// Ex) `python_version == "3.12"`
     pub fn python_version(&self) -> Version {
         let major = self.release().first().copied().unwrap_or(0);
@@ -94,6 +98,9 @@ impl PythonVersion {
     }
 
     /// Return the `python_full_version` marker corresponding to this Python version.
+    ///
+    /// This should include exactly a major, minor, and patch version (even if it's zero), along
+    /// with any pre-release or post-release information.
     ///
     /// Ex) `python_full_version == "3.12.0b1"`
     pub fn python_full_version(&self) -> Version {

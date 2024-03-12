@@ -134,7 +134,7 @@ fn compatible_python_incompatible_override() -> Result<()> {
                  ----- stderr -----
                  warning: The requested Python version 3.9 is not available; 3.11.7 will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the requested Python version (3.9.0) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
+                   ╰─▶ Because the requested Python version (3.9) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
                        And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
                  "###
     );
@@ -379,7 +379,7 @@ fn incompatible_python_compatible_override_other_wheel() -> Result<()> {
                            albatross==2.0.0
                        we can conclude that albatross<2.0.0 cannot be used. (1)
 
-                       Because the requested Python version (3.11.0) does not satisfy Python>=3.12 and albatross==2.0.0 depends on Python>=3.12, we can conclude that albatross==2.0.0 cannot be used.
+                       Because the requested Python version (3.11) does not satisfy Python>=3.12 and albatross==2.0.0 depends on Python>=3.12, we can conclude that albatross==2.0.0 cannot be used.
                        And because we know from (1) that albatross<2.0.0 cannot be used, we can conclude that all versions of albatross cannot be used.
                        And because you require albatross, we can conclude that the requirements are unsatisfiable.
                  "###
@@ -428,7 +428,7 @@ fn python_patch_override_no_patch() -> Result<()> {
 
                  ----- stderr -----
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the requested Python version (3.8.0) does not satisfy Python>=3.8.4 and albatross==1.0.0 depends on Python>=3.8.4, we can conclude that albatross==1.0.0 cannot be used.
+                   ╰─▶ Because the requested Python version (3.8) does not satisfy Python>=3.8.4 and albatross==1.0.0 depends on Python>=3.8.4, we can conclude that albatross==1.0.0 cannot be used.
                        And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
                  "###
     );
