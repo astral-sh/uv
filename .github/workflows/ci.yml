@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
   workflow_dispatch:
 
@@ -32,7 +32,7 @@ jobs:
     name: "cargo clippy"
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ ubuntu-latest, windows-latest ]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -300,7 +300,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: "Install Python"
-        run: apk add --update --no-cache python3 py3-pip
+        run: apk add --update --no-cache python3 py3-pip pipx
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -315,6 +315,18 @@ jobs:
 
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
+
+      - name: "Download Python build standalone"
+        run: pipx run /io/scripts/bootstrap/install.py python-build-standalone
+        env:
+          UV_BOOTSTRAP_DIR: python-build-standalone
+
+      - name: "Test Python build standalone"
+        run: |
+          python-build-standalone/versions/cpython@3.12.1/install/bin/python3 -m venv venv3.12
+          venv3.12/bin/python scripts/check_system_python.py --uv ./uv
+          python-build-standalone/versions/cpython@3.8.18/install/bin/python3 -m venv venv3.8
+          venv3.8/bin/python scripts/check_system_python.py --uv ./uv
 
   system-test-macos:
     needs: build-binary-macos-aarch64
@@ -435,14 +447,14 @@ jobs:
 
   system-test-conda:
     needs:
-      [build-binary-windows, build-binary-macos-aarch64, build-binary-linux]
+      [ build-binary-windows, build-binary-macos-aarch64, build-binary-linux ]
     name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        os: ["linux", "windows", "macos"]
-        python-version: ["3.8", "3.11"]
+        os: [ "linux", "windows", "macos" ]
+        python-version: [ "3.8", "3.11" ]
         include:
           - { os: "linux", target: "linux", runner: "ubuntu-latest" }
           - { os: "windows", target: "windows", runner: "windows-latest" }
