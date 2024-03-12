@@ -564,19 +564,33 @@ impl Display for Cursor<'_> {
 fn parse_name(cursor: &mut Cursor) -> Result<PackageName, Pep508Error> {
     // https://peps.python.org/pep-0508/#names
     // ^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$ with re.IGNORECASE
+    let start = cursor.pos();
     let mut name = String::new();
+
     if let Some((index, char)) = cursor.next() {
         if matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9') {
             name.push(char);
         } else {
-            return Err(Pep508Error {
-                message: Pep508ErrorSource::String(format!(
+            // Check if the user added a filesystem path without a package name. pip supports this
+            // in `requirements.txt`, but it doesn't adhere to the PEP 508 grammar.
+            let mut clone = cursor.clone().at(start);
+            return if looks_like_file_path(&mut clone) {
+                Err(Pep508Error {
+                    message: Pep508ErrorSource::UnsupportedRequirement("URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ /path/to/file`).".to_string()),
+                    start,
+                    len: clone.pos() - start,
+                    input: clone.to_string(),
+                })
+            } else {
+                Err(Pep508Error {
+                    message: Pep508ErrorSource::String(format!(
                     "Expected package name starting with an alphanumeric character, found '{char}'"
                 )),
-                start: index,
-                len: char.len_utf8(),
-                input: cursor.to_string(),
-            });
+                    start: index,
+                    len: char.len_utf8(),
+                    input: cursor.to_string(),
+                })
+            };
         }
     } else {
         return Err(Pep508Error {
@@ -750,6 +764,35 @@ fn parse_url(cursor: &mut Cursor, working_dir: Option<&Path>) -> Result<Verbatim
     let url = preprocess_url(url, working_dir, cursor, start, len)?;
 
     Ok(url)
+}
+
+/// Parse a filesystem path from the [`Cursor`], advancing the [`Cursor`] to the end of the path.
+///
+/// Returns `false` if the path is not a clear and unambiguous filesystem path.
+fn looks_like_file_path(cursor: &mut Cursor) -> bool {
+    let Some((_, first_char)) = cursor.next() else {
+        return false;
+    };
+
+    // Ex) `/bin/ls`
+    if first_char == '\\' || first_char == '/' || first_char == '.' {
+        // Read until the end of the path.
+        cursor.take_while(|char| !char.is_whitespace());
+        return true;
+    }
+
+    // Ex) `C:`
+    if first_char.is_alphabetic() {
+        if let Some((_, second_char)) = cursor.next() {
+            if second_char == ':' {
+                // Read until the end of the path.
+                cursor.take_while(|char| !char.is_whitespace());
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 /// Create a `VerbatimUrl` to represent the requirement.
@@ -1488,6 +1531,18 @@ mod tests {
             URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).
             git+https://github.com/pallets/flask.git
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+        );
+    }
+
+    #[test]
+    fn error_bare_file_path() {
+        assert_snapshot!(
+            parse_err(r"/path/to/flask.tar.gz"),
+            @r###"
+        URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ /path/to/file`).
+        /path/to/flask.tar.gz
+        ^^^^^^^^^^^^^^^^^^^^^
+        "###
         );
     }
 
