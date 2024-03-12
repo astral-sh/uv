@@ -455,8 +455,8 @@ def get_operating_system_and_architecture():
         version = platform.mac_ver()[0].split(".")
         operating_system = {
             "name": "macos",
-            "major": version[0],
-            "minor": version[1],
+            "major": int(version[0]),
+            "minor": int(version[1]),
         }
     elif operating_system in [
         "freebsd",
@@ -469,8 +469,7 @@ def get_operating_system_and_architecture():
         version = platform.mac_ver()[0].split(".")
         operating_system = {
             "name": "macos",
-            "major": version[0],
-            "minor": version[1],
+            "release": version,
         }
     else:
         error = {

@@ -694,14 +694,12 @@ mod windows {
     }
 
     #[cfg(test)]
-    #[cfg(windows)]
     mod tests {
         use std::fmt::Debug;
 
         use insta::assert_snapshot;
         use itertools::Itertools;
 
-        use platform_host::Platform;
         use uv_cache::Cache;
 
         use crate::{find_requested_python, Error};
@@ -713,6 +711,7 @@ mod windows {
         }
 
         #[test]
+        #[cfg_attr(not(windows), ignore)]
         fn no_such_python_path() {
             let result =
                 find_requested_python(r"C:\does\not\exists\python3.12", &Cache::temp().unwrap());
@@ -732,7 +731,6 @@ mod windows {
     }
 }
 
-#[cfg(unix)]
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
@@ -750,6 +748,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(unix), ignore)]
     fn no_such_python_version() {
         let request = "3.1000";
         let result = find_requested_python(request, &Cache::temp().unwrap())
@@ -762,6 +761,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(unix), ignore)]
     fn no_such_python_binary() {
         let request = "python3.1000";
         let result = find_requested_python(request, &Cache::temp().unwrap())
@@ -774,6 +774,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(unix), ignore)]
     fn no_such_python_path() {
         let result = find_requested_python("/does/not/exists/python3.12", &Cache::temp().unwrap());
         assert_snapshot!(
