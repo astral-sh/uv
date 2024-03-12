@@ -67,6 +67,7 @@ pub(crate) async fn pip_compile(
     python_version: Option<PythonVersion>,
     exclude_newer: Option<DateTime<Utc>>,
     annotation_style: AnnotationStyle,
+    native_tls: bool,
     quiet: bool,
     cache: Cache,
     printer: Printer,
@@ -188,6 +189,7 @@ pub(crate) async fn pip_compile(
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
+        .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
         .build();

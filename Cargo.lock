@@ -2880,6 +2880,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
+ "webpki-roots",
  "winreg",
 ]
 
@@ -4360,6 +4361,8 @@ dependencies = [
  "rmp-serde",
  "rust-netrc",
  "rustc-hash",
+ "rustls",
+ "rustls-native-certs",
  "serde",
  "serde_json",
  "sha2",
@@ -4378,6 +4381,7 @@ dependencies = [
  "uv-normalize",
  "uv-version",
  "uv-warnings",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -4934,6 +4938,12 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "webpki-roots"
+version = "0.25.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
 name = "weezl"
