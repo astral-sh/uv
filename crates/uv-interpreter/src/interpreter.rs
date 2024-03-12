@@ -326,6 +326,22 @@ impl ExternallyManaged {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "result", rename_all = "lowercase")]
+enum InterpreterInfoResult {
+    Error(InterpreterInfoError),
+    Success(InterpreterInfo),
+}
+
+#[derive(Debug, Error, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum InterpreterInfoError {
+    #[error("Could not detect a glibc or a musl libc (while running on linux)")]
+    NeitherGlibcNorMusl,
+    #[error("Unknown operation system `{operating_system}`")]
+    UnknownOperatingSystem { operating_system: String },
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     platform: Platform,
@@ -375,19 +391,26 @@ impl InterpreterInfo {
             });
         }
 
-        let data: Self = serde_json::from_slice(&output.stdout).map_err(|err| {
-            Error::PythonSubcommandOutput {
-                message: format!(
-                    "Querying Python at `{}` did not return the expected data: {err}",
-                    interpreter.display(),
-                ),
-                exit_code: output.status,
-                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            }
-        })?;
+        let result: InterpreterInfoResult =
+            serde_json::from_slice(&output.stdout).map_err(|err| {
+                Error::PythonSubcommandOutput {
+                    message: format!(
+                        "Querying Python at `{}` did not return the expected data: {err}",
+                        interpreter.display(),
+                    ),
+                    exit_code: output.status,
+                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                    stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                }
+            })?;
 
-        Ok(data)
+        match result {
+            InterpreterInfoResult::Error(err) => Err(Error::QueryScript {
+                err,
+                interpreter: interpreter.to_path_buf(),
+            }),
+            InterpreterInfoResult::Success(data) => Ok(data),
+        }
     }
 
     /// Duplicate the directory structure we have in `../python` into a tempdir, so we can run

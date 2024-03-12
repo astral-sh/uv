@@ -17,6 +17,7 @@ use thiserror::Error;
 pub use crate::cfg::PyVenvConfiguration;
 pub use crate::find_python::{find_best_python, find_default_python, find_requested_python};
 pub use crate::interpreter::Interpreter;
+use crate::interpreter::InterpreterInfoError;
 pub use crate::python_environment::PythonEnvironment;
 pub use crate::python_version::PythonVersion;
 pub use crate::virtualenv::Virtualenv;
@@ -38,11 +39,11 @@ pub enum Error {
     PythonNotFound,
     #[error("Failed to locate a virtualenv or Conda environment (checked: `VIRTUAL_ENV`, `CONDA_PREFIX`, and `.venv`). Run `uv venv` to create a virtualenv.")]
     VenvNotFound,
-    #[error("Failed to locate Python interpreter at: `{0}`")]
+    #[error("Failed to locate Python interpreter at `{0}`")]
     RequestedPythonNotFound(String),
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Failed to query python interpreter `{interpreter}`")]
+    #[error("Failed to query Python interpreter at `{interpreter}`")]
     PythonSubcommandLaunch {
         interpreter: PathBuf,
         #[source]
@@ -56,7 +57,7 @@ pub enum Error {
     )]
     NoSuchPython(String),
     #[cfg(unix)]
-    #[error("No Python {0} In `PATH`. Is Python {0} installed?")]
+    #[error("No Python {0} in `PATH`. Is Python {0} installed?")]
     NoSuchPython(String),
     #[error("Neither `python` nor `python3` are in `PATH`. Is Python installed?")]
     NoPythonInstalledUnix,
@@ -79,4 +80,10 @@ pub enum Error {
     Cfg(#[from] cfg::Error),
     #[error("Error finding `{}` in PATH", _0.to_string_lossy())]
     WhichError(OsString, #[source] which::Error),
+    #[error("Can't use Python at `{interpreter}`")]
+    QueryScript {
+        #[source]
+        err: InterpreterInfoError,
+        interpreter: PathBuf,
+    },
 }

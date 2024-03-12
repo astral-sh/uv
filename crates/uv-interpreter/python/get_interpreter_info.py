@@ -447,8 +447,7 @@ def get_operating_system_and_architecture():
                 "minor": glibc_version[1],
             }
         else:
-            # TODO(konstin): Unsupported platform error in rust
-            print(json.dumps({"error": "neither_glibc_nor_musl"}))
+            print(json.dumps({"result": "error", "kind": "neither_glibc_nor_musl"}))
             sys.exit(0)
     elif operating_system == "win":
         operating_system = {
@@ -476,8 +475,12 @@ def get_operating_system_and_architecture():
             "minor": version[1],
         }
     else:
-        # TODO(konstin): Unsupported platform error in rust
-        print(json.dumps({"error": "unknown_operation_system"}))
+        error = {
+            "result": "error",
+            "kind": "unknown_operation_system",
+            "operating_system": operating_system,
+        }
+        print(json.dumps(error))
         sys.exit(0)
     return {"os": operating_system, "arch": architecture}
 
@@ -496,6 +499,7 @@ markers = {
     "sys_platform": sys.platform,
 }
 interpreter_info = {
+    "result": "success",
     "platform": get_operating_system_and_architecture(),
     "markers": markers,
     "base_prefix": sys.base_prefix,
