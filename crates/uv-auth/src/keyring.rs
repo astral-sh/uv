@@ -35,7 +35,8 @@ pub enum Error {
 
 /// Get credentials from keyring for given url
 ///
-///
+/// See `pip`'s KeyringCLIProvider
+/// <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L102>
 pub fn get_keyring_subprocess_auth(url: &Url) -> Result<Option<Credential>, Error> {
     let host = url.host_str();
     if host.is_none() {
