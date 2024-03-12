@@ -255,8 +255,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             // Run unit propagation.
             state.unit_propagation(next)?;
 
-            // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
-            Self::pre_visit(state.partial_solution.prioritized_packages(), request_sink).await?;
+            // Pre-visit all candidate packages, to allow metadata to be fetched in parallel. If
+            // the dependency mode is direct, we only need to visit the root package.
+            if self.dependency_mode.is_transitive() {
+                Self::pre_visit(state.partial_solution.prioritized_packages(), request_sink)
+                    .await?;
+            }
 
             // Choose a package version.
             let Some(highest_priority_pkg) =
