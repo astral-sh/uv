@@ -5,7 +5,7 @@ use std::path::Path;
 use task_local_extensions::Extensions;
 
 use crate::{
-    keyring::{get_keyring_auth, KeyringProvider},
+    keyring::{get_keyring_subprocess_auth, KeyringProvider},
     store::{AuthenticationStore, Credential},
 };
 
@@ -79,7 +79,7 @@ impl Middleware for AuthMiddleware {
             AuthenticationStore::set(&url, Some(auth));
         } else if matches!(self.keyring_provider, KeyringProvider::Subprocess) {
             // If we have keyring support enabled, we check there as well
-            if let Ok(auth) = get_keyring_auth(&url) {
+            if let Ok(Some(auth)) = get_keyring_subprocess_auth(&url) {
                 // Keyring auth found - save it and return the request
                 req.headers_mut().insert(
                     reqwest::header::AUTHORIZATION,

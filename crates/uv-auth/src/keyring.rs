@@ -12,28 +12,31 @@ use crate::store::{BasicAuthData, Credential};
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum KeyringProvider {
-    // Will not use keyring for authentication
+    /// Will not use keyring for authentication
     #[default]
     Disabled,
-    // Will use keyring CLI command for authentication
+    /// Will use keyring CLI command for authentication
     Subprocess,
-    // Auto, - not yet implemented
-    // Import, - will probably never be implemented
+    // /// Not yet implemented
+    // Auto,
+    // /// Not implemented yet.  Maybe use <https://docs.rs/keyring/latest/keyring/> for this?
+    // Import,
 }
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Url is not valid Keyring target: {0}")]
     NotKeyringTarget(String),
-    #[error("Keyring did not resolve password: {0}")]
-    NotFound(String),
     #[error(transparent)]
     CliFailure(#[from] std::io::Error),
     #[error(transparent)]
     ParseFailed(#[from] std::string::FromUtf8Error),
 }
 
-pub fn get_keyring_auth(url: &Url) -> Result<Credential, Error> {
+/// Get credentials from keyring for given url
+///
+///
+pub fn get_keyring_subprocess_auth(url: &Url) -> Result<Option<Credential>, Error> {
     let host = url.host_str();
     if host.is_none() {
         return Err(Error::NotKeyringTarget(
@@ -61,20 +64,22 @@ pub fn get_keyring_auth(url: &Url) -> Result<Credential, Error> {
         .arg(username)
         .output()
     {
-        Ok(output) if output.status.success() => Ok(String::from_utf8(output.stdout)
-            .map_err(Error::ParseFailed)?
-            .trim_end()
-            .to_owned()),
-        Ok(output) => Err(Error::NotFound(
-            String::from_utf8(output.stderr).map_err(Error::ParseFailed)?,
+        Ok(output) if output.status.success() => Ok(Some(
+            String::from_utf8(output.stdout)
+                .map_err(Error::ParseFailed)?
+                .trim_end()
+                .to_owned(),
         )),
+        Ok(_) => Ok(None),
         Err(e) => Err(Error::CliFailure(e)),
     };
 
     output.map(|password| {
-        Credential::Basic(BasicAuthData {
-            username: username.to_string(),
-            password: Some(password),
+        password.map(|password| {
+            Credential::Basic(BasicAuthData {
+                username: username.to_string(),
+                password: Some(password),
+            })
         })
     })
 }
@@ -86,7 +91,7 @@ mod test {
     #[test]
     fn hostless_url_should_err() {
         let url = Url::parse("file:/etc/bin/").unwrap();
-        let res = get_keyring_auth(&url);
+        let res = get_keyring_subprocess_auth(&url);
         assert!(res.is_err());
         assert!(matches!(res.unwrap_err(),
                 Error::NotKeyringTarget(s) if s == "Should only use keyring for urls with host"));
@@ -95,7 +100,7 @@ mod test {
     #[test]
     fn passworded_url_should_err() {
         let url = Url::parse("https://u:p@example.com").unwrap();
-        let res = get_keyring_auth(&url);
+        let res = get_keyring_subprocess_auth(&url);
         assert!(res.is_err());
         assert!(matches!(res.unwrap_err(),
                 Error::NotKeyringTarget(s) if s == "Url already contains password - keyring not required"));
