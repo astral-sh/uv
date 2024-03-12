@@ -475,7 +475,7 @@ def get_operating_system_and_architecture():
     else:
         error = {
             "result": "error",
-            "kind": "unknown_operation_system",
+            "kind": "unknown_operating_system",
             "operating_system": operating_system,
         }
         print(json.dumps(error))

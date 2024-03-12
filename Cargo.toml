@@ -67,7 +67,6 @@ owo-colors = { version = "4.0.0" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
-plist = { version = "1.6.0" }
 pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "b5ead05c954b81690aec40255a1c36ec248e90af" }
 pyo3 = { version = "0.20.3" }
 pyo3-log = { version = "0.9.0" }

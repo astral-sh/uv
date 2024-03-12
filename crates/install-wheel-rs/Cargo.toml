@@ -36,7 +36,6 @@ mailparse = { workspace = true }
 once_cell = { workspace = true }
 pathdiff = { workspace = true }
 platform-info = { workspace = true }
-plist = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }

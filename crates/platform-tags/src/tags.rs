@@ -262,7 +262,7 @@ enum Implementation {
 impl Implementation {
     /// Returns the "language implementation and version tag" for the current implementation and
     /// Python version (e.g., `cp39` or `pp37`).
-    fn language_tag(&self, python_version: (u8, u8)) -> String {
+    fn language_tag(self, python_version: (u8, u8)) -> String {
         match self {
             // Ex) `cp39`
             Self::CPython => format!("cp{}{}", python_version.0, python_version.1),
@@ -273,7 +273,7 @@ impl Implementation {
         }
     }
 
-    fn abi_tag(&self, python_version: (u8, u8), implementation_version: (u8, u8)) -> String {
+    fn abi_tag(self, python_version: (u8, u8), implementation_version: (u8, u8)) -> String {
         match self {
             // Ex) `cp39`
             Self::CPython => {
