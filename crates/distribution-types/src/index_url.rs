@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use pep508_rs::{split_scheme, Scheme, VerbatimUrl, expand_env_vars};
+use pep508_rs::{expand_env_vars, split_scheme, Scheme, VerbatimUrl};
 use uv_fs::normalize_url_path;
 
 use crate::Verbatim;

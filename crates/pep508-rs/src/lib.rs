@@ -44,9 +44,9 @@ pub use marker::{
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_fs::normalize_url_path;
 // Parity with the crates.io version of pep508_rs
+use crate::verbatim_url::VerbatimUrlError;
 pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 pub use verbatim_url::{expand_env_vars, split_scheme, Scheme, VerbatimUrl};
-use crate::verbatim_url::VerbatimUrlError;
 
 mod marker;
 mod verbatim_url;
@@ -818,9 +818,8 @@ fn preprocess_url(
 
                 #[cfg(feature = "non-pep508-extensions")]
                 if let Some(working_dir) = working_dir {
-                    return Ok(
-                        VerbatimUrl::parse_path(path.as_ref(), working_dir).with_given(url.to_string())
-                    );
+                    return Ok(VerbatimUrl::parse_path(path.as_ref(), working_dir)
+                        .with_given(url.to_string()));
                 }
 
                 Ok(VerbatimUrl::parse_absolute_path(path.as_ref())
@@ -835,21 +834,22 @@ fn preprocess_url(
             // Ex) `https://download.pytorch.org/whl/torch_stable.html`
             Some(_) => {
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                Ok(VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| Pep508Error {
-                    message: Pep508ErrorSource::UrlError(VerbatimUrlError::Url(expanded.to_string(), err)),
-                    start,
-                    len,
-                    input: cursor.to_string(),
-                })?.with_given(url.to_string()))
+                Ok(VerbatimUrl::parse_url(expanded.as_ref())
+                    .map_err(|err| Pep508Error {
+                        message: Pep508ErrorSource::UrlError(VerbatimUrlError::Url(err)),
+                        start,
+                        len,
+                        input: cursor.to_string(),
+                    })?
+                    .with_given(url.to_string()))
             }
 
             // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
             _ => {
                 #[cfg(feature = "non-pep508-extensions")]
                 if let Some(working_dir) = working_dir {
-                    return Ok(
-                        VerbatimUrl::parse_path(expanded.as_ref(), working_dir).with_given(url.to_string())
-                    );
+                    return Ok(VerbatimUrl::parse_path(expanded.as_ref(), working_dir)
+                        .with_given(url.to_string()));
                 }
 
                 Ok(VerbatimUrl::parse_absolute_path(expanded.as_ref())
@@ -866,7 +866,9 @@ fn preprocess_url(
         // Ex) `../editable/`
         #[cfg(feature = "non-pep508-extensions")]
         if let Some(working_dir) = working_dir {
-            return Ok(VerbatimUrl::parse_path(expanded.as_ref(), working_dir).with_given(url.to_string()));
+            return Ok(
+                VerbatimUrl::parse_path(expanded.as_ref(), working_dir).with_given(url.to_string())
+            );
         }
 
         Ok(VerbatimUrl::parse_absolute_path(expanded.as_ref())

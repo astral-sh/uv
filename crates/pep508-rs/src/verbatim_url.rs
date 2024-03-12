@@ -122,9 +122,7 @@ impl std::str::FromStr for VerbatimUrl {
     type Err = VerbatimUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse_url(s)
-            .map(|url| url.with_given(s.to_owned()))
-            .map_err(|e| VerbatimUrlError::Url(s.to_owned(), e))
+        Ok(Self::parse_url(s).map(|url| url.with_given(s.to_owned()))?)
     }
 }
 
@@ -146,8 +144,8 @@ impl Deref for VerbatimUrl {
 #[derive(thiserror::Error, Debug)]
 pub enum VerbatimUrlError {
     /// Failed to parse a URL.
-    #[error("{0}")]
-    Url(String, #[source] ParseError),
+    #[error(transparent)]
+    Url(#[from] ParseError),
 
     /// Received a relative path, but no working directory was provided.
     #[error("relative path without a working directory: {0}")]
