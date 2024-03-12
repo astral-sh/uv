@@ -17,7 +17,6 @@ use std::path::{Path, PathBuf};
 use std::process::Output;
 use uv_fs::Simplified;
 
-use platform_host::Platform;
 use uv_cache::Cache;
 use uv_interpreter::find_requested_python;
 
@@ -317,12 +316,8 @@ pub fn create_bin_with_executables(
     let bin = temp_dir.child("bin");
     fs_err::create_dir(&bin)?;
     for &request in python_versions {
-        let interpreter = find_requested_python(
-            request,
-            &Platform::current().unwrap(),
-            &Cache::temp().unwrap(),
-        )?
-        .ok_or(uv_interpreter::Error::NoSuchPython(request.to_string()))?;
+        let interpreter = find_requested_python(request, &Cache::temp().unwrap())?
+            .ok_or(uv_interpreter::Error::NoSuchPython(request.to_string()))?;
         let name = interpreter
             .sys_executable()
             .file_name()

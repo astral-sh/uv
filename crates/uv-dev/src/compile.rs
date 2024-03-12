@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use platform_host::Platform;
 use tracing::info;
 use uv_cache::{Cache, CacheArgs};
 use uv_interpreter::PythonEnvironment;
@@ -21,8 +20,7 @@ pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
     let interpreter = if let Some(python) = args.python {
         python
     } else {
-        let platform = Platform::current()?;
-        let venv = PythonEnvironment::from_virtualenv(platform, &cache)?;
+        let venv = PythonEnvironment::from_virtualenv(&cache)?;
         venv.python_executable().to_path_buf()
     };
 

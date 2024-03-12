@@ -2,14 +2,8 @@
 
 use std::{fmt, io};
 
-use platform_info::{PlatformInfo, PlatformInfoAPI, UNameAPI};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
-use crate::linux::detect_linux_libc;
-use crate::mac_os::get_mac_os_version;
-
-mod linux;
-mod mac_os;
 
 #[derive(Error, Debug)]
 pub enum PlatformError {
@@ -19,7 +13,7 @@ pub enum PlatformError {
     OsVersionDetectionError(String),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct Platform {
     os: Os,
     arch: Arch,
@@ -29,13 +23,6 @@ impl Platform {
     /// Create a new platform from the given operating system and architecture.
     pub fn new(os: Os, arch: Arch) -> Self {
         Self { os, arch }
-    }
-
-    /// Create a new platform from the current operating system and architecture.
-    pub fn current() -> Result<Self, PlatformError> {
-        let os = Os::current()?;
-        let arch = Arch::current()?;
-        Ok(Self { os, arch })
     }
 
     /// Return the platform's operating system.
@@ -50,7 +37,8 @@ impl Platform {
 }
 
 /// All supported operating systems.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(tag = "name", rename_all = "lowercase")]
 pub enum Os {
     Manylinux { major: u16, minor: u16 },
     Musllinux { major: u16, minor: u16 },
@@ -62,71 +50,6 @@ pub enum Os {
     Dragonfly { release: String },
     Illumos { release: String, arch: String },
     Haiku { release: String },
-}
-
-impl Os {
-    pub fn current() -> Result<Self, PlatformError> {
-        let target_triple = target_lexicon::HOST;
-
-        let os = match target_triple.operating_system {
-            target_lexicon::OperatingSystem::Linux => detect_linux_libc()?,
-            target_lexicon::OperatingSystem::Windows => Self::Windows,
-            target_lexicon::OperatingSystem::MacOSX { major, minor, .. } => {
-                Self::Macos { major, minor }
-            }
-            target_lexicon::OperatingSystem::Darwin => {
-                let (major, minor) = get_mac_os_version()?;
-                Self::Macos { major, minor }
-            }
-            target_lexicon::OperatingSystem::Netbsd => Self::NetBsd {
-                release: Self::platform_info()?
-                    .release()
-                    .to_string_lossy()
-                    .to_string(),
-            },
-            target_lexicon::OperatingSystem::Freebsd => Self::FreeBsd {
-                release: Self::platform_info()?
-                    .release()
-                    .to_string_lossy()
-                    .to_string(),
-            },
-            target_lexicon::OperatingSystem::Openbsd => Self::OpenBsd {
-                release: Self::platform_info()?
-                    .release()
-                    .to_string_lossy()
-                    .to_string(),
-            },
-            target_lexicon::OperatingSystem::Dragonfly => Self::Dragonfly {
-                release: Self::platform_info()?
-                    .release()
-                    .to_string_lossy()
-                    .to_string(),
-            },
-            target_lexicon::OperatingSystem::Illumos => {
-                let platform_info = Self::platform_info()?;
-                Self::Illumos {
-                    release: platform_info.release().to_string_lossy().to_string(),
-                    arch: platform_info.machine().to_string_lossy().to_string(),
-                }
-            }
-            target_lexicon::OperatingSystem::Haiku => Self::Haiku {
-                release: Self::platform_info()?
-                    .release()
-                    .to_string_lossy()
-                    .to_string(),
-            },
-            unsupported => {
-                return Err(PlatformError::OsVersionDetectionError(format!(
-                    "The operating system {unsupported:?} is not supported"
-                )));
-            }
-        };
-        Ok(os)
-    }
-
-    fn platform_info() -> Result<PlatformInfo, PlatformError> {
-        PlatformInfo::new().map_err(|err| PlatformError::OsVersionDetectionError(err.to_string()))
-    }
 }
 
 impl fmt::Display for Os {
@@ -147,7 +70,8 @@ impl fmt::Display for Os {
 }
 
 /// All supported CPU architectures
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Arch {
     Aarch64,
     Armv7L,
@@ -173,25 +97,6 @@ impl fmt::Display for Arch {
 }
 
 impl Arch {
-    pub fn current() -> Result<Self, PlatformError> {
-        let target_triple = target_lexicon::HOST;
-        let arch = match target_triple.architecture {
-            target_lexicon::Architecture::X86_64 => Self::X86_64,
-            target_lexicon::Architecture::X86_32(_) => Self::X86,
-            target_lexicon::Architecture::Arm(_) => Self::Armv7L,
-            target_lexicon::Architecture::Aarch64(_) => Self::Aarch64,
-            target_lexicon::Architecture::Powerpc64 => Self::Powerpc64,
-            target_lexicon::Architecture::Powerpc64le => Self::Powerpc64Le,
-            target_lexicon::Architecture::S390x => Self::S390X,
-            unsupported => {
-                return Err(PlatformError::OsVersionDetectionError(format!(
-                    "The architecture {unsupported} is not supported"
-                )));
-            }
-        };
-        Ok(arch)
-    }
-
     /// Returns the oldest possible Manylinux tag for this architecture
     pub fn get_minimum_manylinux_minor(&self) -> u16 {
         match self {

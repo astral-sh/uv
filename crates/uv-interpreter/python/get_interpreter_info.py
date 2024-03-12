@@ -7,11 +7,18 @@ Exit Codes:
     3: Python version 3 or newer is required
 """
 
+import sys
+
 import json
 import os
 import platform
-import sys
 import sysconfig
+
+# noinspection PyProtectedMember
+from .packaging._manylinux import _get_glibc_version
+
+# noinspection PyProtectedMember
+from .packaging._musllinux import _get_musl_version
 
 
 def format_full_version(info):
@@ -24,7 +31,6 @@ def format_full_version(info):
 
 if sys.version_info[0] < 3:
     sys.exit(3)
-
 
 if hasattr(sys, "implementation"):
     implementation_version = format_full_version(sys.implementation.version)
@@ -373,9 +379,11 @@ def get_scheme():
         # finalize_options(); we only want to override here if the user
         # has explicitly requested it hence going back to the config
         if "install_lib" in d.get_option_dict("install"):
+            # noinspection PyUnresolvedReferences
             scheme.update({"purelib": i.install_lib, "platlib": i.install_lib})
 
         if running_under_virtualenv():
+            # noinspection PyUnresolvedReferences
             scheme["headers"] = os.path.join(
                 i.prefix,
                 "include",
@@ -406,6 +414,74 @@ def get_scheme():
         return get_distutils_scheme()
 
 
+def get_operating_system_and_architecture():
+    """Determine the python interpreter architecture and operating system.
+
+    Note that this might be different from uv's arch and os, e.g. on Apple Silicon Macs
+    transparently supporting both x86_64 and aarch64 binaries
+    """
+    # https://github.com/pypa/packaging/blob/cc938f984bbbe43c5734b9656c9837ab3a28191f/src/packaging/_musllinux.py#L84
+    # Note that this is not `os.name`.
+    [operating_system, version_arch] = sysconfig.get_platform().split("-", 1)
+    if "-" in version_arch:
+        # Ex: macosx-11.2-arm64
+        version, architecture = version_arch.rsplit("-", 1)
+    else:
+        # Ex: linux-x86_64
+        version = None
+        architecture = version_arch
+
+    if operating_system == "linux":
+        musl_version = _get_musl_version(sys.executable)
+        glibc_version = _get_glibc_version()
+        if musl_version:
+            operating_system = {
+                "name": "musllinux",
+                "major": musl_version[0],
+                "minor": musl_version[1],
+            }
+        elif glibc_version:
+            operating_system = {
+                "name": "manylinux",
+                "major": glibc_version[0],
+                "minor": glibc_version[1],
+            }
+        else:
+            # TODO(konstin): Unsupported platform error in rust
+            print(json.dumps({"error": "neither_glibc_nor_musl"}))
+            sys.exit(0)
+    elif operating_system == "win":
+        operating_system = {
+            "name": "windows",
+        }
+    elif operating_system == "macosx":
+        version = platform.mac_ver()[0].split(".")
+        operating_system = {
+            "name": "macos",
+            "major": version[0],
+            "minor": version[1],
+        }
+    elif operating_system in [
+        "freebsd",
+        "netbsd",
+        "openbsd",
+        "dragonfly",
+        "illumos",
+        "haiku",
+    ]:
+        version = platform.mac_ver()[0].split(".")
+        operating_system = {
+            "name": "macos",
+            "major": version[0],
+            "minor": version[1],
+        }
+    else:
+        # TODO(konstin): Unsupported platform error in rust
+        print(json.dumps({"error": "unknown_operation_system"}))
+        sys.exit(0)
+    return {"os": operating_system, "arch": architecture}
+
+
 markers = {
     "implementation_name": implementation_name,
     "implementation_version": implementation_version,
@@ -420,6 +496,7 @@ markers = {
     "sys_platform": sys.platform,
 }
 interpreter_info = {
+    "platform": get_operating_system_and_architecture(),
     "markers": markers,
     "base_prefix": sys.base_prefix,
     "base_exec_prefix": sys.base_exec_prefix,

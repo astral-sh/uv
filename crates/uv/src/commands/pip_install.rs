@@ -17,7 +17,6 @@ use distribution_types::{
 };
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{MarkerEnvironment, Requirement};
-use platform_host::Platform;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
@@ -108,13 +107,12 @@ pub(crate) async fn pip_install(
     }
 
     // Detect the current Python interpreter.
-    let platform = Platform::current()?;
     let venv = if let Some(python) = python.as_ref() {
-        PythonEnvironment::from_requested_python(python, &platform, &cache)?
+        PythonEnvironment::from_requested_python(python, &cache)?
     } else if system {
-        PythonEnvironment::from_default_python(&platform, &cache)?
+        PythonEnvironment::from_default_python(&cache)?
     } else {
-        PythonEnvironment::from_virtualenv(platform, &cache)?
+        PythonEnvironment::from_virtualenv(&cache)?
     };
     debug!(
         "Using Python {} environment at {}",

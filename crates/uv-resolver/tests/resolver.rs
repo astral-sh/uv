@@ -16,7 +16,7 @@ use platform_host::{Arch, Os, Platform};
 use platform_tags::Tags;
 use uv_cache::Cache;
 use uv_client::{FlatIndex, RegistryClientBuilder};
-use uv_interpreter::{Interpreter, PythonEnvironment};
+use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     ResolutionGraph, ResolutionMode, Resolver,
@@ -120,7 +120,10 @@ async fn resolve(
     let client = RegistryClientBuilder::new(Cache::temp()?).build();
     let flat_index = FlatIndex::default();
     let index = InMemoryIndex::default();
-    let interpreter = Interpreter::artificial(Platform::current()?, markers.clone());
+    // TODO(konstin): Should we also use the bootstrapped pythons here?
+    let real_interpreter =
+        find_default_python(&Cache::temp().unwrap()).expect("Expected a python to be installed");
+    let interpreter = Interpreter::artificial(real_interpreter.platform().clone(), markers.clone());
     let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
     let resolver = Resolver::new(
         manifest,

@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -6,6 +5,7 @@ use configparser::ini::Ini;
 use fs_err as fs;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+use tempfile::tempdir;
 use tracing::{debug, warn};
 
 use cache_key::digest;
@@ -39,11 +39,7 @@ pub struct Interpreter {
 
 impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
-    pub fn query(
-        executable: impl AsRef<Path>,
-        platform: Platform,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
+    pub fn query(executable: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
         let info = InterpreterInfo::query_cached(executable.as_ref(), cache)?;
 
         debug_assert!(
@@ -53,7 +49,7 @@ impl Interpreter {
         );
 
         Ok(Self {
-            platform,
+            platform: info.platform,
             markers: Box::new(info.markers),
             scheme: info.scheme,
             virtualenv: info.virtualenv,
@@ -332,6 +328,7 @@ impl ExternallyManaged {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
+    platform: Platform,
     markers: MarkerEnvironment,
     scheme: Scheme,
     virtualenv: Scheme,
@@ -346,50 +343,18 @@ struct InterpreterInfo {
 impl InterpreterInfo {
     /// Return the resolved [`InterpreterInfo`] for the given Python executable.
     pub(crate) fn query(interpreter: &Path) -> Result<Self, Error> {
-        let script = include_str!("get_interpreter_info.py");
-        let output = if cfg!(windows)
-            && interpreter
-                .extension()
-                .is_some_and(|extension| extension == "bat")
-        {
-            // Multiline arguments aren't well-supported in batch files and `pyenv-win`, for example, trips over it.
-            // We work around this batch limitation by passing the script via stdin instead.
-            // This is somewhat more expensive because we have to spawn a new thread to write the
-            // stdin to avoid deadlocks in case the child process waits for the parent to read stdout.
-            // The performance overhead is the reason why we only applies this to batch files.
-            // https://github.com/pyenv-win/pyenv-win/issues/589
-            let mut child = Command::new(interpreter)
-                .arg("-")
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::piped())
-                .spawn()
-                .map_err(|err| Error::PythonSubcommandLaunch {
-                    interpreter: interpreter.to_path_buf(),
-                    err,
-                })?;
+        let tempdir = tempdir()?;
+        Self::setup_python_query_files(tempdir.path())?;
 
-            let mut stdin = child.stdin.take().unwrap();
-
-            // From the Rust documentation:
-            // If the child process fills its stdout buffer, it may end up
-            // waiting until the parent reads the stdout, and not be able to
-            // read stdin in the meantime, causing a deadlock.
-            // Writing from another thread ensures that stdout is being read
-            // at the same time, avoiding the problem.
-            std::thread::spawn(move || {
-                stdin
-                    .write_all(script.as_bytes())
-                    .expect("failed to write to stdin");
-            });
-
-            child.wait_with_output()
-        } else {
-            Command::new(interpreter).arg("-c").arg(script).output()
-        }
-        .map_err(|err| Error::PythonSubcommandLaunch {
-            interpreter: interpreter.to_path_buf(),
-            err,
-        })?;
+        let output = Command::new(interpreter)
+            .arg("-m")
+            .arg("python.get_interpreter_info")
+            .current_dir(tempdir.path())
+            .output()
+            .map_err(|err| Error::PythonSubcommandLaunch {
+                interpreter: interpreter.to_path_buf(),
+                err,
+            })?;
 
         // stderr isn't technically a criterion for success, but i don't know of any cases where there
         // should be stderr output and if there is, we want to know
@@ -423,6 +388,40 @@ impl InterpreterInfo {
         })?;
 
         Ok(data)
+    }
+
+    /// Duplicate the directory structure we have in `../python` into a tempdir, so we can run
+    /// the Python probing scripts with `python -m python.get_interpreter_info` from that tempdir.
+    fn setup_python_query_files(root: &Path) -> Result<(), Error> {
+        let python_dir = root.join("python");
+        fs_err::create_dir(&python_dir)?;
+        fs_err::write(
+            python_dir.join("get_interpreter_info.py"),
+            include_str!("../python/get_interpreter_info.py"),
+        )?;
+        fs_err::write(
+            python_dir.join("__init__.py"),
+            include_str!("../python/__init__.py"),
+        )?;
+        let packaging_dir = python_dir.join("packaging");
+        fs_err::create_dir(&packaging_dir)?;
+        fs_err::write(
+            packaging_dir.join("__init__.py"),
+            include_str!("../python/packaging/__init__.py"),
+        )?;
+        fs_err::write(
+            packaging_dir.join("_elffile.py"),
+            include_str!("../python/packaging/_elffile.py"),
+        )?;
+        fs_err::write(
+            packaging_dir.join("_manylinux.py"),
+            include_str!("../python/packaging/_manylinux.py"),
+        )?;
+        fs_err::write(
+            packaging_dir.join("_musllinux.py"),
+            include_str!("../python/packaging/_musllinux.py"),
+        )?;
+        Ok(())
     }
 
     /// A wrapper around [`markers::query_interpreter_info`] to cache the computed markers.
@@ -510,7 +509,6 @@ mod tests {
     use tempfile::tempdir;
 
     use pep440_rs::Version;
-    use platform_host::Platform;
     use uv_cache::Cache;
 
     use crate::Interpreter;
@@ -557,7 +555,6 @@ mod tests {
         "##};
 
         let cache = Cache::temp().unwrap();
-        let platform = Platform::current().unwrap();
 
         fs::write(
             &mocked_interpreter,
@@ -572,8 +569,7 @@ mod tests {
             std::os::unix::fs::PermissionsExt::from_mode(0o770),
         )
         .unwrap();
-        let interpreter =
-            Interpreter::query(&mocked_interpreter, platform.clone(), &cache).unwrap();
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
         assert_eq!(
             interpreter.markers.python_version.version,
             Version::from_str("3.12").unwrap()
@@ -586,8 +582,7 @@ mod tests {
             "##, json.replace("3.12", "3.13")},
         )
         .unwrap();
-        let interpreter =
-            Interpreter::query(&mocked_interpreter, platform.clone(), &cache).unwrap();
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
         assert_eq!(
             interpreter.markers.python_version.version,
             Version::from_str("3.13").unwrap()

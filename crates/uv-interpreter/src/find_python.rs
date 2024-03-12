@@ -5,7 +5,6 @@ use std::path::PathBuf;
 
 use tracing::{debug, instrument};
 
-use platform_host::Platform;
 use uv_cache::Cache;
 use uv_fs::normalize_path;
 
@@ -25,11 +24,7 @@ use crate::{Error, Interpreter, PythonVersion};
 /// patch version (e.g. `python3.12.1`) is often not in `PATH` and we make the simplifying
 /// assumption that the user has only this one patch version installed.
 #[instrument(skip_all, fields(%request))]
-pub fn find_requested_python(
-    request: &str,
-    platform: &Platform,
-    cache: &Cache,
-) -> Result<Option<Interpreter>, Error> {
+pub fn find_requested_python(request: &str, cache: &Cache) -> Result<Option<Interpreter>, Error> {
     debug!("Starting interpreter discovery for Python @ `{request}`");
     let versions = request
         .splitn(3, '.')
@@ -46,18 +41,18 @@ pub fn find_requested_python(
             // SAFETY: Guaranteed by the Ok(versions) guard
             _ => unreachable!(),
         };
-        find_python(selector, platform, cache)
+        find_python(selector, cache)
     } else if !request.contains(std::path::MAIN_SEPARATOR) {
         // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
         let Some(executable) = find_executable(request)? else {
             return Ok(None);
         };
-        Interpreter::query(executable, platform.clone(), cache).map(Some)
+        Interpreter::query(executable, cache).map(Some)
     } else {
         // `-p /home/ferris/.local/bin/python3.10`
         let executable = normalize_path(request);
 
-        Interpreter::query(executable, platform.clone(), cache).map(Some)
+        Interpreter::query(executable, cache).map(Some)
     }
 }
 
@@ -66,9 +61,9 @@ pub fn find_requested_python(
 /// We prefer the test overwrite `UV_TEST_PYTHON_PATH` if it is set, otherwise `python3`/`python` or
 /// `python.exe` respectively.
 #[instrument(skip_all)]
-pub fn find_default_python(platform: &Platform, cache: &Cache) -> Result<Interpreter, Error> {
+pub fn find_default_python(cache: &Cache) -> Result<Interpreter, Error> {
     debug!("Starting interpreter discovery for default Python");
-    try_find_default_python(platform, cache)?.ok_or(if cfg!(windows) {
+    try_find_default_python(cache)?.ok_or(if cfg!(windows) {
         Error::NoPythonInstalledWindows
     } else if cfg!(unix) {
         Error::NoPythonInstalledUnix
@@ -78,11 +73,8 @@ pub fn find_default_python(platform: &Platform, cache: &Cache) -> Result<Interpr
 }
 
 /// Same as [`find_default_python`] but returns `None` if no python is found instead of returning an `Err`.
-pub(crate) fn try_find_default_python(
-    platform: &Platform,
-    cache: &Cache,
-) -> Result<Option<Interpreter>, Error> {
-    find_python(PythonVersionSelector::Default, platform, cache)
+pub(crate) fn try_find_default_python(cache: &Cache) -> Result<Option<Interpreter>, Error> {
+    find_python(PythonVersionSelector::Default, cache)
 }
 
 /// Find a Python version matching `selector`.
@@ -100,7 +92,6 @@ pub(crate) fn try_find_default_python(
 /// (Windows): Filter out the Windows store shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).
 fn find_python(
     selector: PythonVersionSelector,
-    platform: &Platform,
     cache: &Cache,
 ) -> Result<Option<Interpreter>, Error> {
     #[allow(non_snake_case)]
@@ -126,7 +117,7 @@ fn find_python(
                         continue;
                     }
 
-                    let interpreter = match Interpreter::query(&path, platform.clone(), cache) {
+                    let interpreter = match Interpreter::query(&path, cache) {
                         Ok(interpreter) => interpreter,
                         Err(Error::Python2OrOlder) => {
                             if selector.major() <= Some(2) {
@@ -141,7 +132,7 @@ fn find_python(
 
                     let installation = PythonInstallation::Interpreter(interpreter);
 
-                    if let Some(interpreter) = installation.select(selector, platform, cache)? {
+                    if let Some(interpreter) = installation.select(selector, cache)? {
                         return Ok(Some(interpreter));
                     }
                 }
@@ -154,7 +145,7 @@ fn find_python(
         if cfg!(windows) {
             if let Ok(shims) = which::which_in_global("python.bat", Some(&path)) {
                 for shim in shims {
-                    let interpreter = match Interpreter::query(&shim, platform.clone(), cache) {
+                    let interpreter = match Interpreter::query(&shim, cache) {
                         Ok(interpreter) => interpreter,
                         Err(error) => {
                             // Don't fail when querying the shim failed. E.g it's possible that no python version is selected
@@ -164,8 +155,8 @@ fn find_python(
                         }
                     };
 
-                    if let Some(interpreter) = PythonInstallation::Interpreter(interpreter)
-                        .select(selector, platform, cache)?
+                    if let Some(interpreter) =
+                        PythonInstallation::Interpreter(interpreter).select(selector, cache)?
                     {
                         return Ok(Some(interpreter));
                     }
@@ -180,7 +171,7 @@ fn find_python(
             Ok(paths) => {
                 for entry in paths {
                     let installation = PythonInstallation::PyListPath(entry);
-                    if let Some(interpreter) = installation.select(selector, platform, cache)? {
+                    if let Some(interpreter) = installation.select(selector, cache)? {
                         return Ok(Some(interpreter));
                     }
                 }
@@ -299,7 +290,6 @@ impl PythonInstallation {
     fn select(
         self,
         selector: PythonVersionSelector,
-        platform: &Platform,
         cache: &Cache,
     ) -> Result<Option<Interpreter>, Error> {
         let selected = match selector {
@@ -312,7 +302,7 @@ impl PythonInstallation {
             }
 
             PythonVersionSelector::MajorMinorPatch(major, minor, requested_patch) => {
-                let interpreter = self.into_interpreter(platform, cache)?;
+                let interpreter = self.into_interpreter(cache)?;
                 return Ok(
                     if major == interpreter.python_major()
                         && minor == interpreter.python_minor()
@@ -327,21 +317,17 @@ impl PythonInstallation {
         };
 
         if selected {
-            self.into_interpreter(platform, cache).map(Some)
+            self.into_interpreter(cache).map(Some)
         } else {
             Ok(None)
         }
     }
 
-    pub(super) fn into_interpreter(
-        self,
-        platform: &Platform,
-        cache: &Cache,
-    ) -> Result<Interpreter, Error> {
+    pub(super) fn into_interpreter(self, cache: &Cache) -> Result<Interpreter, Error> {
         match self {
             Self::PyListPath(PyListPath {
                 executable_path, ..
-            }) => Interpreter::query(executable_path, platform.clone(), cache),
+            }) => Interpreter::query(executable_path, cache),
             Self::Interpreter(interpreter) => Ok(interpreter),
         }
     }
@@ -415,7 +401,6 @@ impl PythonVersionSelector {
 #[instrument(skip_all, fields(?python_version))]
 pub fn find_best_python(
     python_version: Option<&PythonVersion>,
-    platform: &Platform,
     cache: &Cache,
 ) -> Result<Interpreter, Error> {
     if let Some(python_version) = python_version {
@@ -428,7 +413,7 @@ pub fn find_best_python(
     }
 
     // First, check for an exact match (or the first available version if no Python version was provided)
-    if let Some(interpreter) = find_version(python_version, platform, cache)? {
+    if let Some(interpreter) = find_version(python_version, cache)? {
         return Ok(interpreter);
     }
 
@@ -436,16 +421,14 @@ pub fn find_best_python(
         // If that fails, and a specific patch version was requested try again allowing a
         // different patch version
         if python_version.patch().is_some() {
-            if let Some(interpreter) =
-                find_version(Some(&python_version.without_patch()), platform, cache)?
-            {
+            if let Some(interpreter) = find_version(Some(&python_version.without_patch()), cache)? {
                 return Ok(interpreter);
             }
         }
     }
 
     // If a Python version was requested but cannot be fulfilled, just take any version
-    if let Some(interpreter) = find_version(None, platform, cache)? {
+    if let Some(interpreter) = find_version(None, cache)? {
         return Ok(interpreter);
     }
 
@@ -470,7 +453,6 @@ pub fn find_best_python(
 /// we will return [`None`].
 fn find_version(
     python_version: Option<&PythonVersion>,
-    platform: &Platform,
     cache: &Cache,
 ) -> Result<Option<Interpreter>, Error> {
     let version_matches = |interpreter: &Interpreter| -> bool {
@@ -486,7 +468,7 @@ fn find_version(
     // Check if the venv Python matches.
     if let Some(venv) = detect_virtual_env()? {
         let executable = detect_python_executable(venv);
-        let interpreter = Interpreter::query(executable, platform.clone(), cache)?;
+        let interpreter = Interpreter::query(executable, cache)?;
 
         if version_matches(&interpreter) {
             return Ok(Some(interpreter));
@@ -496,9 +478,9 @@ fn find_version(
     // Look for the requested version with by search for `python{major}.{minor}` in `PATH` on
     // Unix and `py --list-paths` on Windows.
     let interpreter = if let Some(python_version) = python_version {
-        find_requested_python(&python_version.string, platform, cache)?
+        find_requested_python(&python_version.string, cache)?
     } else {
-        try_find_default_python(platform, cache)?
+        try_find_default_python(cache)?
     };
 
     if let Some(interpreter) = interpreter {
@@ -726,11 +708,8 @@ mod windows {
 
         #[test]
         fn no_such_python_path() {
-            let result = find_requested_python(
-                r"C:\does\not\exists\python3.12",
-                &Platform::current().unwrap(),
-                &Cache::temp().unwrap(),
-            );
+            let result =
+                find_requested_python(r"C:\does\not\exists\python3.12", &Cache::temp().unwrap());
             insta::with_settings!({
                 filters => vec![
                     // The exact message is host language dependent
@@ -753,7 +732,6 @@ mod tests {
     use insta::assert_snapshot;
     use itertools::Itertools;
 
-    use platform_host::Platform;
     use uv_cache::Cache;
 
     use crate::find_python::find_requested_python;
@@ -768,13 +746,9 @@ mod tests {
     #[test]
     fn no_such_python_version() {
         let request = "3.1000";
-        let result = find_requested_python(
-            request,
-            &Platform::current().unwrap(),
-            &Cache::temp().unwrap(),
-        )
-        .unwrap()
-        .ok_or(Error::NoSuchPython(request.to_string()));
+        let result = find_requested_python(request, &Cache::temp().unwrap())
+            .unwrap()
+            .ok_or(Error::NoSuchPython(request.to_string()));
         assert_snapshot!(
             format_err(result),
             @"No Python 3.1000 In `PATH`. Is Python 3.1000 installed?"
@@ -784,13 +758,9 @@ mod tests {
     #[test]
     fn no_such_python_binary() {
         let request = "python3.1000";
-        let result = find_requested_python(
-            request,
-            &Platform::current().unwrap(),
-            &Cache::temp().unwrap(),
-        )
-        .unwrap()
-        .ok_or(Error::NoSuchPython(request.to_string()));
+        let result = find_requested_python(request, &Cache::temp().unwrap())
+            .unwrap()
+            .ok_or(Error::NoSuchPython(request.to_string()));
         assert_snapshot!(
             format_err(result),
             @"No Python python3.1000 In `PATH`. Is Python python3.1000 installed?"
@@ -799,11 +769,7 @@ mod tests {
 
     #[test]
     fn no_such_python_path() {
-        let result = find_requested_python(
-            "/does/not/exists/python3.12",
-            &Platform::current().unwrap(),
-            &Cache::temp().unwrap(),
-        );
+        let result = find_requested_python("/does/not/exists/python3.12", &Cache::temp().unwrap());
         assert_snapshot!(
             format_err(result), @r###"
         failed to canonicalize path `/does/not/exists/python3.12`
