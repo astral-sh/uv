@@ -1702,14 +1702,7 @@ async fn run() -> Result<ExitStatus> {
         ),
         Commands::Pip(PipNamespace {
             command: PipCommand::Check(args),
-        }) => commands::pip_check(
-            args.package,
-            args.strict,
-            args.python.as_deref(),
-            args.system,
-            &cache,
-            printer,
-        ),
+        }) => commands::pip_check(args.python.as_deref(), args.system, &cache, printer),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })
