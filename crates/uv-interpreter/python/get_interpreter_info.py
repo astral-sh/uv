@@ -1,10 +1,7 @@
 """
 Queries information about the current Python interpreter and prints it as JSON.
 
-Exit Codes:
-    0: Success
-    1: General failure
-    3: Python version 3 or newer is required
+The script will exit with status 0 on known error that are turned into rust errors.
 """
 
 import sys
@@ -30,7 +27,8 @@ def format_full_version(info):
 
 
 if sys.version_info[0] < 3:
-    sys.exit(3)
+    print(json.dumps({"result": "error", "kind": "python_2_or_older"}))
+    sys.exit(0)
 
 if hasattr(sys, "implementation"):
     implementation_version = format_full_version(sys.implementation.version)

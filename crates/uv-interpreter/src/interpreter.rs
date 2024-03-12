@@ -340,6 +340,8 @@ pub enum InterpreterInfoError {
     NeitherGlibcNorMusl,
     #[error("Unknown operation system `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
+    #[error("Python 2 or older is not supported. Please use Python 3 or newer.")]
+    Python2OrOlder,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -375,10 +377,6 @@ impl InterpreterInfo {
         // stderr isn't technically a criterion for success, but i don't know of any cases where there
         // should be stderr output and if there is, we want to know
         if !output.status.success() || !output.stderr.is_empty() {
-            if output.status.code() == Some(3) {
-                return Err(Error::Python2OrOlder);
-            }
-
             return Err(Error::PythonSubcommandOutput {
                 message: format!(
                     "Querying Python at `{}` failed with status {}",

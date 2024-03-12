@@ -8,6 +8,7 @@ use tracing::{debug, instrument};
 use uv_cache::Cache;
 use uv_fs::normalize_path;
 
+use crate::interpreter::InterpreterInfoError;
 use crate::python_environment::{detect_python_executable, detect_virtual_env};
 use crate::{Error, Interpreter, PythonVersion};
 
@@ -119,9 +120,14 @@ fn find_python(
 
                     let interpreter = match Interpreter::query(&path, cache) {
                         Ok(interpreter) => interpreter,
-                        Err(Error::Python2OrOlder) => {
+                        Err(
+                            err @ Error::QueryScript {
+                                err: InterpreterInfoError::Python2OrOlder,
+                                ..
+                            },
+                        ) => {
                             if selector.major() <= Some(2) {
-                                return Err(Error::Python2OrOlder);
+                                return Err(err);
                             }
                             // Skip over Python 2 or older installation when querying for a recent python installation.
                             debug!("Found a Python 2 installation that isn't supported by uv, skipping.");
