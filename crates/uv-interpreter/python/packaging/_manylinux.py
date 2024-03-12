@@ -169,7 +169,7 @@ def _parse_glibc_version(version_str: str) -> tuple[int, int]:
     return int(m.group("major")), int(m.group("minor"))
 
 
-@functools.lru_cache
+@functools.lru_cache()
 def _get_glibc_version() -> tuple[int, int]:
     version_str = _glibc_version_string()
     if version_str is None:

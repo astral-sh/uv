@@ -330,7 +330,7 @@ impl ExternallyManaged {
 #[serde(tag = "result", rename_all = "lowercase")]
 enum InterpreterInfoResult {
     Error(InterpreterInfoError),
-    Success(InterpreterInfo),
+    Success(Box<InterpreterInfo>),
 }
 
 #[derive(Debug, Error, Deserialize, Serialize)]
@@ -407,7 +407,7 @@ impl InterpreterInfo {
                 err,
                 interpreter: interpreter.to_path_buf(),
             }),
-            InterpreterInfoResult::Success(data) => Ok(data),
+            InterpreterInfoResult::Success(data) => Ok(*data),
         }
     }
 
@@ -540,6 +540,15 @@ mod tests {
         let mocked_interpreter = mock_dir.path().join("python");
         let json = indoc! {r##"
             {
+                "result": "success",
+                "platform": {
+                    "os": {
+                        "name": "manylinux",
+                        "major": 2,
+                        "minor": 38
+                    },
+                    "arch": "x86_64"
+                },
                 "markers": {
                     "implementation_name": "cpython",
                     "implementation_version": "3.12.0",
