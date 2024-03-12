@@ -79,6 +79,7 @@ pub enum Arch {
     Powerpc64Le,
     Powerpc64,
     X86,
+    #[serde(alias = "amd64")]
     X86_64,
     S390X,
 }
