@@ -452,6 +452,9 @@ def get_operating_system_and_architecture():
             "name": "windows",
         }
     elif operating_system == "macosx":
+        # Github actions python seems to be doing this
+        if architecture == "universal2":
+            architecture = platform.processor()
         version = platform.mac_ver()[0].split(".")
         operating_system = {
             "name": "macos",
