@@ -250,7 +250,7 @@ jobs:
     runs-on: ubuntu-latest
     container: registry.access.redhat.com/rhel7/rhel
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
       - name: "Install Python"
         run: dnf install python3 python3-pip
