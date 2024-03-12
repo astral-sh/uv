@@ -351,7 +351,7 @@ struct PipCompileArgs {
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
-    #[clap(long, default_value_t, value_enum)]
+    #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
     keyring_provider: KeyringProvider,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
@@ -525,7 +525,7 @@ struct PipSyncArgs {
     ///
     /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
     /// `uv` will try to use `keyring` via CLI when this flag is used.
-    #[clap(long, default_value_t, value_enum)]
+    #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
     keyring_provider: KeyringProvider,
 
     /// The Python interpreter into which packages should be installed.
@@ -778,7 +778,7 @@ struct PipInstallArgs {
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
-    #[clap(long, default_value_t, value_enum)]
+    #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
     keyring_provider: KeyringProvider,
 
     /// The Python interpreter into which packages should be installed.
@@ -1192,7 +1192,7 @@ struct VenvArgs {
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
-    #[clap(long, default_value_t, value_enum)]
+    #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
     keyring_provider: uv_auth::KeyringProvider,
 
     /// Run offline, i.e., without accessing the network.
