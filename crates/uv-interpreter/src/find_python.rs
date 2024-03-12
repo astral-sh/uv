@@ -1,5 +1,3 @@
-//! Find a user requested python version/interpreter.
-
 use std::borrow::Cow;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -11,9 +9,10 @@ use platform_host::Platform;
 use uv_cache::Cache;
 use uv_fs::normalize_path;
 
-use crate::{Error, Interpreter};
+use crate::python_environment::{detect_python_executable, detect_virtual_env};
+use crate::{Error, Interpreter, PythonVersion};
 
-/// Find a python version/interpreter of a specific version.
+/// Find a Python of a specific version, a binary with a name or a path to a binary.
 ///
 /// Supported formats:
 /// * `-p 3.10` searches for an installed Python 3.10 (`py --list-paths` on Windows, `python3.10` on
@@ -38,36 +37,27 @@ pub fn find_requested_python(
         .collect::<Result<Vec<_>, _>>();
     if let Ok(versions) = versions {
         // `-p 3.10` or `-p 3.10.1`
-        match versions.as_slice() {
-            [requested_major] => find_python(
-                PythonVersionSelector::Major(*requested_major),
-                platform,
-                cache,
-            ),
-            [major, minor] => find_python(
-                PythonVersionSelector::MajorMinor(*major, *minor),
-                platform,
-                cache,
-            ),
-            [major, minor, requested_patch] => find_python(
-                PythonVersionSelector::MajorMinorPatch(*major, *minor, *requested_patch),
-                platform,
-                cache,
-            ),
+        let selector = match versions.as_slice() {
+            [requested_major] => PythonVersionSelector::Major(*requested_major),
+            [major, minor] => PythonVersionSelector::MajorMinor(*major, *minor),
+            [major, minor, requested_patch] => {
+                PythonVersionSelector::MajorMinorPatch(*major, *minor, *requested_patch)
+            }
             // SAFETY: Guaranteed by the Ok(versions) guard
             _ => unreachable!(),
-        }
+        };
+        find_python(selector, platform, cache)
     } else if !request.contains(std::path::MAIN_SEPARATOR) {
         // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
         let Some(executable) = find_executable(request)? else {
             return Ok(None);
         };
-        Interpreter::query(&executable, platform.clone(), cache).map(Some)
+        Interpreter::query(executable, platform.clone(), cache).map(Some)
     } else {
         // `-p /home/ferris/.local/bin/python3.10`
         let executable = normalize_path(request);
 
-        Interpreter::query(&executable, platform.clone(), cache).map(Some)
+        Interpreter::query(executable, platform.clone(), cache).map(Some)
     }
 }
 
@@ -95,7 +85,8 @@ pub(crate) fn try_find_default_python(
     find_python(PythonVersionSelector::Default, platform, cache)
 }
 
-/// Finds a python version matching `selector`.
+/// Find a Python version matching `selector`.
+///
 /// It searches for an existing installation in the following order:
 /// * Search for the python binary in `PATH` (or `UV_TEST_PYTHON_PATH` if set). Visits each path and for each path resolves the
 ///   files in the following order:
@@ -106,7 +97,7 @@ pub(crate) fn try_find_default_python(
 ///   * (windows): For each of the above, test for the existence of `python.bat` shim (pyenv-windows) last.
 /// * (windows): Discover installations using `py --list-paths` (PEP514). Continue if `py` is not installed.
 ///
-/// (Windows): Filter out the windows store shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).
+/// (Windows): Filter out the Windows store shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).
 fn find_python(
     selector: PythonVersionSelector,
     platform: &Platform,
@@ -130,7 +121,8 @@ fn find_python(
         for name in possible_names.iter().flatten() {
             if let Ok(paths) = which::which_in_global(&**name, Some(&path)) {
                 for path in paths {
-                    if cfg!(windows) && windows::is_windows_store_shim(&path) {
+                    #[cfg(windows)]
+                    if windows::is_windows_store_shim(&path) {
                         continue;
                     }
 
@@ -231,10 +223,14 @@ fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
             Err(which::Error::CannotFindBinaryPath) => continue,
             Err(err) => return Err(Error::WhichError(requested.into(), err)),
         };
+
+        #[allow(clippy::never_loop)]
         for path in paths {
-            if cfg!(windows) && windows::is_windows_store_shim(&path) {
+            #[cfg(windows)]
+            if windows::is_windows_store_shim(&path) {
                 continue;
             }
+
             return Ok(Some(path));
         }
     }
@@ -345,7 +341,7 @@ impl PythonInstallation {
         match self {
             Self::PyListPath(PyListPath {
                 executable_path, ..
-            }) => Interpreter::query(&executable_path, platform.clone(), cache),
+            }) => Interpreter::query(executable_path, platform.clone(), cache),
             Self::Interpreter(interpreter) => Ok(interpreter),
         }
     }
@@ -406,15 +402,122 @@ impl PythonVersionSelector {
     }
 }
 
+/// Find a matching Python or any fallback Python.
+///
+/// If no Python version is provided, we will use the first available interpreter.
+///
+/// If a Python version is provided, we will first try to find an exact match. If
+/// that cannot be found and a patch version was requested, we will look for a match
+/// without comparing the patch version number. If that cannot be found, we fall back to
+/// the first available version.
+///
+/// See [`Self::find_version`] for details on the precedence of Python lookup locations.
+#[instrument(skip_all, fields(?python_version))]
+pub fn find_best_python(
+    python_version: Option<&PythonVersion>,
+    platform: &Platform,
+    cache: &Cache,
+) -> Result<Interpreter, Error> {
+    if let Some(python_version) = python_version {
+        debug!(
+            "Starting interpreter discovery for Python {}",
+            python_version
+        );
+    } else {
+        debug!("Starting interpreter discovery for active Python");
+    }
+
+    // First, check for an exact match (or the first available version if no Python version was provided)
+    if let Some(interpreter) = find_version(python_version, platform, cache)? {
+        return Ok(interpreter);
+    }
+
+    if let Some(python_version) = python_version {
+        // If that fails, and a specific patch version was requested try again allowing a
+        // different patch version
+        if python_version.patch().is_some() {
+            if let Some(interpreter) =
+                find_version(Some(&python_version.without_patch()), platform, cache)?
+            {
+                return Ok(interpreter);
+            }
+        }
+    }
+
+    // If a Python version was requested but cannot be fulfilled, just take any version
+    if let Some(interpreter) = find_version(None, platform, cache)? {
+        return Ok(interpreter);
+    }
+
+    Err(Error::PythonNotFound)
+}
+
+/// Find a Python interpreter.
+///
+/// We check, in order, the following locations:
+///
+/// - `UV_DEFAULT_PYTHON`, which is set to the python interpreter when using `python -m uv`.
+/// - `VIRTUAL_ENV` and `CONDA_PREFIX`
+/// - A `.venv` folder
+/// - If a python version is given: Search `PATH` and `py --list-paths`, see `find_python`
+/// - `python3` (unix) or `python.exe` (windows)
+///
+/// If `UV_TEST_PYTHON_PATH` is set, we will not check for Python versions in the
+/// global PATH, instead we will search using the provided path. Virtual environments
+/// will still be respected.
+///
+/// If a version is provided and an interpreter cannot be found with the given version,
+/// we will return [`None`].
+fn find_version(
+    python_version: Option<&PythonVersion>,
+    platform: &Platform,
+    cache: &Cache,
+) -> Result<Option<Interpreter>, Error> {
+    let version_matches = |interpreter: &Interpreter| -> bool {
+        if let Some(python_version) = python_version {
+            // If a patch version was provided, check for an exact match
+            python_version.is_satisfied_by(interpreter)
+        } else {
+            // The version always matches if one was not provided
+            true
+        }
+    };
+
+    // Check if the venv Python matches.
+    if let Some(venv) = detect_virtual_env()? {
+        let executable = detect_python_executable(venv);
+        let interpreter = Interpreter::query(executable, platform.clone(), cache)?;
+
+        if version_matches(&interpreter) {
+            return Ok(Some(interpreter));
+        }
+    };
+
+    // Look for the requested version with by search for `python{major}.{minor}` in `PATH` on
+    // Unix and `py --list-paths` on Windows.
+    let interpreter = if let Some(python_version) = python_version {
+        find_requested_python(&python_version.string, platform, cache)?
+    } else {
+        try_find_default_python(platform, cache)?
+    };
+
+    if let Some(interpreter) = interpreter {
+        debug_assert!(version_matches(&interpreter));
+        Ok(Some(interpreter))
+    } else {
+        Ok(None)
+    }
+}
+
 mod windows {
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     use std::process::Command;
 
     use once_cell::sync::Lazy;
     use regex::Regex;
     use tracing::info_span;
 
-    use crate::python_query::PyListPath;
+    use crate::find_python::PyListPath;
     use crate::Error;
 
     /// ```text
@@ -476,34 +579,47 @@ mod windows {
             .collect())
     }
 
-    /// On Windows we might encounter the windows store proxy shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).
-    /// This requires quite a bit of custom logic to figure out what this thing does.
+    /// On Windows we might encounter the Windows Store proxy shim (enabled in:
+    /// Settings/Apps/Advanced app settings/App execution aliases). When Python is _not_ installed
+    /// via the Windows Store, but the proxy shim is enabled, then executing `python.exe` or
+    /// `python3.exe` will redirect to the Windows Store installer.
     ///
-    /// This is a pretty dumb way.  We know how to parse this reparse point, but Microsoft
-    /// does not want us to do this as the format is unstable.  So this is a best effort way.
-    /// we just hope that the reparse point has the python redirector in it, when it's not
-    /// pointing to a valid Python.
+    /// We need to detect that these `python.exe` and `python3.exe` files are _not_ Python
+    /// executables.
     ///
-    /// Matches against paths like:
-    ///     `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python.exe`
-    pub(super) fn is_windows_store_shim(path: &Path) -> bool {
-        // Rye uses a more sophisticated test to identify the windows store shim.
-        // Unfortunately, it only works with the `python.exe` shim but not `python3.exe`.
-        // What we do here is a very naive implementation but probably sufficient for all we need.
-        // There's the risk of false positives but I consider it rare, considering how specific
-        // the path is.
+    /// This method is taken from Rye:
+    ///
+    /// > This is a pretty dumb way.  We know how to parse this reparse point, but Microsoft
+    /// > does not want us to do this as the format is unstable.  So this is a best effort way.
+    /// > we just hope that the reparse point has the python redirector in it, when it's not
+    /// > pointing to a valid Python.
+    ///
+    /// See: <https://github.com/astral-sh/rye/blob/b0e9eccf05fe4ff0ae7b0250a248c54f2d780b4d/rye/src/cli/shim.rs#L108>
+    #[cfg(windows)]
+    pub(super) fn is_windows_store_shim(path: &std::path::Path) -> bool {
+        use std::os::windows::fs::MetadataExt;
+        use std::os::windows::prelude::OsStrExt;
+        use winapi::um::fileapi::{CreateFileW, OPEN_EXISTING};
+        use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
+        use winapi::um::ioapiset::DeviceIoControl;
+        use winapi::um::winbase::{FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT};
+        use winapi::um::winioctl::FSCTL_GET_REPARSE_POINT;
+        use winapi::um::winnt::{FILE_ATTRIBUTE_REPARSE_POINT, MAXIMUM_REPARSE_DATA_BUFFER_SIZE};
+
+        // The path must be absolute.
         if !path.is_absolute() {
             return false;
         }
 
+        // The path must point to something like:
+        //   `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.exe`
         let mut components = path.components().rev();
 
-        // Ex) `python.exe` or `python3.exe` or `python3.12.exe`
+        // Ex) `python.exe` or `python3.exe`
         if !components
             .next()
             .and_then(|component| component.as_os_str().to_str())
-            .and_then(|component| component.rsplit_once('.'))
-            .is_some_and(|(name, extension)| name.starts_with("python") && extension == "exe")
+            .is_some_and(|component| component == "python.exe" || component == "python3.exe")
         {
             return false;
         }
@@ -524,15 +640,69 @@ mod windows {
             return false;
         }
 
-        // Ex) `Local`
-        if !components
-            .next()
-            .is_some_and(|component| component.as_os_str() == "Local")
-        {
+        // The file is only relevant if it's a reparse point.
+        let Ok(md) = fs_err::symlink_metadata(path) else {
+            return false;
+        };
+        if md.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0 {
             return false;
         }
 
-        true
+        let mut path_encoded = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+
+        // SAFETY: The path is null-terminated.
+        #[allow(unsafe_code)]
+        let reparse_handle = unsafe {
+            CreateFileW(
+                path_encoded.as_mut_ptr(),
+                0,
+                0,
+                std::ptr::null_mut(),
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                std::ptr::null_mut(),
+            )
+        };
+
+        if reparse_handle == INVALID_HANDLE_VALUE {
+            return false;
+        }
+
+        let mut buf = [0u16; MAXIMUM_REPARSE_DATA_BUFFER_SIZE as usize];
+        let mut bytes_returned = 0;
+
+        // SAFETY: The buffer is large enough to hold the reparse point.
+        #[allow(unsafe_code, clippy::cast_possible_truncation)]
+        let success = unsafe {
+            DeviceIoControl(
+                reparse_handle,
+                FSCTL_GET_REPARSE_POINT,
+                std::ptr::null_mut(),
+                0,
+                buf.as_mut_ptr().cast(),
+                buf.len() as u32 * 2,
+                &mut bytes_returned,
+                std::ptr::null_mut(),
+            ) != 0
+        };
+
+        // SAFETY: The handle is valid.
+        #[allow(unsafe_code)]
+        unsafe {
+            CloseHandle(reparse_handle);
+        }
+
+        // If the operation failed, assume it's not a reparse point.
+        if !success {
+            return false;
+        }
+
+        let reparse_point = String::from_utf16_lossy(&buf[..bytes_returned as usize]);
+        reparse_point.contains("\\AppInstallerPythonRedirector.exe")
     }
 
     #[cfg(test)]
@@ -574,22 +744,6 @@ mod windows {
         "###);
             });
         }
-
-        #[test]
-        fn detect_shim() {
-            assert!(super::is_windows_store_shim(
-                r"C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python.exe".as_ref()
-            ));
-            assert!(super::is_windows_store_shim(
-                r"C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.exe".as_ref()
-            ));
-            assert!(super::is_windows_store_shim(
-                r"C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.12.exe".as_ref()
-            ));
-            assert!(!super::is_windows_store_shim(
-                r"C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbs5n2kfra8p0\python.exe".as_ref()
-            ));
-        }
     }
 }
 
@@ -602,7 +756,7 @@ mod tests {
     use platform_host::Platform;
     use uv_cache::Cache;
 
-    use crate::python_query::find_requested_python;
+    use crate::find_python::find_requested_python;
     use crate::Error;
 
     fn format_err<T: std::fmt::Debug>(err: Result<T, Error>) -> String {

@@ -24,7 +24,7 @@ use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder}
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{Downloader, NoBinary};
-use uv_interpreter::{Interpreter, PythonEnvironment, PythonVersion};
+use uv_interpreter::{find_best_python, PythonEnvironment, PythonVersion};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
@@ -67,6 +67,7 @@ pub(crate) async fn pip_compile(
     python_version: Option<PythonVersion>,
     exclude_newer: Option<DateTime<Utc>>,
     annotation_style: AnnotationStyle,
+    native_tls: bool,
     quiet: bool,
     cache: Cache,
     printer: Printer,
@@ -83,11 +84,6 @@ pub(crate) async fn pip_compile(
             "Requesting extras requires a pyproject.toml input file."
         ));
     }
-
-    // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .connectivity(connectivity)
-        .build();
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -106,7 +102,7 @@ pub(crate) async fn pip_compile(
         constraints,
         overrides,
         &extras,
-        &client,
+        connectivity,
     )
     .await?;
 
@@ -132,7 +128,7 @@ pub(crate) async fn pip_compile(
 
     // Find an interpreter to use for building distributions
     let platform = Platform::current()?;
-    let interpreter = Interpreter::find_best(python_version.as_ref(), &platform, &cache)?;
+    let interpreter = find_best_python(python_version.as_ref(), &platform, &cache)?;
     debug!(
         "Using Python {} interpreter at {} for builds",
         interpreter.python_version(),
@@ -191,9 +187,12 @@ pub(crate) async fn pip_compile(
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
-    // Update the index URLs on the client, to take into account any index URLs added by the
-    // sources (e.g., `--index-url` in a `requirements.txt` file).
-    let client = client.with_index_url(index_locations.index_urls());
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .native_tls(native_tls)
+        .connectivity(connectivity)
+        .index_urls(index_locations.index_urls())
+        .build();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

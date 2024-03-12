@@ -11,12 +11,12 @@ use url::Url;
 use distribution_filename::DistFilename;
 use distribution_types::{
     BuiltDist, Dist, File, FileLocation, FlatIndexLocation, IndexUrl, PrioritizedDist,
-    RegistryBuiltDist, RegistrySourceDist, SourceDist,
+    RegistryBuiltDist, RegistrySourceDist, SourceDist, SourceDistCompatibility,
 };
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
-use pypi_types::{Hashes, Yanked};
+use pypi_types::Hashes;
 use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket};
 use uv_normalize::PackageName;
@@ -205,7 +205,7 @@ impl<'a> FlatIndexClient<'a> {
                     .collect();
                 Ok(FlatIndexEntries::from_entries(files))
             }
-            Err(CachedClientError::Client(err)) if matches!(err.kind(), ErrorKind::Offline(_)) => {
+            Err(CachedClientError::Client(err)) if err.is_offline() => {
                 Ok(FlatIndexEntries::offline())
             }
             Err(err) => Err(err.into()),
@@ -307,19 +307,13 @@ impl FlatIndex {
                 }));
                 match distributions.0.entry(version) {
                     Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_built(
-                            dist,
-                            None,
-                            Yanked::default(),
-                            None,
-                            compatibility.into(),
-                        );
+                        entry
+                            .get_mut()
+                            .insert_built(dist, None, compatibility.into());
                     }
                     Entry::Vacant(entry) => {
                         entry.insert(PrioritizedDist::from_built(
                             dist,
-                            None,
-                            Yanked::default(),
                             None,
                             compatibility.into(),
                         ));
@@ -334,16 +328,17 @@ impl FlatIndex {
                 }));
                 match distributions.0.entry(filename.version) {
                     Entry::Occupied(mut entry) => {
-                        entry
-                            .get_mut()
-                            .insert_source(dist, None, Yanked::default(), None);
+                        entry.get_mut().insert_source(
+                            dist,
+                            None,
+                            SourceDistCompatibility::Compatible,
+                        );
                     }
                     Entry::Vacant(entry) => {
                         entry.insert(PrioritizedDist::from_source(
                             dist,
                             None,
-                            Yanked::default(),
-                            None,
+                            SourceDistCompatibility::Compatible,
                         ));
                     }
                 }

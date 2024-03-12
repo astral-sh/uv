@@ -111,7 +111,7 @@ pub(crate) fn pip_list(
             }
 
             for elems in MultiZip(columns.iter().map(Column::fmt).collect_vec()) {
-                writeln!(printer.stdout(), "{}", elems.join(" "))?;
+                writeln!(printer.stdout(), "{}", elems.join(" ").trim_end())?;
             }
         }
         ListFormat::Json => {

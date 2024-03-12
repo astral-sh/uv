@@ -440,7 +440,17 @@ fn install_script(
         )));
     }
 
-    let target_path = layout.scheme.scripts.join(file.file_name());
+    let script_absolute = layout.scheme.scripts.join(file.file_name());
+    let script_relative =
+        pathdiff::diff_paths(&script_absolute, site_packages).ok_or_else(|| {
+            Error::Io(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "Could not find relative path for: {}",
+                    script_absolute.simplified_display()
+                ),
+            ))
+        })?;
 
     let path = file.path();
     let mut script = File::open(&path)?;
@@ -461,14 +471,14 @@ fn install_script(
         let start = format_shebang(&layout.sys_executable, &layout.os_name)
             .as_bytes()
             .to_vec();
-        let mut target = File::create(&target_path)?;
+        let mut target = File::create(&script_absolute)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
         fs::remove_file(&path)?;
         Some(size_and_encoded_hash)
     } else {
         // reading and writing is slow especially for large binaries, so we move them instead
         drop(script);
-        fs::rename(&path, &target_path)?;
+        fs::rename(&path, &script_absolute)?;
         None
     };
     #[cfg(unix)]
@@ -476,9 +486,10 @@ fn install_script(
         use std::fs::Permissions;
         use std::os::unix::fs::PermissionsExt;
 
-        fs::set_permissions(&target_path, Permissions::from_mode(0o755))?;
+        fs::set_permissions(&script_absolute, Permissions::from_mode(0o755))?;
     }
 
+    // Find the existing entry in the `RECORD`.
     let relative_to_site_packages = path
         .strip_prefix(site_packages)
         .expect("Prefix must no change");
@@ -493,7 +504,9 @@ fn install_script(
                 path.simplified_display()
             ))
         })?;
-    entry.path = target_path.display().to_string();
+
+    // Update the entry in the `RECORD`.
+    entry.path = script_relative.simplified_display().to_string();
     if let Some((size, encoded_hash)) = size_and_encoded_hash {
         entry.size = Some(size);
         entry.hash = Some(encoded_hash);
@@ -603,12 +616,6 @@ pub(crate) fn extra_dist_info(
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
     let dist_info_dir = PathBuf::from(format!("{dist_info_prefix}.dist-info"));
-    write_file_recorded(
-        site_packages,
-        &dist_info_dir.join("INSTALLER"),
-        env!("CARGO_PKG_NAME"),
-        record,
-    )?;
     if requested {
         write_file_recorded(site_packages, &dist_info_dir.join("REQUESTED"), "", record)?;
     }

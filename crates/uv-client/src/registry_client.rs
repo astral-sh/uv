@@ -8,7 +8,6 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
 use reqwest::{Client, ClientBuilder, Response, StatusCode};
-use reqwest_netrc::NetrcMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
@@ -19,9 +18,9 @@ use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
-use install_wheel_rs::{find_dist_info, is_metadata_entry};
+use install_wheel_rs::metadata::{find_archive_dist_info, is_metadata_entry};
 use pep440_rs::Version;
-use pypi_types::{Metadata21, SimpleJson};
+use pypi_types::{Metadata23, SimpleJson};
 use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
@@ -30,15 +29,17 @@ use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
-use crate::middleware::OfflineMiddleware;
+use crate::middleware::{NetrcMiddleware, OfflineMiddleware};
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
-use crate::{CachedClient, CachedClientError, Error, ErrorKind};
+use crate::tls::Roots;
+use crate::{tls, CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder {
     index_urls: IndexUrls,
+    native_tls: bool,
     retries: u32,
     connectivity: Connectivity,
     cache: Cache,
@@ -49,6 +50,7 @@ impl RegistryClientBuilder {
     pub fn new(cache: Cache) -> Self {
         Self {
             index_urls: IndexUrls::default(),
+            native_tls: false,
             cache,
             connectivity: Connectivity::Online,
             retries: 3,
@@ -73,6 +75,12 @@ impl RegistryClientBuilder {
     #[must_use]
     pub fn retries(mut self, retries: u32) -> Self {
         self.retries = retries;
+        self
+    }
+
+    #[must_use]
+    pub fn native_tls(mut self, native_tls: bool) -> Self {
+        self.native_tls = native_tls;
         self
     }
 
@@ -111,11 +119,19 @@ impl RegistryClientBuilder {
 
         // Initialize the base client.
         let client = self.client.unwrap_or_else(|| {
-            // Disallow any connections.
+            // Load the TLS configuration.
+            let tls = tls::load(if self.native_tls {
+                Roots::Native
+            } else {
+                Roots::Webpki
+            })
+            .expect("Failed to load TLS configuration.");
+
             let client_core = ClientBuilder::new()
                 .user_agent(user_agent_string)
                 .pool_max_idle_per_host(20)
-                .timeout(std::time::Duration::from_secs(timeout));
+                .timeout(std::time::Duration::from_secs(timeout))
+                .use_preconfigured_tls(tls);
 
             client_core.build().expect("Failed to build HTTP client.")
         });
@@ -133,7 +149,7 @@ impl RegistryClientBuilder {
 
                 // Initialize the netrc middleware.
                 let client = if let Ok(netrc) = NetrcMiddleware::new() {
-                    client.with_init(netrc)
+                    client.with(netrc)
                 } else {
                     client
                 };
@@ -343,7 +359,7 @@ impl RegistryClient {
     /// 2. From a remote wheel by partial zip reading
     /// 3. From a (temp) download of a remote wheel (this is a fallback, the webserver should support range requests)
     #[instrument(skip_all, fields(% built_dist))]
-    pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata21, Error> {
+    pub async fn wheel_metadata(&self, built_dist: &BuiltDist) -> Result<Metadata23, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheel) => match &wheel.file.url {
                 FileLocation::RelativeUrl(base, url) => {
@@ -399,7 +415,7 @@ impl RegistryClient {
         index: &IndexUrl,
         file: &File,
         url: &Url,
-    ) -> Result<Metadata21, Error> {
+    ) -> Result<Metadata23, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
         if file
@@ -428,7 +444,7 @@ impl RegistryClient {
                 let bytes = response.bytes().await.map_err(ErrorKind::from)?;
 
                 info_span!("parse_metadata21")
-                    .in_scope(|| Metadata21::parse(bytes.as_ref()))
+                    .in_scope(|| Metadata23::parse_metadata(bytes.as_ref()))
                     .map_err(|err| {
                         Error::from(ErrorKind::MetadataParseError(
                             filename,
@@ -462,7 +478,7 @@ impl RegistryClient {
         filename: &'data WheelFilename,
         url: &'data Url,
         cache_shard: WheelCache<'data>,
-    ) -> Result<Metadata21, Error> {
+    ) -> Result<Metadata23, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.remote_wheel_dir(filename.name.as_ref()),
@@ -507,14 +523,14 @@ impl RegistryClient {
                 .map_err(ErrorKind::AsyncHttpRangeReader)?;
                 trace!("Getting metadata for {filename} by range request");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
-                let metadata = Metadata21::parse(text.as_bytes()).map_err(|err| {
+                let metadata = Metadata23::parse_metadata(text.as_bytes()).map_err(|err| {
                     Error::from(ErrorKind::MetadataParseError(
                         filename.clone(),
                         url.to_string(),
                         Box::new(err),
                     ))
                 })?;
-                Ok::<Metadata21, CachedClientError<Error>>(metadata)
+                Ok::<Metadata23, CachedClientError<Error>>(metadata)
             }
             .boxed()
             .instrument(info_span!("read_metadata_range_request", wheel = %filename))
@@ -534,7 +550,7 @@ impl RegistryClient {
         match result {
             Ok(metadata) => return Ok(metadata),
             Err(err) => {
-                if err.kind().is_http_range_requests_unsupported() {
+                if err.is_http_range_requests_unsupported() {
                     // The range request version failed. Fall back to streaming the file to search
                     // for the METADATA file.
                     warn!("Range requests not supported for {filename}; streaming wheel");
@@ -549,6 +565,13 @@ impl RegistryClient {
             .client
             .uncached()
             .get(url.clone())
+            .header(
+                // `reqwest` defaults to accepting compressed responses.
+                // Specify identity encoding to get consistent .whl downloading
+                // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
+                "accept-encoding",
+                reqwest::header::HeaderValue::from_static("identity"),
+            )
             .build()
             .map_err(ErrorKind::from)?;
 
@@ -591,12 +614,12 @@ async fn read_metadata_async_seek(
     filename: &WheelFilename,
     debug_source: String,
     reader: impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
-) -> Result<Metadata21, Error> {
+) -> Result<Metadata23, Error> {
     let mut zip_reader = async_zip::tokio::read::seek::ZipFileReader::with_tokio(reader)
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
-    let (metadata_idx, _dist_info_prefix) = find_dist_info(
+    let (metadata_idx, _dist_info_prefix) = find_archive_dist_info(
         filename,
         zip_reader
             .file()
@@ -617,7 +640,7 @@ async fn read_metadata_async_seek(
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
-    let metadata = Metadata21::parse(&contents).map_err(|err| {
+    let metadata = Metadata23::parse_metadata(&contents).map_err(|err| {
         ErrorKind::MetadataParseError(filename.clone(), debug_source, Box::new(err))
     })?;
     Ok(metadata)
@@ -628,7 +651,7 @@ async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
     filename: &WheelFilename,
     debug_source: String,
     reader: R,
-) -> Result<Metadata21, Error> {
+) -> Result<Metadata23, Error> {
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(reader);
 
     while let Some(mut entry) = zip
@@ -649,7 +672,7 @@ async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
             let mut contents = Vec::new();
             reader.read_to_end(&mut contents).await.unwrap();
 
-            let metadata = Metadata21::parse(&contents).map_err(|err| {
+            let metadata = Metadata23::parse_metadata(&contents).map_err(|err| {
                 ErrorKind::MetadataParseError(filename.clone(), debug_source, Box::new(err))
             })?;
             return Ok(metadata);

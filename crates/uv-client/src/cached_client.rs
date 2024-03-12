@@ -356,7 +356,7 @@ impl CachedClient {
             Err(err) => {
                 // When we know the cache entry doesn't exist, then things are
                 // normal and we shouldn't emit a WARN.
-                if err.kind().is_file_not_exists() {
+                if err.is_file_not_exists() {
                     trace!("No cache entry exists for {}", cache_entry.path().display());
                 } else {
                     warn!(

@@ -15,10 +15,10 @@ pub(crate) struct FilePins(FxHashMap<PackageName, FxHashMap<pep440_rs::Version, 
 impl FilePins {
     /// Pin a candidate package.
     pub(crate) fn insert(&mut self, candidate: &Candidate, dist: &CompatibleDist) {
-        self.0.entry(candidate.name().clone()).or_default().insert(
-            candidate.version().clone(),
-            dist.for_installation().dist.clone(),
-        );
+        self.0
+            .entry(candidate.name().clone())
+            .or_default()
+            .insert(candidate.version().clone(), dist.for_installation().clone());
     }
 
     /// Return the pinned file for the given package name and version, if it exists.

@@ -15,7 +15,7 @@ use url::Url;
 use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim};
 use once_map::OnceMap;
 use pep440_rs::Version;
-use pypi_types::{Hashes, Metadata21};
+use pypi_types::{Hashes, Metadata23};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::editables::Editables;
@@ -57,7 +57,7 @@ impl ResolutionGraph {
         selection: &SelectedDependencies<PubGrubPackage, Version>,
         pins: &FilePins,
         packages: &OnceMap<PackageName, VersionsResponse>,
-        distributions: &OnceMap<PackageId, Metadata21>,
+        distributions: &OnceMap<PackageId, Metadata23>,
         redirects: &DashMap<Url, Url>,
         state: &State<PubGrubPackage, Range<Version>, PubGrubPriority>,
         editables: Editables,
@@ -213,6 +213,14 @@ impl ResolutionGraph {
                     dependency_range,
                 ) = &state.incompatibility_store[*id].kind
                 {
+                    // `Kind::FromDependencyOf` will include inverse dependencies. That is, if we're
+                    // looking for a package `A`, this list will include incompatibilities of
+                    // package `B` _depending on_ `A`. We're only interested in packages that `A`
+                    // depends on.
+                    if package != self_package {
+                        continue;
+                    }
+
                     let PubGrubPackage::Package(self_package, _, _) = self_package else {
                         continue;
                     };

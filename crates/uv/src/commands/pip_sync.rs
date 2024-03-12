@@ -45,15 +45,11 @@ pub(crate) async fn pip_sync(
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
+    native_tls: bool,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
-
-    // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .connectivity(connectivity)
-        .build();
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -67,7 +63,7 @@ pub(crate) async fn pip_sync(
         no_index,
         find_links,
         extras: _extras,
-    } = RequirementsSpecification::from_simple_sources(sources, &client).await?;
+    } = RequirementsSpecification::from_simple_sources(sources, connectivity).await?;
 
     let num_requirements = requirements.len() + editables.len();
     if num_requirements == 0 {
@@ -119,9 +115,12 @@ pub(crate) async fn pip_sync(
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
-    // Update the index URLs on the client, to take into account any index URLs added by the
-    // sources (e.g., `--index-url` in a `requirements.txt` file).
-    let client = client.with_index_url(index_locations.index_urls());
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(cache.clone())
+        .native_tls(native_tls)
+        .connectivity(connectivity)
+        .index_urls(index_locations.index_urls())
+        .build();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -220,9 +219,15 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let wheel_finder =
-            uv_resolver::DistFinder::new(tags, &client, venv.interpreter(), &flat_index, no_binary)
-                .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
+        let wheel_finder = uv_resolver::DistFinder::new(
+            tags,
+            &client,
+            venv.interpreter(),
+            &flat_index,
+            no_binary,
+            no_build,
+        )
+        .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
         let resolution = wheel_finder.resolve(&remote).await?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };

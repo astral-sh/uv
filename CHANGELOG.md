@@ -1,5 +1,64 @@
 # Changelog
 
+## 0.1.17
+
+### Enhancements
+
+- Allow more-precise Git URLs to override less-precise Git URLs ([#2285](https://github.com/astral-sh/uv/pull/2285))
+- Add support for Metadata 2.2 ([#2293](https://github.com/astral-sh/uv/pull/2293))
+- Added ability to select bytecode invalidation mode of generated `.pyc` files ([#2297](https://github.com/astral-sh/uv/pull/2297))
+- Add `Seek` fallback for zip files with data descriptors ([#2320](https://github.com/astral-sh/uv/pull/2320))
+
+### Bug fixes
+
+- Support reading UTF-16 requirements files ([#2283](https://github.com/astral-sh/uv/pull/2283))
+- Trim rows in `pip list` ([#2298](https://github.com/astral-sh/uv/pull/2298))
+- Avoid using setuptools shim of distutils ([#2305](https://github.com/astral-sh/uv/pull/2305))
+- Communicate PEP 517 hook results via files ([#2314](https://github.com/astral-sh/uv/pull/2314))
+- Increase default buffer size for wheel and source downloads ([#2319](https://github.com/astral-sh/uv/pull/2319))
+- Add `Accept-Encoding: identity` to remaining stream paths ([#2321](https://github.com/astral-sh/uv/pull/2321))
+- Avoid duplicating authorization header with netrc ([#2325](https://github.com/astral-sh/uv/pull/2325))
+- Remove duplicate `INSTALLER` in `RECORD` ([#2336](https://github.com/astral-sh/uv/pull/2336))
+
+### Documentation
+
+- Add a custom suggestion to install wheel into the build environment ([#2307](https://github.com/astral-sh/uv/pull/2307))
+- Document the environment variables that uv respects ([#2318](https://github.com/astral-sh/uv/pull/2318))
+
+## 0.1.16
+
+### Enhancements
+
+- Add support for `--no-build-isolation` ([#2258](https://github.com/astral-sh/uv/pull/2258))
+- Add support for `--break-system-packages` ([#2249](https://github.com/astral-sh/uv/pull/2249))
+- Add support for `.netrc` authentication ([#2241](https://github.com/astral-sh/uv/pull/2241))
+- Add support for `--format=freeze` and `--format=json` in `uv pip list` ([#1998](https://github.com/astral-sh/uv/pull/1998))
+- Add support for remote `https://` requirements files (#1332) ([#2081](https://github.com/astral-sh/uv/pull/2081))
+- Implement `uv pip show` ([#2115](https://github.com/astral-sh/uv/pull/2115))
+- Allow `UV_PRERELEASE` to be set via environment variable ([#2240](https://github.com/astral-sh/uv/pull/2240))
+- Include exit code for build failures ([#2108](https://github.com/astral-sh/uv/pull/2108))
+- Query interpreter to determine correct `virtualenv` paths, enabling `uv venv` with PyPy and others ([#2188](https://github.com/astral-sh/uv/pull/2188))
+- Respect non-`sysconfig`-based system Pythons, enabling `--system` installs on Debian and others ([#2193](https://github.com/astral-sh/uv/pull/2193))
+
+### Bug fixes
+
+- Fallback to fresh request on non-validating 304 ([#2218](https://github.com/astral-sh/uv/pull/2218))
+- Add `.stdout()` and `.stderr()` outputs to `Printer` ([#2227](https://github.com/astral-sh/uv/pull/2227))
+- Close `RECORD` after reading entries during uninstall ([#2259](https://github.com/astral-sh/uv/pull/2259))
+- Fix Conda Python detection on Windows ([#2279](https://github.com/astral-sh/uv/pull/2279))
+- Fix parsing requirement where a variable follows an operator without a space ([#2273](https://github.com/astral-sh/uv/pull/2273))
+- Prefer more recent minor versions in wheel tags ([#2263](https://github.com/astral-sh/uv/pull/2263))
+- Retry on Python interpreter launch failures during `--compile` ([#2278](https://github.com/astral-sh/uv/pull/2278))
+- Show appropriate activation command based on shell detection ([#2221](https://github.com/astral-sh/uv/pull/2221))
+- Escape Windows paths with spaces in `venv` activation command ([#2223](https://github.com/astral-sh/uv/pull/2223))
+- Add specialized activation message for `cmd.exe` ([#2226](https://github.com/astral-sh/uv/pull/2226))
+- Cache wheel metadata in no-PEP 658 fallback ([#2255](https://github.com/astral-sh/uv/pull/2255))
+- Use reparse points to detect Windows installer shims ([#2284](https://github.com/astral-sh/uv/pull/2284))
+
+### Documentation
+
+- Add `PIP_COMPATIBILITY.md` to document known deviations from `pip` ([#2244](https://github.com/astral-sh/uv/pull/2244))
+
 ## 0.1.15
 
 ### Enhancements

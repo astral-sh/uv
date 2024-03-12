@@ -5,7 +5,6 @@
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::io;
-use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Output};
 use std::str::FromStr;
@@ -48,24 +47,29 @@ static LD_NOT_FOUND_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"/usr/bin/ld: cannot find -l([a-zA-Z10-9]+): No such file or directory").unwrap()
 });
 
+/// e.g. `error: invalid command 'bdist_wheel'`
+static WHEEL_NOT_FOUND_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"error: invalid command 'bdist_wheel'").unwrap());
+
 /// The default backend to use when PEP 517 is used without a `build-system` section.
 static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
     backend: "setuptools.build_meta:__legacy__".to_string(),
     backend_path: None,
-    requirements: vec![
-        Requirement::from_str("wheel").unwrap(),
+    requirements: vec![Requirement::from_str("setuptools >= 40.8.0").unwrap()],
+});
+
+/// The requirements for `--legacy-setup-py` builds.
+static SETUP_PY_REQUIREMENTS: Lazy<[Requirement; 2]> = Lazy::new(|| {
+    [
         Requirement::from_str("setuptools >= 40.8.0").unwrap(),
-    ],
+        Requirement::from_str("wheel").unwrap(),
+    ]
 });
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     IO(#[from] io::Error),
-    #[error("Failed to extract archive: {0}")]
-    Extraction(PathBuf, #[source] uv_extract::Error),
-    #[error("Unsupported archive format (extension not recognized): {0}")]
-    UnsupportedArchiveType(String),
     #[error("Invalid source distribution: {0}")]
     InvalidSourceDist(String),
     #[error("Invalid pyproject.toml")]
@@ -74,8 +78,6 @@ pub enum Error {
     EditableSetupPy,
     #[error("Failed to install requirements from {0}")]
     RequirementsInstall(&'static str, #[source] anyhow::Error),
-    #[error("Source distribution not found at: {0}")]
-    NotFound(PathBuf),
     #[error("Failed to create temporary virtualenv")]
     Virtualenv(#[from] uv_virtualenv::Error),
     #[error("Failed to run {0}")]
@@ -105,6 +107,7 @@ pub enum Error {
 pub enum MissingLibrary {
     Header(String),
     Linker(String),
+    PythonPackage(String),
 }
 
 #[derive(Debug, Error)]
@@ -131,6 +134,13 @@ impl Display for MissingHeaderCause {
                     library = library, package_id = self.package_id
                 )
             }
+            MissingLibrary::PythonPackage(package) => {
+                write!(
+                    f,
+                    "This error likely indicates that you need to `uv pip install {package}` into the build environment for {package_id}",
+                    package = package, package_id = self.package_id
+                )
+            }
         }
     }
 }
@@ -154,6 +164,8 @@ impl Error {
                 LD_NOT_FOUND_RE.captures(line.trim()).map(|c| c.extract())
             {
                 Some(MissingLibrary::Linker(library.to_string()))
+            } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
+                Some(MissingLibrary::PythonPackage("wheel".to_string()))
             } else {
                 None
             }
@@ -303,11 +315,12 @@ impl Pep517Backend {
     }
 }
 
-/// Uses an [`Arc`] internally, clone freely
+/// Uses an [`Arc`] internally, clone freely.
 #[derive(Debug, Default, Clone)]
 pub struct SourceBuildContext {
-    /// Cache the first resolution of `pip`, `setuptools` and `wheel` we made for setup.py (and
-    /// some PEP 517) builds so we can reuse it.
+    /// An in-memory resolution of the default backend's requirements for PEP 517 builds.
+    default_resolution: Arc<Mutex<Option<Resolution>>>,
+    /// An in-memory resolution of the build requirements for `--legacy-setup-py` builds.
     setup_py_resolution: Arc<Mutex<Option<Resolution>>>,
 }
 
@@ -365,38 +378,10 @@ impl SourceBuild {
     ) -> Result<Self, Error> {
         let temp_dir = tempdir_in(build_context.cache().root())?;
 
-        let metadata = match fs::metadata(source) {
-            Ok(metadata) => metadata,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                return Err(Error::NotFound(source.to_path_buf()));
-            }
-            Err(err) => return Err(err.into()),
-        };
-
-        let source_root = if metadata.is_dir() {
-            source.to_path_buf()
-        } else {
-            debug!("Unpacking for build: {}", source.display());
-
-            let extracted = temp_dir.path().join("extracted");
-
-            // Unzip the archive into the temporary directory.
-            let reader = fs_err::tokio::File::open(source).await?;
-            uv_extract::stream::archive(tokio::io::BufReader::new(reader), source, &extracted)
-                .await
-                .map_err(|err| Error::Extraction(extracted.clone(), err))?;
-
-            // Extract the top-level directory from the archive.
-            match uv_extract::strip_component(&extracted) {
-                Ok(top_level) => top_level,
-                Err(uv_extract::Error::NonSingularArchive(_)) => extracted,
-                Err(err) => return Err(Error::Extraction(extracted.clone(), err)),
-            }
-        };
         let source_tree = if let Some(subdir) = subdirectory {
-            source_root.join(subdir)
+            source.join(subdir)
         } else {
-            source_root
+            source.to_path_buf()
         };
 
         let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
@@ -480,6 +465,7 @@ impl SourceBuild {
                     &config_settings,
                     &environment_variables,
                     &modified_path,
+                    &temp_dir,
                 )
                 .await?;
             }
@@ -507,7 +493,7 @@ impl SourceBuild {
     ) -> Result<Resolution, Error> {
         Ok(if let Some(pep517_backend) = pep517_backend {
             if pep517_backend.requirements == default_backend.requirements {
-                let mut resolution = source_build_context.setup_py_resolution.lock().await;
+                let mut resolution = source_build_context.default_resolution.lock().await;
                 if let Some(resolved_requirements) = &*resolution {
                     resolved_requirements.clone()
                 } else {
@@ -535,7 +521,7 @@ impl SourceBuild {
                 resolved_requirements.clone()
             } else {
                 let resolved_requirements = build_context
-                    .resolve(&default_backend.requirements)
+                    .resolve(&*SETUP_PY_REQUIREMENTS)
                     .await
                     .map_err(|err| Error::RequirementsInstall("setup.py build (resolve)", err))?;
                 *resolution = Some(resolved_requirements.clone());
@@ -612,6 +598,12 @@ impl SourceBuild {
         let metadata_directory = self.temp_dir.path().join("metadata_directory");
         fs::create_dir(&metadata_directory)?;
 
+        // Write the hook output to a file so that we can read it back reliably.
+        let outfile = self
+            .temp_dir
+            .path()
+            .join("prepare_metadata_for_build_wheel.txt");
+
         debug!(
             "Calling `{}.prepare_metadata_for_build_wheel()`",
             pep517_backend.backend
@@ -623,13 +615,17 @@ impl SourceBuild {
 
             prepare_metadata_for_build_wheel = getattr(backend, "prepare_metadata_for_build_wheel", None)
             if prepare_metadata_for_build_wheel:
-                print(prepare_metadata_for_build_wheel("{}", config_settings={}))
+                dirname = prepare_metadata_for_build_wheel("{}", config_settings={})
             else:
-                print()
+                dirname = None
+
+            with open("{}", "w") as fp:
+                fp.write(dirname or "")
             "#,
             pep517_backend.backend_import(),
             escape_path_for_python(&metadata_directory),
             self.config_settings.escape_for_python(),
+            escape_path_for_python(&outfile),
         };
         let span = info_span!(
             "run_python_script",
@@ -652,26 +648,12 @@ impl SourceBuild {
                 &self.package_id,
             ));
         }
-        let message = output
-            .stdout
-            .lines()
-            .last()
-            .transpose()
-            .map_err(|err| err.to_string())
-            .and_then(|last_line| last_line.ok_or("Missing message".to_string()))
-            .map_err(|err| {
-                Error::from_command_output(
-                    format!(
-                        "Build backend failed to return metadata directory with `prepare_metadata_for_build_wheel`: {err}"
-                    ),
-                    &output,
-                    &self.package_id,
-                )
-            })?;
-        if message.is_empty() {
+
+        let dirname = fs::read_to_string(&outfile)?;
+        if dirname.is_empty() {
             return Ok(None);
         }
-        self.metadata_directory = Some(metadata_directory.join(message));
+        self.metadata_directory = Some(metadata_directory.join(dirname));
         Ok(self.metadata_directory.clone())
     }
 
@@ -752,22 +734,31 @@ impl SourceBuild {
             .map_or("None".to_string(), |path| {
                 format!(r#""{}""#, escape_path_for_python(path))
             });
+
+        // Write the hook output to a file so that we can read it back reliably.
+        let outfile = self
+            .temp_dir
+            .path()
+            .join(format!("build_{}.txt", self.build_kind));
+
         debug!(
             "Calling `{}.build_{}(metadata_directory={})`",
             pep517_backend.backend, self.build_kind, metadata_directory
         );
-        let escaped_wheel_dir = escape_path_for_python(wheel_dir);
         let script = formatdoc! {
             r#"
             {}
 
-            print(backend.build_{}("{}", metadata_directory={}, config_settings={}))
+            wheel_filename = backend.build_{}("{}", metadata_directory={}, config_settings={})
+            with open("{}", "w") as fp:
+                fp.write(wheel_filename)
             "#,
             pep517_backend.backend_import(),
             self.build_kind,
-            escaped_wheel_dir,
+            escape_path_for_python(wheel_dir),
             metadata_directory,
-            self.config_settings.escape_for_python()
+            self.config_settings.escape_for_python(),
+            escape_path_for_python(&outfile)
         };
         let span = info_span!(
             "run_python_script",
@@ -793,21 +784,19 @@ impl SourceBuild {
                 &self.package_id,
             ));
         }
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let distribution_filename = stdout.lines().last();
-        let Some(distribution_filename) =
-            distribution_filename.filter(|wheel| wheel_dir.join(wheel).is_file())
-        else {
+
+        let distribution_filename = fs::read_to_string(&outfile)?;
+        if !wheel_dir.join(&distribution_filename).is_file() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to build wheel through `build_{}()`",
+                    "Build backend failed to produce wheel through `build_{}()`: `{distribution_filename}` not found",
                     self.build_kind
                 ),
                 &output,
                 &self.package_id,
             ));
-        };
-        Ok(distribution_filename.to_string())
+        }
+        Ok(distribution_filename)
     }
 }
 
@@ -839,11 +828,18 @@ async fn create_pep517_build_environment(
     config_settings: &ConfigSettings,
     environment_variables: &FxHashMap<OsString, OsString>,
     modified_path: &OsString,
+    temp_dir: &TempDir,
 ) -> Result<(), Error> {
+    // Write the hook output to a file so that we can read it back reliably.
+    let outfile = temp_dir
+        .path()
+        .join(format!("get_requires_for_build_{build_kind}.txt"));
+
     debug!(
         "Calling `{}.get_requires_for_build_{}()`",
         pep517_backend.backend, build_kind
     );
+
     let script = formatdoc! {
         r#"
             {}
@@ -854,8 +850,14 @@ async fn create_pep517_build_environment(
                 requires = get_requires_for_build(config_settings={})
             else:
                 requires = []
-            print(json.dumps(requires))
-        "#, pep517_backend.backend_import(), build_kind, config_settings.escape_for_python()
+
+            with open("{}", "w") as fp:
+                json.dump(requires, fp)
+        "#,
+        pep517_backend.backend_import(),
+        build_kind,
+        config_settings.escape_for_python(),
+        escape_path_for_python(&outfile)
     };
     let span = info_span!(
         "run_python_script",
@@ -878,16 +880,20 @@ async fn create_pep517_build_environment(
             package_id,
         ));
     }
-    let extra_requires = output
-        .stdout
-        .lines()
-        .last()
-        .transpose()
-        .map_err(|err| err.to_string())
-        .and_then(|last_line| last_line.ok_or("Missing message".to_string()))
-        .and_then(|message| serde_json::from_str(&message).map_err(|err| err.to_string()));
 
-    let extra_requires: Vec<Requirement> = extra_requires.map_err(|err| {
+    // Read the requirements from the output file.
+    let contents = fs_err::read(&outfile).map_err(|err| {
+        Error::from_command_output(
+            format!(
+                "Build backend failed to read extra requires from `get_requires_for_build_{build_kind}`: {err}"
+            ),
+            &output,
+            package_id,
+        )
+    })?;
+
+    // Deserialize the requirements from the output file.
+    let extra_requires: Vec<Requirement> = serde_json::from_slice(&contents).map_err(|err| {
         Error::from_command_output(
             format!(
                 "Build backend failed to return extra requires with `get_requires_for_build_{build_kind}`: {err}"
@@ -1057,6 +1063,52 @@ mod test {
         insta::assert_snapshot!(
             std::error::Error::source(&err).unwrap(),
             @"This error likely indicates that you need to install the library that provides a shared library for ncurses for pygraphviz-1.11 (e.g. libncurses-dev)"
+        );
+    }
+
+    #[test]
+    fn missing_wheel_package() {
+        let output = Output {
+            status: ExitStatus::default(), // This is wrong but `from_raw` is platform-gated.
+            stdout: Vec::new(),
+            stderr: indoc!(
+                r"
+            usage: setup.py [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+               or: setup.py --help [cmd1 cmd2 ...]
+               or: setup.py --help-commands
+               or: setup.py cmd --help
+
+            error: invalid command 'bdist_wheel'
+                "
+            )
+            .as_bytes()
+            .to_vec(),
+        };
+
+        let err = Error::from_command_output(
+            "Failed building wheel through setup.py".to_string(),
+            &output,
+            "pygraphviz-1.11",
+        );
+        assert!(matches!(err, Error::MissingHeader { .. }));
+        // Unix uses exit status, Windows uses exit code.
+        let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        insta::assert_snapshot!(formatted, @r###"
+        Failed building wheel through setup.py with exit code: 0
+        --- stdout:
+
+        --- stderr:
+        usage: setup.py [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+           or: setup.py --help [cmd1 cmd2 ...]
+           or: setup.py --help-commands
+           or: setup.py cmd --help
+
+        error: invalid command 'bdist_wheel'
+        ---
+        "###);
+        insta::assert_snapshot!(
+            std::error::Error::source(&err).unwrap(),
+            @"This error likely indicates that you need to `uv pip install wheel` into the build environment for pygraphviz-1.11"
         );
     }
 }

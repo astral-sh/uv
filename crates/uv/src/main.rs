@@ -68,8 +68,11 @@ struct Cli {
     quiet: bool,
 
     /// Use verbose output.
-    #[arg(global = true, long, short, conflicts_with = "quiet")]
-    verbose: bool,
+    ///
+    /// You can configure fine-grained logging using the `RUST_LOG` environment variable.
+    /// (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
+    #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with = "quiet")]
+    verbose: u8,
 
     /// Disable colors; provided for compatibility with `pip`.
     #[arg(global = true, long, hide = true, conflicts_with = "color")]
@@ -84,6 +87,18 @@ struct Cli {
         conflicts_with = "no_color"
     )]
     color: ColorChoice,
+
+    /// Whether to load TLS certificates from the platform's native certificate store.
+    ///
+    /// By default, `uv` loads certificates from the bundled `webpki-roots` crate. The
+    /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in `uv`
+    /// improves portability and performance (especially on macOS).
+    ///
+    /// However, in some cases, you may want to use the platform's native certificate store,
+    /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
+    /// included in your system's certificate store.
+    #[arg(global = true, long)]
+    native_tls: bool,
 
     #[command(flatten)]
     cache_args: CacheArgs,
@@ -539,7 +554,12 @@ struct PipSyncArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -785,7 +805,12 @@ struct PipInstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -918,7 +943,12 @@ struct PipUninstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -972,7 +1002,12 @@ struct PipFreezeArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 }
 
@@ -1029,7 +1064,12 @@ struct PipListArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 }
 
@@ -1073,7 +1113,12 @@ struct PipShowArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 }
 
@@ -1107,7 +1152,12 @@ struct VenvArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(long, conflicts_with = "python", group = "discovery")]
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
     system: bool,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
@@ -1260,18 +1310,18 @@ async fn run() -> Result<ExitStatus> {
     #[cfg(not(feature = "tracing-durations-export"))]
     let duration_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(
-        if cli.verbose {
-            logging::Level::Verbose
-        } else {
-            logging::Level::Default
+        match cli.verbose {
+            0 => logging::Level::Default,
+            1 => logging::Level::Verbose,
+            2.. => logging::Level::ExtraVerbose,
         },
         duration_layer,
-    );
+    )?;
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = if cli.quiet {
         printer::Printer::Quiet
-    } else if cli.verbose {
+    } else if cli.verbose > 0 {
         printer::Printer::Verbose
     } else {
         printer::Printer::Default
@@ -1386,6 +1436,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python_version,
                 args.exclude_newer,
                 args.annotation_style,
+                cli.native_tls,
                 cli.quiet,
                 cache,
                 printer,
@@ -1442,6 +1493,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.system,
                 args.break_system_packages,
+                cli.native_tls,
                 cache,
                 printer,
             )
@@ -1537,6 +1589,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.system,
                 args.break_system_packages,
+                cli.native_tls,
                 cache,
                 args.dry_run,
                 printer,

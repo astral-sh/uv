@@ -18,20 +18,92 @@ pub struct Error {
 }
 
 impl Error {
+    /// Convert this error into its [`ErrorKind`] variant.
     pub fn into_kind(self) -> ErrorKind {
         *self.kind
     }
 
-    pub fn kind(&self) -> &ErrorKind {
-        &self.kind
-    }
-
+    /// Create a new error from a JSON parsing error.
     pub(crate) fn from_json_err(err: serde_json::Error, url: Url) -> Self {
         ErrorKind::BadJson { source: err, url }.into()
     }
 
+    /// Create a new error from an HTML parsing error.
     pub(crate) fn from_html_err(err: html::Error, url: Url) -> Self {
         ErrorKind::BadHtml { source: err, url }.into()
+    }
+
+    /// Returns `true` if this error corresponds to an offline error.
+    pub(crate) fn is_offline(&self) -> bool {
+        matches!(&*self.kind, ErrorKind::Offline(_))
+    }
+
+    /// Returns `true` if this error corresponds to an I/O "not found" error.
+    pub(crate) fn is_file_not_exists(&self) -> bool {
+        let ErrorKind::Io(ref err) = &*self.kind else {
+            return false;
+        };
+        matches!(err.kind(), std::io::ErrorKind::NotFound)
+    }
+
+    /// Returns `true` if the error is due to the server not supporting HTTP range requests.
+    pub fn is_http_range_requests_unsupported(&self) -> bool {
+        match &*self.kind {
+            // The server doesn't support range requests (as reported by the `HEAD` check).
+            ErrorKind::AsyncHttpRangeReader(
+                AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
+            ) => {
+                return true;
+            }
+
+            // The server returned a "Method Not Allowed" error, indicating it doesn't support
+            // HEAD requests, so we can't check for range requests.
+            ErrorKind::ReqwestError(err) => {
+                if let Some(status) = err.status() {
+                    // If the server doesn't support HEAD requests, we can't check for range
+                    // requests.
+                    if status == reqwest::StatusCode::METHOD_NOT_ALLOWED {
+                        return true;
+                    }
+
+                    // In some cases, registries return a 404 for HEAD requests when they're not
+                    // supported. In the worst case, we'll now just proceed to attempt to stream the
+                    // entire file, so it's fine to be somewhat lenient here.
+                    if status == reqwest::StatusCode::NOT_FOUND {
+                        return true;
+                    }
+                }
+            }
+
+            // The server doesn't support range requests, but we only discovered this while
+            // unzipping due to erroneous server behavior.
+            ErrorKind::Zip(_, ZipError::UpstreamReadError(err)) => {
+                if let Some(inner) = err.get_ref() {
+                    if let Some(inner) = inner.downcast_ref::<AsyncHttpRangeReaderError>() {
+                        if matches!(
+                            inner,
+                            AsyncHttpRangeReaderError::HttpRangeRequestUnsupported
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            _ => {}
+        }
+
+        false
+    }
+
+    /// Returns `true` if the error is due to the server not supporting HTTP streaming. Most
+    /// commonly, this is due to serving ZIP files with features that are incompatible with
+    /// streaming, like data descriptors.
+    pub fn is_http_streaming_unsupported(&self) -> bool {
+        matches!(
+            &*self.kind,
+            ErrorKind::Zip(_, ZipError::FeatureNotSupported(_))
+        )
     }
 }
 
@@ -110,7 +182,7 @@ pub enum ErrorKind {
         metadata: PackageName,
     },
 
-    #[error("The wheel {0} is not a valid zip file")]
+    #[error("Failed to unzip wheel: {0}")]
     Zip(WheelFilename, #[source] ZipError),
 
     #[error("Failed to write to the client cache")]
@@ -146,65 +218,6 @@ pub enum ErrorKind {
 
     #[error("Network connectivity is disabled, but the requested data wasn't found in the cache for: `{0}`")]
     Offline(String),
-}
-
-impl ErrorKind {
-    /// Returns true if this error kind corresponds to an I/O "not found"
-    /// error.
-    pub(crate) fn is_file_not_exists(&self) -> bool {
-        let Self::Io(ref err) = *self else {
-            return false;
-        };
-        matches!(err.kind(), std::io::ErrorKind::NotFound)
-    }
-
-    /// Returns `true` if the error is due to the server not supporting HTTP range requests.
-    pub(crate) fn is_http_range_requests_unsupported(&self) -> bool {
-        match self {
-            // The server doesn't support range requests (as reported by the `HEAD` check).
-            Self::AsyncHttpRangeReader(AsyncHttpRangeReaderError::HttpRangeRequestUnsupported) => {
-                return true;
-            }
-
-            // The server returned a "Method Not Allowed" error, indicating it doesn't support
-            // HEAD requests, so we can't check for range requests.
-            Self::ReqwestError(err) => {
-                if let Some(status) = err.status() {
-                    // If the server doesn't support HEAD requests, we can't check for range
-                    // requests.
-                    if status == reqwest::StatusCode::METHOD_NOT_ALLOWED {
-                        return true;
-                    }
-
-                    // In some cases, registries return a 404 for HEAD requests when they're not
-                    // supported. In the worst case, we'll now just proceed to attempt to stream the
-                    // entire file, so it's fine to be somewhat lenient here.
-                    if status == reqwest::StatusCode::NOT_FOUND {
-                        return true;
-                    }
-                }
-            }
-
-            // The server doesn't support range requests, but we only discovered this while
-            // unzipping due to erroneous server behavior.
-            Self::Zip(_, ZipError::UpstreamReadError(err)) => {
-                if let Some(inner) = err.get_ref() {
-                    if let Some(inner) = inner.downcast_ref::<AsyncHttpRangeReaderError>() {
-                        if matches!(
-                            inner,
-                            AsyncHttpRangeReaderError::HttpRangeRequestUnsupported
-                        ) {
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            _ => {}
-        }
-
-        false
-    }
 }
 
 impl From<reqwest::Error> for ErrorKind {

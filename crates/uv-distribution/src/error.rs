@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use tokio::task::JoinError;
 use zip::result::ZipError;
 
@@ -54,8 +55,14 @@ pub enum Error {
     Zip(#[from] ZipError),
     #[error("Source distribution directory contains neither readable pyproject.toml nor setup.py")]
     DirWithoutEntrypoint,
-    #[error("Failed to extract source distribution")]
+    #[error("Failed to extract archive")]
     Extract(#[from] uv_extract::Error),
+    #[error("Source distribution not found at: {0}")]
+    NotFound(PathBuf),
+    #[error("The source distribution is missing a `PKG-INFO` file")]
+    MissingPkgInfo,
+    #[error("The source distribution does not support static metadata")]
+    DynamicPkgInfo(#[source] pypi_types::Error),
 
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]

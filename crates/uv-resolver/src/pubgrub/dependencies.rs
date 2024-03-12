@@ -152,23 +152,23 @@ fn to_pubgrub(
 
         // The requirement has a URL (e.g., `flask @ file:///path/to/flask`).
         Some(VersionOrUrl::Url(url)) => {
-            let Some(allowed) = urls.get(&requirement.name) else {
+            let Some(expected) = urls.get(&requirement.name) else {
                 return Err(ResolveError::DisallowedUrl(
                     requirement.name.clone(),
                     url.verbatim().to_string(),
                 ));
             };
 
-            if cache_key::CanonicalUrl::new(allowed) != cache_key::CanonicalUrl::new(url) {
+            if !urls.is_allowed(expected, url) {
                 return Err(ResolveError::ConflictingUrlsTransitive(
                     requirement.name.clone(),
-                    allowed.verbatim().to_string(),
+                    expected.verbatim().to_string(),
                     url.verbatim().to_string(),
                 ));
             }
 
             Ok((
-                PubGrubPackage::Package(requirement.name.clone(), extra, Some(allowed.clone())),
+                PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
                 Range::full(),
             ))
         }

@@ -2,6 +2,9 @@ use std::path::{Path, PathBuf};
 
 use distribution_filename::WheelFilename;
 use distribution_types::{CachedDist, Dist};
+use pypi_types::Metadata23;
+
+use crate::Error;
 
 /// A wheel that's been unzipped while downloading
 #[derive(Debug, Clone)]
@@ -87,6 +90,15 @@ impl LocalWheel {
             Self::Built(wheel) => CachedDist::from_remote(wheel.dist, wheel.filename, archive),
         }
     }
+
+    /// Read the [`Metadata23`] from a wheel.
+    pub fn metadata(&self) -> Result<Metadata23, Error> {
+        match self {
+            Self::Unzipped(wheel) => read_flat_wheel_metadata(&wheel.filename, &wheel.archive),
+            Self::Disk(wheel) => read_built_wheel_metadata(&wheel.filename, &wheel.path),
+            Self::Built(wheel) => read_built_wheel_metadata(&wheel.filename, &wheel.path),
+        }
+    }
 }
 
 impl UnzippedWheel {
@@ -120,4 +132,26 @@ impl std::fmt::Display for LocalWheel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.remote())
     }
+}
+
+/// Read the [`Metadata23`] from a built wheel.
+fn read_built_wheel_metadata(
+    filename: &WheelFilename,
+    wheel: impl AsRef<Path>,
+) -> Result<Metadata23, Error> {
+    let file = fs_err::File::open(wheel.as_ref()).map_err(Error::CacheRead)?;
+    let reader = std::io::BufReader::new(file);
+    let mut archive = zip::ZipArchive::new(reader)?;
+    let metadata = install_wheel_rs::metadata::read_archive_metadata(filename, &mut archive)?;
+    Ok(Metadata23::parse_metadata(&metadata)?)
+}
+
+/// Read the [`Metadata23`] from an unzipped wheel.
+fn read_flat_wheel_metadata(
+    filename: &WheelFilename,
+    wheel: impl AsRef<Path>,
+) -> Result<Metadata23, Error> {
+    let dist_info = install_wheel_rs::metadata::find_flat_dist_info(filename, &wheel)?;
+    let metadata = install_wheel_rs::metadata::read_dist_info_metadata(&dist_info, &wheel)?;
+    Ok(Metadata23::parse_metadata(&metadata)?)
 }
