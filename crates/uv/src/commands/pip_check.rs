@@ -49,14 +49,14 @@ pub(crate) fn pip_check(
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&venv)?;
 
+    let mut is_compatible = true;
     for diagnostic in site_packages.diagnostics()? {
-        writeln!(
-            printer.stderr(),
-            "{}{} {}",
-            "warning".yellow().bold(),
-            ":".bold(),
-            diagnostic.message().bold()
-        )?;
+        is_compatible = false;
+        writeln!(printer.stdout(), "{}", diagnostic.message())?;
+    }
+
+    if !is_compatible {
+        return Ok(ExitStatus::Failure);
     }
 
     writeln!(printer.stdout(), "No broken requirements found.");
