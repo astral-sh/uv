@@ -933,7 +933,7 @@ enum Error {
     Client(#[from] uv_client::Error),
 
     #[error(transparent)]
-    Platform(#[from] platform_host::PlatformError),
+    Platform(#[from] platform_tags::PlatformError),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

@@ -1619,8 +1619,8 @@ dependencies = [
  "once_cell",
  "pathdiff",
  "pep440_rs",
- "platform-host",
  "platform-info",
+ "platform-tags",
  "plist",
  "pypi-types",
  "reflink-copy",
@@ -2323,14 +2323,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
-name = "platform-host"
-version = "0.0.1"
-dependencies = [
- "serde",
- "thiserror",
-]
-
-[[package]]
 name = "platform-info"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2344,8 +2336,8 @@ dependencies = [
 name = "platform-tags"
 version = "0.0.1"
 dependencies = [
- "platform-host",
  "rustc-hash",
+ "serde",
  "thiserror",
 ]
 
@@ -4185,7 +4177,6 @@ dependencies = [
  "owo-colors 4.0.0",
  "pep440_rs",
  "pep508_rs",
- "platform-host",
  "platform-tags",
  "predicates",
  "pubgrub",
@@ -4246,7 +4237,6 @@ dependencies = [
  "itertools 0.12.1",
  "once_cell",
  "pep508_rs",
- "platform-host",
  "pypi-types",
  "pyproject-toml",
  "regex",
@@ -4359,7 +4349,6 @@ dependencies = [
  "pep440_rs",
  "pep508_rs",
  "petgraph",
- "platform-host",
  "platform-tags",
  "poloto",
  "pypi-types",
@@ -4401,7 +4390,6 @@ dependencies = [
  "futures",
  "itertools 0.12.1",
  "pep508_rs",
- "platform-host",
  "platform-tags",
  "pypi-types",
  "rustc-hash",
@@ -4570,7 +4558,6 @@ dependencies = [
  "once_cell",
  "pep440_rs",
  "pep508_rs",
- "platform-host",
  "platform-tags",
  "pypi-types",
  "regex",
@@ -4622,7 +4609,6 @@ dependencies = [
  "pep440_rs",
  "pep508_rs",
  "petgraph",
- "platform-host",
  "platform-tags",
  "pubgrub",
  "pypi-types",
@@ -4681,7 +4667,7 @@ dependencies = [
  "directories",
  "fs-err",
  "pathdiff",
- "platform-host",
+ "platform-tags",
  "pypi-types",
  "serde",
  "serde_json",

@@ -12,7 +12,7 @@ use cache_key::digest;
 use install_wheel_rs::Layout;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use platform_host::Platform;
+use platform_tags::Platform;
 use platform_tags::{Tags, TagsError};
 use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};

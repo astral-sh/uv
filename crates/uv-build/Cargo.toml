@@ -16,7 +16,6 @@ workspace = true
 [dependencies]
 distribution-types = { path = "../distribution-types" }
 pep508_rs = { path = "../pep508-rs" }
-platform-host = { path = "../platform-host" }
 pypi-types = { path = "../pypi-types" }
 uv-fs = { path = "../uv-fs" }
 uv-interpreter = { path = "../uv-interpreter" }

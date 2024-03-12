@@ -22,7 +22,7 @@ name = "install_wheel_rs"
 [dependencies]
 distribution-filename = { path = "../distribution-filename" }
 pep440_rs = { path = "../pep440-rs" }
-platform-host = { path = "../platform-host" }
+platform-tags = { path = "../platform-tags" }
 uv-normalize = { path = "../uv-normalize" }
 uv-fs = { path = "../uv-fs" }
 pypi-types = { path = "../pypi-types" }

@@ -12,8 +12,7 @@ use once_cell::sync::Lazy;
 
 use distribution_types::{IndexLocations, Resolution, SourceDist};
 use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
-use platform_host::{Arch, Os, Platform};
-use platform_tags::Tags;
+use platform_tags::{Arch, Os, Platform, Tags};
 use uv_cache::Cache;
 use uv_client::{FlatIndex, RegistryClientBuilder};
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
