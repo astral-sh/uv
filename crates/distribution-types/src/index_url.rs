@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use pep508_rs::{split_scheme, Scheme, VerbatimUrl};
+use pep508_rs::{split_scheme, Scheme, VerbatimUrl, expand_env_vars};
 use uv_fs::normalize_url_path;
 
 use crate::Verbatim;
@@ -108,7 +108,11 @@ impl FromStr for FlatIndexLocation {
     /// - `../ferris/`
     /// - `https://download.pytorch.org/whl/torch_stable.html`
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some((scheme, path)) = split_scheme(s) {
+        // Expand environment variables.
+        let expanded = expand_env_vars(s);
+
+        // Parse the expanded path.
+        if let Some((scheme, path)) = split_scheme(&expanded) {
             match Scheme::parse(scheme) {
                 // Ex) `file:///home/ferris/project/scripts/...` or `file:../ferris/`
                 Some(Scheme::File) => {
@@ -123,19 +127,19 @@ impl FromStr for FlatIndexLocation {
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
                 Some(_) => {
-                    let url = Url::parse(s)?;
+                    let url = Url::parse(expanded.as_ref())?;
                     Ok(Self::Url(url))
                 }
 
                 // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
                 None => {
-                    let path = PathBuf::from(s);
+                    let path = PathBuf::from(expanded.as_ref());
                     Ok(Self::Path(path))
                 }
             }
         } else {
             // Ex) `../ferris/`
-            let path = PathBuf::from(s);
+            let path = PathBuf::from(expanded.as_ref());
             Ok(Self::Path(path))
         }
     }

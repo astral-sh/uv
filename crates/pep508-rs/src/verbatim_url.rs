@@ -30,12 +30,6 @@ pub struct VerbatimUrl {
 }
 
 impl VerbatimUrl {
-    /// Parse a URL from a string, expanding any environment variables.
-    pub fn parse(given: impl AsRef<str>) -> Result<Self, ParseError> {
-        let url = Url::parse(&expand_env_vars(given.as_ref(), Escape::Url))?;
-        Ok(Self { url, given: None })
-    }
-
     /// Create a [`VerbatimUrl`] from a [`Url`].
     pub fn from_url(url: Url) -> Self {
         Self { url, given: None }
@@ -48,15 +42,18 @@ impl VerbatimUrl {
         Self { url, given: None }
     }
 
+    /// Parse a URL from a string, expanding any environment variables.
+    pub fn parse_url(given: impl AsRef<str>) -> Result<Self, ParseError> {
+        let url = Url::parse(given.as_ref())?;
+        Ok(Self { url, given: None })
+    }
+
     /// Parse a URL from an absolute or relative path.
     #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
-    pub fn parse_path(path: impl AsRef<str>, working_dir: impl AsRef<Path>) -> Self {
-        // Expand any environment variables.
-        let path = PathBuf::from(expand_env_vars(path.as_ref(), Escape::Path).as_ref());
-
+    pub fn parse_path(path: impl AsRef<Path>, working_dir: impl AsRef<Path>) -> Self {
         // Convert the path to an absolute path, if necessary.
-        let path = if path.is_absolute() {
-            path
+        let path = if path.as_ref().is_absolute() {
+            path.as_ref().to_path_buf()
         } else {
             working_dir.as_ref().join(path)
         };
@@ -71,15 +68,12 @@ impl VerbatimUrl {
     }
 
     /// Parse a URL from an absolute path.
-    pub fn parse_absolute_path(path: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
-        // Expand any environment variables.
-        let path = PathBuf::from(expand_env_vars(path.as_ref(), Escape::Path).as_ref());
-
+    pub fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, VerbatimUrlError> {
         // Convert the path to an absolute path, if necessary.
-        let path = if path.is_absolute() {
-            path
+        let path = if path.as_ref().is_absolute() {
+            path.as_ref().to_path_buf()
         } else {
-            return Err(VerbatimUrlError::RelativePath(path));
+            return Err(VerbatimUrlError::RelativePath(path.as_ref().to_path_buf()));
         };
 
         // Normalize the path.
@@ -128,7 +122,7 @@ impl std::str::FromStr for VerbatimUrl {
     type Err = VerbatimUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
+        Self::parse_url(s)
             .map(|url| url.with_given(s.to_owned()))
             .map_err(|e| VerbatimUrlError::Url(s.to_owned(), e))
     }
@@ -160,15 +154,6 @@ pub enum VerbatimUrlError {
     RelativePath(PathBuf),
 }
 
-/// Whether to apply percent-encoding when expanding environment variables.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Escape {
-    /// Apply percent-encoding.
-    Url,
-    /// Do not apply percent-encoding.
-    Path,
-}
-
 /// Expand all available environment variables.
 ///
 /// This is modeled off of pip's environment variable expansion, which states:
@@ -184,7 +169,7 @@ enum Escape {
 ///   Valid characters in variable names follow the `POSIX standard
 ///   <http://pubs.opengroup.org/onlinepubs/9699919799/>`_ and are limited
 ///   to uppercase letter, digits and the `_` (underscore).
-fn expand_env_vars(s: &str, escape: Escape) -> Cow<'_, str> {
+pub fn expand_env_vars(s: &str) -> Cow<'_, str> {
     // Generate the project root, to be used via the `${PROJECT_ROOT}`
     // environment variable.
     static PROJECT_ROOT_FRAGMENT: Lazy<String> = Lazy::new(|| {
@@ -198,19 +183,10 @@ fn expand_env_vars(s: &str, escape: Escape) -> Cow<'_, str> {
     RE.replace_all(s, |caps: &regex::Captures<'_>| {
         let name = caps.name("name").unwrap().as_str();
         std::env::var(name).unwrap_or_else(|_| match name {
-            // Ensure that the variable is URL-escaped, if necessary.
-            "PROJECT_ROOT" => match escape {
-                Escape::Url => PROJECT_ROOT_FRAGMENT.replace(' ', "%20"),
-                Escape::Path => PROJECT_ROOT_FRAGMENT.to_string(),
-            },
+            "PROJECT_ROOT" => PROJECT_ROOT_FRAGMENT.to_string(),
             _ => caps["var"].to_owned(),
         })
     })
-}
-
-/// Expand all available environment variables in a path-like string.
-pub fn expand_path_vars(path: &str) -> Cow<'_, str> {
-    expand_env_vars(path, Escape::Path)
 }
 
 /// Like [`Url::parse`], but only splits the scheme. Derived from the `url` crate.

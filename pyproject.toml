@@ -30,6 +30,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries",
 ]
 readme = "README.md"
+dependencies = ["-e ./scripts/editable-installs/black_editable"]
 
 [project.urls]
 Repository = "https://github.com/astral-sh/uv"
