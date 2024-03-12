@@ -138,41 +138,20 @@ jobs:
 
       - uses: rui314/setup-mold@v1
 
+      - name: "Setup musl"
+        run: |
+          sudo apt-get install musl-tools
+          rustup target add x86_64-unknown-linux-musl
+
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build
+        run: cargo build --target x86_64-unknown-linux-musl
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-linux-${{ github.sha }}
-          path: ./target/debug/uv
-          retention-days: 1
-
-  build-binary-debian:
-    runs-on:
-      labels: ubuntu-latest-large
-    container: debian:bullseye
-    name: "build binary | debian"
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install Rust toolchain"
-        run: |
-          apt-get update
-          apt-get install -y curl build-essential cmake
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo "PATH=$PATH:$HOME/.cargo/bin" >> "$GITHUB_ENV"
-
-      - uses: Swatinem/rust-cache@v2
-      - name: "Build"
-        run: cargo build
-
-      - name: "Upload binary"
-        uses: actions/upload-artifact@v4
-        with:
-          name: uv-debian-${{ github.sha }}
-          path: ./target/debug/uv
+          path: ./target/x86_64-unknown-linux-musl/debug/uv
           retention-days: 1
 
   build-binary-macos-aarch64:
@@ -216,7 +195,7 @@ jobs:
           retention-days: 1
 
   system-test-debian:
-    needs: build-binary-debian
+    needs: build-binary-linux
     name: "check system | python on debian"
     runs-on: ubuntu-latest
     container: debian:bullseye
@@ -229,7 +208,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-debian-${{ github.sha }}
+          name: uv-linux-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -291,7 +270,7 @@ jobs:
         run: pypy scripts/check_system_python.py --uv ./uv
 
   system-test-pyston:
-    needs: build-binary-debian
+    needs: build-binary-linux
     name: "check system | pyston"
     runs-on: ubuntu-latest
     container: pyston/pyston:2.3.5
@@ -301,7 +280,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-debian-${{ github.sha }}
+          name: uv-linux-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
