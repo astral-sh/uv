@@ -248,7 +248,7 @@ jobs:
     needs: build-binary-linux
     name: "check system | python on rhel"
     runs-on: ubuntu-latest
-    container: registry.access.redhat.com/rhel7/rhel
+    container: registry.access.redhat.com/rhel8/rhel
     steps:
       - uses: actions/checkout@v3
 
