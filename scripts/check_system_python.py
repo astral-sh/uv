@@ -14,9 +14,17 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Check a Python interpreter.")
     parser.add_argument("--uv", help="Path to a uv binary.")
+    parser.add_argument(
+        "--externally-managed",
+        action="store_true",
+        help="Set if the Python installation has an EXTERNALLY-MANAGED marker.",
+    )
     args = parser.parse_args()
 
     uv: str = os.path.abspath(args.uv) if args.uv else "uv"
+    allow_externally_managed = (
+        ["--break-system-packages"] if args.externally_managed else []
+    )
 
     # Create a temporary directory.
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -32,7 +40,7 @@ if __name__ == "__main__":
         # Install the package (`pylint`).
         logging.info("Installing the package `pylint`.")
         subprocess.run(
-            [uv, "pip", "install", "pylint", "--system"],
+            [uv, "pip", "install", "pylint", "--system"] + allow_externally_managed,
             cwd=temp_dir,
             check=True,
         )
@@ -57,7 +65,7 @@ if __name__ == "__main__":
         # Uninstall the package (`pylint`).
         logging.info("Uninstalling the package `pylint`.")
         subprocess.run(
-            [uv, "pip", "uninstall", "pylint", "--system"],
+            [uv, "pip", "uninstall", "pylint", "--system"] + allow_externally_managed,
             cwd=temp_dir,
             check=True,
         )
