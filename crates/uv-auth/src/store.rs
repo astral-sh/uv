@@ -98,7 +98,7 @@ impl AuthenticationStore {
         let netloc = NetLoc::from(url);
         let mut passwords = PASSWORDS.lock().unwrap();
         if url.username().is_empty() {
-            // No cerdentials to save
+            // No credentials to save
             return;
         }
         let auth = UrlAuthData {
