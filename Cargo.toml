@@ -34,7 +34,7 @@ clap_complete_command = { version = "0.5.1" }
 configparser = { version = "3.0.4" }
 console = { version = "0.15.8", default-features = false }
 csv = { version = "1.3.0" }
-ctrlc = { version = "3.4.2" }
+ctrlc = { version = "3.4.4" }
 dashmap = { version = "5.5.3" }
 data-encoding = { version = "2.5.0" }
 derivative = { version = "2.2.0" }
@@ -54,7 +54,7 @@ hmac = { version = "0.12.1" }
 home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
 http = { version = "0.2.12" }
-indexmap = { version = "2.1.0" }
+indexmap = { version = "2.2.5" }
 indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
 itertools = { version = "0.12.1" }
@@ -69,15 +69,15 @@ pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.6.0" }
-pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "332f02b0e436ca8449c7ef5e15b992dd5f35908b" }
+pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "b5ead05c954b81690aec40255a1c36ec248e90af" }
 pyo3 = { version = "0.20.3" }
 pyo3-log = { version = "0.9.0" }
 pyproject-toml = { version = "0.10.0" }
 rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
-reflink-copy = { version = "0.1.14" }
+reflink-copy = { version = "0.1.15" }
 regex = { version = "1.10.2" }
-reqwest = { version = "0.11.23", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls-native-roots"] }
+reqwest = { version = "0.11.23", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls", "rustls-tls-native-roots"] }
 reqwest-middleware = { version = "0.2.4" }
 reqwest-retry = { version = "0.3.0" }
 rkyv = { version = "0.7.43", features = ["strict", "validation"] }
@@ -110,8 +110,8 @@ unicode-width = { version = "0.1.11" }
 unscanny = { version = "0.1.0" }
 url = { version = "2.5.0" }
 urlencoding = { version = "2.1.3" }
-walkdir = { version = "2.4.0" }
 wiremock = { version = "0.5.22" }
+walkdir = { version = "2.5.0" }
 which = { version = "6.0.0" }
 winapi = { version = "0.3.9" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }

@@ -399,6 +399,10 @@ uv accepts the following command-line arguments as environment variables:
   cache for any operations.
 - `UV_PRERELEASE`: Equivalent to the `--prerelease` command-line argument. If set to `allow`, uv
   will allow pre-release versions for all dependencies.
+- `UV_SYSTEM_PYTHON`:  Equivalent to the `--system` command-line argument. If set to `true`, uv
+  will use the first Python interpreter found in the system `PATH`.
+  WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI) environments and
+  should be used with caution, as it can modify the system Python installation.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
@@ -421,13 +425,18 @@ In addition, uv respects the following environment variables:
 
 ## Custom CA Certificates
 
-uv supports custom CA certificates (such as those needed by corporate proxies) by utilizing the
-system's trust store. To ensure this works out of the box, ensure your certificates are added to the
-system's trust store.
+By default, uv loads certificates from the bundled `webpki-roots` crate. The `webpki-roots` are a
+reliable set of trust roots from Mozilla, and including them in uv improves portability and
+performance (especially on macOS, where reading the system trust store incurs a significant delay).
+
+However, in some cases, you may want to use the platform's native certificate store, especially if
+you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your
+system's certificate store. To instruct uv to use the system's trust store, run uv with the
+`--native-tls` command-line flag.
 
 If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT_FILE` environment
-variable to the path of the certificate bundle, to instruct uv to use that file instead of the
-system's trust store.
+variable to the path of the certificate bundle (alongside the `--native-tls` flag), to instruct uv
+to use that file instead of the system's trust store.
 
 ## Acknowledgements
 

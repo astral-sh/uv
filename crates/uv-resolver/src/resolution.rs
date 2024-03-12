@@ -213,6 +213,14 @@ impl ResolutionGraph {
                     dependency_range,
                 ) = &state.incompatibility_store[*id].kind
                 {
+                    // `Kind::FromDependencyOf` will include inverse dependencies. That is, if we're
+                    // looking for a package `A`, this list will include incompatibilities of
+                    // package `B` _depending on_ `A`. We're only interested in packages that `A`
+                    // depends on.
+                    if package != self_package {
+                        continue;
+                    }
+
                     let PubGrubPackage::Package(self_package, _, _) = self_package else {
                         continue;
                     };

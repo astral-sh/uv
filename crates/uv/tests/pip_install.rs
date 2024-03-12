@@ -2414,3 +2414,272 @@ fn utf8_to_utf16_with_bom_be(s: &str) -> Vec<u8> {
     byteorder::BigEndian::write_u16_into(&u16s, &mut u8s);
     u8s
 }
+
+#[test]
+fn dry_run_install() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("httpx==0.25.1")?;
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--dry-run")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Would download 7 packages
+    Would install 7 packages
+     + anyio==4.0.0
+     + certifi==2023.11.17
+     + h11==0.14.0
+     + httpcore==1.0.2
+     + httpx==0.25.1
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn dry_run_install_url_dependency() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz")?;
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--dry-run")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Would download 3 packages
+    Would install 3 packages
+     + anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz")?;
+
+    // Install the URL dependency
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    // Then switch to a registry dependency
+    requirements_txt.write_str("anyio")?;
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--upgrade-package")
+        .arg("anyio")
+        .arg("--dry-run")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Would download 1 package
+    Would uninstall 1 package
+    Would install 1 package
+     - anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
+     + anyio==4.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("httpx==0.25.1")?;
+
+    // Install the package
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + anyio==4.0.0
+     + certifi==2023.11.17
+     + h11==0.14.0
+     + httpcore==1.0.2
+     + httpx==0.25.1
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    // Install again with dry run enabled
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--dry-run")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    Would make no changes
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn dry_run_install_transitive_dependency_already_installed(
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("httpcore==1.0.2")?;
+
+    // Install a dependency of httpx
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + certifi==2023.11.17
+     + h11==0.14.0
+     + httpcore==1.0.2
+    "###
+    );
+
+    // Install it httpx with dry run enabled
+    requirements_txt.write_str("httpx==0.25.1")?;
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--dry-run")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Would download 4 packages
+    Would install 4 packages
+     + anyio==4.0.0
+     + httpx==0.25.1
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn dry_run_install_then_upgrade() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("httpx==0.25.0")?;
+
+    // Install the package
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + anyio==4.0.0
+     + certifi==2023.11.17
+     + h11==0.14.0
+     + httpcore==0.18.0
+     + httpx==0.25.0
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    // Bump the version and install with dry run enabled
+    requirements_txt.write_str("httpx==0.25.1")?;
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--dry-run"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Would download 1 package
+    Would uninstall 1 package
+    Would install 1 package
+     - httpx==0.25.0
+     + httpx==0.25.1
+    "###
+    );
+
+    Ok(())
+}

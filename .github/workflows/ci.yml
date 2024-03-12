@@ -49,7 +49,7 @@ jobs:
     strategy:
       matrix:
         include:
-          # We use the large GitHub actions runners for faster testing
+          # We use the large GitHub actions runners
           # For Ubuntu and Windows, this requires Organization-level configuration
           # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
           - { os: "ubuntu", runner: "ubuntu-latest-large" }
@@ -61,37 +61,46 @@ jobs:
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
+
       - if: ${{ matrix.os == 'macos' }}
         name: "Install bootstrap dependencies"
         run: brew install coreutils
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: "Install pipx"
         run: pip install pipx
+
       - name: "Install required Python versions"
         run: pipx run scripts/bootstrap/install.py
+
       - name: "Install Rust toolchain"
         run: rustup show
-      - if: ${{ matrix.os != 'windows' }}
-        uses: rui314/setup-mold@v1
+
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+
+      - if: ${{ matrix.os != 'windows' }}
+        uses: rui314/setup-mold@v1
+
       - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+
       - name: "Cargo test"
         run: |
           cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
-      - name: "Smoke test"
+
+      - name: "Smoke test (unix)"
         if: ${{ matrix.os != 'windows' }}
         run: |
           uv="./target/debug/uv"
           $uv venv
           $uv pip install ruff
-      - name: "Smoke test"
+
+      - name: "Smoke test (windows)"
         if: ${{ matrix.os == 'windows' }}
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
@@ -119,3 +128,355 @@ jobs:
       - name: "Build"
         working-directory: crates/uv-trampoline
         run: cargo build --release --target x86_64-pc-windows-msvc
+
+  build-binary-linux:
+    runs-on:
+      labels: ubuntu-latest-large
+    name: "build binary | linux"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rui314/setup-mold@v1
+
+      - name: "Setup musl"
+        run: |
+          sudo apt-get install musl-tools
+          rustup target add x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+      - name: "Build"
+        run: cargo build --target x86_64-unknown-linux-musl
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+          path: ./target/x86_64-unknown-linux-musl/debug/uv
+          retention-days: 1
+
+  build-binary-macos-aarch64:
+    runs-on:
+      labels: macos-14
+    name: "build binary | macos"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@v2
+      - name: "Build"
+        run: cargo build
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: uv-macos-aarch64-${{ github.sha }}
+          path: ./target/debug/uv
+          retention-days: 1
+
+  build-binary-windows:
+    runs-on:
+      labels: windows-latest-large
+    name: "build binary | windows"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@v2
+      - name: "Build"
+        run: cargo build
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+          path: ./target/debug/uv.exe
+          retention-days: 1
+
+  system-test-debian:
+    needs: build-binary-linux
+    name: "check system | python on debian"
+    runs-on: ubuntu-latest
+    container: debian:bullseye
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: apt-get update && apt-get install -y python3.9 python3-pip python3.9-venv
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3.9)
+
+      - name: "Validate global Python install"
+        run: python3.9 scripts/check_system_python.py --uv ./uv
+
+  system-test-ubuntu:
+    needs: build-binary-linux
+    name: "check system | python on ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python)
+
+      - name: "Validate global Python install"
+        run: python scripts/check_system_python.py --uv ./uv
+
+  system-test-pypy:
+    needs: build-binary-linux
+    name: "check system | pypy on ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "pypy3.9"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which pypy)
+
+      - name: "Validate global Python install"
+        run: pypy scripts/check_system_python.py --uv ./uv
+
+  system-test-pyston:
+    needs: build-binary-linux
+    name: "check system | pyston"
+    runs-on: ubuntu-latest
+    container: pyston/pyston:2.3.5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which pyston)
+
+      - name: "Validate global Python install"
+        run: pyston scripts/check_system_python.py --uv ./uv
+
+  system-test-alpine:
+    needs: build-binary-linux
+    name: "check system | alpine"
+    runs-on: ubuntu-latest
+    container: alpine:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: apk add --update --no-cache python3 py3-pip
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
+
+  system-test-macos:
+    needs: build-binary-macos-aarch64
+    name: "check system | python on macos"
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: brew install python@3.8
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-macos-aarch64-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3.11)
+
+      - name: "Validate global Python install"
+        run: python3.11 scripts/check_system_python.py --uv ./uv
+
+  system-test-windows-python-310:
+    needs: build-binary-windows
+    name: "check system | python3.10 on windows"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+
+      - name: "Print Python path"
+        run: echo $(which python)
+
+      - name: "Validate global Python install"
+        run: py -3.10 ./scripts/check_system_python.py --uv ./uv.exe
+
+  system-test-windows-python-313:
+    needs: build-binary-windows
+    name: "check system | python3.13 on windows"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          allow-prereleases: true
+          cache: pip
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+
+      - name: "Print Python path"
+        run: echo $(which python)
+
+      - name: "Validate global Python install"
+        run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
+
+  system-test-choco:
+    needs: build-binary-windows
+    name: "check system | python3.12 via chocolatey"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: choco install python3 --verbose --version=3.9.13
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: py -3.9 ./scripts/check_system_python.py --uv ./uv.exe
+
+  system-test-pyenv:
+    needs: build-binary-linux
+    name: "check system | python via pyenv"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install pyenv"
+        uses: "gabrielfalcao/pyenv-action@v18"
+        with:
+          default: 3.9.7
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3.9)
+
+      - name: "Validate global Python install"
+        run: python3.9 scripts/check_system_python.py --uv ./uv
+
+  system-test-conda:
+    needs:
+      [build-binary-windows, build-binary-macos-aarch64, build-binary-linux]
+    name: check system | conda${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["linux", "windows", "macos"]
+        python-version: ["3.8", "3.11"]
+        include:
+          - { os: "linux", target: "linux", runner: "ubuntu-latest" }
+          - { os: "windows", target: "windows", runner: "windows-latest" }
+          - { os: "macos", target: "macos-aarch64", runner: "macos-14" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: "latest"
+          activate-environment: uv
+          python-version: ${{ matrix.python-version }}
+
+      - name: Conda info
+        shell: bash -el {0}
+        run: conda info
+
+      - name: Conda list
+        shell: pwsh
+        run: conda list
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-${{ matrix.target }}-${{ github.sha }}
+
+      - name: "Prepare binary"
+        if: ${{ matrix.os != 'windows' }}
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        shell: bash -el {0}
+        run: echo $(which python)
+
+      - name: "Validate global Python install"
+        shell: bash -el {0}
+        run: python ./scripts/check_system_python.py --uv ./uv

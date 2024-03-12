@@ -47,6 +47,7 @@ pub(crate) async fn pip_sync(
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
+    native_tls: bool,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -118,6 +119,7 @@ pub(crate) async fn pip_sync(
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
+        .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
         .keyring_provider(keyring_provider)

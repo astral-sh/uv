@@ -12,7 +12,6 @@ use pubgrub::error::PubGrubError;
 use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use rustc_hash::{FxHashMap, FxHashSet};
-use tokio::select;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info_span, instrument, trace, Instrument};
 use url::Url;
@@ -197,42 +196,40 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         let requests_fut = self.fetch(request_stream).fuse();
 
         // Run the solver.
-        let resolve_fut = self.solve(&request_sink).fuse();
+        let resolve_fut = self.solve(request_sink).fuse();
 
-        let resolution = select! {
-            result = requests_fut => {
-                result?;
-                return Err(ResolveError::ChannelClosed);
+        // Wait for both to complete.
+        match tokio::try_join!(requests_fut, resolve_fut) {
+            Ok(((), resolution)) => {
+                self.on_complete();
+                Ok(resolution)
             }
-            resolution = resolve_fut => {
-                resolution.map_err(|err| {
-                    // Add version information to improve unsat error messages.
-                    if let ResolveError::NoSolution(err) = err {
-                        ResolveError::NoSolution(
-                            err
-                            .with_available_versions(&self.python_requirement, &self.visited, &self.index.packages)
-                            .with_selector(self.selector.clone())
-                            .with_python_requirement(&self.python_requirement)
-                            .with_index_locations(self.provider.index_locations())
-                            .with_unavailable_packages(&self.unavailable_packages)
+            Err(err) => {
+                // Add version information to improve unsat error messages.
+                Err(if let ResolveError::NoSolution(err) = err {
+                    ResolveError::NoSolution(
+                        err.with_available_versions(
+                            &self.python_requirement,
+                            &self.visited,
+                            &self.index.packages,
                         )
-                    } else {
-                        err
-                    }
-                })?
+                        .with_selector(self.selector.clone())
+                        .with_python_requirement(&self.python_requirement)
+                        .with_index_locations(self.provider.index_locations())
+                        .with_unavailable_packages(&self.unavailable_packages),
+                    )
+                } else {
+                    err
+                })
             }
-        };
-
-        self.on_complete();
-
-        Ok(resolution)
+        }
     }
 
     /// Run the `PubGrub` solver.
     #[instrument(skip_all)]
     async fn solve(
         &self,
-        request_sink: &tokio::sync::mpsc::Sender<Request>,
+        request_sink: tokio::sync::mpsc::Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::Root(self.project.clone());
 
@@ -255,8 +252,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             // Run unit propagation.
             state.unit_propagation(next)?;
 
-            // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
-            Self::pre_visit(state.partial_solution.prioritized_packages(), request_sink).await?;
+            // Pre-visit all candidate packages, to allow metadata to be fetched in parallel. If
+            // the dependency mode is direct, we only need to visit the root package.
+            if self.dependency_mode.is_transitive() {
+                Self::pre_visit(state.partial_solution.prioritized_packages(), &request_sink)
+                    .await?;
+            }
 
             // Choose a package version.
             let Some(highest_priority_pkg) =
@@ -290,7 +291,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     &next,
                     term_intersection.unwrap_positive(),
                     &mut pins,
-                    request_sink,
+                    &request_sink,
                 )
                 .await?;
 
@@ -430,7 +431,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 // Retrieve that package dependencies.
                 let package = &next;
                 let dependencies = match self
-                    .get_dependencies(package, &version, &mut priorities, request_sink)
+                    .get_dependencies(package, &version, &mut priorities, &request_sink)
                     .await?
                 {
                     Dependencies::Unavailable(reason) => {
