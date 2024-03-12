@@ -115,13 +115,14 @@ fn show_requires_multiple() -> Result<()> {
     Ok(())
 }
 
+// Asserts python version marker in the metadata is correctly evaluated.
+// click 8.1.7 requires importlib-metadata but only when python_version < "3.8"
 #[test]
 fn show_python_version_marker() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
-    // ./click-8.1.7.dist-info/METADATA:Requires-Dist: importlib-metadata ; python_version < "3.8"
     requirements_txt.write_str("click==8.1.7")?;
 
     uv_snapshot!(install_command(&context)

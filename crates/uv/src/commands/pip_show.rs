@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
@@ -127,6 +128,8 @@ pub(crate) fn pip_show(
             .into_iter()
             .filter(|req| req.evaluate_markers(markers, &[]))
             .map(|req| req.name.to_string())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
             .collect::<Vec<_>>();
         requires.sort();
         writeln!(printer.stdout(), "Requires: {}", requires.join(", "))?;
