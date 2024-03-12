@@ -516,17 +516,10 @@ fn install_editable() -> Result<()> {
         .collect::<Vec<_>>();
 
     // Install the editable package.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(filters, command(&context)
         .arg("-e")
         .arg("../../scripts/editable-installs/poetry_editable")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -618,16 +611,9 @@ fn install_editable_and_registry() -> Result<()> {
         .collect();
 
     // Install the registry-based version of Black.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(filters, command(&context)
         .arg("black")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -647,17 +633,10 @@ fn install_editable_and_registry() -> Result<()> {
     );
 
     // Install the editable version of Black. This should remove the registry-based version.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(filters, command(&context)
         .arg("-e")
         .arg("../../scripts/editable-installs/black_editable")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -674,16 +653,10 @@ fn install_editable_and_registry() -> Result<()> {
 
     // Re-install the registry-based version of Black. This should be a no-op, since we have a
     // version of Black installed (the editable version) that satisfies the requirements.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(filters, command(&context)
         .arg("black")
         .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -703,16 +676,9 @@ fn install_editable_and_registry() -> Result<()> {
         .collect();
 
     // Re-install Black at a specific version. This should replace the editable version.
-    uv_snapshot!(filters2, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(filters2, command(&context)
         .arg("black==23.10.0")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
     exit_code: 0
@@ -855,21 +821,19 @@ fn install_extra_index_url_has_priority() {
         // find it, but then not find a compatible version. After
         // the fix, `uv` will check pypi.org first since it is given
         // priority via --extra-index-url.
-        .arg("black==24.2.0"), @r###"
+        .arg("black==24.2.0")
+        .arg("--no-deps")
+        .arg("--exclude-newer")
+        .arg("2024-03-09"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Downloaded 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
      + black==24.2.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==23.2
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
     "###
     );
 
@@ -884,11 +848,6 @@ fn install_git_public_https() {
 
     let mut command = command(&context);
     command.arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage");
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
 
     uv_snapshot!(command
         , @r###"
@@ -981,11 +940,6 @@ fn install_git_private_https_pat() {
     command.arg(format!(
         "uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"
     ));
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
 
     uv_snapshot!(filters, command
         , @r###"
@@ -1024,11 +978,6 @@ fn install_git_private_https_pat_at_ref() {
 
     let mut command = command(&context);
     command.arg(format!("uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"));
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
 
     uv_snapshot!(filters, command, @r###"
     success: true
@@ -1063,11 +1012,6 @@ fn install_git_private_https_pat_and_username() {
 
     let mut command = command(&context);
     command.arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"));
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
 
     uv_snapshot!(filters, command
         , @r###"
@@ -1127,11 +1071,6 @@ fn reinstall_no_binary() {
     // The first installation should use a pre-built wheel
     let mut command = command(&context);
     command.arg("anyio").arg("--strict");
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
     uv_snapshot!(command, @r###"
     success: true
     exit_code: 0
@@ -1157,11 +1096,6 @@ fn reinstall_no_binary() {
         .arg("--no-binary")
         .arg(":all:")
         .arg("--strict");
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
     uv_snapshot!(command, @r###"
     success: true
     exit_code: 0
@@ -1193,11 +1127,6 @@ fn reinstall_no_binary() {
         .arg("--reinstall-package")
         .arg("anyio")
         .arg("--strict");
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
     uv_snapshot!(filters, command, @r###"
     success: true
     exit_code: 0
@@ -1570,8 +1499,7 @@ fn install_constraints_respects_offline_mode() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Error while accessing remote requirements file http://example.com/requirements.txt: Middleware error: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://example.com/requirements.txt`
-      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `http://example.com/requirements.txt`
+    error: Network connectivity is disabled, but a remote requirements file was requested: http://example.com/requirements.txt
     "###
     );
 }
@@ -1649,14 +1577,7 @@ fn direct_url_zip_file_bunk_permissions() -> Result<()> {
         "opensafely-pipeline @ https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip",
     )?;
 
-    let mut command = command(&context);
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
-    }
-
-    uv_snapshot!(command
+    uv_snapshot!(command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -2418,6 +2339,80 @@ fn no_build_isolation() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// This tests that `uv` can read UTF-16LE encoded requirements.txt files.
+///
+/// Ref: <https://github.com/astral-sh/uv/issues/2276>
+#[test]
+fn install_utf16le_requirements() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli"))?;
+
+    uv_snapshot!(command_without_exclude_newer(&context)
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==2.0.1
+    "###
+    );
+    Ok(())
+}
+
+/// This tests that `uv` can read UTF-16BE encoded requirements.txt files.
+///
+/// Ref: <https://github.com/astral-sh/uv/issues/2276>
+#[test]
+fn install_utf16be_requirements() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli"))?;
+
+    uv_snapshot!(command_without_exclude_newer(&context)
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==2.0.1
+    "###
+    );
+    Ok(())
+}
+
+fn utf8_to_utf16_with_bom_le(s: &str) -> Vec<u8> {
+    use byteorder::ByteOrder;
+
+    let mut u16s = vec![0xFEFF];
+    u16s.extend(s.encode_utf16());
+    let mut u8s = vec![0; u16s.len() * 2];
+    byteorder::LittleEndian::write_u16_into(&u16s, &mut u8s);
+    u8s
+}
+
+fn utf8_to_utf16_with_bom_be(s: &str) -> Vec<u8> {
+    use byteorder::ByteOrder;
+
+    let mut u16s = vec![0xFEFF];
+    u16s.extend(s.encode_utf16());
+    let mut u8s = vec![0; u16s.len() * 2];
+    byteorder::BigEndian::write_u16_into(&u16s, &mut u8s);
+    u8s
 }
 
 #[test]
