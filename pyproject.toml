@@ -45,7 +45,7 @@ include = ["rust-toolchain.toml"]
 
 [tool.rooster]
 major_labels = []  # We do not use the major version number
-minor_labels = ["breaking"]   # Bump the minor version on breaking changes
+minor_labels = []  # Normally we'd bump the minor version on breaking changes, but we're waiting
 changelog_ignore_labels = ["internal", "ci", "testing"]
 changelog_sections.breaking = "Breaking changes"
 changelog_sections.enhancement = "Enhancements"
