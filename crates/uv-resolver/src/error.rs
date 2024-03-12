@@ -27,7 +27,7 @@ pub enum ResolveError {
     #[error(transparent)]
     Client(#[from] uv_client::Error),
 
-    #[error("The channel is closed, was there a panic?")]
+    #[error("The channel closed unexpectedly")]
     ChannelClosed,
 
     #[error(transparent)]
