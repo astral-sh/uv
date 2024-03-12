@@ -115,8 +115,8 @@ fn show_requires_multiple() -> Result<()> {
     Ok(())
 }
 
-// Asserts python version marker in the metadata is correctly evaluated.
-// click 8.1.7 requires importlib-metadata but only when python_version < "3.8"
+/// Asserts that the Python version marker in the metadata is correctly evaluated.
+/// `click` v8.1.7 requires `importlib-metadata`, but only when `python_version < "3.8"`.
 #[test]
 fn show_python_version_marker() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -142,13 +142,13 @@ fn show_python_version_marker() -> Result<()> {
     );
 
     context.assert_command("import click").success();
-    let mut filters = [(
+
+    let mut filters = vec![(
         r"Location:.*site-packages",
         "Location: [WORKSPACE_DIR]/site-packages",
-    )]
-    .to_vec();
+    )];
     if cfg!(windows) {
-        filters.push(("Requires: colorama", "Requires: "));
+        filters.push(("Requires: colorama", "Requires:"));
     }
 
     uv_snapshot!(filters, Command::new(get_bin())
@@ -165,7 +165,7 @@ fn show_python_version_marker() -> Result<()> {
     Name: click
     Version: 8.1.7
     Location: [WORKSPACE_DIR]/site-packages
-    Requires: 
+    Requires:
 
     ----- stderr -----
     "###
@@ -199,11 +199,11 @@ fn show_found_single_package() -> Result<()> {
     );
 
     context.assert_command("import markupsafe").success();
-    let filters = [(
+
+    let filters = vec![(
         r"Location:.*site-packages",
         "Location: [WORKSPACE_DIR]/site-packages",
-    )]
-    .to_vec();
+    )];
 
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
@@ -219,7 +219,7 @@ fn show_found_single_package() -> Result<()> {
     Name: markupsafe
     Version: 2.1.3
     Location: [WORKSPACE_DIR]/site-packages
-    Requires: 
+    Requires:
 
     ----- stderr -----
     "###
@@ -281,12 +281,12 @@ fn show_found_multiple_packages() -> Result<()> {
     Name: markupsafe
     Version: 2.1.3
     Location: [WORKSPACE_DIR]/site-packages
-    Requires: 
+    Requires:
     ---
     Name: pip
     Version: 21.3.1
     Location: [WORKSPACE_DIR]/site-packages
-    Requires: 
+    Requires:
 
     ----- stderr -----
     "###
@@ -348,7 +348,7 @@ fn show_found_one_out_of_two() -> Result<()> {
     Name: markupsafe
     Version: 2.1.3
     Location: [WORKSPACE_DIR]/site-packages
-    Requires: 
+    Requires:
 
     ----- stderr -----
     warning: Package(s) not found for: flask

@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
@@ -121,18 +122,24 @@ pub(crate) fn pip_show(
                 .simplified_display()
         )?;
 
-        let mut requires = distribution
-            .metadata()
-            .unwrap()
-            .requires_dist
-            .into_iter()
-            .filter(|req| req.evaluate_markers(markers, &[]))
-            .map(|req| req.name.to_string())
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-        requires.sort();
-        writeln!(printer.stdout(), "Requires: {}", requires.join(", "))?;
+        // If available, print the requirements.
+        if let Ok(metadata) = distribution.metadata() {
+            let requires_dist = metadata
+                .requires_dist
+                .into_iter()
+                .filter(|req| req.evaluate_markers(markers, &[]))
+                .map(|req| req.name)
+                .collect::<BTreeSet<_>>();
+            if requires_dist.is_empty() {
+                writeln!(printer.stdout(), "Requires:")?;
+            } else {
+                writeln!(
+                    printer.stdout(),
+                    "Requires: {}",
+                    requires_dist.into_iter().join(", ")
+                )?;
+            }
+        }
     }
 
     // Validate that the environment is consistent.
