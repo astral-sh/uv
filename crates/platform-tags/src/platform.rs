@@ -73,7 +73,7 @@ impl fmt::Display for Os {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Arch {
-    #[serde(alias = "amd64")]
+    #[serde(alias = "arm64")]
     Aarch64,
     Armv7L,
     Powerpc64Le,
