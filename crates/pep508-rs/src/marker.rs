@@ -319,7 +319,7 @@ impl FromStr for StringVersion {
 
 impl Display for StringVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.version.fmt(f)
+        self.string.fmt(f)
     }
 }
 
