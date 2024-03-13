@@ -200,28 +200,28 @@ mod tests {
     #[test]
     fn url_compatibility() -> Result<(), url::ParseError> {
         // Same repository, same tag.
-        let previous = VerbatimUrl::parse("git+https://example.com/MyProject.git@v1.0")?;
-        let url = VerbatimUrl::parse("git+https://example.com/MyProject.git@v1.0")?;
+        let previous = VerbatimUrl::parse_url("git+https://example.com/MyProject.git@v1.0")?;
+        let url = VerbatimUrl::parse_url("git+https://example.com/MyProject.git@v1.0")?;
         assert!(is_equal(&previous, &url));
 
         // Same repository, different tags.
-        let previous = VerbatimUrl::parse("git+https://example.com/MyProject.git@v1.0")?;
-        let url = VerbatimUrl::parse("git+https://example.com/MyProject.git@v1.1")?;
+        let previous = VerbatimUrl::parse_url("git+https://example.com/MyProject.git@v1.0")?;
+        let url = VerbatimUrl::parse_url("git+https://example.com/MyProject.git@v1.1")?;
         assert!(!is_equal(&previous, &url));
 
         // Same repository (with and without `.git`), same tag.
-        let previous = VerbatimUrl::parse("git+https://example.com/MyProject@v1.0")?;
-        let url = VerbatimUrl::parse("git+https://example.com/MyProject.git@v1.0")?;
+        let previous = VerbatimUrl::parse_url("git+https://example.com/MyProject@v1.0")?;
+        let url = VerbatimUrl::parse_url("git+https://example.com/MyProject.git@v1.0")?;
         assert!(is_equal(&previous, &url));
 
         // Same repository, no tag on the previous URL.
-        let previous = VerbatimUrl::parse("git+https://example.com/MyProject.git")?;
-        let url = VerbatimUrl::parse("git+https://example.com/MyProject.git@v1.0")?;
+        let previous = VerbatimUrl::parse_url("git+https://example.com/MyProject.git")?;
+        let url = VerbatimUrl::parse_url("git+https://example.com/MyProject.git@v1.0")?;
         assert!(!is_equal(&previous, &url));
 
         // Same repository, tag on the previous URL, no tag on the overriding URL.
-        let previous = VerbatimUrl::parse("git+https://example.com/MyProject.git@v1.0")?;
-        let url = VerbatimUrl::parse("git+https://example.com/MyProject.git")?;
+        let previous = VerbatimUrl::parse_url("git+https://example.com/MyProject.git@v1.0")?;
+        let url = VerbatimUrl::parse_url("git+https://example.com/MyProject.git")?;
         assert!(!is_equal(&previous, &url));
 
         Ok(())
@@ -230,29 +230,29 @@ mod tests {
     #[test]
     fn url_precision() -> Result<(), url::ParseError> {
         // Same repository, no tag on the previous URL, non-SHA on the overriding URL.
-        let previous = VerbatimUrl::parse("git+https://example.com/MyProject.git")?;
-        let url = VerbatimUrl::parse("git+https://example.com/MyProject.git@v1.0")?;
+        let previous = VerbatimUrl::parse_url("git+https://example.com/MyProject.git")?;
+        let url = VerbatimUrl::parse_url("git+https://example.com/MyProject.git@v1.0")?;
         assert!(!is_precise(&previous, &url));
 
         // Same repository, no tag on the previous URL, SHA on the overriding URL.
-        let previous = VerbatimUrl::parse("git+https://example.com/MyProject.git")?;
-        let url = VerbatimUrl::parse(
+        let previous = VerbatimUrl::parse_url("git+https://example.com/MyProject.git")?;
+        let url = VerbatimUrl::parse_url(
             "git+https://example.com/MyProject.git@c3cd550a7a7c41b2c286ca52fbb6dec5fea195ef",
         )?;
         assert!(is_precise(&previous, &url));
 
         // Same repository, tag on the previous URL, SHA on the overriding URL.
-        let previous = VerbatimUrl::parse("git+https://example.com/MyProject.git@v1.0")?;
-        let url = VerbatimUrl::parse(
+        let previous = VerbatimUrl::parse_url("git+https://example.com/MyProject.git@v1.0")?;
+        let url = VerbatimUrl::parse_url(
             "git+https://example.com/MyProject.git@c3cd550a7a7c41b2c286ca52fbb6dec5fea195ef",
         )?;
         assert!(is_precise(&previous, &url));
 
         // Same repository, SHA on the previous URL, different SHA on the overriding URL.
-        let previous = VerbatimUrl::parse(
+        let previous = VerbatimUrl::parse_url(
             "git+https://example.com/MyProject.git@5ae5980c885e350a34ca019a84ba14a2a228d262",
         )?;
-        let url = VerbatimUrl::parse(
+        let url = VerbatimUrl::parse_url(
             "git+https://example.com/MyProject.git@c3cd550a7a7c41b2c286ca52fbb6dec5fea195ef",
         )?;
         assert!(!is_precise(&previous, &url));
