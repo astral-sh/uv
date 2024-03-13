@@ -1419,11 +1419,11 @@ fn install_upgrade() {
 #[test]
 fn install_constraints_txt() -> Result<()> {
     let context = TestContext::new("3.12");
-    let requirementstxt = context.temp_dir.child("requirements.txt");
-    requirementstxt.write_str("django==5.0b1")?;
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
 
     let constraints_txt = context.temp_dir.child("constraints.txt");
-    constraints_txt.write_str("sqlparse<0.4.4")?;
+    constraints_txt.write_str("idna<3.4")?;
 
     uv_snapshot!(command(&context)
             .arg("-r")
@@ -1438,9 +1438,9 @@ fn install_constraints_txt() -> Result<()> {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + asgiref==3.7.2
-     + django==5.0b1
-     + sqlparse==0.4.3
+     + anyio==3.7.0
+     + idna==3.3
+     + sniffio==1.3.0
     "###
     );
 
@@ -1452,10 +1452,10 @@ fn install_constraints_txt() -> Result<()> {
 fn install_constraints_inline() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirementstxt = context.temp_dir.child("requirements.txt");
-    requirementstxt.write_str("django==5.0b1\n-c constraints.txt")?;
+    requirementstxt.write_str("anyio==3.7.0\n-c constraints.txt")?;
 
     let constraints_txt = context.temp_dir.child("constraints.txt");
-    constraints_txt.write_str("sqlparse<0.4.4")?;
+    constraints_txt.write_str("idna<3.4")?;
 
     uv_snapshot!(command(&context)
             .arg("-r")
@@ -1468,9 +1468,9 @@ fn install_constraints_inline() -> Result<()> {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + asgiref==3.7.2
-     + django==5.0b1
-     + sqlparse==0.4.3
+     + anyio==3.7.0
+     + idna==3.3
+     + sniffio==1.3.0
     "###
     );
 
