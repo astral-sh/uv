@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+#
+# Checks if the proxy is running.
+#
+# Usage:
+#
+#   offlinepi-healthcheck
+
+exec curl --output /dev/null --silent --head --fail --proxy 127.0.0.1:8080 http://mitm.it
+
+# TODO(zanieb): We could consider looking at the response to determine if a _different_ proxy is being used.
+# TODO(zanieb): This could take a configurable host and port

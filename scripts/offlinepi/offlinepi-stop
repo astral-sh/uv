@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+#
+# Stops the proxy at the given PID.
+#
+# Usage:
+#
+#   offlinepi-stop <pid>
+
+pid=$1
+shift
+
+if [ -z "$pid" ]; then
+    echo 'A PID must be provided.'
+    exit 1
+fi
+
+if [ -n "$*" ]; then
+    echo "Unexpected extra arguments: $*"
+    exit 1
+fi
+
+kill "$pid" 2> /dev/null
+wait "$pid" 2> /dev/null
+echo "Done!"

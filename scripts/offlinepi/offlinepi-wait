@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#
+# Waits for the proxy to be ready.
+#
+# Usage:
+#
+#   offlinepi-wait-ready <pid>
+
+projectroot=$(realpath "$(dirname "$0")")
+healthcheck="$projectroot/offlinepi-healthcheck"
+
+pid=$1
+shift
+
+if [ -z "$pid" ]; then
+    echo 'A PID must be provided.'
+    exit 1
+fi
+
+if [ -n "$*" ]; then
+    echo "Unexpected extra arguments: $*"
+    exit 1
+fi
+
+
+# Wait until the server is ready
+until $healthcheck; do
+    if ! kill -0 "$pid" 2> /dev/null; then
+        exit 1
+    fi
+    sleep 1
+done

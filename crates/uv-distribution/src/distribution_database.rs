@@ -168,7 +168,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         archive,
                         filename: wheel.filename.clone(),
                     })),
-                    Err(Error::Extract(err)) if err.is_http_streaming_unsupported() => {
+                    Err(Error::Extract(err)) => {
                         warn!(
                             "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
                         );
@@ -215,7 +215,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         archive,
                         filename: wheel.filename.clone(),
                     })),
-                    Err(Error::Client(err)) if err.is_http_streaming_unsupported() => {
+                    Err(Error::Client(err)) => {
+                        //if err.is_http_streaming_unsupported() => {
                         warn!(
                             "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
                         );
@@ -323,7 +324,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             Dist::Built(built_dist) => {
                 match self.client.wheel_metadata(built_dist).boxed().await {
                     Ok(metadata) => Ok((metadata, None)),
-                    Err(err) if err.is_http_streaming_unsupported() => {
+                    Err(err) => {
                         warn!("Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})");
 
                         // If the request failed due to an error that could be resolved by

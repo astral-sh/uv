@@ -2460,6 +2460,8 @@ fn dry_run_install() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("httpx==0.25.1")?;
+    //requirements_txt.write_str("anyio==4.0.0")?;
+    //requirements_txt.write_str("setuptools")?;
 
     uv_snapshot!(command(&context)
         .arg("-r")
@@ -2493,6 +2495,7 @@ fn dry_run_install_url_dependency() -> std::result::Result<(), Box<dyn std::erro
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz")?;
+    //requirements_txt.write_str("setuptools")?;
 
     uv_snapshot!(command(&context)
         .arg("-r")
