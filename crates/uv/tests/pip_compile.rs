@@ -5079,7 +5079,7 @@ fn no_stream() -> Result<()> {
     // Write to a requirements file.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in
-        .write_str("hashb_foxglove_protocolbuffers_python==25.3.0.1.20240226043130+465630478360")?;
+        .write_str("hashb_foxglove_protocolbuffers_python==25.3.0.1.20240226043130+465630478360\nprotobuf==4.25.3")?;
 
     uv_snapshot!(Command::new(get_bin())
         .arg("pip")
