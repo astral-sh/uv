@@ -1,0 +1,2 @@
+# Run on python 3.12 for a pathological test case
+bio_embeddings[all]
