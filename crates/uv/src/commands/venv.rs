@@ -39,6 +39,7 @@ pub(crate) async fn venv(
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -52,6 +53,7 @@ pub(crate) async fn venv(
         connectivity,
         seed,
         exclude_newer,
+        native_tls,
         cache,
         printer,
     )
@@ -96,6 +98,7 @@ async fn venv_impl(
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> miette::Result<ExitStatus> {
@@ -139,6 +142,7 @@ async fn venv_impl(
 
         // Instantiate a client.
         let client = RegistryClientBuilder::new(cache.clone())
+            .native_tls(native_tls)
             .index_urls(index_locations.index_urls())
             .keyring_provider(keyring_provider)
             .connectivity(connectivity)
