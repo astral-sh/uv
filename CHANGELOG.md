@@ -2,13 +2,11 @@
 
 ## 0.1.19
 
-### Enhancements
-
-- feat: keep backwards compatibility with `SSL_CERT_FILE` without requiring `--native-tls` ([#2401](https://github.com/astral-sh/uv/pull/2401))
-
 ### Configuration
 
 - Add `UV_NATIVE_TLS` environment variable ([#2412](https://github.com/astral-sh/uv/pull/2412))
+- Allow `SSL_CERT_FILE` without requiring `--native-tls` ([#2401](https://github.com/astral-sh/uv/pull/2401))
+- Add support for retrieving credentials from `keyring` ([#2254](https://github.com/astral-sh/uv/pull/2254))
 
 ### Bug fixes
 
@@ -21,10 +19,9 @@
 
 - Document HTTP authentication ([#2425](https://github.com/astral-sh/uv/pull/2425))
 
-### Other changes
+### Performance
 
-- Add support for retrieving credentials from `keyring` ([#2254](https://github.com/astral-sh/uv/pull/2254))
-- Update pubgrub for faster range operations ([#2421](https://github.com/astral-sh/uv/pull/2421))
+- Improve performance of version range operations ([#2421](https://github.com/astral-sh/uv/pull/2421))
 
 ## 0.1.18
 
