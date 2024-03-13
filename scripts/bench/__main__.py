@@ -25,6 +25,7 @@ each build, as in:
         --uv-path ./target/release/baseline \
         requirements.in
 """
+
 import abc
 import argparse
 import enum
@@ -271,11 +272,9 @@ class PipCompile(Suite):
             ],
         )
 
-    def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
-        ...
+    def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None: ...
 
-    def install_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
-        ...
+    def install_warm(self, requirements_file: str, *, cwd: str) -> Command | None: ...
 
 
 class PipSync(Suite):
@@ -283,16 +282,13 @@ class PipSync(Suite):
         self.name = path or "pip-sync"
         self.path = path or "pip-sync"
 
-    def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
-        ...
+    def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None: ...
 
-    def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None:
-        ...
+    def resolve_warm(self, requirements_file: str, *, cwd: str) -> Command | None: ...
 
     def resolve_incremental(
         self, requirements_file: str, *, cwd: str
-    ) -> Command | None:
-        ...
+    ) -> Command | None: ...
 
     def install_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
         cache_dir = os.path.join(cwd, ".cache")

@@ -153,9 +153,9 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             and scenario["name"] != "local-not-latest"
         ):
             expected["satisfiable"] = False
-            expected[
-                "explanation"
-            ] = "We do not have correct behavior for local version identifiers yet"
+            expected["explanation"] = (
+                "We do not have correct behavior for local version identifiers yet"
+            )
 
     # Generate cute names for each scenario
     for scenario in data["scenarios"]:
@@ -181,13 +181,13 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
         ref = "HEAD" if packse_version == "0.0.0" else packse_version
 
         # Add generated metadata
-        data[
-            "generated_from"
-        ] = f"https://github.com/zanieb/packse/tree/{ref}/scenarios"
+        data["generated_from"] = (
+            f"https://github.com/zanieb/packse/tree/{ref}/scenarios"
+        )
         data["generated_with"] = "./scripts/scenarios/sync.sh"
-        data[
-            "vendor_links"
-        ] = f"https://raw.githubusercontent.com/zanieb/packse/{ref}/vendor/links.html"
+        data["vendor_links"] = (
+            f"https://raw.githubusercontent.com/zanieb/packse/{ref}/vendor/links.html"
+        )
 
         data["index_url"] = f"https://astral-sh.github.io/packse/{ref}/simple-html/"
 
