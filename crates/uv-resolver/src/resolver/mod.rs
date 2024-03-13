@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
+use std::ops::Deref;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -554,7 +555,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Python(PubGrubPython::Installed) => {
                 let version = self.python_requirement.installed();
                 if range.contains(version) {
-                    Ok(Some(ResolverVersion::Available(version.clone())))
+                    Ok(Some(ResolverVersion::Available(version.deref().clone())))
                 } else {
                     Ok(None)
                 }
@@ -563,7 +564,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             PubGrubPackage::Python(PubGrubPython::Target) => {
                 let version = self.python_requirement.target();
                 if range.contains(version) {
-                    Ok(Some(ResolverVersion::Available(version.clone())))
+                    Ok(Some(ResolverVersion::Available(version.deref().clone())))
                 } else {
                     Ok(None)
                 }

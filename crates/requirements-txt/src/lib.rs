@@ -46,7 +46,7 @@ use unscanny::{Pattern, Scanner};
 use url::Url;
 
 use pep508_rs::{
-    expand_path_vars, split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, Scheme,
+    expand_env_vars, split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, Scheme,
     VerbatimUrl,
 };
 use uv_client::Connectivity;
@@ -97,7 +97,10 @@ impl FindLink {
     /// - `../ferris/`
     /// - `https://download.pytorch.org/whl/torch_stable.html`
     pub fn parse(given: &str, working_dir: impl AsRef<Path>) -> Result<Self, url::ParseError> {
-        if let Some((scheme, path)) = split_scheme(given) {
+        // Expand environment variables.
+        let expanded = expand_env_vars(given);
+
+        if let Some((scheme, path)) = split_scheme(&expanded) {
             match Scheme::parse(scheme) {
                 // Ex) `file:///home/ferris/project/scripts/...` or `file:../ferris/`
                 Some(Scheme::File) => {
@@ -117,13 +120,13 @@ impl FindLink {
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
                 Some(_) => {
-                    let url = Url::parse(given)?;
+                    let url = Url::parse(&expanded)?;
                     Ok(Self::Url(url))
                 }
 
                 // Ex) `C:/Users/ferris/wheel-0.42.0.tar.gz`
                 _ => {
-                    let path = PathBuf::from(given);
+                    let path = PathBuf::from(expanded.as_ref());
                     let path = if path.is_absolute() {
                         path
                     } else {
@@ -134,7 +137,7 @@ impl FindLink {
             }
         } else {
             // Ex) `../ferris/`
-            let path = PathBuf::from(given);
+            let path = PathBuf::from(expanded.as_ref());
             let path = if path.is_absolute() {
                 path
             } else {
@@ -208,8 +211,11 @@ impl EditableRequirement {
             (given, vec![])
         };
 
+        // Expand environment variables.
+        let expanded = expand_env_vars(requirement);
+
         // Create a `VerbatimUrl` to represent the editable requirement.
-        let url = if let Some((scheme, path)) = split_scheme(requirement) {
+        let url = if let Some((scheme, path)) = split_scheme(&expanded) {
             match Scheme::parse(scheme) {
                 // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`
                 Some(Scheme::File) => {
@@ -218,28 +224,28 @@ impl EditableRequirement {
                     // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
                     let path = normalize_url_path(path);
 
-                    VerbatimUrl::parse_path(path, working_dir.as_ref())
+                    VerbatimUrl::parse_path(path.as_ref(), working_dir.as_ref())
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
                 Some(_) => {
                     return Err(RequirementsTxtParserError::UnsupportedUrl(
-                        requirement.to_string(),
+                        expanded.to_string(),
                     ));
                 }
 
                 // Ex) `C:/Users/ferris/wheel-0.42.0.tar.gz`
-                _ => VerbatimUrl::parse_path(requirement, working_dir.as_ref()),
+                _ => VerbatimUrl::parse_path(expanded.as_ref(), working_dir.as_ref()),
             }
         } else {
             // Ex) `../editable/`
-            VerbatimUrl::parse_path(requirement, working_dir.as_ref())
+            VerbatimUrl::parse_path(expanded.as_ref(), working_dir.as_ref())
         };
 
         // Create a `PathBuf`.
-        let path = url.to_file_path().map_err(|()| {
-            RequirementsTxtParserError::InvalidEditablePath(requirement.to_string())
-        })?;
+        let path = url
+            .to_file_path()
+            .map_err(|()| RequirementsTxtParserError::InvalidEditablePath(expanded.to_string()))?;
 
         // Add the verbatim representation of the URL to the `VerbatimUrl`.
         let url = url.with_given(requirement.to_string());
@@ -409,7 +415,7 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let filename = expand_path_vars(&filename);
+                    let filename = expand_env_vars(&filename);
                     let sub_file =
                         if filename.starts_with("http://") || filename.starts_with("https://") {
                             PathBuf::from(filename.as_ref())
@@ -447,7 +453,7 @@ impl RequirementsTxt {
                     start,
                     end,
                 } => {
-                    let filename = expand_path_vars(&filename);
+                    let filename = expand_env_vars(&filename);
                     let sub_file =
                         if filename.starts_with("http://") || filename.starts_with("https://") {
                             PathBuf::from(filename.as_ref())
@@ -569,7 +575,8 @@ fn parse_entry(
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
         let given = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
-        let url = VerbatimUrl::parse(given)
+        let expanded = expand_env_vars(given);
+        let url = VerbatimUrl::parse_url(expanded.as_ref())
             .map(|url| url.with_given(given.to_owned()))
             .map_err(|err| RequirementsTxtParserError::Url {
                 source: err,
@@ -580,7 +587,8 @@ fn parse_entry(
         RequirementsTxtStatement::IndexUrl(url)
     } else if s.eat_if("--extra-index-url") {
         let given = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
-        let url = VerbatimUrl::parse(given)
+        let expanded = expand_env_vars(given);
+        let url = VerbatimUrl::parse_url(expanded.as_ref())
             .map(|url| url.with_given(given.to_owned()))
             .map_err(|err| RequirementsTxtParserError::Url {
                 source: err,
@@ -1289,7 +1297,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn invalid_requirement() -> Result<()> {
+    async fn invalid_requirement_version() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
         let requirements_txt = temp_dir.child("requirements.txt");
         requirements_txt.write_str(indoc! {"
@@ -1319,6 +1327,43 @@ mod test {
             Expected an alphanumeric character starting the extra name, found 'ö'
             numpy[ö]==1.29
                   ^
+            "###);
+        });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn invalid_requirement_url() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            numpy @ https:///
+        "})?;
+
+        let error = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            Connectivity::Offline,
+        )
+        .await
+        .unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt =
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let filters = vec![
+            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
+            (r"\\", "/"),
+        ];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_snapshot!(errors, @r###"
+            Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
+            empty host
+            numpy @ https:///
+                    ^^^^^^^^^
             "###);
         });
 
@@ -1392,7 +1437,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn invalid_index_url() -> Result<()> {
+    async fn relative_index_url() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
         let requirements_txt = temp_dir.child("requirements.txt");
         requirements_txt.write_str(indoc! {"
@@ -1420,6 +1465,41 @@ mod test {
             insta::assert_snapshot!(errors, @r###"
             Invalid URL in `<REQUIREMENTS_TXT>` at position 0: `123`
             relative URL without a base
+            "###);
+        });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn invalid_index_url() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            --index-url https:////
+        "})?;
+
+        let error = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            Connectivity::Offline,
+        )
+        .await
+        .unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt =
+            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let filters = vec![
+            (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
+            (r"\\", "/"),
+        ];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_snapshot!(errors, @r###"
+            Invalid URL in `<REQUIREMENTS_TXT>` at position 0: `https:////`
+            empty host
             "###);
         });
 

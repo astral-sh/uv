@@ -11,7 +11,7 @@ use tracing::{debug, warn};
 use cache_key::digest;
 use install_wheel_rs::Layout;
 use pep440_rs::Version;
-use pep508_rs::MarkerEnvironment;
+use pep508_rs::{MarkerEnvironment, StringVersion};
 use platform_host::Platform;
 use platform_tags::{Tags, TagsError};
 use pypi_types::Scheme;
@@ -180,6 +180,12 @@ impl Interpreter {
     #[inline]
     pub const fn python_version(&self) -> &Version {
         &self.markers.python_full_version.version
+    }
+
+    /// Returns the `python_full_version` marker corresponding to this Python version.
+    #[inline]
+    pub const fn python_full_version(&self) -> &StringVersion {
+        &self.markers.python_full_version
     }
 
     /// Return the major version of this Python version.
