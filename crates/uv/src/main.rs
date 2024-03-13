@@ -98,7 +98,7 @@ struct Cli {
     /// However, in some cases, you may want to use the platform's native certificate store,
     /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
     /// included in your system's certificate store.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, env = "UV_NATIVE_TLS")]
     native_tls: bool,
 
     #[command(flatten)]

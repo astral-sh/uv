@@ -6,7 +6,6 @@ use clap::Parser;
 use fs_err as fs;
 
 use distribution_types::IndexLocations;
-use platform_host::Platform;
 use rustc_hash::FxHashMap;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
@@ -56,8 +55,7 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
 
     let cache = Cache::try_from(args.cache_args)?;
 
-    let platform = Platform::current()?;
-    let venv = PythonEnvironment::from_virtualenv(platform, &cache)?;
+    let venv = PythonEnvironment::from_virtualenv(&cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_urls = IndexLocations::default();
     let flat_index = FlatIndex::default();

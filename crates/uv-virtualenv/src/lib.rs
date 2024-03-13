@@ -1,9 +1,9 @@
 use std::io;
 use std::path::Path;
 
+use platform_tags::PlatformError;
 use thiserror::Error;
 
-use platform_host::PlatformError;
 use uv_interpreter::{Interpreter, PythonEnvironment};
 
 pub use crate::bare::create_bare_venv;

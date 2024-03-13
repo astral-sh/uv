@@ -182,8 +182,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             let tags = self.interpreter.tags()?;
 
             // Determine the set of installed packages.
-            let site_packages =
-                SitePackages::from_executable(venv).context("Failed to list installed packages")?;
+            let site_packages = SitePackages::from_executable(venv)?;
 
             let Plan {
                 local,

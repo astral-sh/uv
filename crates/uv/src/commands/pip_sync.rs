@@ -7,7 +7,6 @@ use tracing::debug;
 
 use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name};
 use install_wheel_rs::linker::LinkMode;
-use platform_host::Platform;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
@@ -74,13 +73,12 @@ pub(crate) async fn pip_sync(
     }
 
     // Detect the current Python interpreter.
-    let platform = Platform::current()?;
     let venv = if let Some(python) = python.as_ref() {
-        PythonEnvironment::from_requested_python(python, &platform, &cache)?
+        PythonEnvironment::from_requested_python(python, &cache)?
     } else if system {
-        PythonEnvironment::from_default_python(&platform, &cache)?
+        PythonEnvironment::from_default_python(&cache)?
     } else {
-        PythonEnvironment::from_virtualenv(platform, &cache)?
+        PythonEnvironment::from_virtualenv(&cache)?
     };
     debug!(
         "Using Python {} environment at {}",
@@ -162,8 +160,7 @@ pub(crate) async fn pip_sync(
     );
 
     // Determine the set of installed packages.
-    let site_packages =
-        SitePackages::from_executable(&venv).context("Failed to list installed packages")?;
+    let site_packages = SitePackages::from_executable(&venv)?;
 
     // Resolve any editables.
     let resolved_editables = resolve_editables(

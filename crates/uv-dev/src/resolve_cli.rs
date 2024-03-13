@@ -11,7 +11,6 @@ use petgraph::dot::{Config as DotConfig, Dot};
 
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl, Resolution};
 use pep508_rs::Requirement;
-use platform_host::Platform;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -54,8 +53,7 @@ pub(crate) struct ResolveCliArgs {
 pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     let cache = Cache::try_from(args.cache_args)?;
 
-    let platform = Platform::current()?;
-    let venv = PythonEnvironment::from_virtualenv(platform, &cache)?;
+    let venv = PythonEnvironment::from_virtualenv(&cache)?;
     let index_locations =
         IndexLocations::new(args.index_url, args.extra_index_url, args.find_links, false);
     let client = RegistryClientBuilder::new(cache.clone())

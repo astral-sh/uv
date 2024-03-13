@@ -13,7 +13,6 @@ use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name};
 use pep508_rs::Requirement;
-use platform_host::Platform;
 use uv_auth::KeyringProvider;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
@@ -101,14 +100,13 @@ async fn venv_impl(
     printer: Printer,
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter.
-    let platform = Platform::current().into_diagnostic()?;
     let interpreter = if let Some(python_request) = python_request {
-        find_requested_python(python_request, &platform, cache)
+        find_requested_python(python_request, cache)
             .into_diagnostic()?
             .ok_or(Error::NoSuchPython(python_request.to_string()))
             .into_diagnostic()?
     } else {
-        find_default_python(&platform, cache).into_diagnostic()?
+        find_default_python(cache).into_diagnostic()?
     };
 
     writeln!(
