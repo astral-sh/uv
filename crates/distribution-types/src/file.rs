@@ -7,7 +7,7 @@ use thiserror::Error;
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pypi_types::{DistInfoMetadata, Hashes, Yanked};
 use url::Url;
-use uv_auth::AuthenticationStore;
+use uv_auth::GLOBAL_AUTH_STORE;
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, Error)]
@@ -55,7 +55,7 @@ impl File {
             url: if file.url.contains("://") {
                 let url = Url::parse(&file.url)
                     .map_err(|err| FileConversionError::Url(file.url.clone(), err))?;
-                let url = AuthenticationStore::with_url_encoded_auth(url);
+                let url = GLOBAL_AUTH_STORE.with_url_encoded_auth(url);
                 FileLocation::AbsoluteUrl(url.to_string())
             } else {
                 FileLocation::RelativeUrl(base.to_string(), file.url)

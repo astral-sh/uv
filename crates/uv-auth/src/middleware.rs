@@ -7,7 +7,8 @@ use tracing::{debug, warn};
 
 use crate::{
     keyring::{get_keyring_subprocess_auth, KeyringProvider},
-    store::{AuthenticationStore, Credential},
+    store::Credential,
+    GLOBAL_AUTH_STORE,
 };
 
 /// A middleware that adds basic authentication to requests based on the netrc file and the keyring.
@@ -47,13 +48,13 @@ impl Middleware for AuthMiddleware {
         // This gives in-URL credentials precedence over the netrc file.
         if req.headers().contains_key(reqwest::header::AUTHORIZATION) {
             if !url.username().is_empty() {
-                AuthenticationStore::save_from_url(&url);
+                GLOBAL_AUTH_STORE.save_from_url(&url);
             }
             return next.run(req, _extensions).await;
         }
 
         // Try auth strategies in order of precedence:
-        if let Some(stored_auth) = AuthenticationStore::get(&url) {
+        if let Some(stored_auth) = GLOBAL_AUTH_STORE.get(&url) {
             // If we've already seen this URL, we can use the stored credentials
             if let Some(auth) = stored_auth {
                 match auth {
@@ -77,7 +78,7 @@ impl Middleware for AuthMiddleware {
                 reqwest::header::AUTHORIZATION,
                 basic_auth(auth.username(), auth.password()),
             );
-            AuthenticationStore::set(&url, Some(auth));
+            GLOBAL_AUTH_STORE.set(&url, Some(auth));
         } else if matches!(self.keyring_provider, KeyringProvider::Subprocess) {
             // If we have keyring support enabled, we check there as well
             match get_keyring_subprocess_auth(&url) {
@@ -86,7 +87,7 @@ impl Middleware for AuthMiddleware {
                         reqwest::header::AUTHORIZATION,
                         basic_auth(auth.username(), auth.password()),
                     );
-                    AuthenticationStore::set(&url, Some(auth));
+                    GLOBAL_AUTH_STORE.set(&url, Some(auth));
                 }
                 Ok(None) => {
                     debug!("No keyring credentials found for {url}");
@@ -99,7 +100,7 @@ impl Middleware for AuthMiddleware {
 
         // If we still don't have any credentials, we save the URL so we don't have to check netrc or keyring again
         if !req.headers().contains_key(reqwest::header::AUTHORIZATION) {
-            AuthenticationStore::set(&url, None);
+            GLOBAL_AUTH_STORE.set(&url, None);
         }
 
         next.run(req, _extensions).await

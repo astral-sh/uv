@@ -21,7 +21,7 @@ use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Nam
 use install_wheel_rs::metadata::{find_archive_dist_info, is_metadata_entry};
 use pep440_rs::Version;
 use pypi_types::{Metadata23, SimpleJson};
-use uv_auth::{AuthMiddleware, AuthenticationStore, KeyringProvider};
+use uv_auth::{AuthMiddleware, KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -317,7 +317,7 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = AuthenticationStore::with_url_encoded_auth(response.url().clone());
+                let url = GLOBAL_AUTH_STORE.with_url_encoded_auth(response.url().clone());
 
                 let content_type = response
                     .headers()
@@ -346,7 +346,7 @@ impl RegistryClient {
                         let text = response.text().await.map_err(ErrorKind::from)?;
                         let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                             .map_err(|err| Error::from_html_err(err, url.clone()))?;
-                        let base = AuthenticationStore::with_url_encoded_auth(base.into_url());
+                        let base = GLOBAL_AUTH_STORE.with_url_encoded_auth(base.into_url());
 
                         SimpleMetadata::from_files(files, package_name, &base)
                     }

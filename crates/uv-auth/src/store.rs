@@ -1,4 +1,3 @@
-use lazy_static::lazy_static;
 use std::{collections::HashMap, sync::Mutex};
 
 use netrc::Authenticator;
@@ -6,11 +5,6 @@ use tracing::warn;
 use url::Url;
 
 use crate::NetLoc;
-
-lazy_static! {
-    // Store credentials for NetLoc
-    static ref PASSWORDS: Mutex<HashMap<NetLoc, Option<Credential>>> = Mutex::new(HashMap::new());
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Credential {
@@ -68,35 +62,49 @@ pub struct BasicAuthData {
     pub password: Option<String>,
 }
 
-pub struct AuthenticationStore;
+pub struct AuthenticationStore {
+    credentials: Mutex<HashMap<NetLoc, Option<Credential>>>,
+}
+
+impl Default for AuthenticationStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl AuthenticationStore {
-    pub fn get(url: &Url) -> Option<Option<Credential>> {
-        let netloc = NetLoc::from(url);
-        let passwords = PASSWORDS.lock().unwrap();
-        passwords.get(&netloc).cloned()
+    pub fn new() -> Self {
+        Self {
+            credentials: Mutex::new(HashMap::new()),
+        }
     }
 
-    pub fn set(url: &Url, auth: Option<Credential>) {
+    pub fn get(&self, url: &Url) -> Option<Option<Credential>> {
         let netloc = NetLoc::from(url);
-        let mut passwords = PASSWORDS.lock().unwrap();
-        passwords.insert(netloc, auth);
+        let credentials = self.credentials.lock().unwrap();
+        credentials.get(&netloc).cloned()
+    }
+
+    pub fn set(&self, url: &Url, auth: Option<Credential>) {
+        let netloc = NetLoc::from(url);
+        let mut credentials = self.credentials.lock().unwrap();
+        credentials.insert(netloc, auth);
     }
 
     /// Copy authentication from one URL to another URL if applicable.
-    pub fn with_url_encoded_auth(url: Url) -> Url {
+    pub fn with_url_encoded_auth(&self, url: Url) -> Url {
         let netloc = NetLoc::from(&url);
-        let passwords = PASSWORDS.lock().unwrap();
-        if let Some(Some(Credential::UrlEncoded(url_auth))) = passwords.get(&netloc) {
+        let credentials = self.credentials.lock().unwrap();
+        if let Some(Some(Credential::UrlEncoded(url_auth))) = credentials.get(&netloc) {
             url_auth.apply_to_url(url)
         } else {
             url
         }
     }
 
-    pub fn save_from_url(url: &Url) {
+    pub fn save_from_url(&self, url: &Url) {
         let netloc = NetLoc::from(url);
-        let mut passwords = PASSWORDS.lock().unwrap();
+        let mut credentials = self.credentials.lock().unwrap();
         if url.username().is_empty() {
             // No credentials to save
             return;
@@ -105,7 +113,7 @@ impl AuthenticationStore {
             username: url.username().to_string(),
             password: url.password().map(str::to_string),
         };
-        passwords.insert(netloc, Some(Credential::UrlEncoded(auth)));
+        credentials.insert(netloc, Some(Credential::UrlEncoded(auth)));
     }
 }
 
@@ -113,63 +121,76 @@ impl AuthenticationStore {
 mod test {
     use super::*;
 
-    // NOTE: Because tests run in parallel, it is imperative to use different URLs for each
     #[test]
-    fn set_get_work() {
-        let url = Url::parse("https://test1example1.com/simple/").unwrap();
-        let not_set_res = AuthenticationStore::get(&url);
+    fn store_set_and_get() {
+        let store = AuthenticationStore::new();
+        let url = Url::parse("https://example1.com/simple/").unwrap();
+        let not_set_res = store.get(&url);
         assert!(not_set_res.is_none());
 
-        let found_first_url = Url::parse("https://test1example2.com/simple/first/").unwrap();
-        let not_found_first_url = Url::parse("https://test1example3.com/simple/first/").unwrap();
+        let found_first_url = Url::parse("https://example2.com/simple/first/").unwrap();
+        let not_found_first_url = Url::parse("https://example3.com/simple/first/").unwrap();
 
-        AuthenticationStore::set(
+        store.set(
             &found_first_url,
             Some(Credential::Basic(BasicAuthData {
                 username: "u".to_string(),
                 password: Some("p".to_string()),
             })),
         );
-        AuthenticationStore::set(&not_found_first_url, None);
+        store.set(&not_found_first_url, None);
 
-        let found_second_url = Url::parse("https://test1example2.com/simple/second/").unwrap();
-        let not_found_second_url = Url::parse("https://test1example3.com/simple/second/").unwrap();
+        let found_second_url = Url::parse("https://example2.com/simple/second/").unwrap();
+        let not_found_second_url = Url::parse("https://example3.com/simple/second/").unwrap();
 
-        let found_res = AuthenticationStore::get(&found_second_url);
+        let found_res = store.get(&found_second_url);
         assert!(found_res.is_some());
         let found_res = found_res.unwrap();
         assert!(matches!(found_res, Some(Credential::Basic(_))));
 
-        let not_found_res = AuthenticationStore::get(&not_found_second_url);
+        let not_found_res = store.get(&not_found_second_url);
         assert!(not_found_res.is_some());
         let not_found_res = not_found_res.unwrap();
         assert!(not_found_res.is_none());
     }
 
     #[test]
-    fn with_url_encoded_auth_works() {
-        let url = Url::parse("https://test2example.com/simple/").unwrap();
+    fn store_with_url_encoded_auth() {
+        let store = AuthenticationStore::new();
+        let url = Url::parse("https://example.com/simple/").unwrap();
         let auth = Credential::UrlEncoded(UrlAuthData {
             username: "u".to_string(),
             password: Some("p".to_string()),
         });
 
-        AuthenticationStore::set(&url, Some(auth.clone()));
+        // Before adding to the store there's no change
+        let url = store.with_url_encoded_auth(url);
+        assert_eq!(url.username(), "");
+        assert_eq!(url.password(), None);
 
-        let url = AuthenticationStore::with_url_encoded_auth(url);
+        store.set(&url, Some(auth.clone()));
+
+        // After adding to the store, the url is updated
+        let url = store.with_url_encoded_auth(url);
         assert_eq!(url.username(), "u");
         assert_eq!(url.password(), Some("p"));
     }
 
     #[test]
-    fn save_from_url_works() {
-        let url = Url::parse("https://u:p@test3example.com/simple/").unwrap();
+    fn store_save_from_url() {
+        let store = AuthenticationStore::new();
+        let url = Url::parse("https://u:p@example.com/simple/").unwrap();
 
-        AuthenticationStore::save_from_url(&url);
+        store.save_from_url(&url);
 
-        let found_res = AuthenticationStore::get(&url);
+        let found_res = store.get(&url);
         assert!(found_res.is_some());
         let found_res = found_res.unwrap();
         assert!(matches!(found_res, Some(Credential::UrlEncoded(_))));
+
+        let url = Url::parse("https://example2.com/simple/").unwrap();
+        store.save_from_url(&url);
+        let found_res = store.get(&url);
+        assert!(found_res.is_none());
     }
 }
