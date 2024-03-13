@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 uv-warnings = { path = "../uv-warnings" }
 
+backoff = { workspace = true }
 dunce = { workspace = true }
 encoding_rs_io = { workspace = true }
 fs-err = { workspace = true }
@@ -27,4 +28,4 @@ urlencoding = { workspace = true }
 
 [features]
 default = []
-tokio = ["fs-err/tokio", "dep:tokio"]
+tokio = ["dep:tokio", "fs-err/tokio", "backoff/tokio"]

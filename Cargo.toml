@@ -25,6 +25,7 @@ async-trait = { version = "0.1.77" }
 async-recursion = { version = "1.0.5" }
 async_http_range_reader = { version = "0.7.0" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "d76801da0943de985254fc6255c0e476b57c5836", features = ["deflate"] }
+backoff = { version = "0.4.0" }
 base64 = { version = "0.21.7" }
 cachedir = { version = "0.3.1" }
 cargo-util = { version = "0.2.8" }
