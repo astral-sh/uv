@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::env;
 use std::fmt::Debug;
 use std::path::Path;
 use std::str::FromStr;
@@ -7,13 +6,11 @@ use std::str::FromStr;
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
-use reqwest::{Client, ClientBuilder, Response, StatusCode};
-use reqwest_retry::policies::ExponentialBackoff;
-use reqwest_retry::RetryTransientMiddleware;
+use reqwest::{Client, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, instrument, trace, warn, Instrument};
+use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
@@ -21,20 +18,16 @@ use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Nam
 use install_wheel_rs::metadata::{find_archive_dist_info, is_metadata_entry};
 use pep440_rs::Version;
 use pypi_types::{Metadata23, SimpleJson};
-use uv_auth::{AuthMiddleware, AuthenticationStore, KeyringProvider};
+use uv_auth::{AuthenticationStore, KeyringProvider};
 use uv_cache::{Cache, CacheBucket, WheelCache};
-use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_version::version;
-use uv_warnings::warn_user_once;
 
+use crate::base_client::BaseClientBuilder;
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
-use crate::middleware::OfflineMiddleware;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
-use crate::tls::Roots;
-use crate::{tls, CachedClient, CachedClientError, Error, ErrorKind};
+use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -106,76 +99,22 @@ impl RegistryClientBuilder {
     }
 
     pub fn build(self) -> RegistryClient {
-        // Create user agent.
-        let user_agent_string = format!("uv/{}", version());
+        // Build a base client
+        let mut builder = BaseClientBuilder::new();
 
-        // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
-        // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-        let default_timeout = 5 * 60;
-        let timeout = env::var("UV_HTTP_TIMEOUT")
-            .or_else(|_| env::var("UV_REQUEST_TIMEOUT"))
-            .or_else(|_| env::var("HTTP_TIMEOUT"))
-            .and_then(|value| {
-                value.parse::<u64>()
-                    .or_else(|_| {
-                        // On parse error, warn and use the default timeout
-                        warn_user_once!("Ignoring invalid value from environment for UV_HTTP_TIMEOUT. Expected integer number of seconds, got \"{value}\".");
-                        Ok(default_timeout)
-                    })
-            })
-            .unwrap_or(default_timeout);
-        debug!("Using registry request timeout of {}s", timeout);
+        if let Some(client) = self.client {
+            builder = builder.client(client)
+        }
 
-        // Initialize the base client.
-        let client = self.client.unwrap_or_else(|| {
-            // Check for the presence of an `SSL_CERT_FILE`.
-            let ssl_cert_file_exists = env::var_os("SSL_CERT_FILE").is_some_and(|path| {
-                let path_exists = Path::new(&path).exists();
-                if !path_exists {
-                    warn_user_once!(
-                        "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
-                        path.simplified_display()
-                    );
-                }
-                path_exists
-            });
-            // Load the TLS configuration.
-            let tls = tls::load(if self.native_tls || ssl_cert_file_exists {
-                Roots::Native
-            } else {
-                Roots::Webpki
-            })
-            .expect("Failed to load TLS configuration.");
+        let client = builder
+            .retries(self.retries)
+            .connectivity(self.connectivity)
+            .native_tls(self.native_tls)
+            .keyring_provider(self.keyring_provider)
+            .build();
 
-            let client_core = ClientBuilder::new()
-                .user_agent(user_agent_string)
-                .pool_max_idle_per_host(20)
-                .timeout(std::time::Duration::from_secs(timeout))
-                .use_preconfigured_tls(tls);
-
-            client_core.build().expect("Failed to build HTTP client.")
-        });
-
-        // Wrap in any relevant middleware.
-        let client = match self.connectivity {
-            Connectivity::Online => {
-                let client = reqwest_middleware::ClientBuilder::new(client.clone());
-
-                // Initialize the retry strategy.
-                let retry_policy =
-                    ExponentialBackoff::builder().build_with_max_retries(self.retries);
-                let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
-                let client = client.with(retry_strategy);
-
-                // Initialize the authentication middleware to set headers.
-                let client = client.with(AuthMiddleware::new(self.keyring_provider));
-
-                client.build()
-            }
-            Connectivity::Offline => reqwest_middleware::ClientBuilder::new(client.clone())
-                .with(OfflineMiddleware)
-                .build(),
-        };
+        let timeout = client.timeout();
+        let connectivity = client.connectivity();
 
         // Wrap in the cache middleware.
         let client = CachedClient::new(client);
@@ -183,7 +122,7 @@ impl RegistryClientBuilder {
         RegistryClient {
             index_urls: self.index_urls,
             cache: self.cache,
-            connectivity: self.connectivity,
+            connectivity,
             client,
             timeout,
         }
@@ -308,6 +247,7 @@ impl RegistryClient {
         let simple_request = self
             .client
             .uncached()
+            .client()
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
@@ -472,6 +412,7 @@ impl RegistryClient {
             let req = self
                 .client
                 .uncached()
+                .client()
                 .get(url.clone())
                 .build()
                 .map_err(ErrorKind::from)?;
@@ -512,6 +453,7 @@ impl RegistryClient {
         let req = self
             .client
             .uncached()
+            .client()
             .head(url.clone())
             .header(
                 "accept-encoding",
@@ -531,7 +473,7 @@ impl RegistryClient {
         let read_metadata_range_request = |response: Response| {
             async {
                 let mut reader = AsyncHttpRangeReader::from_head_response(
-                    self.client.uncached(),
+                    self.client.uncached().client(),
                     response,
                     headers,
                 )
@@ -580,6 +522,7 @@ impl RegistryClient {
         let req = self
             .client
             .uncached()
+            .client()
             .get(url.clone())
             .header(
                 // `reqwest` defaults to accepting compressed responses.
