@@ -316,6 +316,36 @@ jobs:
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
 
+  system-test-amazonlinux:
+    needs: build-binary-linux
+    name: "check system | amazonlinux"
+    runs-on: ubuntu-latest
+    container: amazonlinux:2023
+    steps:
+      - name: "Install base requirements"
+        run: |
+          # Needed for `actions/checkout`
+          yum install tar gzip -y
+
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: yum install python3 python3-pip -y
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
+
   system-test-macos:
     needs: build-binary-macos-aarch64
     name: "check system | python on macos"
