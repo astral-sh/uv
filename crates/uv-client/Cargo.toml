@@ -23,7 +23,6 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 async_http_range_reader = { workspace = true }
 async_zip = { workspace = true, features = ["tokio"] }
-base64 = { workspace = true }
 chrono = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
@@ -34,7 +33,6 @@ reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
 rkyv = { workspace = true, features = ["strict", "validation"] }
 rmp-serde = { workspace = true }
-rust-netrc = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
