@@ -4,18 +4,11 @@ Queries information about the current Python interpreter and prints it as JSON.
 The script will exit with status 0 on known error that are turned into rust errors.
 """
 
-import sys
-
 import json
 import os
 import platform
+import sys
 import sysconfig
-
-# noinspection PyProtectedMember
-from .packaging._manylinux import _get_glibc_version
-
-# noinspection PyProtectedMember
-from .packaging._musllinux import _get_musl_version
 
 
 def format_full_version(info):
@@ -413,10 +406,10 @@ def get_scheme():
 
 
 def get_operating_system_and_architecture():
-    """Determine the python interpreter architecture and operating system.
+    """Determine the Python interpreter architecture and operating system.
 
-    Note that this might be different from uv's arch and os, e.g. on Apple Silicon Macs
-    transparently supporting both x86_64 and aarch64 binaries
+    This can differ from uv's architecture and operating system. For example, Apple
+    Silicon Macs can run both x86_64 and aarch64 binaries transparently.
     """
     # https://github.com/pypa/packaging/blob/cc938f984bbbe43c5734b9656c9837ab3a28191f/src/packaging/_musllinux.py#L84
     # Note that this is not `os.name`.
@@ -430,6 +423,12 @@ def get_operating_system_and_architecture():
         architecture = version_arch
 
     if operating_system == "linux":
+        # noinspection PyProtectedMember
+        from .packaging._manylinux import _get_glibc_version
+
+        # noinspection PyProtectedMember
+        from .packaging._musllinux import _get_musl_version
+
         musl_version = _get_musl_version(sys.executable)
         glibc_version = _get_glibc_version()
         if musl_version:
@@ -452,7 +451,7 @@ def get_operating_system_and_architecture():
             "name": "windows",
         }
     elif operating_system == "macosx":
-        # Github actions python seems to be doing this
+        # GitHub Actions python seems to be doing this.
         if architecture == "universal2":
             if platform.processor() == "arm":
                 architecture = "aarch64"
