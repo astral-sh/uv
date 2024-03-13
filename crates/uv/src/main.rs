@@ -1736,6 +1736,7 @@ async fn run() -> Result<ExitStatus> {
                 },
                 args.seed,
                 args.exclude_newer,
+                cli.native_tls,
                 &cache,
                 printer,
             )
