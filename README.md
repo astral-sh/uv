@@ -403,6 +403,8 @@ uv accepts the following command-line arguments as environment variables:
   will use the first Python interpreter found in the system `PATH`.
   WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI) environments and
   should be used with caution, as it can modify the system Python installation.
+- `UV_NATIVE_TLS`: Equivalent to the `--native-tls` command-line argument. If set to `true`, uv
+  will use the system's trust store instead of the bundled `webpki-roots` crate.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
@@ -432,7 +434,7 @@ performance (especially on macOS, where reading the system trust store incurs a 
 However, in some cases, you may want to use the platform's native certificate store, especially if
 you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your
 system's certificate store. To instruct uv to use the system's trust store, run uv with the
-`--native-tls` command-line flag.
+`--native-tls` command-line flag, or set the `UV_NATIVE_TLS` environment variable to `true`.
 
 If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT_FILE` environment
 variable to the path of the certificate bundle, to instruct uv to use that file instead of the
