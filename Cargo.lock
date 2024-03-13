@@ -4277,7 +4277,7 @@ dependencies = [
  "async-trait",
  "base64 0.21.7",
  "clap",
- "lazy_static",
+ "once_cell",
  "reqwest",
  "reqwest-middleware",
  "rust-netrc",

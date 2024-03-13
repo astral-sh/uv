@@ -4,9 +4,15 @@ mod store;
 
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
+use once_cell::sync::Lazy;
 pub use store::AuthenticationStore;
 
 use url::Url;
+
+// TODO(zanieb): Consider passing a store explicitly throughout
+
+/// Global authentication store for a `uv` invocation
+pub static GLOBAL_AUTH_STORE: Lazy<AuthenticationStore> = Lazy::new(AuthenticationStore::default);
 
 /// Used to determine if authentication information should be retained on a new URL.
 /// Based on the specification defined in RFC 7235 and 7230.

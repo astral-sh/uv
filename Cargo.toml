@@ -60,7 +60,6 @@ indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
 itertools = { version = "0.12.1" }
 junction = { version = "1.0.0" }
-lazy_static = { version = "1.4.0" }
 mailparse = { version = "0.14.0" }
 miette = { version = "6.0.0" }
 nanoid = { version = "0.4.0" }
