@@ -52,9 +52,6 @@ pub enum ResolveError {
     #[error("There are conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
     ConflictingUrlsTransitive(PackageName, String, String),
 
-    #[error("There are conflicting versions for `{0}`: {1}")]
-    ConflictingVersions(String, String),
-
     #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
     DisallowedUrl(PackageName, String),
 

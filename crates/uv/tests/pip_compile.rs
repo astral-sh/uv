@@ -1501,11 +1501,22 @@ fn disallowed_transitive_url_dependency() -> Result<()> {
         .arg("requirements.in")
         .env("HATCHLING", hatchling_path.as_os_str()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Package `iniconfig` attempted to resolve via URL: git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4. URL dependencies must be expressed as direct requirements or constraints. Consider adding `iniconfig @ git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4` to your dependencies or constraints file.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only hatchling-editable==0.1.0 is available and
+          hatchling-editable==0.1.0 is unusable because its dependencies are
+          unusable because package `iniconfig` attempted to resolve via URL:
+          git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4.
+          URL dependencies must be expressed as direct
+          requirements or constraints. Consider adding `iniconfig @
+          git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4`
+          to your dependencies or constraints file., we can conclude that all
+          versions of hatchling-editable cannot be used.
+          And because you require hatchling-editable, we can conclude that the
+          requirements are unsatisfiable.
     "###
     );
 

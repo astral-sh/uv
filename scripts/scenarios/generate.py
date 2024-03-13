@@ -133,20 +133,15 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             else []
         )
 
-
+    # We don't yet support local versions that aren't expressed as direct dependencies.
     for scenario in data["scenarios"]:
         expected = scenario["expected"]
 
-        # TODO(charlie): We do not yet support local version identifiers
         if scenario["name"] in (
             "local-less-than-or-equal",
             "local-simple",
             "local-transitive-confounding",
-            "local-transitive-backtrack",
-            "local-used-with-sdist",
             "local-used-without-sdist",
-            "local-transitive",
-            "local-transitive-less-than-or-equal",
         ):
             expected["satisfiable"] = False
             expected[

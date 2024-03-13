@@ -1198,12 +1198,12 @@ mod tests {
             ],
             version_or_url: Some(VersionOrUrl::VersionSpecifier(
                 [
-                    VersionSpecifier::new(
+                    VersionSpecifier::from_pattern(
                         Operator::GreaterThanEqual,
                         VersionPattern::verbatim(Version::new([2, 8, 1])),
                     )
                     .unwrap(),
-                    VersionSpecifier::new(
+                    VersionSpecifier::from_pattern(
                         Operator::Equal,
                         VersionPattern::wildcard(Version::new([2, 8])),
                     )
