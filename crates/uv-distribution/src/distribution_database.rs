@@ -451,6 +451,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let archive = self
                     .cache
                     .persist(temp_dir.into_path(), wheel_entry.path())
+                    .await
                     .map_err(Error::CacheRead)?;
                 Ok(archive)
             }
@@ -532,6 +533,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let archive = self
                     .cache
                     .persist(temp_dir.into_path(), wheel_entry.path())
+                    .await
                     .map_err(Error::CacheRead)?;
                 Ok(archive)
             }
