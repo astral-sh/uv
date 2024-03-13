@@ -42,8 +42,22 @@ impl<'a> SitePackages<'a> {
         let mut by_name = FxHashMap::default();
         let mut by_url = FxHashMap::default();
 
+        // Read the site-packages directory.
+        let site_packages = match fs::read_dir(venv.site_packages()) {
+            Ok(site_packages) => site_packages,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Self {
+                    venv,
+                    distributions,
+                    by_name,
+                    by_url,
+                });
+            }
+            Err(err) => return Err(err).context("Failed to read site-packages directory"),
+        };
+
         // Index all installed packages by name.
-        for entry in fs::read_dir(venv.site_packages())? {
+        for entry in site_packages {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
                 let path = entry.path();

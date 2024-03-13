@@ -143,8 +143,7 @@ pub(crate) async fn pip_install(
     let _lock = venv.lock()?;
 
     // Determine the set of installed packages.
-    let site_packages =
-        SitePackages::from_executable(&venv).context("Failed to list installed packages")?;
+    let site_packages = SitePackages::from_executable(&venv)?;
 
     // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
     // enough to let us remove this check. But right now, for large environments, it's an order of

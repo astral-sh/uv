@@ -157,8 +157,7 @@ pub(crate) async fn pip_sync(
     );
 
     // Determine the set of installed packages.
-    let site_packages =
-        SitePackages::from_executable(&venv).context("Failed to list installed packages")?;
+    let site_packages = SitePackages::from_executable(&venv)?;
 
     // Resolve any editables.
     let resolved_editables = resolve_editables(
