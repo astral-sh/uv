@@ -748,7 +748,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg_attr(not(unix), ignore)]
     fn no_such_python_version() {
         let request = "3.1000";
         let result = find_requested_python(request, &Cache::temp().unwrap())
@@ -761,7 +761,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg_attr(not(unix), ignore)]
     fn no_such_python_binary() {
         let request = "python3.1000";
         let result = find_requested_python(request, &Cache::temp().unwrap())
@@ -774,7 +774,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg_attr(not(unix), ignore)]
     fn no_such_python_path() {
         let result = find_requested_python("/does/not/exists/python3.12", &Cache::temp().unwrap());
         assert_snapshot!(
