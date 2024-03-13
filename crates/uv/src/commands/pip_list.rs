@@ -35,11 +35,10 @@ pub(crate) fn pip_list(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
-    let platform = Platform::current()?;
     let venv = if user {
-        PythonEnvironment::from_user_scheme(python, platform, cache)?
+        PythonEnvironment::from_user_scheme(python, cache)?
     } else if let Some(python) = python {
-        PythonEnvironment::from_requested_python(python, &platform, cache)?
+        PythonEnvironment::from_requested_python(python, cache)?
     } else if system {
         PythonEnvironment::from_default_python(cache)?
     } else {

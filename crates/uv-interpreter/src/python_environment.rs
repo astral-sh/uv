@@ -69,25 +69,21 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] with user scheme.
-    pub fn from_user_scheme(
-        python: Option<&str>,
-        platform: Platform,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
+    pub fn from_user_scheme(python: Option<&str>, cache: &Cache) -> Result<Self, Error> {
         // Attempt to determine the interpreter based on the provided criteria
         let interpreter = if let Some(requested_python) = python {
             // If a specific Python version is requested
-            Self::from_requested_python(requested_python, &platform, cache)?.interpreter
+            Self::from_requested_python(requested_python, cache)?.interpreter
         } else if let Some(_venv) = detect_virtual_env()? {
             // If a virtual environment is detected
-            Self::from_virtualenv(platform, cache)?.interpreter
+            Self::from_virtualenv(cache)?.interpreter
         } else {
             // Fallback to the default Python interpreter
-            Self::from_default_python(&platform, cache)?.interpreter
+            Self::from_default_python(cache)?.interpreter
         };
 
         // Apply the user scheme to the determined interpreter
-        let interpreter_with_user_scheme = interpreter.with_user_scheme()?;
+        let interpreter_with_user_scheme = interpreter.with_user_scheme(cache)?;
 
         // Ensure interpreter scheme directories exist, as per the model in pip
         // <https://github.com/pypa/pip/blob/main/src/pip/_internal/models/scheme.py#L12>
