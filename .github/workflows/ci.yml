@@ -138,41 +138,20 @@ jobs:
 
       - uses: rui314/setup-mold@v1
 
+      - name: "Setup musl"
+        run: |
+          sudo apt-get install musl-tools
+          rustup target add x86_64-unknown-linux-musl
+
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build
+        run: cargo build --target x86_64-unknown-linux-musl
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
           name: uv-linux-${{ github.sha }}
-          path: ./target/debug/uv
-          retention-days: 1
-
-  build-binary-debian:
-    runs-on:
-      labels: ubuntu-latest-large
-    container: debian:bullseye
-    name: "build binary | debian"
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "Install Rust toolchain"
-        run: |
-          apt-get update
-          apt-get install -y curl build-essential cmake
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo "PATH=$PATH:$HOME/.cargo/bin" >> "$GITHUB_ENV"
-
-      - uses: Swatinem/rust-cache@v2
-      - name: "Build"
-        run: cargo build
-
-      - name: "Upload binary"
-        uses: actions/upload-artifact@v4
-        with:
-          name: uv-debian-${{ github.sha }}
-          path: ./target/debug/uv
+          path: ./target/x86_64-unknown-linux-musl/debug/uv
           retention-days: 1
 
   build-binary-macos-aarch64:
@@ -216,7 +195,7 @@ jobs:
           retention-days: 1
 
   system-test-debian:
-    needs: build-binary-debian
+    needs: build-binary-linux
     name: "check system | python on debian"
     runs-on: ubuntu-latest
     container: debian:bullseye
@@ -229,7 +208,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-debian-${{ github.sha }}
+          name: uv-linux-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -265,6 +244,35 @@ jobs:
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./uv
 
+  system-test-centos:
+    needs: build-binary-linux
+    name: "check system | python on centos"
+    runs-on: ubuntu-latest
+    container: centos:8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: |
+          # Add CentOS stream repositories, you cannot install from the EOL CentOS 8 mirrors
+          dnf -y --disablerepo '*' --enablerepo extras swap centos-linux-repos centos-stream-repos
+          # `python` gives you `python3.6` which we do not support
+          dnf install python39 python39-pip which -y
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv
+
   system-test-pypy:
     needs: build-binary-linux
     name: "check system | pypy on ubuntu"
@@ -291,7 +299,7 @@ jobs:
         run: pypy scripts/check_system_python.py --uv ./uv
 
   system-test-pyston:
-    needs: build-binary-debian
+    needs: build-binary-linux
     name: "check system | pyston"
     runs-on: ubuntu-latest
     container: pyston/pyston:2.3.5
@@ -301,7 +309,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-debian-${{ github.sha }}
+          name: uv-linux-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
@@ -311,6 +319,31 @@ jobs:
 
       - name: "Validate global Python install"
         run: pyston scripts/check_system_python.py --uv ./uv
+
+  system-test-alpine:
+    needs: build-binary-linux
+    name: "check system | alpine"
+    runs-on: ubuntu-latest
+    container: alpine:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: apk add --update --no-cache python3 py3-pip
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
 
   system-test-macos:
     needs: build-binary-macos-aarch64
@@ -404,7 +437,7 @@ jobs:
         run: py -3.9 ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-pyenv:
-    needs: build-binary-windows
+    needs: build-binary-linux
     name: "check system | python via pyenv"
     runs-on: ubuntu-latest
     steps:
@@ -476,3 +509,31 @@ jobs:
       - name: "Validate global Python install"
         shell: bash -el {0}
         run: python ./scripts/check_system_python.py --uv ./uv
+
+  system-test-amazonlinux:
+    needs: build-binary-linux
+    name: "check system | amazonlinux"
+    runs-on: ubuntu-latest
+    container: amazonlinux:2023
+    steps:
+      - name: "Install base requirements"
+        run: |
+          # Needed for `actions/checkout`
+          yum install tar gzip which -y
+      - uses: actions/checkout@v4
+      - name: "Install Python"
+        run: yum install python3 python3-pip -y
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv

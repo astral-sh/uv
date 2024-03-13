@@ -6,7 +6,6 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{InstalledDist, Name};
-use platform_host::Platform;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
@@ -25,18 +24,17 @@ pub(crate) fn pip_freeze(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
-    let platform = Platform::current()?;
     let venv = if user {
-        PythonEnvironment::from_user_scheme(python, platform, cache)?
+        PythonEnvironment::from_user_scheme(python, cache)?
     } else if let Some(python) = python {
-        PythonEnvironment::from_requested_python(python, &platform, cache)?
+        PythonEnvironment::from_requested_python(python, cache)?
     } else if system {
-        PythonEnvironment::from_default_python(&platform, cache)?
+        PythonEnvironment::from_default_python(cache)?
     } else {
-        match PythonEnvironment::from_virtualenv(platform.clone(), cache) {
+        match PythonEnvironment::from_virtualenv(cache) {
             Ok(venv) => venv,
             Err(uv_interpreter::Error::VenvNotFound) => {
-                PythonEnvironment::from_default_python(&platform, cache)?
+                PythonEnvironment::from_default_python(cache)?
             }
             Err(err) => return Err(err.into()),
         }

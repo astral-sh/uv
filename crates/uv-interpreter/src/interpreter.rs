@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -11,8 +10,8 @@ use tracing::{debug, warn};
 use cache_key::digest;
 use install_wheel_rs::Layout;
 use pep440_rs::Version;
-use pep508_rs::MarkerEnvironment;
-use platform_host::Platform;
+use pep508_rs::{MarkerEnvironment, StringVersion};
+use platform_tags::Platform;
 use platform_tags::{Tags, TagsError};
 use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
@@ -39,11 +38,7 @@ pub struct Interpreter {
 
 impl Interpreter {
     /// Detect the interpreter info for the given Python executable.
-    pub fn query(
-        executable: impl AsRef<Path>,
-        platform: Platform,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
+    pub fn query(executable: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
         let info = InterpreterInfo::query_cached(executable.as_ref(), cache)?;
 
         debug_assert!(
@@ -53,7 +48,7 @@ impl Interpreter {
         );
 
         Ok(Self {
-            platform,
+            platform: info.platform,
             markers: Box::new(info.markers),
             scheme: info.scheme,
             virtualenv: info.virtualenv,
@@ -189,6 +184,12 @@ impl Interpreter {
     #[inline]
     pub const fn python_version(&self) -> &Version {
         &self.markers.python_full_version.version
+    }
+
+    /// Returns the `python_full_version` marker corresponding to this Python version.
+    #[inline]
+    pub const fn python_full_version(&self) -> &StringVersion {
+        &self.markers.python_full_version
     }
 
     /// Return the major version of this Python version.
@@ -339,8 +340,27 @@ impl ExternallyManaged {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "result", rename_all = "lowercase")]
+enum InterpreterInfoResult {
+    Error(InterpreterInfoError),
+    Success(Box<InterpreterInfo>),
+}
+
+#[derive(Debug, Error, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum InterpreterInfoError {
+    #[error("Could not detect a glibc or a musl libc (while running on Linux)")]
+    LibcNotFound,
+    #[error("Unknown operation system: `{operating_system}`")]
+    UnknownOperatingSystem { operating_system: String },
+    #[error("Python 2 is not supported. Please use Python 3.8 or newer.")]
+    UnsupportedPythonVersion,
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
+    platform: Platform,
     markers: MarkerEnvironment,
     scheme: Scheme,
     virtualenv: Scheme,
@@ -354,24 +374,89 @@ struct InterpreterInfo {
 
 impl InterpreterInfo {
     /// Return the resolved [`InterpreterInfo`] for the given Python executable.
-    pub(crate) fn query(interpreter: &Path) -> Result<Self, Error> {
-        let script = include_str!("get_interpreter_info.py");
+    pub(crate) fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
+        let tempdir = tempfile::tempdir_in(cache.root())?;
+        Self::setup_python_query_files(tempdir.path())?;
 
-        let output = Self::execute_script(interpreter, script, None)?;
+        let output = Command::new(interpreter)
+            .arg("-m")
+            .arg("python.get_interpreter_info")
+            .current_dir(tempdir.path().simplified())
+            .output()
+            .map_err(|err| Error::PythonSubcommandLaunch {
+                interpreter: interpreter.to_path_buf(),
+                err,
+            })?;
 
-        let data: Self = serde_json::from_slice(&output.stdout).map_err(|err| {
-            Error::PythonSubcommandOutput {
+        // stderr isn't technically a criterion for success, but i don't know of any cases where there
+        // should be stderr output and if there is, we want to know
+        if !output.status.success() || !output.stderr.is_empty() {
+            return Err(Error::PythonSubcommandOutput {
                 message: format!(
-                    "Querying Python at `{}` did not return the expected data: {err}",
+                    "Querying Python at `{}` failed with status {}",
                     interpreter.display(),
+                    output.status,
                 ),
                 exit_code: output.status,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            }
-        })?;
+            });
+        }
 
-        Ok(data)
+        let result: InterpreterInfoResult =
+            serde_json::from_slice(&output.stdout).map_err(|err| {
+                Error::PythonSubcommandOutput {
+                    message: format!(
+                        "Querying Python at `{}` did not return the expected data: {err}",
+                        interpreter.display(),
+                    ),
+                    exit_code: output.status,
+                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                    stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                }
+            })?;
+
+        match result {
+            InterpreterInfoResult::Error(err) => Err(Error::QueryScript {
+                err,
+                interpreter: interpreter.to_path_buf(),
+            }),
+            InterpreterInfoResult::Success(data) => Ok(*data),
+        }
+    }
+
+    /// Duplicate the directory structure we have in `../python` into a tempdir, so we can run
+    /// the Python probing scripts with `python -m python.get_interpreter_info` from that tempdir.
+    fn setup_python_query_files(root: &Path) -> Result<(), Error> {
+        let python_dir = root.join("python");
+        fs_err::create_dir(&python_dir)?;
+        fs_err::write(
+            python_dir.join("get_interpreter_info.py"),
+            include_str!("../python/get_interpreter_info.py"),
+        )?;
+        fs_err::write(
+            python_dir.join("__init__.py"),
+            include_str!("../python/__init__.py"),
+        )?;
+        let packaging_dir = python_dir.join("packaging");
+        fs_err::create_dir(&packaging_dir)?;
+        fs_err::write(
+            packaging_dir.join("__init__.py"),
+            include_str!("../python/packaging/__init__.py"),
+        )?;
+        fs_err::write(
+            packaging_dir.join("_elffile.py"),
+            include_str!("../python/packaging/_elffile.py"),
+        )?;
+        fs_err::write(
+            packaging_dir.join("_manylinux.py"),
+            include_str!("../python/packaging/_manylinux.py"),
+        )?;
+        fs_err::write(
+            packaging_dir.join("_musllinux.py"),
+            include_str!("../python/packaging/_musllinux.py"),
+        )?;
+        Ok(())
     }
 
     /// A wrapper around [`markers::query_interpreter_info`] to cache the computed markers.
@@ -425,7 +510,7 @@ impl InterpreterInfo {
 
         // Otherwise, run the Python script.
         debug!("Probing interpreter info for: {}", executable.display());
-        let info = Self::query(executable)?;
+        let info = Self::query(executable, cache)?;
         debug!(
             "Found Python {} for: {}",
             info.markers.python_full_version,
@@ -559,7 +644,6 @@ mod tests {
     use tempfile::tempdir;
 
     use pep440_rs::Version;
-    use platform_host::Platform;
     use uv_cache::Cache;
 
     use crate::Interpreter;
@@ -570,6 +654,15 @@ mod tests {
         let mocked_interpreter = mock_dir.path().join("python");
         let json = indoc! {r##"
             {
+                "result": "success",
+                "platform": {
+                    "os": {
+                        "name": "manylinux",
+                        "major": 2,
+                        "minor": 38
+                    },
+                    "arch": "x86_64"
+                },
                 "markers": {
                     "implementation_name": "cpython",
                     "implementation_version": "3.12.0",
@@ -606,7 +699,6 @@ mod tests {
         "##};
 
         let cache = Cache::temp().unwrap();
-        let platform = Platform::current().unwrap();
 
         fs::write(
             &mocked_interpreter,
@@ -621,8 +713,7 @@ mod tests {
             std::os::unix::fs::PermissionsExt::from_mode(0o770),
         )
         .unwrap();
-        let interpreter =
-            Interpreter::query(&mocked_interpreter, platform.clone(), &cache).unwrap();
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
         assert_eq!(
             interpreter.markers.python_version.version,
             Version::from_str("3.12").unwrap()
@@ -635,8 +726,7 @@ mod tests {
             "##, json.replace("3.12", "3.13")},
         )
         .unwrap();
-        let interpreter =
-            Interpreter::query(&mocked_interpreter, platform.clone(), &cache).unwrap();
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
         assert_eq!(
             interpreter.markers.python_version.version,
             Version::from_str("3.13").unwrap()

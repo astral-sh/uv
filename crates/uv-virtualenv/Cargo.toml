@@ -21,7 +21,7 @@ required-features = ["cli"]
 workspace = true
 
 [dependencies]
-platform-host = { path = "../platform-host" }
+platform-tags = { path = "../platform-tags" }
 pypi-types = { path = "../pypi-types" }
 uv-cache = { path = "../uv-cache" }
 uv-fs = { path = "../uv-fs" }

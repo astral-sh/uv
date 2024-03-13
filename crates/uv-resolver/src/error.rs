@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::fmt::Formatter;
+use std::ops::Deref;
 
 use dashmap::{DashMap, DashSet};
 use indexmap::IndexMap;
@@ -27,7 +28,7 @@ pub enum ResolveError {
     #[error(transparent)]
     Client(#[from] uv_client::Error),
 
-    #[error("The channel is closed, was there a panic?")]
+    #[error("The channel closed unexpectedly")]
     ChannelClosed,
 
     #[error(transparent)]
@@ -190,13 +191,13 @@ impl NoSolutionError {
                 PubGrubPackage::Python(PubGrubPython::Installed) => {
                     available_versions.insert(
                         package.clone(),
-                        BTreeSet::from([python_requirement.installed().clone()]),
+                        BTreeSet::from([python_requirement.installed().deref().clone()]),
                     );
                 }
                 PubGrubPackage::Python(PubGrubPython::Target) => {
                     available_versions.insert(
                         package.clone(),
-                        BTreeSet::from([python_requirement.target().clone()]),
+                        BTreeSet::from([python_requirement.target().deref().clone()]),
                     );
                 }
                 PubGrubPackage::Package(name, ..) => {

@@ -17,10 +17,10 @@ use distribution_types::{
 };
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{MarkerEnvironment, Requirement};
-use platform_host::Platform;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
+use uv_auth::KeyringProvider;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -55,6 +55,7 @@ pub(crate) async fn pip_install(
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
+    keyring_provider: KeyringProvider,
     reinstall: &Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -109,17 +110,15 @@ pub(crate) async fn pip_install(
     }
 
     // Detect the current Python interpreter.
-    let platform = Platform::current()?;
     let venv = if user {
-        PythonEnvironment::from_user_scheme(python.as_deref(), platform, &cache)?
+        PythonEnvironment::from_user_scheme(python.as_deref(), &cache)?
     } else if let Some(python) = python.as_ref() {
-        PythonEnvironment::from_requested_python(python, &platform, &cache)?
+        PythonEnvironment::from_requested_python(python, &cache)?
     } else if system {
-        PythonEnvironment::from_default_python(&platform, &cache)?
+        PythonEnvironment::from_default_python(&cache)?
     } else {
-        PythonEnvironment::from_virtualenv(platform, &cache)?
+        PythonEnvironment::from_virtualenv(&cache)?
     };
-
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
@@ -161,8 +160,7 @@ pub(crate) async fn pip_install(
     let _lock = venv.lock()?;
 
     // Determine the set of installed packages.
-    let site_packages =
-        SitePackages::from_executable(&venv).context("Failed to list installed packages")?;
+    let site_packages = SitePackages::from_executable(&venv)?;
 
     // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
     // enough to let us remove this check. But right now, for large environments, it's an order of
@@ -203,6 +201,7 @@ pub(crate) async fn pip_install(
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .keyring_provider(keyring_provider)
         .build();
 
     // Resolve the flat indexes from `--find-links`.
@@ -951,7 +950,7 @@ enum Error {
     Client(#[from] uv_client::Error),
 
     #[error(transparent)]
-    Platform(#[from] platform_host::PlatformError),
+    Platform(#[from] platform_tags::PlatformError),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

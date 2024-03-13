@@ -11,7 +11,6 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
 
-use platform_host::Platform;
 use uv_cache::Cache;
 use uv_interpreter::{find_default_python, find_requested_python};
 use uv_virtualenv::{create_bare_venv, Prompt};
@@ -30,18 +29,17 @@ struct Cli {
 fn run() -> Result<(), uv_virtualenv::Error> {
     let cli = Cli::parse();
     let location = cli.path.unwrap_or(PathBuf::from(".venv"));
-    let platform = Platform::current()?;
     let cache = if let Some(project_dirs) = ProjectDirs::from("", "", "uv-virtualenv") {
         Cache::from_path(project_dirs.cache_dir())?
     } else {
         Cache::from_path(".cache")?
     };
     let interpreter = if let Some(python_request) = &cli.python {
-        find_requested_python(python_request, &platform, &cache)?.ok_or(
+        find_requested_python(python_request, &cache)?.ok_or(
             uv_interpreter::Error::NoSuchPython(python_request.to_string()),
         )?
     } else {
-        find_default_python(&platform, &cache)?
+        find_default_python(&cache)?
     };
     create_bare_venv(
         &location,

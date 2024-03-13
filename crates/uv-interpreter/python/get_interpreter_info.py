@@ -1,11 +1,9 @@
 """
 Queries information about the current Python interpreter and prints it as JSON.
 
-Exit Codes:
-    0: Success
-    1: General failure
-    3: Python version 3 or newer is required
+The script will exit with status 0 on known error that are turned into rust errors.
 """
+
 import json
 import os
 import platform
@@ -22,7 +20,8 @@ def format_full_version(info):
 
 
 if sys.version_info[0] < 3:
-    sys.exit(3)
+    print(json.dumps({"result": "error", "kind": "unsupported_python_version"}))
+    sys.exit(0)
 
 if hasattr(sys, "implementation"):
     implementation_version = format_full_version(sys.implementation.version)
@@ -390,6 +389,7 @@ def get_scheme(user: bool = False):
         # finalize_options(); we only want to override here if the user
         # has explicitly requested it hence going back to the config
         if "install_lib" in d.get_option_dict("install"):
+            # noinspection PyUnresolvedReferences
             scheme.update({"purelib": i.install_lib, "platlib": i.install_lib})
 
         if running_under_virtualenv():
@@ -397,6 +397,7 @@ def get_scheme(user: bool = False):
                 prefix = i.install_userbase
             else:
                 prefix = i.prefix
+            # noinspection PyUnresolvedReferences
             scheme["headers"] = os.path.join(
                 prefix,
                 "include",
@@ -430,6 +431,91 @@ def get_scheme(user: bool = False):
 # Read the environment variable `_UV_USE_USER_SCHEME` to determine if we should use the user scheme.
 user = os.getenv("_UV_USE_USER_SCHEME", "False").upper() in {"TRUE", "1"}
 
+def get_operating_system_and_architecture():
+    """Determine the Python interpreter architecture and operating system.
+
+    This can differ from uv's architecture and operating system. For example, Apple
+    Silicon Macs can run both x86_64 and aarch64 binaries transparently.
+    """
+    # https://github.com/pypa/packaging/blob/cc938f984bbbe43c5734b9656c9837ab3a28191f/src/packaging/_musllinux.py#L84
+    # Note that this is not `os.name`.
+    [operating_system, version_arch] = sysconfig.get_platform().split("-", 1)
+    if "-" in version_arch:
+        # Ex: macosx-11.2-arm64
+        version, architecture = version_arch.rsplit("-", 1)
+    else:
+        # Ex: linux-x86_64
+        version = None
+        architecture = version_arch
+
+    if operating_system == "linux":
+        # noinspection PyProtectedMember
+        from .packaging._manylinux import _get_glibc_version
+
+        # noinspection PyProtectedMember
+        from .packaging._musllinux import _get_musl_version
+
+        musl_version = _get_musl_version(sys.executable)
+        glibc_version = _get_glibc_version()
+        if musl_version:
+            operating_system = {
+                "name": "musllinux",
+                "major": musl_version[0],
+                "minor": musl_version[1],
+            }
+        elif glibc_version:
+            operating_system = {
+                "name": "manylinux",
+                "major": glibc_version[0],
+                "minor": glibc_version[1],
+            }
+        else:
+            print(json.dumps({"result": "error", "kind": "libc_not_found"}))
+            sys.exit(0)
+    elif operating_system == "win":
+        operating_system = {
+            "name": "windows",
+        }
+    elif operating_system == "macosx":
+        # GitHub Actions python seems to be doing this.
+        if architecture == "universal2":
+            if platform.processor() == "arm":
+                architecture = "aarch64"
+            else:
+                architecture = platform.processor()
+        version = platform.mac_ver()[0].split(".")
+        operating_system = {
+            "name": "macos",
+            "major": int(version[0]),
+            "minor": int(version[1]),
+        }
+    elif operating_system in [
+        "freebsd",
+        "netbsd",
+        "openbsd",
+        "dragonfly",
+        "illumos",
+        "haiku",
+    ]:
+        version = platform.mac_ver()[0].split(".")
+        operating_system = {
+            "name": operating_system,
+            "release": version,
+        }
+    else:
+        print(
+            json.dumps(
+                {
+                    "result": "error",
+                    "kind": "unknown_operating_system",
+                    "operating_system": operating_system,
+                }
+            )
+        )
+        sys.exit(0)
+    return {"os": operating_system, "arch": architecture}
+
+
 markers = {
     "implementation_name": implementation_name,
     "implementation_version": implementation_version,
@@ -444,6 +530,7 @@ markers = {
     "sys_platform": sys.platform,
 }
 interpreter_info = {
+    "result": "success",
     "markers": markers,
     "base_prefix": sys.base_prefix,
     "base_exec_prefix": sys.base_exec_prefix,
@@ -453,5 +540,6 @@ interpreter_info = {
     "stdlib": sysconfig.get_path("stdlib"),
     "scheme": get_scheme(user),
     "virtualenv": get_virtualenv(),
+    "platform": get_operating_system_and_architecture(),
 }
 print(json.dumps(interpreter_info))

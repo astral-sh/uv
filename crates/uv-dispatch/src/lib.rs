@@ -182,8 +182,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             let tags = self.interpreter.tags()?;
 
             // Determine the set of installed packages.
-            let site_packages =
-                SitePackages::from_executable(venv).context("Failed to list installed packages")?;
+            let site_packages = SitePackages::from_executable(venv)?;
 
             let Plan {
                 local,
@@ -280,7 +279,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         build_kind: BuildKind,
     ) -> Result<SourceBuild> {
         match self.no_build {
-            NoBuild::All => bail!("Building source distributions is disabled"),
+            NoBuild::All => debug_assert!(
+                matches!(build_kind, BuildKind::Editable),
+                "Only editable builds are exempt from 'no build' checks"
+            ),
             NoBuild::None => {}
             NoBuild::Packages(packages) => {
                 if let Some(dist) = dist {

@@ -16,9 +16,9 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{IndexLocations, LocalEditable, Verbatim};
-use platform_host::Platform;
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
+use uv_auth::KeyringProvider;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -59,6 +59,7 @@ pub(crate) async fn pip_compile(
     include_index_url: bool,
     include_find_links: bool,
     index_locations: IndexLocations,
+    keyring_provider: KeyringProvider,
     setup_py: SetupPyStrategy,
     config_settings: ConfigSettings,
     connectivity: Connectivity,
@@ -127,8 +128,7 @@ pub(crate) async fn pip_compile(
     let preferences = read_lockfile(output_file, upgrade).await?;
 
     // Find an interpreter to use for building distributions
-    let platform = Platform::current()?;
-    let interpreter = find_best_python(python_version.as_ref(), &platform, &cache)?;
+    let interpreter = find_best_python(python_version.as_ref(), &cache)?;
     debug!(
         "Using Python {} interpreter at {} for builds",
         interpreter.python_version(),
@@ -192,6 +192,7 @@ pub(crate) async fn pip_compile(
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .keyring_provider(keyring_provider)
         .build();
 
     // Resolve the flat indexes from `--find-links`.

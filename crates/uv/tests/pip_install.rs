@@ -696,6 +696,45 @@ fn install_editable_and_registry() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn install_editable_no_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let current_dir = std::env::current_dir()?;
+    let workspace_dir = regex::escape(
+        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
+            .unwrap()
+            .as_str(),
+    );
+
+    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    // Install the editable package with no-binary enabled
+    uv_snapshot!(filters, command(&context)
+        .arg("-e")
+        .arg("../../scripts/editable-installs/black_editable")
+        .arg("--no-binary")
+        .arg(":all:")
+        .current_dir(&current_dir)
+        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install a source distribution that uses the `flit` build system, along with `flit`
 /// at the top-level, along with `--reinstall` to force a re-download after resolution, to ensure
 /// that the `flit` install and the source distribution build don't conflict.
@@ -1380,11 +1419,11 @@ fn install_upgrade() {
 #[test]
 fn install_constraints_txt() -> Result<()> {
     let context = TestContext::new("3.12");
-    let requirementstxt = context.temp_dir.child("requirements.txt");
-    requirementstxt.write_str("django==5.0b1")?;
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
 
     let constraints_txt = context.temp_dir.child("constraints.txt");
-    constraints_txt.write_str("sqlparse<0.4.4")?;
+    constraints_txt.write_str("idna<3.4")?;
 
     uv_snapshot!(command(&context)
             .arg("-r")
@@ -1399,9 +1438,9 @@ fn install_constraints_txt() -> Result<()> {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + asgiref==3.7.2
-     + django==5.0b1
-     + sqlparse==0.4.3
+     + anyio==3.7.0
+     + idna==3.3
+     + sniffio==1.3.0
     "###
     );
 
@@ -1413,10 +1452,10 @@ fn install_constraints_txt() -> Result<()> {
 fn install_constraints_inline() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirementstxt = context.temp_dir.child("requirements.txt");
-    requirementstxt.write_str("django==5.0b1\n-c constraints.txt")?;
+    requirementstxt.write_str("anyio==3.7.0\n-c constraints.txt")?;
 
     let constraints_txt = context.temp_dir.child("constraints.txt");
-    constraints_txt.write_str("sqlparse<0.4.4")?;
+    constraints_txt.write_str("idna<3.4")?;
 
     uv_snapshot!(command(&context)
             .arg("-r")
@@ -1429,9 +1468,9 @@ fn install_constraints_inline() -> Result<()> {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + asgiref==3.7.2
-     + django==5.0b1
-     + sqlparse==0.4.3
+     + anyio==3.7.0
+     + idna==3.3
+     + sniffio==1.3.0
     "###
     );
 

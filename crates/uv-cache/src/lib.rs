@@ -206,7 +206,7 @@ impl Cache {
     }
 
     /// Persist a temporary directory to the artifact store.
-    pub fn persist(
+    pub async fn persist(
         &self,
         temp_dir: impl AsRef<Path>,
         path: impl AsRef<Path>,
@@ -218,7 +218,7 @@ impl Cache {
         // Move the temporary directory into the directory store.
         let archive_entry = self.entry(CacheBucket::Archive, "", id);
         fs_err::create_dir_all(archive_entry.dir())?;
-        fs_err::rename(temp_dir.as_ref(), archive_entry.path())?;
+        uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await?;
 
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
