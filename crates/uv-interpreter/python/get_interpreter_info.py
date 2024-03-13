@@ -20,7 +20,7 @@ def format_full_version(info):
 
 
 if sys.version_info[0] < 3:
-    print(json.dumps({"result": "error", "kind": "python_2_or_older"}))
+    print(json.dumps({"result": "error", "kind": "unsupported_python_version"}))
     sys.exit(0)
 
 if hasattr(sys, "implementation"):
@@ -444,7 +444,7 @@ def get_operating_system_and_architecture():
                 "minor": glibc_version[1],
             }
         else:
-            print(json.dumps({"result": "error", "kind": "neither_glibc_nor_musl"}))
+            print(json.dumps({"result": "error", "kind": "libc_not_found"}))
             sys.exit(0)
     elif operating_system == "win":
         operating_system = {

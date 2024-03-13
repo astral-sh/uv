@@ -122,7 +122,7 @@ fn find_python(
                         Ok(interpreter) => interpreter,
                         Err(
                             err @ Error::QueryScript {
-                                err: InterpreterInfoError::Python2OrOlder,
+                                err: InterpreterInfoError::UnsupportedPythonVersion,
                                 ..
                             },
                         ) => {

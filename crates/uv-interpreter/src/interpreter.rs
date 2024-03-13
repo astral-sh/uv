@@ -341,12 +341,12 @@ enum InterpreterInfoResult {
 #[derive(Debug, Error, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum InterpreterInfoError {
-    #[error("Could not detect a glibc or a musl libc (while running on linux)")]
-    NeitherGlibcNorMusl,
-    #[error("Unknown operation system `{operating_system}`")]
+    #[error("Could not detect a glibc or a musl libc (while running on Linux)")]
+    LibcNotFound,
+    #[error("Unknown operation system: `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
-    #[error("Python 2 or older is not supported. Please use Python 3 or newer.")]
-    Python2OrOlder,
+    #[error("Python 2 is not supported. Please use Python 3.8 or newer.")]
+    UnsupportedPythonVersion,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
