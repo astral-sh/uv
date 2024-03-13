@@ -23,6 +23,7 @@ use pep440_rs::Version;
 use pypi_types::{Metadata23, SimpleJson};
 use uv_auth::{AuthMiddleware, AuthenticationStore, KeyringProvider};
 use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_version::version;
 use uv_warnings::warn_user_once;
@@ -127,8 +128,19 @@ impl RegistryClientBuilder {
 
         // Initialize the base client.
         let client = self.client.unwrap_or_else(|| {
+            // Check for the presence of an `SSL_CERT_FILE`.
+            let ssl_cert_file_exists = env::var_os("SSL_CERT_FILE").is_some_and(|path| {
+                let path_exists = Path::new(&path).exists();
+                if !path_exists {
+                    warn_user_once!(
+                        "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
+                        path.simplified_display()
+                    );
+                }
+                path_exists
+            });
             // Load the TLS configuration.
-            let tls = tls::load(if self.native_tls {
+            let tls = tls::load(if self.native_tls || ssl_cert_file_exists {
                 Roots::Native
             } else {
                 Roots::Webpki

@@ -435,8 +435,8 @@ system's certificate store. To instruct uv to use the system's trust store, run 
 `--native-tls` command-line flag.
 
 If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT_FILE` environment
-variable to the path of the certificate bundle (alongside the `--native-tls` flag), to instruct uv
-to use that file instead of the system's trust store.
+variable to the path of the certificate bundle, to instruct uv to use that file instead of the
+system's trust store.
 
 ## Acknowledgements
 
