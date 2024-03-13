@@ -46,6 +46,7 @@ pub(crate) fn pip_check(
     let site_packages = SitePackages::from_executable(&venv)?;
 
     let mut is_compatible = true;
+    // This loop is entered if and only if there is at least one conflict.
     for diagnostic in site_packages.diagnostics()? {
         is_compatible = false;
         writeln!(printer.stdout(), "{}", diagnostic.message())?;
