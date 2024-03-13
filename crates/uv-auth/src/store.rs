@@ -19,25 +19,25 @@ pub enum Credential {
 }
 
 impl Credential {
-    pub fn username(&self) -> String {
+    pub fn username(&self) -> &str {
         match self {
-            Credential::Basic(auth) => auth.username.clone(),
-            Credential::UrlEncoded(auth) => auth.username.clone(),
+            Credential::Basic(auth) => &auth.username,
+            Credential::UrlEncoded(auth) => &auth.username,
         }
     }
-    pub fn password(&self) -> Option<String> {
+    pub fn password(&self) -> Option<&str> {
         match self {
-            Credential::Basic(auth) => auth.password.clone(),
-            Credential::UrlEncoded(auth) => auth.password.clone(),
+            Credential::Basic(auth) => auth.password.as_deref(),
+            Credential::UrlEncoded(auth) => auth.password.as_deref(),
         }
     }
 }
 
-impl From<&Authenticator> for Credential {
-    fn from(auth: &Authenticator) -> Self {
+impl From<Authenticator> for Credential {
+    fn from(auth: Authenticator) -> Self {
         Credential::Basic(BasicAuthData {
-            username: auth.login.clone(),
-            password: Some(auth.password.clone()),
+            username: auth.login,
+            password: Some(auth.password),
         })
     }
 }

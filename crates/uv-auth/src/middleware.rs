@@ -72,7 +72,7 @@ impl Middleware for AuthMiddleware {
             url.host_str()
                 .and_then(|host| nrc.hosts.get(host).or_else(|| nrc.hosts.get("default")))
         }) {
-            let auth = Credential::from(auth);
+            let auth = Credential::from(auth.to_owned());
             req.headers_mut().insert(
                 reqwest::header::AUTHORIZATION,
                 basic_auth(auth.username(), auth.password()),
@@ -89,10 +89,10 @@ impl Middleware for AuthMiddleware {
                     AuthenticationStore::set(&url, Some(auth));
                 }
                 Ok(None) => {
-                    debug!("No keyring credentials found for {}", url);
+                    debug!("No keyring credentials found for {url}");
                 }
                 Err(e) => {
-                    warn!("Failed to get keyring credentials for {}: {}", url, e);
+                    warn!("Failed to get keyring credentials for {url}: {e}");
                 }
             }
         }
@@ -144,7 +144,7 @@ mod tests {
     const NETRC: &str = r#"default login myuser password mypassword"#;
 
     #[tokio::test]
-    async fn test_init() -> Result<(), std::io::Error> {
+    async fn test_init() -> Result<(), Box<dyn std::error::Error>> {
         let server = MockServer::start().await;
 
         Mock::given(method("GET"))
@@ -154,12 +154,11 @@ mod tests {
             .mount(&server)
             .await;
 
-        let status = ClientBuilder::new(Client::builder().build().unwrap())
+        let status = ClientBuilder::new(Client::builder().build()?)
             .build()
             .get(format!("{}/hello", &server.uri()))
             .send()
-            .await
-            .unwrap()
+            .await?
             .status();
 
         assert_eq!(status, 404);
@@ -167,7 +166,7 @@ mod tests {
         let mut netrc_file = NamedTempFile::new()?;
         writeln!(netrc_file, "{}", NETRC)?;
 
-        let status = ClientBuilder::new(Client::builder().build().unwrap())
+        let status = ClientBuilder::new(Client::builder().build()?)
             .with(AuthMiddleware::from_netrc_file(
                 netrc_file.path(),
                 KeyringProvider::Disabled,
@@ -175,8 +174,7 @@ mod tests {
             .build()
             .get(format!("{}/hello", &server.uri()))
             .send()
-            .await
-            .unwrap()
+            .await?
             .status();
 
         assert_eq!(status, 200);
