@@ -474,7 +474,7 @@ def get_operating_system_and_architecture():
     ]:
         version = platform.mac_ver()[0].split(".")
         operating_system = {
-            "name": "macos",
+            "name": operating_system,
             "release": version,
         }
     else:
