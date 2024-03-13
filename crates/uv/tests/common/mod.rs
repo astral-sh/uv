@@ -17,7 +17,6 @@ use std::path::{Path, PathBuf};
 use std::process::Output;
 use uv_fs::Simplified;
 
-use platform_host::Platform;
 use uv_cache::Cache;
 use uv_interpreter::find_requested_python;
 
@@ -297,14 +296,14 @@ pub fn get_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_uv"))
 }
 
-/// Create a directory with the requested Python binaries available.
+/// Create a `PATH` with the requested Python versions available in order.
 pub fn create_bin_with_executables(
     temp_dir: &assert_fs::TempDir,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
     if let Some(bootstrapped_pythons) = bootstrapped_pythons() {
-        let selected_pythons = bootstrapped_pythons.into_iter().filter(|path| {
-            python_versions.iter().any(|python_version| {
+        let selected_pythons = python_versions.iter().flat_map(|python_version| {
+            bootstrapped_pythons.iter().filter(move |path| {
                 // Good enough since we control the directory
                 path.to_str()
                     .unwrap()
@@ -317,12 +316,8 @@ pub fn create_bin_with_executables(
     let bin = temp_dir.child("bin");
     fs_err::create_dir(&bin)?;
     for &request in python_versions {
-        let interpreter = find_requested_python(
-            request,
-            &Platform::current().unwrap(),
-            &Cache::temp().unwrap(),
-        )?
-        .ok_or(uv_interpreter::Error::NoSuchPython(request.to_string()))?;
+        let interpreter = find_requested_python(request, &Cache::temp().unwrap())?
+            .ok_or(uv_interpreter::Error::NoSuchPython(request.to_string()))?;
         let name = interpreter
             .sys_executable()
             .file_name()

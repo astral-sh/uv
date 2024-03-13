@@ -284,7 +284,7 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-          × No Python 3.15 In `PATH`. Is Python 3.15 installed?
+          × No Python 3.15 in `PATH`. Is Python 3.15 installed?
         "###
         );
     }
@@ -309,7 +309,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
         ),
         (
             r"No Python 3\.8\.0 found through `py --list-paths` or in `PATH`\. Is Python 3\.8\.0 installed\?",
-            "No Python 3.8.0 In `PATH`. Is Python 3.8.0 installed?",
+            "No Python 3.8.0 in `PATH`. Is Python 3.8.0 installed?",
         ),
         (&filter_venv, "/home/ferris/project/.venv"),
     ];
@@ -330,7 +330,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No Python 3.8.0 In `PATH`. Is Python 3.8.0 installed?
+      × No Python 3.8.0 in `PATH`. Is Python 3.8.0 installed?
     "###
     );
 
@@ -537,7 +537,7 @@ fn windows_shims() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let bin =
-        create_bin_with_executables(&temp_dir, &["3.8", "3.9"]).expect("Failed to create bin dir");
+        create_bin_with_executables(&temp_dir, &["3.9", "3.8"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
     let shim_path = temp_dir.child("shim");
 

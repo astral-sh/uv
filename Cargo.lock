@@ -844,15 +844,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d7439c3735f405729d52c3fbbe4de140eaf938a1fe47d227c27f8254d4302a5"
 
 [[package]]
-name = "deranged"
-version = "0.3.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b42b6fa04a440b495c8b04d0e71b707c585f83cb9cb28cf8cd0d976c315e31b4"
-dependencies = [
- "powerfmt",
-]
-
-[[package]]
 name = "derivative"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1327,17 +1318,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "goblin"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb07a4ffed2093b118a525b1d8f5204ae274faed5604537caf7135d0f18d9887"
-dependencies = [
- "log",
- "plain",
- "scroll",
-]
-
-[[package]]
 name = "h2"
 version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1630,9 +1610,8 @@ dependencies = [
  "once_cell",
  "pathdiff",
  "pep440_rs",
- "platform-host",
  "platform-info",
- "plist",
+ "platform-tags",
  "pypi-types",
  "reflink-copy",
  "regex",
@@ -1846,15 +1825,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "line-wrap"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f30344350a2a51da54c1d53be93fade8a237e545dbcc4bdbe635413f2117cab9"
-dependencies = [
- "safemem",
-]
-
-[[package]]
 name = "linked-hash-map"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2065,12 +2035,6 @@ checksum = "c073d3c1930d0751774acf49e66653acecb416c3a54c6ec095a9b11caddb5a68"
 dependencies = [
  "windows-sys 0.48.0",
 ]
-
-[[package]]
-name = "num-conv"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51d515d32fb182ee37cda2ccdcb92950d6a3c2893aa280e540671c2cd0f3b1d9"
 
 [[package]]
 name = "num-traits"
@@ -2344,28 +2308,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
-name = "plain"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
-
-[[package]]
-name = "platform-host"
-version = "0.0.1"
-dependencies = [
- "fs-err",
- "goblin",
- "once_cell",
- "platform-info",
- "plist",
- "regex",
- "serde",
- "target-lexicon",
- "thiserror",
- "tracing",
-]
-
-[[package]]
 name = "platform-info"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2379,23 +2321,9 @@ dependencies = [
 name = "platform-tags"
 version = "0.0.1"
 dependencies = [
- "platform-host",
  "rustc-hash",
- "thiserror",
-]
-
-[[package]]
-name = "plist"
-version = "1.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5699cc8a63d1aa2b1ee8e12b9ad70ac790d65788cd36101fa37f87ea46c4cef"
-dependencies = [
- "base64 0.21.7",
- "indexmap 2.2.5",
- "line-wrap",
- "quick-xml",
  "serde",
- "time",
+ "thiserror",
 ]
 
 [[package]]
@@ -2425,12 +2353,6 @@ name = "portable-atomic"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7170ef9988bc169ba16dd36a7fa041e5c4cbeb6a35b76d4c03daded371eae7c0"
-
-[[package]]
-name = "powerfmt"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "ppv-lite86"
@@ -2627,15 +2549,6 @@ dependencies = [
  "pep508_rs",
  "serde",
  "toml",
-]
-
-[[package]]
-name = "quick-xml"
-version = "0.31.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1004a344b30a54e2ee58d66a71b32d2db2feb0a31f9a2d302bf0536f15de2a33"
-dependencies = [
- "memchr",
 ]
 
 [[package]]
@@ -3165,12 +3078,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e86697c916019a8588c99b5fac3cead74ec0b4b819707a682fd4d23fa0ce1ba1"
 
 [[package]]
-name = "safemem"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef703b7cb59335eae2eb93ceb664c0eb7ea6bf567079d843e09420219668e072"
-
-[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3193,26 +3100,6 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
-
-[[package]]
-name = "scroll"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ab8598aa408498679922eff7fa985c25d58a90771bd6be794434c5277eab1a6"
-dependencies = [
- "scroll_derive",
-]
-
-[[package]]
-name = "scroll_derive"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f81c2fde025af7e69b1d1420531c8a8811ca898919db177141a85313b1cb932"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.52",
-]
 
 [[package]]
 name = "sct"
@@ -3704,37 +3591,6 @@ checksum = "965fe0c26be5c56c94e38ba547249074803efd52adfb66de62107d95aab3eaca"
 dependencies = [
  "libc",
  "tikv-jemalloc-sys",
-]
-
-[[package]]
-name = "time"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8248b6521bb14bc45b4067159b9b6ad792e2d6d754d6c41fb50e29fefe38749"
-dependencies = [
- "deranged",
- "itoa",
- "num-conv",
- "powerfmt",
- "serde",
- "time-core",
- "time-macros",
-]
-
-[[package]]
-name = "time-core"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef927ca75afb808a4d64dd374f00a2adf8d0fcff8e7b184af886c3c87ec4a3f3"
-
-[[package]]
-name = "time-macros"
-version = "0.2.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ba3a3ef41e6672a2f0f001392bb5dcd3ff0a9992d618ca761a11c3121547774"
-dependencies = [
- "num-conv",
- "time-core",
 ]
 
 [[package]]
@@ -4241,7 +4097,6 @@ dependencies = [
  "owo-colors 4.0.0",
  "pep440_rs",
  "pep508_rs",
- "platform-host",
  "platform-tags",
  "predicates",
  "pubgrub",
@@ -4302,7 +4157,6 @@ dependencies = [
  "itertools 0.12.1",
  "once_cell",
  "pep508_rs",
- "platform-host",
  "pypi-types",
  "pyproject-toml",
  "regex",
@@ -4415,7 +4269,6 @@ dependencies = [
  "pep440_rs",
  "pep508_rs",
  "petgraph",
- "platform-host",
  "platform-tags",
  "poloto",
  "pypi-types",
@@ -4457,7 +4310,6 @@ dependencies = [
  "futures",
  "itertools 0.12.1",
  "pep508_rs",
- "platform-host",
  "platform-tags",
  "pypi-types",
  "rustc-hash",
@@ -4626,7 +4478,6 @@ dependencies = [
  "once_cell",
  "pep440_rs",
  "pep508_rs",
- "platform-host",
  "platform-tags",
  "pypi-types",
  "regex",
@@ -4678,7 +4529,6 @@ dependencies = [
  "pep440_rs",
  "pep508_rs",
  "petgraph",
- "platform-host",
  "platform-tags",
  "pubgrub",
  "pypi-types",
@@ -4737,7 +4587,7 @@ dependencies = [
  "directories",
  "fs-err",
  "pathdiff",
- "platform-host",
+ "platform-tags",
  "pypi-types",
  "serde",
  "serde_json",
