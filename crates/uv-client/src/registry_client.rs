@@ -119,8 +119,17 @@ impl RegistryClientBuilder {
 
         // Initialize the base client.
         let client = self.client.unwrap_or_else(|| {
+            // Check and validate SSL_CERT_FILE being set.
+            let ssl_cert_file_exists = env::var_os("SSL_CERT_FILE")
+                .map_or(false, |path| {
+                    let path_exists = Path::new(&path).exists();
+                    if !path_exists {
+                        warn_user_once!("Ignoring invalid value from environment for SSL_CERT_FILE. File path {} does not exists.", path.to_string_lossy());
+                    }
+                    path_exists
+                });
             // Load the TLS configuration.
-            let tls = tls::load(if self.native_tls || env::var("SSL_CERT_FILE").is_ok() {
+            let tls = tls::load(if self.native_tls || ssl_cert_file_exists {
                 Roots::Native
             } else {
                 Roots::Webpki
