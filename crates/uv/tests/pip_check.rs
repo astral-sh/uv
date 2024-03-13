@@ -1,11 +1,8 @@
-use std::env::current_dir;
 use std::process::Command;
 
 use anyhow::Result;
-use assert_cmd::prelude::*;
 use assert_fs::fixture::PathChild;
 use assert_fs::fixture::{FileTouch, FileWriteStr};
-use indoc::indoc;
 
 use common::uv_snapshot;
 
