@@ -372,7 +372,7 @@ impl InterpreterInfo {
         let output = Command::new(interpreter)
             .arg("-m")
             .arg("python.get_interpreter_info")
-            .current_dir(tempdir.path())
+            .current_dir(tempdir.path().simplified())
             .output()
             .map_err(|err| Error::PythonSubcommandLaunch {
                 interpreter: interpreter.to_path_buf(),

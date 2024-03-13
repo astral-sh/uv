@@ -296,14 +296,14 @@ pub fn get_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_uv"))
 }
 
-/// Create a directory with the requested Python binaries available.
+/// Create a `PATH` with the requested Python versions available in order.
 pub fn create_bin_with_executables(
     temp_dir: &assert_fs::TempDir,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
     if let Some(bootstrapped_pythons) = bootstrapped_pythons() {
-        let selected_pythons = bootstrapped_pythons.into_iter().filter(|path| {
-            python_versions.iter().any(|python_version| {
+        let selected_pythons = python_versions.iter().flat_map(|python_version| {
+            bootstrapped_pythons.iter().filter(move |path| {
                 // Good enough since we control the directory
                 path.to_str()
                     .unwrap()

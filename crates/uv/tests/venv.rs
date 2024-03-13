@@ -537,7 +537,7 @@ fn windows_shims() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let bin =
-        create_bin_with_executables(&temp_dir, &["3.8", "3.9"]).expect("Failed to create bin dir");
+        create_bin_with_executables(&temp_dir, &["3.9", "3.8"]).expect("Failed to create bin dir");
     let venv = temp_dir.child(".venv");
     let shim_path = temp_dir.child("shim");
 
