@@ -477,12 +477,15 @@ def get_operating_system_and_architecture():
             "release": version,
         }
     else:
-        error = {
-            "result": "error",
-            "kind": "unknown_operating_system",
-            "operating_system": operating_system,
-        }
-        print(json.dumps(error))
+        print(
+            json.dumps(
+                {
+                    "result": "error",
+                    "kind": "unknown_operating_system",
+                    "operating_system": operating_system,
+                }
+            )
+        )
         sys.exit(0)
     return {"os": operating_system, "arch": architecture}
 
