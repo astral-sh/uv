@@ -5,7 +5,6 @@ use configparser::ini::Ini;
 use fs_err as fs;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use tempfile::tempdir;
 use tracing::{debug, warn};
 
 use cache_key::digest;
@@ -366,8 +365,8 @@ struct InterpreterInfo {
 
 impl InterpreterInfo {
     /// Return the resolved [`InterpreterInfo`] for the given Python executable.
-    pub(crate) fn query(interpreter: &Path) -> Result<Self, Error> {
-        let tempdir = tempdir()?;
+    pub(crate) fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
+        let tempdir = tempfile::tempdir_in(cache.root())?;
         Self::setup_python_query_files(tempdir.path())?;
 
         let output = Command::new(interpreter)
@@ -502,7 +501,7 @@ impl InterpreterInfo {
 
         // Otherwise, run the Python script.
         debug!("Probing interpreter info for: {}", executable.display());
-        let info = Self::query(executable)?;
+        let info = Self::query(executable, cache)?;
         debug!(
             "Found Python {} for: {}",
             info.markers.python_full_version,
