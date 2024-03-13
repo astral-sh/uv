@@ -25,6 +25,12 @@ pub struct BaseClientBuilder {
     client: Option<Client>,
 }
 
+impl Default for BaseClientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BaseClientBuilder {
     pub fn new() -> Self {
         Self {
@@ -66,6 +72,10 @@ impl BaseClientBuilder {
     pub fn client(mut self, client: Client) -> Self {
         self.client = Some(client);
         self
+    }
+
+    pub fn is_offline(&self) -> bool {
+        matches!(self.connectivity, Connectivity::Offline)
     }
 
     pub fn build(self) -> BaseClient {

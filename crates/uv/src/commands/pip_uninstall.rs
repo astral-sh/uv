@@ -5,8 +5,9 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{InstalledMetadata, Name};
+use uv_auth::KeyringProvider;
 use uv_cache::Cache;
-use uv_client::Connectivity;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
 
@@ -15,6 +16,7 @@ use crate::printer::Printer;
 use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
 /// Uninstall packages from the current environment.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn pip_uninstall(
     sources: &[RequirementsSource],
     python: Option<String>,
@@ -22,9 +24,15 @@ pub(crate) async fn pip_uninstall(
     break_system_packages: bool,
     cache: Cache,
     connectivity: Connectivity,
+    native_tls: bool,
+    keyring_provider: KeyringProvider,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls)
+        .keyring_provider(keyring_provider);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -38,7 +46,7 @@ pub(crate) async fn pip_uninstall(
         no_index: _no_index,
         find_links: _find_links,
         extras: _extras,
-    } = RequirementsSpecification::from_simple_sources(sources, connectivity).await?;
+    } = RequirementsSpecification::from_simple_sources(sources, client_builder).await?;
 
     // Detect the current Python interpreter.
     let venv = if let Some(python) = python.as_ref() {

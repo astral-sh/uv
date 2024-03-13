@@ -25,11 +25,15 @@ fs-err = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, optional = true }
+reqwest-middleware = { workspace = true, optional = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }
 url = { workspace = true }
+
+[features]
+http = ["reqwest", "reqwest-middleware"]
 
 [dev-dependencies]
 anyhow = { version = "1.0.80" }

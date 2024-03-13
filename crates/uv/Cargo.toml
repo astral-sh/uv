@@ -21,7 +21,7 @@ pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
 pypi-types = { path = "../pypi-types" }
-requirements-txt = { path = "../requirements-txt", features = ["reqwest"] }
+requirements-txt = { path = "../requirements-txt", features = ["http"] }
 uv-auth = { path = "../uv-auth", features = ["clap"] }
 uv-build = { path = "../uv-build" }
 uv-cache = { path = "../uv-cache", features = ["clap"] }

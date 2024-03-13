@@ -957,6 +957,13 @@ struct PipUninstallArgs {
     )]
     python: Option<String>,
 
+    /// Attempt to use `keyring` for authentication for remote requirements files.
+    ///
+    /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
+    /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
+    #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
+    keyring_provider: KeyringProvider,
+
     /// Use the system Python to uninstall packages.
     ///
     /// By default, `uv` uninstalls from the virtual environment in the current working directory or
@@ -1653,6 +1660,8 @@ async fn run() -> Result<ExitStatus> {
                 } else {
                     Connectivity::Online
                 },
+                cli.native_tls,
+                args.keyring_provider,
                 printer,
             )
             .await

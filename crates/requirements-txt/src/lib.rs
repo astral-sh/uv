@@ -49,7 +49,9 @@ use pep508_rs::{
     expand_env_vars, split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, Scheme,
     VerbatimUrl,
 };
-use uv_client::Connectivity;
+#[cfg(feature = "http")]
+use uv_client::BaseClient;
+use uv_client::BaseClientBuilder;
 use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
 use uv_warnings::warn_user;
@@ -332,38 +334,39 @@ impl RequirementsTxt {
     pub async fn parse(
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
-        connectivity: Connectivity,
+        client_builder: BaseClientBuilder,
     ) -> Result<Self, RequirementsTxtFileError> {
         let requirements_txt = requirements_txt.as_ref();
         let working_dir = working_dir.as_ref();
 
         let content =
             if requirements_txt.starts_with("http://") | requirements_txt.starts_with("https://") {
-                #[cfg(not(feature = "reqwest"))]
+                #[cfg(not(feature = "http"))]
                 {
                     return Err(RequirementsTxtFileError {
                         file: requirements_txt.to_path_buf(),
                         error: RequirementsTxtParserError::IO(io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            "Remote file not supported without `reqwest` feature",
+                            "Remote file not supported without `http` feature",
                         )),
                     });
                 }
 
-                #[cfg(feature = "reqwest")]
+                #[cfg(feature = "http")]
                 {
-                    match connectivity {
-                        Connectivity::Online => read_url_to_string(&requirements_txt).await,
-                        Connectivity::Offline => {
-                            return Err(RequirementsTxtFileError {
-                                file: requirements_txt.to_path_buf(),
-                                error: RequirementsTxtParserError::IO(io::Error::new(
-                                    io::ErrorKind::InvalidInput,
-                                    format!("Network connectivity is disabled, but a remote requirements file was requested: {}", requirements_txt.display()),
-                                )),
-                            });
-                        }
+                    // Avoid constructing a client if network is disabled already
+                    if client_builder.is_offline() {
+                        return Err(RequirementsTxtFileError {
+                            file: requirements_txt.to_path_buf(),
+                            error: RequirementsTxtParserError::IO(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                format!("Network connectivity is disabled, but a remote requirements file was requested: {}", requirements_txt.display()),
+                            )),
+                        });
                     }
+
+                    let client = client_builder.clone().build();
+                    read_url_to_string(&requirements_txt, client).await
                 }
             } else {
                 uv_fs::read_to_string_transcode(&requirements_txt)
@@ -376,7 +379,7 @@ impl RequirementsTxt {
             })?;
 
         let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
-        let data = Self::parse_inner(&content, working_dir, requirements_dir, connectivity)
+        let data = Self::parse_inner(&content, working_dir, requirements_dir, client_builder)
             .await
             .map_err(|err| RequirementsTxtFileError {
                 file: requirements_txt.to_path_buf(),
@@ -403,7 +406,7 @@ impl RequirementsTxt {
         content: &str,
         working_dir: &Path,
         requirements_dir: &Path,
-        connectivity: Connectivity,
+        client_builder: BaseClientBuilder,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
@@ -422,13 +425,14 @@ impl RequirementsTxt {
                         } else {
                             requirements_dir.join(filename.as_ref())
                         };
-                    let sub_requirements = Self::parse(&sub_file, working_dir, connectivity)
-                        .await
-                        .map_err(|err| RequirementsTxtParserError::Subfile {
-                            source: Box::new(err),
-                            start,
-                            end,
-                        })?;
+                    let sub_requirements =
+                        Self::parse(&sub_file, working_dir, client_builder.clone())
+                            .await
+                            .map_err(|err| RequirementsTxtParserError::Subfile {
+                                source: Box::new(err),
+                                start,
+                                end,
+                            })?;
 
                     // Disallow conflicting `--index-url` in nested `requirements` files.
                     if sub_requirements.index_url.is_some()
@@ -460,13 +464,14 @@ impl RequirementsTxt {
                         } else {
                             requirements_dir.join(filename.as_ref())
                         };
-                    let sub_constraints = Self::parse(&sub_file, working_dir, connectivity)
-                        .await
-                        .map_err(|err| RequirementsTxtParserError::Subfile {
-                        source: Box::new(err),
-                        start,
-                        end,
-                    })?;
+                    let sub_constraints =
+                        Self::parse(&sub_file, working_dir, client_builder.clone())
+                            .await
+                            .map_err(|err| RequirementsTxtParserError::Subfile {
+                                source: Box::new(err),
+                                start,
+                                end,
+                            })?;
                     // Treat any nested requirements or constraints as constraints. This differs
                     // from `pip`, which seems to treat `-r` requirements in constraints files as
                     // _requirements_, but we don't want to support that.
@@ -827,8 +832,11 @@ fn parse_value<'a, T>(
 }
 
 /// Fetch the contents of a URL and return them as a string.
-#[cfg(feature = "reqwest")]
-async fn read_url_to_string(path: impl AsRef<Path>) -> Result<String, RequirementsTxtParserError> {
+#[cfg(feature = "http")]
+async fn read_url_to_string(
+    path: impl AsRef<Path>,
+    client: BaseClient,
+) -> Result<String, RequirementsTxtParserError> {
     // pip would URL-encode the non-UTF-8 bytes of the string; we just don't support them.
     let path_utf8 =
         path.as_ref()
@@ -836,7 +844,11 @@ async fn read_url_to_string(path: impl AsRef<Path>) -> Result<String, Requiremen
             .ok_or_else(|| RequirementsTxtParserError::NonUnicodeUrl {
                 url: path.as_ref().to_owned(),
             })?;
-    Ok(reqwest::get(path_utf8)
+
+    Ok(client
+        .client()
+        .get(path_utf8)
+        .send()
         .await?
         .error_for_status()?
         .text()
@@ -887,8 +899,8 @@ pub enum RequirementsTxtParserError {
     NonUnicodeUrl {
         url: PathBuf,
     },
-    #[cfg(feature = "reqwest")]
-    Reqwest(reqwest::Error),
+    #[cfg(feature = "http")]
+    Reqwest(reqwest_middleware::Error),
 }
 
 impl RequirementsTxtParserError {
@@ -937,7 +949,7 @@ impl RequirementsTxtParserError {
                 end: end + offset,
             },
             Self::NonUnicodeUrl { url } => Self::NonUnicodeUrl { url },
-            #[cfg(feature = "reqwest")]
+            #[cfg(feature = "http")]
             Self::Reqwest(err) => Self::Reqwest(err),
         }
     }
@@ -988,7 +1000,7 @@ impl Display for RequirementsTxtParserError {
                     url.display(),
                 )
             }
-            #[cfg(feature = "reqwest")]
+            #[cfg(feature = "http")]
             Self::Reqwest(err) => {
                 write!(f, "Error while accessing remote requirements file {err}")
             }
@@ -1010,7 +1022,7 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::Subfile { source, .. } => Some(source.as_ref()),
             Self::Parser { .. } => None,
             Self::NonUnicodeUrl { .. } => None,
-            #[cfg(feature = "reqwest")]
+            #[cfg(feature = "http")]
             Self::Reqwest(err) => err.source(),
         }
     }
@@ -1094,7 +1106,7 @@ impl Display for RequirementsTxtFileError {
                     url.display(),
                 )
             }
-            #[cfg(feature = "reqwest")]
+            #[cfg(feature = "http")]
             RequirementsTxtParserError::Reqwest(err) => {
                 write!(
                     f,
@@ -1118,9 +1130,16 @@ impl From<io::Error> for RequirementsTxtParserError {
     }
 }
 
-#[cfg(feature = "reqwest")]
+#[cfg(feature = "http")]
 impl From<reqwest::Error> for RequirementsTxtParserError {
     fn from(err: reqwest::Error) -> Self {
+        Self::Reqwest(reqwest_middleware::Error::Reqwest(err))
+    }
+}
+
+#[cfg(feature = "http")]
+impl From<reqwest_middleware::Error> for RequirementsTxtParserError {
+    fn from(err: reqwest_middleware::Error) -> Self {
         Self::Reqwest(err)
     }
 }
@@ -1177,7 +1196,7 @@ mod test {
     use tempfile::tempdir;
     use test_case::test_case;
     use unscanny::Scanner;
-    use uv_client::Connectivity;
+    use uv_client::BaseClientBuilder;
 
     use uv_fs::Simplified;
 
@@ -1202,9 +1221,10 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual = RequirementsTxt::parse(requirements_txt, &working_dir, Connectivity::Offline)
-            .await
-            .unwrap();
+        let actual =
+            RequirementsTxt::parse(requirements_txt, &working_dir, BaseClientBuilder::new())
+                .await
+                .unwrap();
 
         let snapshot = format!("parse-{}", path.to_string_lossy());
         insta::assert_debug_snapshot!(snapshot, actual);
@@ -1246,9 +1266,10 @@ mod test {
         let requirements_txt = temp_dir.path().join(path);
         fs::write(&requirements_txt, contents).unwrap();
 
-        let actual = RequirementsTxt::parse(&requirements_txt, &working_dir, Connectivity::Offline)
-            .await
-            .unwrap();
+        let actual =
+            RequirementsTxt::parse(&requirements_txt, &working_dir, BaseClientBuilder::new())
+                .await
+                .unwrap();
 
         let snapshot = format!("line-endings-{}", path.to_string_lossy());
         insta::assert_debug_snapshot!(snapshot, actual);
@@ -1266,7 +1287,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            Connectivity::Offline,
+            BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1307,7 +1328,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            Connectivity::Offline,
+            BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1344,7 +1365,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            Connectivity::Offline,
+            BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1381,7 +1402,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            Connectivity::Offline,
+            BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1413,7 +1434,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            Connectivity::Offline,
+            BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1447,7 +1468,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            Connectivity::Offline,
+            BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1482,7 +1503,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            Connectivity::Offline,
+            BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1522,7 +1543,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            Connectivity::Offline,
+            BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1567,7 +1588,7 @@ mod test {
         "})?;
 
         let requirements =
-            RequirementsTxt::parse(parent_txt.path(), temp_dir.path(), Connectivity::Offline)
+            RequirementsTxt::parse(parent_txt.path(), temp_dir.path(), BaseClientBuilder::new())
                 .await
                 .unwrap();
         insta::assert_debug_snapshot!(requirements, @r###"
@@ -1622,7 +1643,7 @@ mod test {
         let requirements = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            Connectivity::Offline,
+            BaseClientBuilder::new(),
         )
         .await
         .unwrap();
@@ -1686,7 +1707,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            Connectivity::Offline,
+            BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1740,7 +1761,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            Connectivity::Offline,
+            BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();

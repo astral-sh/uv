@@ -12,7 +12,7 @@ use tracing::{instrument, Level};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
-use uv_client::Connectivity;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 use uv_warnings::warn_user;
@@ -142,7 +142,7 @@ impl RequirementsSpecification {
     pub(crate) async fn from_source(
         source: &RequirementsSource,
         extras: &ExtrasSpecification<'_>,
-        connectivity: Connectivity,
+        client_builder: BaseClientBuilder,
     ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Package(name) => {
@@ -179,7 +179,7 @@ impl RequirementsSpecification {
             }
             RequirementsSource::RequirementsTxt(path) => {
                 let requirements_txt =
-                    RequirementsTxt::parse(path, std::env::current_dir()?, connectivity).await?;
+                    RequirementsTxt::parse(path, std::env::current_dir()?, client_builder).await?;
                 Self {
                     project: None,
                     requirements: requirements_txt
@@ -281,7 +281,7 @@ impl RequirementsSpecification {
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
         extras: &ExtrasSpecification<'_>,
-        connectivity: Connectivity,
+        client_builder: BaseClientBuilder,
     ) -> Result<Self> {
         let mut spec = Self::default();
 
@@ -289,7 +289,7 @@ impl RequirementsSpecification {
         // A `requirements.txt` can contain a `-c constraints.txt` directive within it, so reading
         // a requirements file can also add constraints.
         for source in requirements {
-            let source = Self::from_source(source, extras, connectivity).await?;
+            let source = Self::from_source(source, extras, client_builder.clone()).await?;
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
@@ -316,7 +316,7 @@ impl RequirementsSpecification {
 
         // Read all constraints, treating _everything_ as a constraint.
         for source in constraints {
-            let source = Self::from_source(source, extras, connectivity).await?;
+            let source = Self::from_source(source, extras, client_builder.clone()).await?;
             spec.constraints.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.constraints.extend(source.overrides);
@@ -336,7 +336,7 @@ impl RequirementsSpecification {
 
         // Read all overrides, treating both requirements _and_ constraints as overrides.
         for source in overrides {
-            let source = Self::from_source(source, extras, connectivity).await?;
+            let source = Self::from_source(source, extras, client_builder.clone()).await?;
             spec.overrides.extend(source.requirements);
             spec.overrides.extend(source.constraints);
             spec.overrides.extend(source.overrides);
@@ -360,14 +360,14 @@ impl RequirementsSpecification {
     /// Read the requirements from a set of sources.
     pub(crate) async fn from_simple_sources(
         requirements: &[RequirementsSource],
-        connectivity: Connectivity,
+        client_builder: BaseClientBuilder,
     ) -> Result<Self> {
         Self::from_sources(
             requirements,
             &[],
             &[],
             &ExtrasSpecification::None,
-            connectivity,
+            client_builder,
         )
         .await
     }
@@ -455,9 +455,12 @@ pub(crate) async fn read_lockfile(
     };
 
     // Parse the requirements from the lockfile.
-    let requirements_txt =
-        RequirementsTxt::parse(output_file, std::env::current_dir()?, Connectivity::Offline)
-            .await?;
+    let requirements_txt = RequirementsTxt::parse(
+        output_file,
+        std::env::current_dir()?,
+        BaseClientBuilder::new().connectivity(Connectivity::Offline),
+    )
+    .await?;
     let requirements = requirements_txt
         .requirements
         .into_iter()
