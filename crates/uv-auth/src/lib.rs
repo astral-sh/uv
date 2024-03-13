@@ -2,7 +2,7 @@ mod keyring;
 mod middleware;
 mod store;
 
-pub use keyring::KeyringProvider;
+pub use keyring::{KeyringConfig, KeyringProvider};
 pub use middleware::AuthMiddleware;
 use once_cell::sync::Lazy;
 pub use store::AuthenticationStore;

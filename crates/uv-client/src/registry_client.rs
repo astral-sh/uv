@@ -21,7 +21,7 @@ use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Nam
 use install_wheel_rs::metadata::{find_archive_dist_info, is_metadata_entry};
 use pep440_rs::Version;
 use pypi_types::{Metadata23, SimpleJson};
-use uv_auth::{AuthMiddleware, KeyringProvider, GLOBAL_AUTH_STORE};
+use uv_auth::{AuthMiddleware, KeyringConfig, GLOBAL_AUTH_STORE};
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -40,7 +40,7 @@ use crate::{tls, CachedClient, CachedClientError, Error, ErrorKind};
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder {
     index_urls: IndexUrls,
-    keyring_provider: KeyringProvider,
+    keyring_conf: KeyringConfig,
     native_tls: bool,
     retries: u32,
     connectivity: Connectivity,
@@ -52,7 +52,7 @@ impl RegistryClientBuilder {
     pub fn new(cache: Cache) -> Self {
         Self {
             index_urls: IndexUrls::default(),
-            keyring_provider: KeyringProvider::default(),
+            keyring_conf: KeyringConfig::default(),
             native_tls: false,
             cache,
             connectivity: Connectivity::Online,
@@ -70,8 +70,8 @@ impl RegistryClientBuilder {
     }
 
     #[must_use]
-    pub fn keyring_provider(mut self, keyring_provider: KeyringProvider) -> Self {
-        self.keyring_provider = keyring_provider;
+    pub fn keyring_conf(mut self, keyring_conf: KeyringConfig) -> Self {
+        self.keyring_conf = keyring_conf;
         self
     }
 
@@ -168,7 +168,7 @@ impl RegistryClientBuilder {
                 let client = client.with(retry_strategy);
 
                 // Initialize the authentication middleware to set headers.
-                let client = client.with(AuthMiddleware::new(self.keyring_provider));
+                let client = client.with(AuthMiddleware::new(self.keyring_conf));
 
                 client.build()
             }

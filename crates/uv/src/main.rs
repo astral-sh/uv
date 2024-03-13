@@ -14,7 +14,7 @@ use tracing::instrument;
 
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use requirements::ExtrasSpecification;
-use uv_auth::KeyringProvider;
+use uv_auth::{KeyringConfig, KeyringProvider};
 use uv_cache::{Cache, CacheArgs, Refresh};
 use uv_client::Connectivity;
 use uv_installer::{NoBinary, Reinstall};
@@ -366,6 +366,16 @@ struct PipCompileArgs {
     #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
     keyring_provider: KeyringProvider,
 
+    /// Use custom subprocess command for keyring authentication.
+    ///
+    /// Must be used with `--keyring-provider custom`.
+    #[clap(
+        long,
+        required_if_eq("keyring_provider", "custom"),
+        env = "UV_CUSTOM_KEYRING_COMMAND"
+    )]
+    custom_keyring_command: Option<String>,
+
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
     /// If a path, the target must be a directory that contains package as wheel files (`.whl`) or
@@ -539,6 +549,16 @@ struct PipSyncArgs {
     /// `uv` will try to use `keyring` via CLI when this flag is used.
     #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
     keyring_provider: KeyringProvider,
+
+    /// Use custom subprocess command for keyring authentication.
+    ///
+    /// Must be used with `--keyring-provider custom`.
+    #[clap(
+        long,
+        required_if_eq("keyring_provider", "custom"),
+        env = "UV_CUSTOM_KEYRING_COMMAND"
+    )]
+    custom_keyring_command: Option<String>,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -797,6 +817,16 @@ struct PipInstallArgs {
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
     #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
     keyring_provider: KeyringProvider,
+
+    /// Use custom subprocess command for keyring authentication.
+    ///
+    /// Must be used with `--keyring-provider custom`.
+    #[clap(
+        long,
+        required_if_eq("keyring_provider", "custom"),
+        env = "UV_CUSTOM_KEYRING_COMMAND"
+    )]
+    custom_keyring_command: Option<String>,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -1247,6 +1277,16 @@ struct VenvArgs {
     #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
     keyring_provider: uv_auth::KeyringProvider,
 
+    /// Use custom subprocess command for keyring authentication.
+    ///
+    /// Must be used with `--keyring-provider custom`.
+    #[clap(
+        long,
+        required_if_eq("keyring_provider", "custom"),
+        env = "UV_CUSTOM_KEYRING_COMMAND"
+    )]
+    custom_keyring_command: Option<String>,
+
     /// Run offline, i.e., without accessing the network.
     #[arg(global = true, long)]
     offline: bool,
@@ -1435,6 +1475,8 @@ async fn run() -> Result<ExitStatus> {
             } else {
                 SetupPyStrategy::Pep517
             };
+            let keyring_conf =
+                KeyringConfig::new(args.keyring_provider, args.custom_keyring_command);
             let config_settings = args.config_setting.into_iter().collect::<ConfigSettings>();
             commands::pip_compile(
                 &requirements,
@@ -1453,7 +1495,7 @@ async fn run() -> Result<ExitStatus> {
                 args.emit_index_url,
                 args.emit_find_links,
                 index_urls,
-                args.keyring_provider,
+                keyring_conf,
                 setup_py,
                 config_settings,
                 if args.offline {
@@ -1501,6 +1543,8 @@ async fn run() -> Result<ExitStatus> {
             } else {
                 SetupPyStrategy::Pep517
             };
+            let keyring_conf =
+                KeyringConfig::new(args.keyring_provider, args.custom_keyring_command);
             let config_settings = args.config_setting.into_iter().collect::<ConfigSettings>();
 
             commands::pip_sync(
@@ -1509,7 +1553,7 @@ async fn run() -> Result<ExitStatus> {
                 args.link_mode,
                 args.compile,
                 index_urls,
-                args.keyring_provider,
+                keyring_conf,
                 setup_py,
                 if args.offline {
                     Connectivity::Offline
@@ -1590,6 +1634,8 @@ async fn run() -> Result<ExitStatus> {
             } else {
                 SetupPyStrategy::Pep517
             };
+            let keyring_conf =
+                KeyringConfig::new(args.keyring_provider, args.custom_keyring_command);
             let config_settings = args.config_setting.into_iter().collect::<ConfigSettings>();
 
             commands::pip_install(
@@ -1602,7 +1648,7 @@ async fn run() -> Result<ExitStatus> {
                 dependency_mode,
                 upgrade,
                 index_urls,
-                args.keyring_provider,
+                keyring_conf,
                 &reinstall,
                 args.link_mode,
                 args.compile,
@@ -1721,12 +1767,14 @@ async fn run() -> Result<ExitStatus> {
                     None
                 }
             });
+            let keyring_conf =
+                KeyringConfig::new(args.keyring_provider, args.custom_keyring_command);
 
             commands::venv(
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
-                args.keyring_provider,
+                keyring_conf,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 if args.offline {

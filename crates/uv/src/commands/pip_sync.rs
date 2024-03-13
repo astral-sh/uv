@@ -10,7 +10,7 @@ use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
-use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
+use uv_auth::{KeyringConfig, GLOBAL_AUTH_STORE};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -35,7 +35,7 @@ pub(crate) async fn pip_sync(
     link_mode: LinkMode,
     compile: bool,
     index_locations: IndexLocations,
-    keyring_provider: KeyringProvider,
+    keyring_conf: KeyringConfig,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -125,7 +125,7 @@ pub(crate) async fn pip_sync(
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
-        .keyring_provider(keyring_provider)
+        .keyring_conf(keyring_conf)
         .build();
 
     // Resolve the flat indexes from `--find-links`.

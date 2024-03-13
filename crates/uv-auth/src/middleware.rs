@@ -4,9 +4,10 @@ use reqwest_middleware::{Middleware, Next};
 use std::path::Path;
 use task_local_extensions::Extensions;
 use tracing::{debug, warn};
+use url::Url;
 
 use crate::{
-    keyring::{get_keyring_subprocess_auth, KeyringProvider},
+    keyring::{get_keyring_subprocess_auth, KeyringProvider, KeyringConfig},
     store::Credential,
     GLOBAL_AUTH_STORE,
 };
@@ -16,21 +17,21 @@ use crate::{
 /// Netrc support Based on: <https://github.com/gribouille/netrc>.
 pub struct AuthMiddleware {
     nrc: Option<Netrc>,
-    keyring_provider: KeyringProvider,
+    keyring_conf: KeyringConfig,
 }
 
 impl AuthMiddleware {
-    pub fn new(keyring_provider: KeyringProvider) -> Self {
+    pub fn new(keyring_conf: KeyringConfig) -> Self {
         Self {
             nrc: Netrc::new().ok(),
-            keyring_provider,
+            keyring_conf,
         }
     }
 
-    pub fn from_netrc_file(file: &Path, keyring_provider: KeyringProvider) -> Self {
+    pub fn from_netrc_file(file: &Path, keyring_conf: KeyringConfig) -> Self {
         Self {
             nrc: Netrc::from_file(file).ok(),
-            keyring_provider,
+            keyring_conf,
         }
     }
 }
@@ -52,6 +53,34 @@ impl Middleware for AuthMiddleware {
             return next.run(req, _extensions).await;
         }
 
+        let netrc_auth = move |url: &Url| {
+            self.nrc.as_ref().and_then(|nrc| {
+                url.host_str()
+                    .and_then(|host| nrc.hosts.get(host).or_else(|| nrc.hosts.get("default")))
+            })
+        };
+
+        let keyring_auth = move |url: &Url| {
+            if matches!(
+                self.keyring_conf.provider,
+                KeyringProvider::Subprocess | KeyringProvider::CustomSubprocess
+            ) {
+                match get_keyring_subprocess_auth(&url, &self.keyring_conf) {
+                    Ok(Some(auth)) => Some(auth),
+                    Ok(None) => {
+                        debug!("No keyring credentials found for {url}");
+                        None
+                    }
+                    Err(e) => {
+                        warn!("Failed to get keyring credentials for {url}: {e}");
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        };
+
         // Try auth strategies in order of precedence:
         if let Some(stored_auth) = GLOBAL_AUTH_STORE.get(&url) {
             // If we've already seen this URL, we can use the stored credentials
@@ -70,34 +99,19 @@ impl Middleware for AuthMiddleware {
             } else {
                 debug!("No credentials found for already-seen URL: {url}");
             }
-        } else if let Some(auth) = self.nrc.as_ref().and_then(|nrc| {
-            // If we find a matching entry in the netrc file, we can use it
-            url.host_str()
-                .and_then(|host| nrc.hosts.get(host).or_else(|| nrc.hosts.get("default")))
-        }) {
+        } else if let Some(auth) = netrc_auth(&url) {
             let auth = Credential::from(auth.to_owned());
             req.headers_mut().insert(
                 reqwest::header::AUTHORIZATION,
                 basic_auth(auth.username(), auth.password()),
             );
             GLOBAL_AUTH_STORE.set(&url, Some(auth));
-        } else if matches!(self.keyring_provider, KeyringProvider::Subprocess) {
-            // If we have keyring support enabled, we check there as well
-            match get_keyring_subprocess_auth(&url) {
-                Ok(Some(auth)) => {
-                    req.headers_mut().insert(
-                        reqwest::header::AUTHORIZATION,
-                        basic_auth(auth.username(), auth.password()),
-                    );
-                    GLOBAL_AUTH_STORE.set(&url, Some(auth));
-                }
-                Ok(None) => {
-                    debug!("No keyring credentials found for {url}");
-                }
-                Err(e) => {
-                    warn!("Failed to get keyring credentials for {url}: {e}");
-                }
-            }
+        } else if let Some(auth) = keyring_auth(&url) {
+            req.headers_mut().insert(
+                reqwest::header::AUTHORIZATION,
+                basic_auth(auth.username(), auth.password()),
+            );
+            GLOBAL_AUTH_STORE.set(&url, Some(auth));
         }
 
         // If we still don't have any credentials, we save the URL so we don't have to check netrc or keyring again
@@ -173,7 +187,7 @@ mod tests {
         let status = ClientBuilder::new(Client::builder().build()?)
             .with(AuthMiddleware::from_netrc_file(
                 netrc_file.path(),
-                KeyringProvider::Disabled,
+                KeyringConfig::default(),
             ))
             .build()
             .get(format!("{}/hello", &server.uri()))

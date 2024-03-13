@@ -20,7 +20,7 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
-use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
+use uv_auth::{KeyringConfig, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -55,7 +55,7 @@ pub(crate) async fn pip_install(
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
-    keyring_provider: KeyringProvider,
+    keyring_conf: KeyringConfig,
     reinstall: &Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -191,7 +191,7 @@ pub(crate) async fn pip_install(
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
-        .keyring_provider(keyring_provider)
+        .keyring_conf(keyring_conf)
         .build();
 
     // Resolve the flat indexes from `--find-links`.
