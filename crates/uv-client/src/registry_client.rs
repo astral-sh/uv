@@ -120,7 +120,7 @@ impl RegistryClientBuilder {
         // Initialize the base client.
         let client = self.client.unwrap_or_else(|| {
             // Load the TLS configuration.
-            let tls = tls::load(if self.native_tls {
+            let tls = tls::load(if self.native_tls || env::var("SSL_CERT_FILE").is_ok() {
                 Roots::Native
             } else {
                 Roots::Webpki
