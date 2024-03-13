@@ -502,7 +502,6 @@ markers = {
 }
 interpreter_info = {
     "result": "success",
-    "platform": get_operating_system_and_architecture(),
     "markers": markers,
     "base_prefix": sys.base_prefix,
     "base_exec_prefix": sys.base_exec_prefix,
@@ -512,5 +511,6 @@ interpreter_info = {
     "stdlib": sysconfig.get_path("stdlib"),
     "scheme": get_scheme(),
     "virtualenv": get_virtualenv(),
+    "platform": get_operating_system_and_architecture(),
 }
 print(json.dumps(interpreter_info))
