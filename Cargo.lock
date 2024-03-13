@@ -2564,7 +2564,7 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/zanieb/pubgrub?rev=b5ead05c954b81690aec40255a1c36ec248e90af#b5ead05c954b81690aec40255a1c36ec248e90af"
+source = "git+https://github.com/astral-sh/pubgrub?rev=addbaf184891d66a2dfd93d241a66d13bfe5de86#addbaf184891d66a2dfd93d241a66d13bfe5de86"
 dependencies = [
  "indexmap 2.2.5",
  "log",
