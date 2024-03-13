@@ -1,13 +1,16 @@
 use std::borrow::Cow;
 use std::env;
-use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
+use std::str::FromStr;
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use tracing::{debug, instrument};
 
 use platform_host::Platform;
+use platform_tags::Implementation;
 use uv_cache::Cache;
-use uv_fs::normalize_path;
+use uv_fs::{normalize_path, Simplified};
 
 use crate::python_environment::{detect_python_executable, detect_virtual_env};
 use crate::{Error, Interpreter, PythonVersion};
@@ -31,33 +34,55 @@ pub fn find_requested_python(
     cache: &Cache,
 ) -> Result<Option<Interpreter>, Error> {
     debug!("Starting interpreter discovery for Python @ `{request}`");
-    let versions = request
-        .splitn(3, '.')
-        .map(str::parse::<u8>)
-        .collect::<Result<Vec<_>, _>>();
-    if let Ok(versions) = versions {
-        // `-p 3.10` or `-p 3.10.1`
-        let selector = match versions.as_slice() {
-            [requested_major] => PythonVersionSelector::Major(*requested_major),
-            [major, minor] => PythonVersionSelector::MajorMinor(*major, *minor),
-            [major, minor, requested_patch] => {
-                PythonVersionSelector::MajorMinorPatch(*major, *minor, *requested_patch)
-            }
-            // SAFETY: Guaranteed by the Ok(versions) guard
-            _ => unreachable!(),
-        };
-        find_python(selector, platform, cache)
-    } else if !request.contains(std::path::MAIN_SEPARATOR) {
-        // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
-        let Some(executable) = find_executable(request)? else {
-            return Ok(None);
-        };
-        Interpreter::query(executable, platform.clone(), cache).map(Some)
-    } else {
+
+    if request.contains(std::path::MAIN_SEPARATOR) {
         // `-p /home/ferris/.local/bin/python3.10`
         let executable = normalize_path(request);
 
         Interpreter::query(executable, platform.clone(), cache).map(Some)
+    } else {
+        static RE: Lazy<Regex> = Lazy::new(|| {
+            Regex::new(r"^(?<implementation>[A-Za-z]+)?(?<version>(\d+)?(\.\d+)?(\.\d+)?)?$")
+                .unwrap()
+        });
+
+        if let Some(captures) = RE.captures(request) {
+            let implementation = if let Some(implementation) = captures.name("implementation") {
+                // We assume that a user specifying python wants cpython and not pypy.
+                if implementation.as_str() == "python" {
+                    Implementation::default()
+                } else {
+                    Implementation::from_str(&implementation.as_str().to_ascii_lowercase())
+                        .map_err(Error::UnrecognizedImplementation)?
+                }
+            } else {
+                Implementation::default()
+            };
+            let versions = if let Some(version) = captures.name("version") {
+                version
+                    .as_str()
+                    .splitn(3, '.')
+                    .map(str::parse::<u8>)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|_| Error::UnrecognizedPython(request.to_string()))?
+            } else {
+                Vec::new()
+            };
+            // `-p 3.10` or `-p 3.10.1`
+            let selector = match versions.as_slice() {
+                [] => PythonVersionSelector::Default,
+                [requested_major] => PythonVersionSelector::Major(*requested_major),
+                [major, minor] => PythonVersionSelector::MajorMinor(*major, *minor),
+                [major, minor, requested_patch] => {
+                    PythonVersionSelector::MajorMinorPatch(*major, *minor, *requested_patch)
+                }
+                // SAFETY: Guaranteed by the Ok(versions) guard
+                _ => unreachable!(),
+            };
+            find_python(selector, implementation, platform, cache)
+        } else {
+            Err(Error::UnrecognizedPython(request.to_string()))
+        }
     }
 }
 
@@ -82,7 +107,12 @@ pub(crate) fn try_find_default_python(
     platform: &Platform,
     cache: &Cache,
 ) -> Result<Option<Interpreter>, Error> {
-    find_python(PythonVersionSelector::Default, platform, cache)
+    find_python(
+        PythonVersionSelector::Default,
+        Implementation::default(),
+        platform,
+        cache,
+    )
 }
 
 /// Find a Python version matching `selector`.
@@ -100,6 +130,7 @@ pub(crate) fn try_find_default_python(
 /// (Windows): Filter out the Windows store shim (Enabled in Settings/Apps/Advanced app settings/App execution aliases).
 fn find_python(
     selector: PythonVersionSelector,
+    requested_implementation: Implementation,
     platform: &Platform,
     cache: &Cache,
 ) -> Result<Option<Interpreter>, Error> {
@@ -138,6 +169,28 @@ fn find_python(
                         }
                         Err(error) => return Err(error),
                     };
+
+                    // TODO(konsti): Move this into the `Interpreter` type.
+                    let Ok(actual_implementation) =
+                        Implementation::from_str(&interpreter.implementation_name().to_lowercase())
+                    else {
+                        debug!(
+                            "Skipping interpreter with unsupported implementation `{}` at `{}`",
+                            interpreter.implementation_name(),
+                            path.simplified_display()
+                        );
+                        continue;
+                    };
+
+                    if requested_implementation != actual_implementation {
+                        debug!(
+                            "Skipping interpreter with implementation `{}` different from the requested `{}` at `{}`",
+                            actual_implementation,
+                            interpreter.implementation_name(),
+                            path.simplified_display()
+                        );
+                        continue;
+                    }
 
                     let installation = PythonInstallation::Interpreter(interpreter);
 
@@ -182,76 +235,6 @@ fn find_python(
                     let installation = PythonInstallation::PyListPath(entry);
                     if let Some(interpreter) = installation.select(selector, platform, cache)? {
                         return Ok(Some(interpreter));
-                    }
-                }
-            }
-            Err(Error::PyList(error)) => {
-                if error.kind() == std::io::ErrorKind::NotFound {
-                    debug!("`py` is not installed");
-                }
-            }
-            Err(error) => return Err(error),
-        }
-    }
-
-    Ok(None)
-}
-
-/// Find the Python interpreter in `PATH` matching the given name (e.g., `python3`, respecting
-/// `UV_PYTHON_PATH`.
-///
-/// Returns `Ok(None)` if not found.
-fn find_executable<R: AsRef<OsStr> + Into<OsString> + Copy>(
-    requested: R,
-) -> Result<Option<PathBuf>, Error> {
-    #[allow(non_snake_case)]
-    let UV_TEST_PYTHON_PATH = env::var_os("UV_TEST_PYTHON_PATH");
-
-    let use_override = UV_TEST_PYTHON_PATH.is_some();
-
-    #[allow(non_snake_case)]
-    let PATH = UV_TEST_PYTHON_PATH
-        .or(env::var_os("PATH"))
-        .unwrap_or_default();
-
-    // We use `which` here instead of joining the paths ourselves because `which` checks for us if the python
-    // binary is executable and exists. It also has some extra logic that handles inconsistent casing on Windows
-    // and expands `~`.
-    for path in env::split_paths(&PATH) {
-        let paths = match which::which_in_global(requested, Some(&path)) {
-            Ok(paths) => paths,
-            Err(which::Error::CannotFindBinaryPath) => continue,
-            Err(err) => return Err(Error::WhichError(requested.into(), err)),
-        };
-
-        #[allow(clippy::never_loop)]
-        for path in paths {
-            #[cfg(windows)]
-            if windows::is_windows_store_shim(&path) {
-                continue;
-            }
-
-            return Ok(Some(path));
-        }
-    }
-
-    if cfg!(windows) && !use_override {
-        // Use `py` to find the python installation on the system.
-        match windows::py_list_paths() {
-            Ok(paths) => {
-                for entry in paths {
-                    // Ex) `--python python3.12.exe`
-                    if entry.executable_path.file_name() == Some(requested.as_ref()) {
-                        return Ok(Some(entry.executable_path));
-                    }
-
-                    // Ex) `--python python3.12`
-                    if entry
-                        .executable_path
-                        .file_stem()
-                        .is_some_and(|stem| stem == requested.as_ref())
-                    {
-                        return Ok(Some(entry.executable_path));
                     }
                 }
             }
@@ -767,7 +750,7 @@ mod tests {
 
     #[test]
     fn no_such_python_version() {
-        let request = "3.1000";
+        let request = "3.100";
         let result = find_requested_python(
             request,
             &Platform::current().unwrap(),
@@ -777,13 +760,13 @@ mod tests {
         .ok_or(Error::NoSuchPython(request.to_string()));
         assert_snapshot!(
             format_err(result),
-            @"No Python 3.1000 In `PATH`. Is Python 3.1000 installed?"
+            @"No Python 3.100 In `PATH`. Is Python 3.100 installed?"
         );
     }
 
     #[test]
     fn no_such_python_binary() {
-        let request = "python3.1000";
+        let request = "python3.100";
         let result = find_requested_python(
             request,
             &Platform::current().unwrap(),
@@ -793,7 +776,7 @@ mod tests {
         .ok_or(Error::NoSuchPython(request.to_string()));
         assert_snapshot!(
             format_err(result),
-            @"No Python python3.1000 In `PATH`. Is Python python3.1000 installed?"
+            @"No Python python3.100 In `PATH`. Is Python python3.100 installed?"
         );
     }
 

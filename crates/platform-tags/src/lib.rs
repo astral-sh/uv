@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::{cmp, num::NonZeroU32};
@@ -252,8 +253,9 @@ impl TryFrom<usize> for TagPriority {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Implementation {
+    #[default]
     CPython,
     PyPy,
     Pyston,
@@ -318,6 +320,16 @@ impl FromStr for Implementation {
             "jython" => Err(TagsError::UnsupportedImplementation(s.to_string())),
             // Unknown implementations.
             _ => Err(TagsError::UnknownImplementation(s.to_string())),
+        }
+    }
+}
+
+impl Display for Implementation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Implementation::CPython => f.write_str("cpython"),
+            Implementation::PyPy => f.write_str("pypy"),
+            Implementation::Pyston => f.write_str("pyston"),
         }
     }
 }

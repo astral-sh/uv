@@ -12,6 +12,7 @@ use std::io;
 use std::path::PathBuf;
 use std::process::ExitStatus;
 
+use platform_tags::TagsError;
 use thiserror::Error;
 
 pub use crate::cfg::PyVenvConfiguration;
@@ -79,4 +80,12 @@ pub enum Error {
     Cfg(#[from] cfg::Error),
     #[error("Error finding `{}` in PATH", _0.to_string_lossy())]
     WhichError(OsString, #[source] which::Error),
+    #[error(
+        "Unrecognized python specifier: `{0}`. You can use a version (e.g. `3.12`), \
+        an implementation and a version (e.g. `pypy3.10`) or \
+        the path to a python interpreter (e.g. `/usr/bin/python`)"
+    )]
+    UnrecognizedPython(String),
+    #[error(transparent)]
+    UnrecognizedImplementation(TagsError),
 }
