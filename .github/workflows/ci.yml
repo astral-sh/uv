@@ -103,6 +103,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
+        with:
+          ## limits ssh access and adds the ssh public keys of the listed GitHub users
+          limit-access-to-users: konstin
+
       - name: "Smoke test (unix)"
         if: ${{ matrix.os != 'windows' }}
         run: |
