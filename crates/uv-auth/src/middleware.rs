@@ -60,8 +60,8 @@ impl Middleware for AuthMiddleware {
             })
         };
 
-        let keyring_auth = move |url: &Url| {
-            match get_keyring_subprocess_auth(url, &self.keyring_conf) {
+        let keyring_auth =
+            move |url: &Url| match get_keyring_subprocess_auth(url, &self.keyring_conf) {
                 Ok(Some(auth)) => Some(auth),
                 Ok(None) => {
                     debug!("No keyring credentials found for {url}");
@@ -71,8 +71,7 @@ impl Middleware for AuthMiddleware {
                     warn!("Failed to get keyring credentials for {url}: {e}");
                     None
                 }
-            }
-        };
+            };
 
         // Try auth strategies in order of precedence:
         if let Some(stored_auth) = GLOBAL_AUTH_STORE.get(&url) {
