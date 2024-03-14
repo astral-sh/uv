@@ -33,6 +33,232 @@ env:
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
+  sdist:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Build sdist"
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - name: "Test sdist"
+        run: |
+          pip install dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
+          ${{ env.MODULE_NAME }} --help
+          python -m ${{ env.MODULE_NAME }} --help
+      - name: "Upload sdist"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist
+
+  macos-x86_64:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+      - name: "Build wheels - x86_64"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64
+          args: --release --locked --out dist
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-x86_64
+          path: dist
+      - name: "Archive binary"
+        run: |
+          TARGET=x86_64-apple-darwin
+          ARCHIVE_NAME=uv-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-macos-x86_64
+          path: |
+            *.tar.gz
+            *.sha256
+
+  macos-universal:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+      - name: "Build wheels - universal2"
+        uses: PyO3/maturin-action@v1
+        with:
+          args: --release --locked --target universal2-apple-darwin --out dist
+      - name: "Test wheel - universal2"
+        run: |
+          pip install dist/${{ env.PACKAGE_NAME }}-*universal2.whl --force-reinstall
+          ${{ env.MODULE_NAME }} --help
+          python -m ${{ env.MODULE_NAME }} --help
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-aarch64-apple-darwin
+          path: dist
+      - name: "Archive binary"
+        run: |
+          TARGET=aarch64-apple-darwin
+          ARCHIVE_NAME=uv-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-aarch64-apple-darwin
+          path: |
+            *.tar.gz
+            *.sha256
+
+  windows:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        platform:
+          - target: x86_64-pc-windows-msvc
+            arch: x64
+          - target: i686-pc-windows-msvc
+            arch: x86
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ matrix.platform.arch }}
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --locked --out dist
+      - name: "Test wheel"
+        if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
+        shell: bash
+        run: |
+          python -m pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          ${{ env.MODULE_NAME }} --help
+          python -m ${{ env.MODULE_NAME }} --help
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          ARCHIVE_FILE=uv-${{ matrix.platform.target }}.zip
+          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/uv.exe
+          sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.platform.target }}
+          path: |
+            *.zip
+            *.sha256
+
+  linux:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - i686-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: auto
+          args: --release --locked --out dist
+          # See: https://github.com/sfackler/rust-openssl/issues/2036#issuecomment-1724324145
+          before-script-linux: |
+            # If we're running on rhel centos, install needed packages.
+            if command -v yum &> /dev/null; then
+                yum update -y && yum install -y perl-core openssl openssl-devel pkgconfig libatomic
+
+                # If we're running on i686 we need to symlink libatomic
+                # in order to build openssl with -latomic flag.
+                if [[ ! -d "/usr/lib64" ]]; then
+                    ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
+                fi
+            else
+                # If we're running on debian-based system.
+                apt update -y && apt-get install -y libssl-dev openssl pkg-config
+            fi
+      - name: "Test wheel"
+        if: ${{ startsWith(matrix.target, 'x86_64') }}
+        run: |
+          pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          ${{ env.MODULE_NAME }} --help
+          python -m ${{ env.MODULE_NAME }} --help
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.target }}
+          ARCHIVE_NAME=uv-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.target }}
+          path: |
+            *.tar.gz
+            *.sha256
+
   linux-arm:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
@@ -82,6 +308,268 @@ jobs:
       - name: "Upload wheels"
         # Skip for `arm`, which is not supported by PyPI.
         if: ${{ matrix.platform.arch != 'arm' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.platform.target }}
+          ARCHIVE_NAME=uv-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.platform.target }}
+          path: |
+            *.tar.gz
+            *.sha256
+
+  # Like `linux-arm`, but use `--no-default-features --features flate2/rust_backend` when
+  # building uv.
+  linux-s390x:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - target: s390x-unknown-linux-gnu
+            arch: s390x
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          args: --release --locked --out dist --no-default-features --features flate2/rust_backend
+      - uses: uraimo/run-on-arch-action@v2
+        if: matrix.platform.arch != 'ppc64'
+        name: Test wheel
+        with:
+          arch: ${{ matrix.platform.arch }}
+          distro: ubuntu20.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update
+            apt-get install -y --no-install-recommends python3 python3-pip
+            pip3 install -U pip
+          run: |
+            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            ${{ env.MODULE_NAME }} --help
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.platform.target }}
+          ARCHIVE_NAME=uv-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.platform.target }}
+          path: |
+            *.tar.gz
+            *.sha256
+
+  # Like `linux-arm`, but use `--no-default-features --features flate2/rust_backend` when
+  # building uv, and install the `gcc-powerpc64-linux-gnu` package.
+  linux-powerpc:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - target: powerpc64le-unknown-linux-gnu
+            arch: ppc64le
+          - target: powerpc64-unknown-linux-gnu
+            arch: ppc64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          args: --release --locked --out dist --no-default-features --features flate2/rust_backend
+          before-script-linux: |
+            if command -v yum &> /dev/null; then
+                yum update -y
+                yum -y install epel-release
+                yum repolist
+                yum install -y gcc-powerpc64-linux-gnu
+            fi
+      - uses: uraimo/run-on-arch-action@v2
+        if: matrix.platform.arch != 'ppc64'
+        name: Test wheel
+        with:
+          arch: ${{ matrix.platform.arch }}
+          distro: ubuntu20.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update
+            apt-get install -y --no-install-recommends python3 python3-pip
+            pip3 install -U pip
+          run: |
+            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            ${{ env.MODULE_NAME }} --help
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.platform.target }}
+          ARCHIVE_NAME=uv-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.platform.target }}
+          path: |
+            *.tar.gz
+            *.sha256
+
+  musllinux:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - i686-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: musllinux_1_2
+          args: --release --locked --out dist
+      - name: "Test wheel"
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        uses: addnab/docker-run-action@v3
+        with:
+          image: alpine:latest
+          options: -v ${{ github.workspace }}:/io -w /io
+          run: |
+            apk add python3
+            python -m venv .venv
+            .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            .venv/bin/${{ env.MODULE_NAME }} --help
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.target }}
+          ARCHIVE_NAME=uv-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/release/uv $ARCHIVE_NAME/uv
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.target }}
+          path: |
+            *.tar.gz
+            *.sha256
+
+  musllinux-cross:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - target: aarch64-unknown-linux-musl
+            arch: aarch64
+            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
+          - target: armv7-unknown-linux-musleabihf
+            arch: armv7
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: musllinux_1_2
+          args: --release --locked --out dist
+          docker-options: ${{ matrix.platform.maturin_docker_options }}
+      - uses: uraimo/run-on-arch-action@v2
+        name: Test wheel
+        with:
+          arch: ${{ matrix.platform.arch }}
+          distro: alpine_latest
+          githubToken: ${{ github.token }}
+          install: |
+            apk add python3
+          run: |
+            python -m venv .venv
+            .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            .venv/bin/${{ env.MODULE_NAME }} --help
+      - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.platform.target }}
