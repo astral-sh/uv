@@ -2,6 +2,7 @@ use std::io::{Read, Seek};
 use std::path::Path;
 use std::str::FromStr;
 
+use tracing::warn;
 use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
@@ -42,13 +43,9 @@ pub fn is_metadata_entry(path: &str, filename: &WheelFilename) -> bool {
 
 /// Find the `.dist-info` directory in a zipped wheel.
 ///
-/// The metadata name may be uppercase, while the wheel and dist info names are lowercase, or
-/// the metadata name and the dist info name are lowercase, while the wheel name is uppercase.
-/// Either way, we just search the wheel for the name.
-///
 /// Returns the dist info dir prefix without the `.dist-info` extension.
 ///
-/// Reference implementation: <https://github.com/pypa/packaging/blob/2f83540272e79e3fe1f5d42abae8df0c14ddf4c2/src/packaging/utils.py#L146-L172>
+/// Reference implementation: <https://github.com/pypa/pip/blob/36823099a9cdd83261fdbc8c1d2a24fa2eea72ca/src/pip/_internal/utils/wheel.py#L38>
 pub fn find_archive_dist_info<'a, T: Copy>(
     filename: &WheelFilename,
     files: impl Iterator<Item = (T, &'a str)>,
@@ -59,20 +56,12 @@ pub fn find_archive_dist_info<'a, T: Copy>(
             if file != "METADATA" {
                 return None;
             }
-
-            let dir_stem = dist_info_dir.strip_suffix(".dist-info")?;
-            let (name, version) = dir_stem.rsplit_once('-')?;
-            if PackageName::from_str(name).ok()? != filename.name {
-                return None;
-            }
-
-            if Version::from_str(version).ok()? != filename.version {
-                return None;
-            }
-
-            Some((payload, dir_stem))
+            let dist_info_prefix = dist_info_dir.strip_suffix(".dist-info")?;
+            Some((payload, dist_info_prefix))
         })
         .collect();
+
+    // Like `pip`, assert that there is exactly one `.dist-info` directory.
     let (payload, dist_info_prefix) = match metadatas[..] {
         [] => {
             return Err(Error::MissingDistInfo);
@@ -88,6 +77,28 @@ pub fn find_archive_dist_info<'a, T: Copy>(
             ));
         }
     };
+
+    // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
+    // package name, but only warn if the version is not the normalized version.
+    let Some((name, version)) = dist_info_prefix.rsplit_once('-') else {
+        return Err(Error::MissingDistInfoSegments(dist_info_prefix.to_string()));
+    };
+    if PackageName::from_str(name)? != filename.name {
+        return Err(Error::MissingDistInfoPackageName(
+            dist_info_prefix.to_string(),
+            filename.name.to_string(),
+        ));
+    }
+    if !Version::from_str(version).is_ok_and(|version| version == filename.version) {
+        warn!(
+            "{}",
+            Error::MissingDistInfoVersion(
+                dist_info_prefix.to_string(),
+                filename.version.to_string(),
+            )
+        );
+    }
+
     Ok((payload, dist_info_prefix))
 }
 
@@ -118,7 +129,7 @@ pub fn find_flat_dist_info(
     path: impl AsRef<Path>,
 ) -> Result<String, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
-    let Some(dist_info) = fs_err::read_dir(path.as_ref())?.find_map(|entry| {
+    let Some(dist_info_prefix) = fs_err::read_dir(path.as_ref())?.find_map(|entry| {
         let entry = entry.ok()?;
         let file_type = entry.file_type().ok()?;
         if file_type.is_dir() {
@@ -129,16 +140,8 @@ pub fn find_flat_dist_info(
                 return None;
             }
 
-            let stem = path.file_stem()?;
-            let (name, version) = stem.to_str()?.rsplit_once('-')?;
-            if PackageName::from_str(name).ok()? != filename.name {
-                return None;
-            }
-            if Version::from_str(version).ok()? != filename.version {
-                return None;
-            }
-
-            Some(path)
+            let dist_info_prefix = path.file_stem()?.to_str()?;
+            Some(dist_info_prefix.to_string())
         } else {
             None
         }
@@ -148,13 +151,28 @@ pub fn find_flat_dist_info(
         ));
     };
 
-    let Some(dist_info_prefix) = dist_info.file_stem() else {
-        return Err(Error::InvalidWheel(
-            "Missing .dist-info directory".to_string(),
-        ));
+    // Like `pip`, validate that the `.dist-info` directory is prefixed with the canonical
+    // package name, but only warn if the version is not the normalized version.
+    let Some((name, version)) = dist_info_prefix.rsplit_once('-') else {
+        return Err(Error::MissingDistInfoSegments(dist_info_prefix.to_string()));
     };
+    if PackageName::from_str(name)? != filename.name {
+        return Err(Error::MissingDistInfoPackageName(
+            dist_info_prefix.to_string(),
+            filename.name.to_string(),
+        ));
+    }
+    if !Version::from_str(version).is_ok_and(|version| version == filename.version) {
+        warn!(
+            "{}",
+            Error::MissingDistInfoVersion(
+                dist_info_prefix.to_string(),
+                filename.version.to_string(),
+            )
+        );
+    }
 
-    Ok(dist_info_prefix.to_string_lossy().to_string())
+    Ok(dist_info_prefix)
 }
 
 /// Read the wheel `METADATA` metadata from a `.dist-info` directory.

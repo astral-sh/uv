@@ -86,6 +86,16 @@ pub enum Error {
     MissingRecord(PathBuf),
     #[error("Multiple .dist-info directories found: {0}")]
     MultipleDistInfo(String),
+    #[error(
+        "The .dist-info directory {0} does not consist of the normalized package name and version"
+    )]
+    MissingDistInfoSegments(String),
+    #[error("The .dist-info directory {0} does not start with the normalized package name: {0}")]
+    MissingDistInfoPackageName(String, String),
+    #[error("The .dist-info directory {0} does not start with the normalized version: {0}")]
+    MissingDistInfoVersion(String, String),
+    #[error("The .dist-info directory name contains invalid characters")]
+    InvalidDistInfoPrefix,
     #[error("Invalid wheel size")]
     InvalidSize,
     #[error("Invalid package name")]
