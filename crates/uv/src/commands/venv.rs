@@ -13,7 +13,7 @@ use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name};
 use pep508_rs::Requirement;
-use platform_host::Platform;
+use uv_auth::KeyringProvider;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -33,11 +33,13 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    keyring_provider: KeyringProvider,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -45,11 +47,13 @@ pub(crate) async fn venv(
         path,
         python_request,
         index_locations,
+        keyring_provider,
         prompt,
         system_site_packages,
         connectivity,
         seed,
         exclude_newer,
+        native_tls,
         cache,
         printer,
     )
@@ -88,23 +92,24 @@ async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    keyring_provider: KeyringProvider,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
     exclude_newer: Option<DateTime<Utc>>,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> miette::Result<ExitStatus> {
     // Locate the Python interpreter.
-    let platform = Platform::current().into_diagnostic()?;
     let interpreter = if let Some(python_request) = python_request {
-        find_requested_python(python_request, &platform, cache)
+        find_requested_python(python_request, cache)
             .into_diagnostic()?
             .ok_or(Error::NoSuchPython(python_request.to_string()))
             .into_diagnostic()?
     } else {
-        find_default_python(&platform, cache).into_diagnostic()?
+        find_default_python(cache).into_diagnostic()?
     };
 
     writeln!(
@@ -137,7 +142,9 @@ async fn venv_impl(
 
         // Instantiate a client.
         let client = RegistryClientBuilder::new(cache.clone())
+            .native_tls(native_tls)
             .index_urls(index_locations.index_urls())
+            .keyring_provider(keyring_provider)
             .connectivity(connectivity)
             .build();
 

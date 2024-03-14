@@ -20,7 +20,6 @@ install-wheel-rs = { path = "../install-wheel-rs" }
 once-map = { path = "../once-map" }
 pep440_rs = { path = "../pep440-rs", features = ["pubgrub"] }
 pep508_rs = { path = "../pep508-rs" }
-platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
 pypi-types = { path = "../pypi-types" }
 uv-cache = { path = "../uv-cache" }
@@ -55,7 +54,7 @@ sha2 = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
-tokio-stream  = { workspace = true }
+tokio-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }

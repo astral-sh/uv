@@ -21,15 +21,16 @@ use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Nam
 use install_wheel_rs::metadata::{find_archive_dist_info, is_metadata_entry};
 use pep440_rs::Version;
 use pypi_types::{Metadata23, SimpleJson};
-use uv_auth::safe_copy_url_auth;
+use uv_auth::{AuthMiddleware, KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
-use crate::middleware::{NetrcMiddleware, OfflineMiddleware};
+use crate::middleware::OfflineMiddleware;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::tls::Roots;
@@ -39,6 +40,7 @@ use crate::{tls, CachedClient, CachedClientError, Error, ErrorKind};
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder {
     index_urls: IndexUrls,
+    keyring_provider: KeyringProvider,
     native_tls: bool,
     retries: u32,
     connectivity: Connectivity,
@@ -50,6 +52,7 @@ impl RegistryClientBuilder {
     pub fn new(cache: Cache) -> Self {
         Self {
             index_urls: IndexUrls::default(),
+            keyring_provider: KeyringProvider::default(),
             native_tls: false,
             cache,
             connectivity: Connectivity::Online,
@@ -63,6 +66,12 @@ impl RegistryClientBuilder {
     #[must_use]
     pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
         self.index_urls = index_urls;
+        self
+    }
+
+    #[must_use]
+    pub fn keyring_provider(mut self, keyring_provider: KeyringProvider) -> Self {
+        self.keyring_provider = keyring_provider;
         self
     }
 
@@ -119,8 +128,19 @@ impl RegistryClientBuilder {
 
         // Initialize the base client.
         let client = self.client.unwrap_or_else(|| {
+            // Check for the presence of an `SSL_CERT_FILE`.
+            let ssl_cert_file_exists = env::var_os("SSL_CERT_FILE").is_some_and(|path| {
+                let path_exists = Path::new(&path).exists();
+                if !path_exists {
+                    warn_user_once!(
+                        "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
+                        path.simplified_display()
+                    );
+                }
+                path_exists
+            });
             // Load the TLS configuration.
-            let tls = tls::load(if self.native_tls {
+            let tls = tls::load(if self.native_tls || ssl_cert_file_exists {
                 Roots::Native
             } else {
                 Roots::Webpki
@@ -147,12 +167,8 @@ impl RegistryClientBuilder {
                 let retry_strategy = RetryTransientMiddleware::new_with_policy(retry_policy);
                 let client = client.with(retry_strategy);
 
-                // Initialize the netrc middleware.
-                let client = if let Ok(netrc) = NetrcMiddleware::new() {
-                    client.with(netrc)
-                } else {
-                    client
-                };
+                // Initialize the authentication middleware to set headers.
+                let client = client.with(AuthMiddleware::new(self.keyring_provider));
 
                 client.build()
             }
@@ -301,7 +317,7 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = safe_copy_url_auth(&url, response.url().clone());
+                let url = GLOBAL_AUTH_STORE.with_url_encoded_auth(response.url().clone());
 
                 let content_type = response
                     .headers()
@@ -330,7 +346,7 @@ impl RegistryClient {
                         let text = response.text().await.map_err(ErrorKind::from)?;
                         let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                             .map_err(|err| Error::from_html_err(err, url.clone()))?;
-                        let base = safe_copy_url_auth(&url, base.into_url());
+                        let base = GLOBAL_AUTH_STORE.with_url_encoded_auth(base.into_url());
 
                         SimpleMetadata::from_files(files, package_name, &base)
                     }

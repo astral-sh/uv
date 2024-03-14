@@ -13,7 +13,6 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 use distribution_types::IndexLocations;
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
-use platform_host::Platform;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, OwnedArchive, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -72,8 +71,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
     };
     let total = requirements.len();
 
-    let platform = Platform::current()?;
-    let venv = PythonEnvironment::from_virtualenv(platform, &cache)?;
+    let venv = PythonEnvironment::from_virtualenv(&cache)?;
     let in_flight = InFlight::default();
     let client = RegistryClientBuilder::new(cache.clone()).build();
 

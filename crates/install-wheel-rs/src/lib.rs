@@ -9,7 +9,7 @@ use thiserror::Error;
 use zip::result::ZipError;
 
 use pep440_rs::Version;
-use platform_host::{Arch, Os};
+use platform_tags::{Arch, Os};
 use pypi_types::Scheme;
 pub use uninstall::{uninstall_wheel, Uninstall};
 use uv_fs::Simplified;

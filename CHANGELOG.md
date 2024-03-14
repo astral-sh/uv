@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.1.19
+
+### Configuration
+
+- Add `UV_NATIVE_TLS` environment variable ([#2412](https://github.com/astral-sh/uv/pull/2412))
+- Allow `SSL_CERT_FILE` without requiring `--native-tls` ([#2401](https://github.com/astral-sh/uv/pull/2401))
+- Add support for retrieving credentials from `keyring` ([#2254](https://github.com/astral-sh/uv/pull/2254))
+
+### Bug fixes
+
+- Add backoff for transient Windows failures ([#2419](https://github.com/astral-sh/uv/pull/2419))
+- Move architecture and operating system probing to Python ([#2381](https://github.com/astral-sh/uv/pull/2381))
+- Respect `--native-tls` in `venv` ([#2433](https://github.com/astral-sh/uv/pull/2433))
+- Treat non-existent site-packages as empty ([#2413](https://github.com/astral-sh/uv/pull/2413))
+
+### Documentation
+
+- Document HTTP authentication ([#2425](https://github.com/astral-sh/uv/pull/2425))
+
+### Performance
+
+- Improve performance of version range operations ([#2421](https://github.com/astral-sh/uv/pull/2421))
+
+## 0.1.18
+
+### Breaking changes
+
+Users that rely on native root certificates (or the `SSL_CERT_FILE`) environment variable must now
+pass the `--native-tls` command-line flag to enable this behavior.
+
+- Enable TLS native root toggling at runtime ([#2362](https://github.com/astral-sh/uv/pull/2362))
+
+### Enhancements
+
+- Add `--dry-run` flag to `uv pip install` ([#1436](https://github.com/astral-sh/uv/pull/1436))
+- Implement "Requires" field in `pip show` ([#2347](https://github.com/astral-sh/uv/pull/2347))
+- Remove `wheel` from default PEP 517 backend ([#2341](https://github.com/astral-sh/uv/pull/2341))
+- Add `UV_SYSTEM_PYTHON` environment variable as alias to `--system` ([#2354](https://github.com/astral-sh/uv/pull/2354))
+- Add a `-vv` log level and make `-v` more readable ([#2301](https://github.com/astral-sh/uv/pull/2301))
+
+### Bug fixes
+
+- Expand environment variables prior to detecting scheme ([#2394](https://github.com/astral-sh/uv/pull/2394))
+- Fix bug where `--no-binary :all:` prevented build of editable packages ([#2393](https://github.com/astral-sh/uv/pull/2393))
+- Ignore inverse dependencies when building graph ([#2360](https://github.com/astral-sh/uv/pull/2360))
+- Skip prefetching when `--no-deps` is specified ([#2373](https://github.com/astral-sh/uv/pull/2373))
+- Trim injected `python_version` marker to (major, minor) ([#2395](https://github.com/astral-sh/uv/pull/2395))
+- Wait for request stream to flush before returning resolution ([#2374](https://github.com/astral-sh/uv/pull/2374))
+- Write relative paths for scripts in data directory ([#2348](https://github.com/astral-sh/uv/pull/2348))
+- Add dedicated error message for direct filesystem paths in requirements ([#2369](https://github.com/astral-sh/uv/pull/2369))
+
 ## 0.1.17
 
 ### Enhancements

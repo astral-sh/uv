@@ -1,8 +1,9 @@
 use std::cmp::Reverse;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
+use tempfile::TempDir;
 use tokio::task::JoinError;
 use tracing::instrument;
 use url::Url;
@@ -27,6 +28,8 @@ pub enum Error {
     Join(#[from] JoinError),
     #[error(transparent)]
     Editable(#[from] uv_distribution::Error),
+    #[error("Failed to write to the client cache")]
+    CacheWrite(#[source] std::io::Error),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
 }
@@ -197,20 +200,25 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         }
 
         // Unzip the wheel.
-        let archive = tokio::task::spawn_blocking({
+        let temp_dir = tokio::task::spawn_blocking({
             let download = download.clone();
             let cache = self.cache.clone();
-            move || -> Result<PathBuf, uv_extract::Error> {
+            move || -> Result<TempDir, uv_extract::Error> {
                 // Unzip the wheel into a temporary directory.
                 let temp_dir = tempfile::tempdir_in(cache.root())?;
                 download.unzip(temp_dir.path())?;
-
-                // Persist the temporary directory to the directory store.
-                Ok(cache.persist(temp_dir.into_path(), download.target())?)
+                Ok(temp_dir)
             }
         })
         .await?
         .map_err(|err| Error::Unzip(download.remote().clone(), err))?;
+
+        // Persist the temporary directory to the directory store.
+        let archive = self
+            .cache
+            .persist(temp_dir.into_path(), download.target())
+            .map_err(Error::CacheWrite)
+            .await?;
 
         Ok(download.into_cached_dist(archive))
     }

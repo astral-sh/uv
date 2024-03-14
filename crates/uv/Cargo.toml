@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.1.17"
+version = "0.1.19"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -19,10 +19,10 @@ distribution-types = { path = "../distribution-types" }
 install-wheel-rs = { path = "../install-wheel-rs", features = ["clap"], default-features = false }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
-platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
 pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt", features = ["reqwest"] }
+uv-auth = { path = "../uv-auth", features = ["clap"] }
 uv-build = { path = "../uv-build" }
 uv-cache = { path = "../uv-cache", features = ["clap"] }
 uv-client = { path = "../uv-client" }

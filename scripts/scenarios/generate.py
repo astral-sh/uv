@@ -23,7 +23,7 @@ Usage:
 
         Serve scenarios on a local index using packse
 
-        $ packse serve <path to scenarios>
+        $ packse serve --no-hash <path to scenarios>
 
         Override the uv package index and update the tests
 
