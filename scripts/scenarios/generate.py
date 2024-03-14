@@ -55,17 +55,6 @@ TESTS = PROJECT_ROOT / "crates" / "uv" / "tests"
 INSTALL_TESTS = TESTS / "pip_install_scenarios.rs"
 COMPILE_TESTS = TESTS / "pip_compile_scenarios.rs"
 
-CUTE_NAMES = {
-    "a": "albatross",
-    "b": "bluebird",
-    "c": "crow",
-    "d": "duck",
-    "e": "eagle",
-    "f": "flamingo",
-    "g": "goose",
-    "h": "heron",
-}
-
 try:
     import packse
     import packse.inspect
@@ -156,11 +145,6 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             expected[
                 "explanation"
             ] = "We do not have correct behavior for local version identifiers yet"
-
-    # Generate cute names for each scenario
-    for scenario in data["scenarios"]:
-        for package in scenario["packages"]:
-            package["cute_name"] = CUTE_NAMES[package["name"].rsplit("-")[-1]]
 
     # Split scenarios into `install` and `compile` cases
     install_scenarios = []
