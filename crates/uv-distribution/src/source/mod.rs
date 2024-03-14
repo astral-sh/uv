@@ -815,8 +815,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         // Download and unzip the source distribution into a temporary directory.
         let span =
             info_span!("download_source_dist", filename = filename, source_dist = %source_dist);
-        let temp_dir = tempfile::tempdir_in(self.build_context.cache().bucket(CacheBucket::Build))
-            .map_err(Error::CacheWrite)?;
+        let temp_dir =
+            tempfile::tempdir_in(self.build_context.cache().bucket(CacheBucket::BuiltWheels))
+                .map_err(Error::CacheWrite)?;
         let reader = response
             .bytes_stream()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
@@ -897,7 +898,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             debug!("Unpacking for build: {source_dist}");
 
             let temp_dir =
-                tempfile::tempdir_in(self.build_context.cache().bucket(CacheBucket::Build))
+                tempfile::tempdir_in(self.build_context.cache().bucket(CacheBucket::BuiltWheels))
                     .map_err(Error::CacheWrite)?;
 
             // Unzip the archive into the temporary directory.
