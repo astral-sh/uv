@@ -39,18 +39,17 @@ jobs:
     strategy:
       matrix:
         platform:
-#          - target: aarch64-unknown-linux-gnu
-#            arch: aarch64
-#            # see https://github.com/astral-sh/ruff/issues/3791
-#            # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963
-#            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-#          - target: armv7-unknown-linux-gnueabihf
-#            arch: armv7
+          - target: aarch64-unknown-linux-gnu
+            arch: aarch64
+            # see https://github.com/astral-sh/ruff/issues/3791
+            # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963
+            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
+          - target: armv7-unknown-linux-gnueabihf
+            arch: armv7
           - target: armv7-unknown-linux-musleabihf
             arch: armv7
           - target: arm-unknown-linux-musleabihf
             arch: arm
-#            maturin_docker_options: -e CC=gcc-arm-linux-gnu
 
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +62,8 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          manylinux: auto
+          # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
+          manylinux: ${{ matrix.platform.arch == 'aarch64' && '2_28' || 'auto' }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --no-default-features --features flate2/rust_backend
       - uses: uraimo/run-on-arch-action@v2
@@ -80,6 +80,8 @@ jobs:
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
+        # Skip for `arm`, which is not supported by PyPI.
+        if: ${{ matrix.platform.arch != 'arm' }}
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.platform.target }}
