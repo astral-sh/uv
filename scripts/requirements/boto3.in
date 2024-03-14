@@ -1,16 +1,3 @@
-# Works with python 3.12
-boto3>0.0.19
-urllib3
-botocore
-setuptools
-s3transfer
-wheel
-packaging
-idna
-pyyaml
-python-dateutil
-grpcio-status
-cryptography
-google-api-core
-pip
-numpy
+# Works with Python 3.8 to 3.12
+urllib3<1.25.4
+boto3
