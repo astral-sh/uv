@@ -102,15 +102,18 @@ impl fmt::Display for Arch {
 }
 
 impl Arch {
-    /// Returns the oldest possible Manylinux tag for this architecture
-    pub fn get_minimum_manylinux_minor(&self) -> u16 {
+    /// Returns the oldest possible `manylinux` tag for this architecture, if it supports
+    /// `manylinux`.
+    pub fn get_minimum_manylinux_minor(&self) -> Option<u16> {
         match self {
             // manylinux 2014
-            Self::Aarch64 | Self::Armv7L | Self::Powerpc64 | Self::Powerpc64Le | Self::S390X => 17,
+            Self::Aarch64 | Self::Armv7L | Self::Powerpc64 | Self::Powerpc64Le | Self::S390X => {
+                Some(17)
+            }
             // manylinux 1
-            Self::X86 | Self::X86_64 => 5,
-            // not supported
-            Self::Armv6L => 0,
+            Self::X86 | Self::X86_64 => Some(5),
+            // unsupported
+            Self::Armv6L => None,
         }
     }
 }
