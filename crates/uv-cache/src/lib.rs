@@ -257,6 +257,20 @@ impl Cache {
             .write(true)
             .open(root.join(".git"))?;
 
+        // Add an empty .gitignore to the build bucket, to ensure that the cache's own .gitignore
+        // doesn't interfere with source distribution builds. (Build backends like hatchling will
+        // traverse upwards to look for .gitignore files.)
+        fs::create_dir_all(root.join(CacheBucket::Build.to_str()))?;
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(root.join(CacheBucket::Build.to_str()).join(".gitignore"))
+        {
+            Ok(_) => {}
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+            Err(err) => return Err(err),
+        }
+
         fs::canonicalize(root)
     }
 
@@ -515,6 +529,9 @@ pub enum CacheBucket {
     /// that cache entries can be atomically replaced and removed, as storing directories in the
     /// other buckets directly would make atomic operations impossible.
     Archive,
+    /// Used to store build artifacts, such as unpacked source distributions during the build
+    /// process.
+    Build,
 }
 
 impl CacheBucket {
@@ -527,6 +544,7 @@ impl CacheBucket {
             Self::Simple => "simple-v3",
             Self::Wheels => "wheels-v0",
             Self::Archive => "archive-v0",
+            Self::Build => "build-v0",
         }
     }
 
@@ -615,6 +633,9 @@ impl CacheBucket {
                 // Nothing to do.
             }
             Self::Archive => {
+                // Nothing to do.
+            }
+            Self::Build => {
                 // Nothing to do.
             }
         }
