@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.20
+
+### Bug fixes
+
+- Add in-URL credentials to store prior to creating requests ([#2446](https://github.com/astral-sh/uv/pull/2446))
+- Error when direct URL requirements don't match `Requires-Python` ([#2196](https://github.com/astral-sh/uv/pull/2196))
+
 ## 0.1.19
 
 ### Configuration
