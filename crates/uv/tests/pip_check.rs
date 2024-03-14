@@ -71,7 +71,7 @@ fn check_compatible_packages() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    No broken requirements found.
+    Installed packages pass the check.
 
     ----- stderr -----
     "###

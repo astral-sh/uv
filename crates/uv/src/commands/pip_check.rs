@@ -56,6 +56,6 @@ pub(crate) fn pip_check(
         return Ok(ExitStatus::Failure);
     }
 
-    writeln!(printer.stdout(), "No broken requirements found.").unwrap();
+    writeln!(printer.stdout(), "Installed packages pass the check.").unwrap();
     Ok(ExitStatus::Success)
 }
