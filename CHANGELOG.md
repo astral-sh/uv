@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.21
+
+### Enhancements
+
+- Loosen `.dist-info` validation to accept arbitrary versions ([#2441](https://github.com/astral-sh/uv/pull/2441))
+
+### Bug fixes
+
+- Fix macOS architecture detection on i386 machines ([#2454](https://github.com/astral-sh/uv/pull/2454))
+
 ## 0.1.20
 
 ### Bug fixes
