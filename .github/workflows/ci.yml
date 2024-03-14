@@ -392,7 +392,7 @@ jobs:
   system-test-macos-x86_64:
     needs: build-binary-macos-x86_64
     name: "check system | python on macos x86_64"
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -403,7 +403,7 @@ jobs:
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
-          name: uv-macos-aarch64-${{ github.sha }}
+          name: uv-macos-x86_64-${{ github.sha }}
 
       - name: "Prepare binary"
         run: chmod +x ./uv
