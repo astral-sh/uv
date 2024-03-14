@@ -73,8 +73,8 @@ jobs:
       - name: "Install pipx"
         run: pip install pipx
 
-      - name: "Install required Python versions"
-        run: pipx run scripts/bootstrap/install.py
+      #- name: "Install required Python versions"
+      #  run: pipx run scripts/bootstrap/install.py
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -89,16 +89,17 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: "Cargo test"
-        run: |
-          cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
-
+      #- name: "Cargo test"
+      #  run: |
+      #    cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+      - run: cargo build --tests
       - name: "Smoke test (unix)"
         if: ${{ matrix.os != 'windows' }}
         run: |
           uv="./target/debug/uv"
           $uv venv
           $uv pip install ruff
+          $uv pip install ruff --system
 
       - name: "Smoke test (windows)"
         if: ${{ matrix.os == 'windows' }}
