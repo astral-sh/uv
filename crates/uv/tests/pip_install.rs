@@ -2787,3 +2787,57 @@ fn install_package_basic_auth_from_url() {
 
     context.assert_command("import anyio").success();
 }
+
+/// Install a package from an index that provides relative links
+#[test]
+fn install_index_with_relative_links() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://pypi-proxy.fly.dev/relative/simple")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
+
+/// Install a package from an index that provides relative links and requires authentication
+#[test]
+fn install_index_with_relative_links_authenticated() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/relative/simple")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
