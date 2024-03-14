@@ -540,8 +540,6 @@ jobs:
           - target: aarch64-unknown-linux-musl
             arch: aarch64
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-          - target: armv7-unknown-linux-musleabihf
-            arch: armv7
 
     steps:
       - uses: actions/checkout@v4
