@@ -46,8 +46,8 @@ jobs:
 #            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
 #          - target: armv7-unknown-linux-gnueabihf
 #            arch: armv7
-#          - target: armv7-unknown-linux-musleabihf
-#            arch: armv7
+          - target: armv7-unknown-linux-musleabihf
+            arch: armv7
           - target: arm-unknown-linux-musleabihf
             arch: arm
 #            maturin_docker_options: -e CC=gcc-arm-linux-gnu
@@ -66,12 +66,6 @@ jobs:
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --no-default-features --features flate2/rust_backend
-#          before-script-linux: |
-#            echo "deb http://archive.debian.org/debian stretch main" > /etc/apt/sources.list
-#            apt-get update
-#            apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf musl musl-dev musl-tools
-#            ln -s /usr/bin/g++ /usr/bin/musl-g++
-#            ln -s /usr/bin/arm-linux-gnueabihf-gcc /usr/bin/arm-linux-musleabihf-gcc
       - uses: uraimo/run-on-arch-action@v2
         name: Test wheel
         with:
