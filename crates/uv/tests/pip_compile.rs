@@ -5104,3 +5104,45 @@ fn no_stream() -> Result<()> {
 
     Ok(())
 }
+
+/// Raise an error when a direct URL dependency's `Requires-Python` constraint is not met.
+#[test]
+fn requires_python_direct_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with a `Requires-Python` constraint that is not met.
+    let editable_dir = TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = "<=3.8"
+"#,
+    )?;
+
+    // Write to a requirements file.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(&format!("example @ {}", editable_dir.path().display()))?;
+
+    uv_snapshot!(context.compile()
+        .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.12.1) does not satisfy Python<=3.8
+          and example==0.0.0 depends on Python<=3.8, we can conclude that
+          example==0.0.0 cannot be used.
+          And because only example==0.0.0 is available and you require example, we
+          can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
