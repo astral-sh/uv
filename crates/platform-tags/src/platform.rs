@@ -78,6 +78,7 @@ pub enum Arch {
     Armv7L,
     Powerpc64Le,
     Powerpc64,
+    #[serde(alias = "i386")]
     X86,
     #[serde(alias = "amd64")]
     X86_64,
