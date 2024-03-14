@@ -106,6 +106,7 @@ jobs:
       - name: "Smoke test (unix)"
         if: ${{ matrix.os != 'windows' }}
         run: |
+          uv="./target/debug/uv"
           $uv pip install ruff --system
 
       - name: "Smoke test (windows)"
