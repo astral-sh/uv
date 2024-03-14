@@ -44,12 +44,11 @@ impl Middleware for AuthMiddleware {
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
         let url = req.url().clone();
+
         // If the request already has an authorization header, we don't need to do anything.
         // This gives in-URL credentials precedence over the netrc file.
         if req.headers().contains_key(reqwest::header::AUTHORIZATION) {
-            if !url.username().is_empty() {
-                GLOBAL_AUTH_STORE.save_from_url(&url);
-            }
+            debug!("Request already has an authorization header: {url}");
             return next.run(req, _extensions).await;
         }
 
@@ -57,6 +56,7 @@ impl Middleware for AuthMiddleware {
         if let Some(stored_auth) = GLOBAL_AUTH_STORE.get(&url) {
             // If we've already seen this URL, we can use the stored credentials
             if let Some(auth) = stored_auth {
+                debug!("Adding authentication to already-seen URL: {url}");
                 match auth {
                     Credential::Basic(_) => {
                         req.headers_mut().insert(
@@ -67,6 +67,8 @@ impl Middleware for AuthMiddleware {
                     // Url must already have auth if before middleware runs - see `AuthenticationStore::with_url_encoded_auth`
                     Credential::UrlEncoded(_) => (),
                 }
+            } else {
+                debug!("No credentials found for already-seen URL: {url}");
             }
         } else if let Some(auth) = self.nrc.as_ref().and_then(|nrc| {
             // If we find a matching entry in the netrc file, we can use it
@@ -100,6 +102,7 @@ impl Middleware for AuthMiddleware {
 
         // If we still don't have any credentials, we save the URL so we don't have to check netrc or keyring again
         if !req.headers().contains_key(reqwest::header::AUTHORIZATION) {
+            debug!("No credentials found for: {url}");
             GLOBAL_AUTH_STORE.set(&url, None);
         }
 

@@ -102,6 +102,7 @@ impl AuthenticationStore {
         }
     }
 
+    /// Store in-URL credentials for future use.
     pub fn save_from_url(&self, url: &Url) {
         let netloc = NetLoc::from(url);
         let mut credentials = self.credentials.lock().unwrap();
