@@ -7,7 +7,7 @@ use tracing::{debug, warn};
 use url::Url;
 
 use crate::{
-    keyring::{get_keyring_subprocess_auth, KeyringProvider, KeyringConfig},
+    keyring::{get_keyring_subprocess_auth, KeyringConfig, KeyringProvider},
     store::Credential,
     GLOBAL_AUTH_STORE,
 };
@@ -65,7 +65,7 @@ impl Middleware for AuthMiddleware {
                 self.keyring_conf.provider,
                 KeyringProvider::Subprocess | KeyringProvider::CustomSubprocess
             ) {
-                match get_keyring_subprocess_auth(&url, &self.keyring_conf) {
+                match get_keyring_subprocess_auth(url, &self.keyring_conf) {
                     Ok(Some(auth)) => Some(auth),
                     Ok(None) => {
                         debug!("No keyring credentials found for {url}");
