@@ -396,8 +396,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: "Install Python"
-        run: brew install python@3.8
+      # We test with GitHub's Python as a regression test for
+      # https://github.com/astral-sh/uv/issues/2450
+      - uses: actions/setup-python@v5
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
