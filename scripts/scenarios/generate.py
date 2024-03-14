@@ -133,10 +133,11 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             else []
         )
 
-    # TEMPORARY
-    # We do not yet support local version identifiers
+
     for scenario in data["scenarios"]:
         expected = scenario["expected"]
+
+        # TODO(charlie): We do not yet support local version identifiers
         if scenario["name"] in (
             "local-less-than-or-equal",
             "local-simple",
@@ -175,6 +176,30 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
                     "name": "local-transitive-greater-than-b",
                     "version": "2.0.0+foo",
                     "module_name": "local_transitive_greater_than_b",
+                }
+            ]
+            expected["explanation"] = (
+                "We do not have correct behavior for local version identifiers yet"
+            )
+        elif scenario["name"] == 'post-greater-than':
+            expected["satisfiable"] = True
+            expected["packages"] = [
+                {
+                    "name": "post-greater-than-a",
+                    "version": "1.2.3.post1",
+                    "module_name": "post_greater_than_a",
+                }
+            ]
+            expected["explanation"] = (
+                "We do not have correct behavior for local version identifiers yet"
+            )
+        elif scenario["name"] == 'post-local-greater-than':
+            expected["satisfiable"] = True
+            expected["packages"] = [
+                {
+                    "name": "post-local-greater-than-a",
+                    "version": "1.2.3.post1+local",
+                    "module_name": "post_local_greater_than_a",
                 }
             ]
             expected["explanation"] = (
