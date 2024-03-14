@@ -62,6 +62,11 @@ pub fn get_keyring_subprocess_auth(
     url: &Url,
     conf: &KeyringConfig,
 ) -> Result<Option<Credential>, Error> {
+    let keyring_command = match conf.provider {
+        KeyringProvider::Subprocess => "keyring",
+        KeyringProvider::CustomSubprocess => conf.custom_command.as_deref().unwrap_or("keyring"),
+        KeyringProvider::Disabled => return Ok(None),
+    };
     let host = url.host_str();
     if host.is_none() {
         return Err(Error::NotKeyringTarget(
@@ -77,11 +82,6 @@ pub fn get_keyring_subprocess_auth(
         u if !u.is_empty() => u,
         // this is the username keyring.get_credentials returns as username for GCP registry
         _ => "oauth2accesstoken",
-    };
-    let keyring_command = match conf.provider {
-        KeyringProvider::Subprocess => "keyring",
-        KeyringProvider::CustomSubprocess => conf.custom_command.as_deref().unwrap_or("keyring"),
-        KeyringProvider::Disabled => return Ok(None),
     };
     debug!("Running `{keyring_command} get` for `{url}` with username `{username}`");
     let output = match Command::new(keyring_command)
@@ -117,7 +117,13 @@ mod test {
     #[test]
     fn hostless_url_should_err() {
         let url = Url::parse("file:/etc/bin/").unwrap();
-        let res = get_keyring_subprocess_auth(&url, &KeyringConfig::default());
+        let res = get_keyring_subprocess_auth(
+            &url,
+            &KeyringConfig {
+                provider: KeyringProvider::Subprocess,
+                custom_command: None,
+            },
+        );
         assert!(res.is_err());
         assert!(matches!(res.unwrap_err(),
                 Error::NotKeyringTarget(s) if s == "Should only use keyring for urls with host"));
@@ -126,7 +132,13 @@ mod test {
     #[test]
     fn passworded_url_should_err() {
         let url = Url::parse("https://u:p@example.com").unwrap();
-        let res = get_keyring_subprocess_auth(&url, &KeyringConfig::default());
+        let res = get_keyring_subprocess_auth(
+            &url,
+            &KeyringConfig {
+                provider: KeyringProvider::Subprocess,
+                custom_command: None,
+            },
+        );
         assert!(res.is_err());
         assert!(matches!(res.unwrap_err(),
                 Error::NotKeyringTarget(s) if s == "Url already contains password - keyring not required"));
@@ -139,5 +151,23 @@ mod test {
         let res = get_keyring_subprocess_auth(&url, &KeyringConfig::default());
         assert!(res.is_ok());
         assert!(matches!(res, Ok(None)));
+    }
+
+    #[test]
+    fn custom_command_should_be_used() {
+        let url = Url::parse("https://example.com").unwrap();
+        let res = get_keyring_subprocess_auth(
+            &url,
+            &KeyringConfig {
+                provider: KeyringProvider::CustomSubprocess,
+                custom_command: Some("echo".to_string()),
+            },
+        );
+        let expected_echo = "get https://example.com/ oauth2accesstoken";
+        assert!(res.is_ok());
+        println!("{:?}", res);
+        assert!(
+            matches!(res, Ok(Some(credential)) if credential.password() == Some(expected_echo))
+        );
     }
 }
