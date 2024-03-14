@@ -2760,3 +2760,30 @@ requires-python = "<=3.8"
 
     Ok(())
 }
+
+/// Install a package from an index that requires authentication
+#[test]
+fn install_package_basic_auth_from_url() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
