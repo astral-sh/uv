@@ -32,7 +32,7 @@ nh3==0.2.15
     # via readme-renderer
 packaging==24.0
     # via hatchling
-packse==0.3.9
+packse==0.3.10
 pathspec==0.12.1
     # via hatchling
 pkginfo==1.10.0
@@ -65,5 +65,5 @@ urllib3==2.2.1
     # via
     #   requests
     #   twine
-zipp==3.18.0
+zipp==3.18.1
     # via importlib-metadata

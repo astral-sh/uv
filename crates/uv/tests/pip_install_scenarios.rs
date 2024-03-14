@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/sync.sh
-//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.9/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.10/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -46,9 +46,9 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.9/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.10/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.9/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.10/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -2022,6 +2022,381 @@ fn local_less_than_or_equal() {
     assert_not_installed(
         &context.venv,
         "local_less_than_or_equal_a",
+        &context.temp_dir,
+    );
+}
+
+/// A simple version constraint should not match a post-release version.
+///
+/// ```text
+/// post-simple
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a==1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_simple() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-simple-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-simple-a==1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of package-a==1.2.3 and you require package-a==1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(&context.venv, "post_simple_a", &context.temp_dir);
+}
+
+/// A greater-than-or-equal version constraint should match a post-release version.
+///
+/// ```text
+/// post-greater-than-or-equal
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>=1.2.3
+/// │       └── satisfied by a-1.2.3.post1
+/// └── a
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_greater_than_or_equal() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-greater-than-or-equal-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-greater-than-or-equal-a>=1.2.3")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3.post1
+    "###);
+
+    // The version '1.2.3.post1' satisfies the constraint '>=1.2.3'.
+    assert_installed(
+        &context.venv,
+        "post_greater_than_or_equal_a",
+        "1.2.3.post1",
+        &context.temp_dir,
+    );
+}
+
+/// A greater-than version constraint should not match a post-release version.
+///
+/// ```text
+/// post-greater-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_greater_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-greater-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-greater-than-a>1.2.3")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3.post1
+    "###);
+
+    assert_installed(
+        &context.venv,
+        "post_greater_than_a",
+        "1.2.3.post1",
+        &context.temp_dir,
+    );
+}
+
+/// A greater-than version constraint should match a post-release version if the
+/// constraint is itself a post-release version.
+///
+/// ```text
+/// post-greater-than-post
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>1.2.3.post0
+/// │       └── satisfied by a-1.2.3.post1
+/// └── a
+///     ├── a-1.2.3.post0
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_greater_than_post() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-greater-than-post-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-greater-than-post-a>1.2.3.post0")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3.post1
+    "###);
+
+    // The version '1.2.3.post1' satisfies the constraint '>1.2.3.post0'.
+    assert_installed(
+        &context.venv,
+        "post_greater_than_post_a",
+        "1.2.3.post1",
+        &context.temp_dir,
+    );
+}
+
+/// A greater-than-or-equal version constraint should match a post-release version
+/// if the constraint is itself a post-release version.
+///
+/// ```text
+/// post-greater-than-or-equal-post
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>=1.2.3.post0
+/// │       ├── satisfied by a-1.2.3.post0
+/// │       └── satisfied by a-1.2.3.post1
+/// └── a
+///     ├── a-1.2.3.post0
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_greater_than_or_equal_post() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-greater-than-or-equal-post-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-greater-than-or-equal-post-a>=1.2.3.post0")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3.post1
+    "###);
+
+    // The version '1.2.3.post1' satisfies the constraint '>=1.2.3.post0'.
+    assert_installed(
+        &context.venv,
+        "post_greater_than_or_equal_post_a",
+        "1.2.3.post1",
+        &context.temp_dir,
+    );
+}
+
+/// A less-than-or-equal version constraint should not match a post-release version.
+///
+/// ```text
+/// post-less-than-or-equal
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a<=1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_less_than_or_equal() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-less-than-or-equal-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-less-than-or-equal-a<=1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a>1.2.3 is available and you require package-a<=1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "post_less_than_or_equal_a",
+        &context.temp_dir,
+    );
+}
+
+/// A less-than version constraint should not match a post-release version.
+///
+/// ```text
+/// post-less-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a<1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_less_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-less-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-less-than-a<1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a>=1.2.3 is available and you require package-a<1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(&context.venv, "post_less_than_a", &context.temp_dir);
+}
+
+/// A greater-than version constraint should not match a post-release version with a
+/// local version identifier.
+///
+/// ```text
+/// post-local-greater-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     ├── a-1.2.3.post1
+///     └── a-1.2.3.post1+local
+/// ```
+#[test]
+fn post_local_greater_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-local-greater-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-local-greater-than-a>1.2.3")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3.post1+local
+    "###);
+
+    assert_installed(
+        &context.venv,
+        "post_local_greater_than_a",
+        "1.2.3.post1+local",
+        &context.temp_dir,
+    );
+}
+
+/// A greater-than version constraint should not match a post-release version with a
+/// local version identifier.
+///
+/// ```text
+/// post-local-greater-than-post
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>1.2.3.post0
+/// │       └── satisfied by a-1.2.3.post1
+/// └── a
+///     ├── a-1.2.3.post0
+///     ├── a-1.2.3.post0+local
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_local_greater_than_post() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-local-greater-than-post-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-local-greater-than-post-a>1.2.3.post0")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3.post1
+    "###);
+
+    // The version '1.2.3.post1' satisfies the constraint '>1.2.3.post0'.
+    assert_installed(
+        &context.venv,
+        "post_local_greater_than_post_a",
+        "1.2.3.post1",
         &context.temp_dir,
     );
 }
