@@ -257,6 +257,19 @@ impl Cache {
             .write(true)
             .open(root.join(".git"))?;
 
+        // Add an empty .gitignore to the build bucket, to ensure that the cache's own .gitignore
+        // doesn't interfere with source distribution builds. Build backends (like hatchling) will
+        // traverse upwards to look for .gitignore files.
+        fs::create_dir_all(root.join(CacheBucket::BuiltWheels.to_str()))?;
+        match fs::OpenOptions::new().write(true).create_new(true).open(
+            root.join(CacheBucket::BuiltWheels.to_str())
+                .join(".gitignore"),
+        ) {
+            Ok(_) => {}
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+            Err(err) => return Err(err),
+        }
+
         fs::canonicalize(root)
     }
 

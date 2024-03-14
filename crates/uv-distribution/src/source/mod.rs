@@ -816,7 +816,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let span =
             info_span!("download_source_dist", filename = filename, source_dist = %source_dist);
         let temp_dir =
-            tempfile::tempdir_in(self.build_context.cache().root()).map_err(Error::CacheWrite)?;
+            tempfile::tempdir_in(self.build_context.cache().bucket(CacheBucket::BuiltWheels))
+                .map_err(Error::CacheWrite)?;
         let reader = response
             .bytes_stream()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
@@ -896,8 +897,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         } else {
             debug!("Unpacking for build: {source_dist}");
 
-            let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
-                .map_err(Error::CacheWrite)?;
+            let temp_dir =
+                tempfile::tempdir_in(self.build_context.cache().bucket(CacheBucket::BuiltWheels))
+                    .map_err(Error::CacheWrite)?;
 
             // Unzip the archive into the temporary directory.
             let reader = fs_err::tokio::File::open(&path)

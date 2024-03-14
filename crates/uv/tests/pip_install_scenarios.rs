@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/sync.sh
-//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.7/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.9/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -46,9 +46,9 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.7/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.9/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.7/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.9/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -1289,7 +1289,7 @@ fn local_simple() {
       ╰─▶ Because there is no version of package-a==1.2.3 and you require package-a==1.2.3, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // The verison '1.2.3+foo' satisfies the constraint '==1.2.3'.
+    // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
     assert_not_installed(&context.venv, "local_simple_a", &context.temp_dir);
 }
 
@@ -1330,10 +1330,11 @@ fn local_not_used_with_sdist() {
      + package-a==1.2.3
     "###);
 
-    // The verison '1.2.3' with an sdist satisfies the constraint '==1.2.3'.
-    assert_not_installed(
+    // The version '1.2.3' with an sdist satisfies the constraint '==1.2.3'.
+    assert_installed(
         &context.venv,
         "local_not_used_with_sdist_a",
+        "1.2.3",
         &context.temp_dir,
     );
 }
@@ -1374,7 +1375,7 @@ fn local_used_without_sdist() {
       ╰─▶ Because package-a==1.2.3 is unusable because no wheels are available with a matching Python ABI and you require package-a==1.2.3, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // The verison '1.2.3+foo' satisfies the constraint '==1.2.3'.
+    // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
     assert_not_installed(
         &context.venv,
         "local_used_without_sdist_a",
@@ -1470,13 +1471,235 @@ fn local_transitive() {
           And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // The verison '2.0.0+foo' satisfies both ==2.0.0 and ==2.0.0+foo.
+    // The version '2.0.0+foo' satisfies both ==2.0.0 and ==2.0.0+foo.
     assert_not_installed(&context.venv, "local_transitive_a", &context.temp_dir);
     assert_not_installed(&context.venv, "local_transitive_b", &context.temp_dir);
 }
 
+/// A transitive constraint on a local version should not match an exclusive ordered
+/// operator.
+///
+/// ```text
+/// local-transitive-greater-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b>2.0.0
+/// │           └── unsatisfied: no matching version
+/// └── b
+///     └── b-2.0.0+foo
+/// ```
+#[test]
+fn local_transitive_greater_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-transitive-greater-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-transitive-greater-than-a")
+                .arg("local-transitive-greater-than-b==2.0.0+foo")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==2.0.0+foo
+    "###);
+
+    assert_installed(
+        &context.venv,
+        "local_transitive_greater_than_a",
+        "1.0.0",
+        &context.temp_dir,
+    );
+    assert_installed(
+        &context.venv,
+        "local_transitive_greater_than_b",
+        "2.0.0+foo",
+        &context.temp_dir,
+    );
+}
+
+/// A transitive constraint on a local version should match an inclusive ordered
+/// operator.
+///
+/// ```text
+/// local-transitive-greater-than-or-equal
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b>=2.0.0
+/// │           └── satisfied by b-2.0.0+foo
+/// └── b
+///     └── b-2.0.0+foo
+/// ```
+#[test]
+fn local_transitive_greater_than_or_equal() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-transitive-greater-than-or-equal-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-transitive-greater-than-or-equal-a")
+                .arg("local-transitive-greater-than-or-equal-b==2.0.0+foo")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==2.0.0+foo
+    "###);
+
+    // The version '2.0.0+foo' satisfies both >=2.0.0 and ==2.0.0+foo.
+    assert_installed(
+        &context.venv,
+        "local_transitive_greater_than_or_equal_a",
+        "1.0.0",
+        &context.temp_dir,
+    );
+    assert_installed(
+        &context.venv,
+        "local_transitive_greater_than_or_equal_b",
+        "2.0.0+foo",
+        &context.temp_dir,
+    );
+}
+
+/// A transitive constraint on a local version should not match an exclusive ordered
+/// operator.
+///
+/// ```text
+/// local-transitive-less-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b<2.0.0
+/// │           └── unsatisfied: no matching version
+/// └── b
+///     └── b-2.0.0+foo
+/// ```
+#[test]
+fn local_transitive_less_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-transitive-less-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-transitive-less-than-a")
+                .arg("local-transitive-less-than-b==2.0.0+foo")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b<2.0.0, we can conclude that all versions of package-a depend on package-b<2.0.0.
+          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_less_than_a",
+        &context.temp_dir,
+    );
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_less_than_b",
+        &context.temp_dir,
+    );
+}
+
+/// A transitive constraint on a local version should match an inclusive ordered
+/// operator.
+///
+/// ```text
+/// local-transitive-less-than-or-equal
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b<=2.0.0
+/// │           └── satisfied by b-2.0.0+foo
+/// └── b
+///     └── b-2.0.0+foo
+/// ```
+#[test]
+fn local_transitive_less_than_or_equal() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-transitive-less-than-or-equal-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-transitive-less-than-or-equal-a")
+                .arg("local-transitive-less-than-or-equal-b==2.0.0+foo")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b<=2.0.0, we can conclude that all versions of package-a depend on package-b<=2.0.0.
+          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    // The version '2.0.0+foo' satisfies both <=2.0.0 and ==2.0.0+foo.
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_less_than_or_equal_a",
+        &context.temp_dir,
+    );
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_less_than_or_equal_b",
+        &context.temp_dir,
+    );
+}
+
 /// A transitive dependency has both a non-local and local version published, but
-/// the non-local version is unuable.
+/// the non-local version is unusable.
 ///
 /// ```text
 /// local-transitive-confounding
@@ -1515,10 +1738,290 @@ fn local_transitive_confounding() {
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // The verison '1.2.3+foo' satisfies the constraint '==1.2.3'.
+    // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
     assert_not_installed(
         &context.venv,
         "local_transitive_confounding_a",
+        &context.temp_dir,
+    );
+}
+
+/// A dependency depends on a conflicting local version of a direct dependency.
+///
+/// ```text
+/// local-transitive-conflicting
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b==2.0.0+bar
+/// │           └── satisfied by b-2.0.0+bar
+/// └── b
+///     ├── b-2.0.0+foo
+///     └── b-2.0.0+bar
+/// ```
+#[test]
+fn local_transitive_conflicting() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-transitive-conflicting-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-transitive-conflicting-a")
+                .arg("local-transitive-conflicting-b==2.0.0+foo")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0+bar, we can conclude that all versions of package-a depend on package-b==2.0.0+bar.
+          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_conflicting_a",
+        &context.temp_dir,
+    );
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_conflicting_b",
+        &context.temp_dir,
+    );
+}
+
+/// A dependency depends on a conflicting local version of a direct dependency, but
+/// we can backtrack to a compatible version.
+///
+/// ```text
+/// local-transitive-backtrack
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-2.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   │   └── requires b==2.0.0
+/// │   │       ├── satisfied by b-2.0.0+foo
+/// │   │       └── satisfied by b-2.0.0+bar
+/// │   └── a-2.0.0
+/// │       └── requires b==2.0.0+bar
+/// │           └── satisfied by b-2.0.0+bar
+/// └── b
+///     ├── b-2.0.0+foo
+///     └── b-2.0.0+bar
+/// ```
+#[test]
+fn local_transitive_backtrack() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-transitive-backtrack-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-transitive-backtrack-a")
+                .arg("local-transitive-backtrack-b==2.0.0+foo")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only the following versions of package-a are available:
+              package-a==1.0.0
+              package-a==2.0.0
+          and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that package-a<2.0.0 depends on package-b==2.0.0.
+          And because package-a==2.0.0 depends on package-b==2.0.0+bar, we can conclude that all versions of package-a depend on one of:
+              package-b==2.0.0
+              package-b==2.0.0+bar
+
+          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    // Backtracking to '1.0.0' gives us compatible local versions of b.
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_backtrack_a",
+        &context.temp_dir,
+    );
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_backtrack_b",
+        &context.temp_dir,
+    );
+}
+
+/// A local version should be excluded in exclusive ordered comparisons.
+///
+/// ```text
+/// local-greater-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.2.3+foo
+/// ```
+#[test]
+fn local_greater_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-greater-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-greater-than-a>1.2.3")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3+foo
+    "###);
+
+    assert_installed(
+        &context.venv,
+        "local_greater_than_a",
+        "1.2.3+foo",
+        &context.temp_dir,
+    );
+}
+
+/// A local version should be included in inclusive ordered comparisons.
+///
+/// ```text
+/// local-greater-than-or-equal
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>=1.2.3
+/// │       └── satisfied by a-1.2.3+foo
+/// └── a
+///     └── a-1.2.3+foo
+/// ```
+#[test]
+fn local_greater_than_or_equal() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-greater-than-or-equal-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-greater-than-or-equal-a>=1.2.3")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3+foo
+    "###);
+
+    // The version '1.2.3+foo' satisfies the constraint '>=1.2.3'.
+    assert_installed(
+        &context.venv,
+        "local_greater_than_or_equal_a",
+        "1.2.3+foo",
+        &context.temp_dir,
+    );
+}
+
+/// A local version should be excluded in exclusive ordered comparisons.
+///
+/// ```text
+/// local-less-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a<1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.2.3+foo
+/// ```
+#[test]
+fn local_less_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-less-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-less-than-a<1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a>=1.2.3 is available and you require package-a<1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(&context.venv, "local_less_than_a", &context.temp_dir);
+}
+
+/// A local version should be included in inclusive ordered comparisons.
+///
+/// ```text
+/// local-less-than-or-equal
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a<=1.2.3
+/// │       └── satisfied by a-1.2.3+foo
+/// └── a
+///     └── a-1.2.3+foo
+/// ```
+#[test]
+fn local_less_than_or_equal() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-less-than-or-equal-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-less-than-or-equal-a<=1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a>1.2.3 is available and you require package-a<=1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    // The version '1.2.3+foo' satisfies the constraint '<=1.2.3'.
+    assert_not_installed(
+        &context.venv,
+        "local_less_than_or_equal_a",
         &context.temp_dir,
     );
 }

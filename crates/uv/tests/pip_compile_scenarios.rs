@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/sync.sh
-//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.7/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.9/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -27,9 +27,9 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg("compile")
         .arg("requirements.in")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.7/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.9/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.7/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.9/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -66,7 +66,7 @@ fn incompatible_python_compatible_override() -> Result<()> {
     let context = TestContext::new("3.9");
     let python_versions = &[];
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((r"incompatible-python-compatible-override-", "package-"));
 
@@ -115,7 +115,7 @@ fn compatible_python_incompatible_override() -> Result<()> {
     let context = TestContext::new("3.11");
     let python_versions = &[];
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((r"compatible-python-incompatible-override-", "package-"));
 
@@ -162,7 +162,7 @@ fn incompatible_python_compatible_override_unavailable_no_wheels() -> Result<()>
     let context = TestContext::new("3.9");
     let python_versions = &[];
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
         r"incompatible-python-compatible-override-unavailable-no-wheels-",
@@ -218,7 +218,7 @@ fn incompatible_python_compatible_override_available_no_wheels() -> Result<()> {
     let context = TestContext::new("3.9");
     let python_versions = &["3.11"];
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
         r"incompatible-python-compatible-override-available-no-wheels-",
@@ -273,7 +273,7 @@ fn incompatible_python_compatible_override_no_compatible_wheels() -> Result<()> 
     let context = TestContext::new("3.9");
     let python_versions = &[];
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
         r"incompatible-python-compatible-override-no-compatible-wheels-",
@@ -331,7 +331,7 @@ fn incompatible_python_compatible_override_other_wheel() -> Result<()> {
     let context = TestContext::new("3.9");
     let python_versions = &[];
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
         r"incompatible-python-compatible-override-other-wheel-",
@@ -391,7 +391,7 @@ fn python_patch_override_no_patch() -> Result<()> {
     let context = TestContext::new("3.8.18");
     let python_versions = &[];
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((r"python-patch-override-no-patch-", "package-"));
 
@@ -438,7 +438,7 @@ fn python_patch_override_patch_compatible() -> Result<()> {
     let context = TestContext::new("3.8.18");
     let python_versions = &[];
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((r"python-patch-override-patch-compatible-", "package-"));
 
