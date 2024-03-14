@@ -4,10 +4,12 @@ Queries information about the current Python interpreter and prints it as JSON.
 The script will exit with status 0 on known error that are turned into rust errors.
 """
 
+import sys
+
 import json
 import os
 import platform
-import sys
+import struct
 import sysconfig
 
 
@@ -451,13 +453,20 @@ def get_operating_system_and_architecture():
             "name": "windows",
         }
     elif operating_system == "macosx":
-        # GitHub Actions python seems to be doing this.
-        if architecture == "universal2":
-            if platform.processor() == "arm":
-                architecture = "aarch64"
+        # Apparently, Mac OS is reporting i386 sometimes in sysconfig.get_platform even
+        # though that's not a thing anymore.
+        # https://github.com/astral-sh/uv/issues/2450
+        version, _, architecture = platform.mac_ver()
+
+        # https://github.com/pypa/packaging/blob/cc938f984bbbe43c5734b9656c9837ab3a28191f/src/packaging/tags.py#L356-L363
+        is_32bit = struct.calcsize("P") == 4
+        if is_32bit:
+            if architecture.startswith("ppc"):
+                architecture = "ppc"
             else:
-                architecture = platform.processor()
-        version = platform.mac_ver()[0].split(".")
+                architecture = "i386"
+
+        version = version.split(".")
         operating_system = {
             "name": "macos",
             "major": int(version[0]),
