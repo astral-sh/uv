@@ -162,6 +162,47 @@ pub fn force_remove_all(path: impl AsRef<Path>) -> Result<bool, std::io::Error> 
     Ok(true)
 }
 
+/// Rename a file, retrying (on Windows) if it fails due to transient operating system errors.
+#[cfg(feature = "tokio")]
+pub async fn rename_with_retry(
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
+) -> Result<(), std::io::Error> {
+    if cfg!(windows) {
+        // On Windows, antivirus software can lock files temporarily, making them inaccessible.
+        // This is most common for DLLs, and the common suggestion is to retry the operation with
+        // some backoff.
+        //
+        // See: <https://github.com/astral-sh/uv/issues/1491>
+        let from = from.as_ref();
+        let to = to.as_ref();
+
+        let backoff = backoff::ExponentialBackoffBuilder::default()
+            .with_initial_interval(std::time::Duration::from_millis(10))
+            .with_max_elapsed_time(Some(std::time::Duration::from_secs(10)))
+            .build();
+
+        backoff::future::retry(backoff, || async move {
+            match fs_err::rename(from, to) {
+                Ok(()) => Ok(()),
+                Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+                    warn!(
+                        "Retrying rename from {} to {} due to transient error: {}",
+                        from.display(),
+                        to.display(),
+                        err
+                    );
+                    Err(backoff::Error::transient(err))
+                }
+                Err(err) => Err(backoff::Error::permanent(err)),
+            }
+        })
+        .await
+    } else {
+        fs_err::tokio::rename(from, to).await
+    }
+}
+
 /// Iterate over the subdirectories of a directory.
 ///
 /// If the directory does not exist, returns an empty iterator.

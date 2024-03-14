@@ -17,7 +17,6 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, enabled, info_span, instrument, trace, Instrument, Level};
 use url::Url;
 
-use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
     Name, RemoteSource, SourceDist, VersionOrUrl,
@@ -609,38 +608,57 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // If the dist is an editable, return the version from the editable metadata.
                 if let Some((_local, metadata)) = self.editables.get(package_name) {
-                    let version = metadata.version.clone();
-                    return if range.contains(&version) {
-                        Ok(Some(ResolverVersion::Available(version)))
-                    } else {
-                        Ok(None)
-                    };
+                    let version = &metadata.version;
+
+                    // The version is incompatible with the requirement.
+                    if !range.contains(version) {
+                        return Ok(None);
+                    }
+
+                    // The version is incompatible due to its Python requirement.
+                    if let Some(requires_python) = metadata.requires_python.as_ref() {
+                        let target = self.python_requirement.target();
+                        if !requires_python.contains(target) {
+                            return Ok(Some(ResolverVersion::Unavailable(
+                                version.clone(),
+                                UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
+                                    IncompatibleSource::RequiresPython(requires_python.clone()),
+                                )),
+                            )));
+                        }
+                    }
+
+                    return Ok(Some(ResolverVersion::Available(version.clone())));
                 }
 
-                if let Ok(wheel_filename) = WheelFilename::try_from(url.raw()) {
-                    // If the URL is that of a wheel, extract the version.
-                    let version = wheel_filename.version;
-                    if range.contains(&version) {
-                        Ok(Some(ResolverVersion::Available(version)))
-                    } else {
-                        Ok(None)
-                    }
-                } else {
-                    // Otherwise, assume this is a source distribution.
-                    let dist = PubGrubDistribution::from_url(package_name, url);
-                    let metadata = self
-                        .index
-                        .distributions
-                        .wait(&dist.package_id())
-                        .await
-                        .ok_or(ResolveError::Unregistered)?;
-                    let version = &metadata.version;
-                    if range.contains(version) {
-                        Ok(Some(ResolverVersion::Available(version.clone())))
-                    } else {
-                        Ok(None)
+                let dist = PubGrubDistribution::from_url(package_name, url);
+                let metadata = self
+                    .index
+                    .distributions
+                    .wait(&dist.package_id())
+                    .await
+                    .ok_or(ResolveError::Unregistered)?;
+                let version = &metadata.version;
+
+                // The version is incompatible with the requirement.
+                if !range.contains(version) {
+                    return Ok(None);
+                }
+
+                // The version is incompatible due to its Python requirement.
+                if let Some(requires_python) = metadata.requires_python.as_ref() {
+                    let target = self.python_requirement.target();
+                    if !requires_python.contains(target) {
+                        return Ok(Some(ResolverVersion::Unavailable(
+                            version.clone(),
+                            UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
+                                IncompatibleSource::RequiresPython(requires_python.clone()),
+                            )),
+                        )));
                     }
                 }
+
+                Ok(Some(ResolverVersion::Available(version.clone())))
             }
 
             PubGrubPackage::Package(package_name, extra, None) => {

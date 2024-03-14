@@ -312,6 +312,15 @@ If you encounter a missing option or subcommand, please search the issue tracker
 already been reported, and if not, consider opening a new issue. Feel free to upvote any existing
 issues to convey your interest.
 
+## Registry authentication
+
+uv does not support `pip`'s `auto` or `import` options for `--keyring-provider` — only `subproces` is supported.
+
+Unlike `pip`, uv does not enable keyring authentication by default.
+
+Unlike `pip`, uv does not wait until a request returns a HTTP 401 before searching for authentication. uv attaches
+authentication to all requests for hosts with credentials available.
+
 ## Legacy features
 
 `uv` does not support features that are considered legacy or deprecated in `pip`. For example,

@@ -81,12 +81,9 @@ fn command(context: &TestContext) -> Command {
 fn {{module_name}}() {
     let context = TestContext::new("{{environment.python}}");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    {{#packages}}
-    filters.push((r"{{name}}", "{{cute_name}}"));
-    {{/packages}}
-    filters.push((r"{{name}}-", "pkg-"));
+    filters.push((r"{{name}}-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         {{#resolver_options.prereleases}}

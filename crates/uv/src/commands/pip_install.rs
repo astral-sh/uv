@@ -20,6 +20,7 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
+use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -54,6 +55,7 @@ pub(crate) async fn pip_install(
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
+    keyring_provider: KeyringProvider,
     reinstall: &Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -143,8 +145,7 @@ pub(crate) async fn pip_install(
     let _lock = venv.lock()?;
 
     // Determine the set of installed packages.
-    let site_packages =
-        SitePackages::from_executable(&venv).context("Failed to list installed packages")?;
+    let site_packages = SitePackages::from_executable(&venv)?;
 
     // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
     // enough to let us remove this check. But right now, for large environments, it's an order of
@@ -180,11 +181,17 @@ pub(crate) async fn pip_install(
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
+    // Add all authenticated sources to the store.
+    for url in index_locations.urls() {
+        GLOBAL_AUTH_STORE.save_from_url(url);
+    }
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .keyring_provider(keyring_provider)
         .build();
 
     // Resolve the flat indexes from `--find-links`.

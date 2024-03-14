@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.1.20
+
+### Bug fixes
+
+- Add in-URL credentials to store prior to creating requests ([#2446](https://github.com/astral-sh/uv/pull/2446))
+- Error when direct URL requirements don't match `Requires-Python` ([#2196](https://github.com/astral-sh/uv/pull/2196))
+
+## 0.1.19
+
+### Configuration
+
+- Add `UV_NATIVE_TLS` environment variable ([#2412](https://github.com/astral-sh/uv/pull/2412))
+- Allow `SSL_CERT_FILE` without requiring `--native-tls` ([#2401](https://github.com/astral-sh/uv/pull/2401))
+- Add support for retrieving credentials from `keyring` ([#2254](https://github.com/astral-sh/uv/pull/2254))
+
+### Bug fixes
+
+- Add backoff for transient Windows failures ([#2419](https://github.com/astral-sh/uv/pull/2419))
+- Move architecture and operating system probing to Python ([#2381](https://github.com/astral-sh/uv/pull/2381))
+- Respect `--native-tls` in `venv` ([#2433](https://github.com/astral-sh/uv/pull/2433))
+- Treat non-existent site-packages as empty ([#2413](https://github.com/astral-sh/uv/pull/2413))
+
+### Documentation
+
+- Document HTTP authentication ([#2425](https://github.com/astral-sh/uv/pull/2425))
+
+### Performance
+
+- Improve performance of version range operations ([#2421](https://github.com/astral-sh/uv/pull/2421))
+
 ## 0.1.18
 
 ### Breaking changes

@@ -1,2 +1,2 @@
-# Run on Python 3.12 for a bad backtracking case
+# Run on python 3.12 for a pathological test case
 bio_embeddings[all]

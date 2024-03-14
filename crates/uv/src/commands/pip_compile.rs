@@ -18,6 +18,7 @@ use tracing::debug;
 use distribution_types::{IndexLocations, LocalEditable, Verbatim};
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
+use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -58,6 +59,7 @@ pub(crate) async fn pip_compile(
     include_index_url: bool,
     include_find_links: bool,
     index_locations: IndexLocations,
+    keyring_provider: KeyringProvider,
     setup_py: SetupPyStrategy,
     config_settings: ConfigSettings,
     connectivity: Connectivity,
@@ -185,11 +187,17 @@ pub(crate) async fn pip_compile(
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
+    // Add all authenticated sources to the store.
+    for url in index_locations.urls() {
+        GLOBAL_AUTH_STORE.save_from_url(url);
+    }
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .keyring_provider(keyring_provider)
         .build();
 
     // Resolve the flat indexes from `--find-links`.

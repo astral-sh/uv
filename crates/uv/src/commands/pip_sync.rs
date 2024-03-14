@@ -10,6 +10,7 @@ use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
+use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -34,6 +35,7 @@ pub(crate) async fn pip_sync(
     link_mode: LinkMode,
     compile: bool,
     index_locations: IndexLocations,
+    keyring_provider: KeyringProvider,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -113,11 +115,17 @@ pub(crate) async fn pip_sync(
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
+    // Add all authenticated sources to the store.
+    for url in index_locations.urls() {
+        GLOBAL_AUTH_STORE.save_from_url(url);
+    }
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .keyring_provider(keyring_provider)
         .build();
 
     // Resolve the flat indexes from `--find-links`.
@@ -157,8 +165,7 @@ pub(crate) async fn pip_sync(
     );
 
     // Determine the set of installed packages.
-    let site_packages =
-        SitePackages::from_executable(&venv).context("Failed to list installed packages")?;
+    let site_packages = SitePackages::from_executable(&venv)?;
 
     // Resolve any editables.
     let resolved_editables = resolve_editables(
