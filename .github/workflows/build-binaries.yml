@@ -291,7 +291,7 @@ jobs:
           # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
           manylinux: ${{ matrix.platform.arch == 'aarch64' && '2_28' || 'auto' }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --release --locked --out dist --no-default-features --features flate2/rust_backend
+          args: --release --locked --out dist
       - uses: uraimo/run-on-arch-action@v2
         name: Test wheel
         with:
