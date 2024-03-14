@@ -1,10 +1,13 @@
+use itertools::Either;
 use reqwest::{Client, ClientBuilder};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use std::env;
 use std::fmt::Debug;
+use std::ops::Deref;
 use std::path::Path;
+use std::sync::Mutex;
 use tracing::debug;
 use uv_auth::{AuthMiddleware, KeyringProvider};
 use uv_fs::Simplified;
@@ -76,6 +79,10 @@ impl BaseClientBuilder {
 
     pub fn is_offline(&self) -> bool {
         matches!(self.connectivity, Connectivity::Offline)
+    }
+
+    pub fn to_lazy_builder(self) -> LazyBaseClientBuilder {
+        LazyBaseClientBuilder::new(self)
     }
 
     pub fn build(self) -> BaseClient {
@@ -183,5 +190,29 @@ impl BaseClient {
     /// The configured connectivity mode.
     pub fn connectivity(&self) -> Connectivity {
         self.connectivity
+    }
+}
+
+pub struct LazyBaseClientBuilder {
+    builder: Option<BaseClientBuilder>,
+    client: Option<BaseClient>,
+}
+
+impl LazyBaseClientBuilder {
+    fn new(builder: BaseClientBuilder) -> Self {
+        Self {
+            builder: Some(builder),
+            client: None,
+        }
+    }
+
+    pub fn build(&mut self) -> &BaseClient {
+        if let Some(ref client) = self.client {
+            client
+        } else {
+            let builder = self.builder.take().unwrap();
+            let client = self.client.insert(builder.build());
+            client
+        }
     }
 }

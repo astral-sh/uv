@@ -4360,6 +4360,7 @@ dependencies = [
  "hyper 0.14.28",
  "insta",
  "install-wheel-rs",
+ "itertools 0.12.1",
  "pep440_rs",
  "pep508_rs",
  "platform-tags",
