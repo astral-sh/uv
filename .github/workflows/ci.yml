@@ -369,6 +369,33 @@ jobs:
       - name: "Validate global Python install"
         run: python3.11 scripts/check_system_python.py --uv ./uv
 
+  system-test-macos-rosetta:
+    needs: build-binary-macos-aarch64
+    name: "check system | python on macos rosetta"
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: |
+          arch -x86_64 /bin/bash -c "NONINTERACTIVE=1 $(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+          arch -x86_64 /usr/local/bin/brew install python@3.8
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-macos-aarch64-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Check Python version"
+        # Should fail if the binary is for arm64
+        run: arch -x86_64 /usr/local/bin/python3 --version
+
+      - name: "Validate global Python install"
+        run: arch -x86_64 /usr/local/bin/python3 scripts/check_system_python.py --uv ./uv
+
   system-test-windows-python-310:
     needs: build-binary-windows
     name: "check system | python3.10 on windows"
