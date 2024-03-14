@@ -1,7 +1,8 @@
+use std::path::Path;
+
 use netrc::Netrc;
 use reqwest::{header::HeaderValue, Request, Response};
 use reqwest_middleware::{Middleware, Next};
-use std::path::Path;
 use task_local_extensions::Extensions;
 use tracing::{debug, warn};
 
@@ -57,16 +58,10 @@ impl Middleware for AuthMiddleware {
             // If we've already seen this URL, we can use the stored credentials
             if let Some(auth) = stored_auth {
                 debug!("Adding authentication to already-seen URL: {url}");
-                match auth {
-                    Credential::Basic(_) => {
-                        req.headers_mut().insert(
-                            reqwest::header::AUTHORIZATION,
-                            basic_auth(auth.username(), auth.password()),
-                        );
-                    }
-                    // Url must already have auth if before middleware runs - see `AuthenticationStore::with_url_encoded_auth`
-                    Credential::UrlEncoded(_) => (),
-                }
+                req.headers_mut().insert(
+                    reqwest::header::AUTHORIZATION,
+                    basic_auth(auth.username(), auth.password()),
+                );
             } else {
                 debug!("No credentials found for already-seen URL: {url}");
             }
@@ -137,13 +132,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::io::Write;
+
     use reqwest::Client;
     use reqwest_middleware::ClientBuilder;
-    use std::io::Write;
     use tempfile::NamedTempFile;
     use wiremock::matchers::{basic_auth, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::*;
 
     const NETRC: &str = r#"default login myuser password mypassword"#;
 

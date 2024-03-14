@@ -91,17 +91,6 @@ impl AuthenticationStore {
         credentials.insert(netloc, auth);
     }
 
-    /// Copy authentication from one URL to another URL if applicable.
-    pub fn with_url_encoded_auth(&self, url: Url) -> Url {
-        let netloc = NetLoc::from(&url);
-        let credentials = self.credentials.lock().unwrap();
-        if let Some(Some(Credential::UrlEncoded(url_auth))) = credentials.get(&netloc) {
-            url_auth.apply_to_url(url)
-        } else {
-            url
-        }
-    }
-
     /// Store in-URL credentials for future use.
     pub fn save_from_url(&self, url: &Url) {
         let netloc = NetLoc::from(url);
@@ -153,28 +142,6 @@ mod test {
         assert!(not_found_res.is_some());
         let not_found_res = not_found_res.unwrap();
         assert!(not_found_res.is_none());
-    }
-
-    #[test]
-    fn store_with_url_encoded_auth() {
-        let store = AuthenticationStore::new();
-        let url = Url::parse("https://example.com/simple/").unwrap();
-        let auth = Credential::UrlEncoded(UrlAuthData {
-            username: "u".to_string(),
-            password: Some("p".to_string()),
-        });
-
-        // Before adding to the store there's no change
-        let url = store.with_url_encoded_auth(url);
-        assert_eq!(url.username(), "");
-        assert_eq!(url.password(), None);
-
-        store.set(&url, Some(auth.clone()));
-
-        // After adding to the store, the url is updated
-        let url = store.with_url_encoded_auth(url);
-        assert_eq!(url.username(), "u");
-        assert_eq!(url.password(), Some("p"));
     }
 
     #[test]

@@ -3,11 +3,10 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use url::Url;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pypi_types::{DistInfoMetadata, Hashes, Yanked};
-use url::Url;
-use uv_auth::GLOBAL_AUTH_STORE;
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, Error)]
@@ -53,13 +52,8 @@ impl File {
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(|dt| dt.timestamp_millis()),
             url: if file.url.contains("://") {
-                // Copy over any credentials from the global store.
-                let url = Url::parse(&file.url)
-                    .map_err(|err| FileConversionError::Url(file.url.clone(), err))?;
-                let url = GLOBAL_AUTH_STORE.with_url_encoded_auth(url);
-                FileLocation::AbsoluteUrl(url.to_string())
+                FileLocation::AbsoluteUrl(file.url)
             } else {
-                // It's assumed that the base URL already contains any necessary credentials.
                 FileLocation::RelativeUrl(base.to_string(), file.url)
             },
             yanked: file.yanked,
