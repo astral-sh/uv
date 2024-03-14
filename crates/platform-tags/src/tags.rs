@@ -351,6 +351,10 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
             }
             platform_tags
         }
+        (Os::Musllinux { .. }, Arch::Armv6L) => {
+            // armv6l is not supported by musllinux
+            vec![format!("linux_{}", arch)]
+        }
         (Os::Musllinux { major, minor }, _) => {
             let mut platform_tags = vec![format!("linux_{}", arch)];
             // musl 1.1 is the lowest supported version in musllinux

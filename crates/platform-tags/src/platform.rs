@@ -75,6 +75,7 @@ impl fmt::Display for Os {
 pub enum Arch {
     #[serde(alias = "arm64")]
     Aarch64,
+    Armv6L,
     Armv7L,
     Powerpc64Le,
     Powerpc64,
@@ -89,6 +90,7 @@ impl fmt::Display for Arch {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Self::Aarch64 => write!(f, "aarch64"),
+            Self::Armv6L => write!(f, "armv6l"),
             Self::Armv7L => write!(f, "armv7l"),
             Self::Powerpc64Le => write!(f, "ppc64le"),
             Self::Powerpc64 => write!(f, "ppc64"),
@@ -107,6 +109,8 @@ impl Arch {
             Self::Aarch64 | Self::Armv7L | Self::Powerpc64 | Self::Powerpc64Le | Self::S390X => 17,
             // manylinux 1
             Self::X86 | Self::X86_64 => 5,
+            // not supported
+            Self::Armv6L => 0,
         }
     }
 }
