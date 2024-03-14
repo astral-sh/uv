@@ -53,11 +53,13 @@ impl File {
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(|dt| dt.timestamp_millis()),
             url: if file.url.contains("://") {
+                // Copy over any credentials from the global store.
                 let url = Url::parse(&file.url)
                     .map_err(|err| FileConversionError::Url(file.url.clone(), err))?;
                 let url = GLOBAL_AUTH_STORE.with_url_encoded_auth(url);
                 FileLocation::AbsoluteUrl(url.to_string())
             } else {
+                // It's assumed that the base URL already contains any necessary credentials.
                 FileLocation::RelativeUrl(base.to_string(), file.url)
             },
             yanked: file.yanked,

@@ -13,7 +13,7 @@ use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name};
 use pep508_rs::Requirement;
-use uv_auth::KeyringProvider;
+use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -139,6 +139,11 @@ async fn venv_impl(
     if seed {
         // Extract the interpreter.
         let interpreter = venv.interpreter();
+
+        // Add all authenticated sources to the store.
+        for url in index_locations.urls() {
+            GLOBAL_AUTH_STORE.save_from_url(url);
+        }
 
         // Instantiate a client.
         let client = RegistryClientBuilder::new(cache.clone())
