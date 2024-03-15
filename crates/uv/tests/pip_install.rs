@@ -527,11 +527,13 @@ fn install_editable() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 2 packages in [TIME]
-     + numpy==1.26.2
+    Resolved 4 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + sniffio==1.3.0
     "###
     );
 
@@ -577,7 +579,7 @@ fn install_editable() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    Resolved 8 packages in [TIME]
+    Resolved 10 packages in [TIME]
     Downloaded 6 packages in [TIME]
     Installed 7 packages in [TIME]
      + black==23.11.0
