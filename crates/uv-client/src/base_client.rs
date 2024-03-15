@@ -4,6 +4,7 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use std::env;
 use std::fmt::Debug;
+use std::ops::Deref;
 use std::path::Path;
 use tracing::debug;
 use uv_auth::{AuthMiddleware, KeyringProvider};
@@ -173,5 +174,15 @@ impl BaseClient {
     /// The configured connectivity mode.
     pub fn connectivity(&self) -> Connectivity {
         self.connectivity
+    }
+}
+
+// To avoid excessively verbose call chains, as the [`BaseClient`] is often nested within other client types.
+impl Deref for BaseClient {
+    type Target = ClientWithMiddleware;
+
+    /// Deference to the underlying [`ClientWithMiddleware`].
+    fn deref(&self) -> &Self::Target {
+        &self.client
     }
 }

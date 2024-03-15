@@ -22,7 +22,7 @@ use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
 
-use crate::base_client::BaseClientBuilder;
+use crate::base_client::{BaseClient, BaseClientBuilder};
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
@@ -150,6 +150,11 @@ impl RegistryClient {
         &self.client
     }
 
+    /// Return the [`BaseClient`] used by this client.
+    pub fn uncached_client(&self) -> BaseClient {
+        self.client.uncached()
+    }
+
     /// Return the [`Connectivity`] mode used by this client.
     pub fn connectivity(&self) -> Connectivity {
         self.connectivity
@@ -247,7 +252,6 @@ impl RegistryClient {
         let simple_request = self
             .client
             .uncached()
-            .client()
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
@@ -411,7 +415,6 @@ impl RegistryClient {
             let req = self
                 .client
                 .uncached()
-                .client()
                 .get(url.clone())
                 .build()
                 .map_err(ErrorKind::from)?;
@@ -452,7 +455,6 @@ impl RegistryClient {
         let req = self
             .client
             .uncached()
-            .client()
             .head(url.clone())
             .header(
                 "accept-encoding",
@@ -521,7 +523,6 @@ impl RegistryClient {
         let req = self
             .client
             .uncached()
-            .client()
             .get(url.clone())
             .header(
                 // `reqwest` defaults to accepting compressed responses.

@@ -462,7 +462,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             .client
             .cached_client()
             .uncached()
-            .client()
             .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.
@@ -545,7 +544,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             .client
             .cached_client()
             .uncached()
-            .client()
             .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.
