@@ -40,7 +40,8 @@ if __name__ == "__main__":
         # Install the package (`pylint`).
         logging.info("Installing the package `pylint`.")
         subprocess.run(
-            [uv, "pip", "install", "pylint", "--system"] + allow_externally_managed,
+            [uv, "pip", "install", "pylint", "--system", "--verbose"]
+            + allow_externally_managed,
             cwd=temp_dir,
             check=True,
         )
