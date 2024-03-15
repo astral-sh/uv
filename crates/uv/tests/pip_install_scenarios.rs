@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/sync.sh
-//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.10/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.12/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -46,9 +46,9 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.10/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.12/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.10/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.12/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -2342,12 +2342,11 @@ fn post_local_greater_than() {
 /// ├── environment
 /// │   └── python3.8
 /// ├── root
-/// │   └── requires a>1.2.3.post0
-/// │       └── satisfied by a-1.2.3.post1
+/// │   └── requires a>1.2.3.post1
+/// │       └── unsatisfied: no matching version
 /// └── a
-///     ├── a-1.2.3.post0
-///     ├── a-1.2.3.post0+local
-///     └── a-1.2.3.post1
+///     ├── a-1.2.3.post1
+///     └── a-1.2.3.post1+local
 /// ```
 #[test]
 fn post_local_greater_than_post() {
@@ -2358,7 +2357,89 @@ fn post_local_greater_than_post() {
     filters.push((r"post-local-greater-than-post-", "package-"));
 
     uv_snapshot!(filters, command(&context)
-        .arg("post-local-greater-than-post-a>1.2.3.post0")
+        .arg("post-local-greater-than-post-a>1.2.3.post1")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a<1.2.3.post2 is available and you require package-a>=1.2.3.post2, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "post_local_greater_than_post_a",
+        &context.temp_dir,
+    );
+}
+
+/// An equal version constraint should not match a post-release version if the post-
+/// release version is not available.
+///
+/// ```text
+/// post-equal-not-available
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a==1.2.3.post0
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     ├── a-1.2.3
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_equal_not_available() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-equal-not-available-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-equal-not-available-a==1.2.3.post0")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of package-a==1.2.3.post0 and you require package-a==1.2.3.post0, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "post_equal_not_available_a",
+        &context.temp_dir,
+    );
+}
+
+/// An equal version constraint should match a post-release version if the post-
+/// release version is available.
+///
+/// ```text
+/// post-equal-available
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a==1.2.3.post0
+/// │       └── satisfied by a-1.2.3.post0
+/// └── a
+///     ├── a-1.2.3
+///     └── a-1.2.3.post0
+/// ```
+#[test]
+fn post_equal_available() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-equal-available-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-equal-available-a==1.2.3.post0")
         , @r###"
     success: true
     exit_code: 0
@@ -2368,14 +2449,56 @@ fn post_local_greater_than_post() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + package-a==1.2.3.post1
+     + package-a==1.2.3.post0
     "###);
 
-    // The version '1.2.3.post1' satisfies the constraint '>1.2.3.post0'.
+    // The version '1.2.3.post0' satisfies the constraint '==1.2.3.post0'.
     assert_installed(
         &context.venv,
-        "post_local_greater_than_post_a",
-        "1.2.3.post1",
+        "post_equal_available_a",
+        "1.2.3.post0",
+        &context.temp_dir,
+    );
+}
+
+/// A greater-than version constraint should not match a post-release version if the
+/// post-release version is not available.
+///
+/// ```text
+/// post-greater-than-post-not-available
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>1.2.3.post2
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     ├── a-1.2.3
+///     ├── a-1.2.3.post0
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_greater_than_post_not_available() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-greater-than-post-not-available-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-greater-than-post-not-available-a>1.2.3.post2")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a<1.2.3.post3 is available and you require package-a>=1.2.3.post3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "post_greater_than_post_not_available_a",
         &context.temp_dir,
     );
 }
