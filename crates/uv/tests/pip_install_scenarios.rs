@@ -46,7 +46,7 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.10/simple-html/")
+        .arg("http://localhost:3141")
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.10/vendor/links.html")
         .arg("--cache-dir")
@@ -2127,15 +2127,13 @@ fn post_greater_than() {
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-a>1.2.3")
         , @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + package-a==1.2.3.post1
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a<=1.2.3.post18446744073709551615+18446744073709551615 is available and you require package-a>1.2.3.post18446744073709551615+18446744073709551615, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_installed(
@@ -2336,15 +2334,13 @@ fn post_local_greater_than() {
     uv_snapshot!(filters, command(&context)
         .arg("post-local-greater-than-a>1.2.3")
         , @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + package-a==1.2.3.post1+local
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a<=1.2.3.post18446744073709551615+18446744073709551615 is available and you require package-a>1.2.3.post18446744073709551615+18446744073709551615, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_installed(
@@ -2379,17 +2375,15 @@ fn post_local_greater_than_post() {
     filters.push((r"post-local-greater-than-post-", "package-"));
 
     uv_snapshot!(filters, command(&context)
-        .arg("post-local-greater-than-post-a>1.2.3.post0")
+        .arg("post-local-greater-than-post-a>1.2.3.post1")
         , @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + package-a==1.2.3.post1
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a<=1.2.3.post1+18446744073709551615 is available and you require package-a>1.2.3.post1+18446744073709551615, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // The version '1.2.3.post1' satisfies the constraint '>1.2.3.post0'.

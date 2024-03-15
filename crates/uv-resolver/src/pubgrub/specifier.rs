@@ -1,7 +1,7 @@
 use anyhow::Result;
 use pubgrub::range::Range;
 
-use pep440_rs::{Operator, PreRelease, Version, VersionSpecifier};
+use pep440_rs::{LocalSegment, Operator, PreRelease, Version, VersionSpecifier};
 
 use crate::ResolveError;
 
@@ -62,9 +62,12 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
             Operator::GreaterThan => {
                 // Per PEP 440: "The exclusive ordered comparison >V MUST NOT allow a post-release of
                 // the given version unless V itself is a post release."
-                // TODO(charlie): This needs to exclude post and local releases.
                 let version = specifier.version().clone();
-                Range::strictly_higher_than(version)
+                if version.is_post() {
+                    Range::strictly_higher_than(version.with_local(vec![LocalSegment::Number(u64::MAX)]))
+                } else {
+                    Range::strictly_higher_than(version.with_post(Some(u64::MAX)).with_local(vec![LocalSegment::Number(u64::MAX)]))
+                }
             }
             Operator::GreaterThanEqual => {
                 let version = specifier.version().clone();
