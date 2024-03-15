@@ -16,3 +16,6 @@ workspace = true
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+insta = { version = "1.36.1" }

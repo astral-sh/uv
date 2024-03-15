@@ -2453,6 +2453,7 @@ dependencies = [
 name = "platform-tags"
 version = "0.0.1"
 dependencies = [
+ "insta",
  "rustc-hash",
  "serde",
  "thiserror",
