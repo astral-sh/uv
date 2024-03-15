@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 use distribution_types::InstalledMetadata;
+pub(crate) use pip_check::pip_check;
 pub(crate) use pip_compile::{extra_name_with_clap_error, pip_compile, Upgrade};
 pub(crate) use pip_freeze::pip_freeze;
 pub(crate) use pip_install::pip_install;
@@ -26,6 +27,7 @@ use crate::printer::Printer;
 
 mod cache_clean;
 mod cache_dir;
+mod pip_check;
 mod pip_compile;
 mod pip_freeze;
 mod pip_install;
