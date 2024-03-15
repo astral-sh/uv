@@ -46,7 +46,7 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("http://localhost:3141")
+        .arg("https://astral-sh.github.io/packse/0.3.10/simple-html/")
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.10/vendor/links.html")
         .arg("--cache-dir")
@@ -1507,28 +1507,24 @@ fn local_transitive_greater_than() {
         .arg("local-transitive-greater-than-a")
                 .arg("local-transitive-greater-than-b==2.0.0+foo")
         , @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Downloaded 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + package-a==1.0.0
-     + package-b==2.0.0+foo
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b>2.0.0, we can conclude that all versions of package-a depend on package-b>2.0.0.
+          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_installed(
+    assert_not_installed(
         &context.venv,
         "local_transitive_greater_than_a",
-        "1.0.0",
         &context.temp_dir,
     );
-    assert_installed(
+    assert_not_installed(
         &context.venv,
         "local_transitive_greater_than_b",
-        "2.0.0+foo",
         &context.temp_dir,
     );
 }
@@ -1889,23 +1885,16 @@ fn local_greater_than() {
     uv_snapshot!(filters, command(&context)
         .arg("local-greater-than-a>1.2.3")
         , @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + package-a==1.2.3+foo
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a<=1.2.3 is available and you require package-a>1.2.3, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_installed(
-        &context.venv,
-        "local_greater_than_a",
-        "1.2.3+foo",
-        &context.temp_dir,
-    );
+    assert_not_installed(&context.venv, "local_greater_than_a", &context.temp_dir);
 }
 
 /// A local version should be included in inclusive ordered comparisons.
@@ -2133,15 +2122,10 @@ fn post_greater_than() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a<=1.2.3.post18446744073709551615+18446744073709551615 is available and you require package-a>1.2.3.post18446744073709551615+18446744073709551615, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a<=1.2.3 is available and you require package-a>1.2.3, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_installed(
-        &context.venv,
-        "post_greater_than_a",
-        "1.2.3.post1",
-        &context.temp_dir,
-    );
+    assert_not_installed(&context.venv, "post_greater_than_a", &context.temp_dir);
 }
 
 /// A greater-than version constraint should match a post-release version if the
@@ -2340,13 +2324,12 @@ fn post_local_greater_than() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a<=1.2.3.post18446744073709551615+18446744073709551615 is available and you require package-a>1.2.3.post18446744073709551615+18446744073709551615, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a<=1.2.3 is available and you require package-a>1.2.3, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    assert_installed(
+    assert_not_installed(
         &context.venv,
         "post_local_greater_than_a",
-        "1.2.3.post1+local",
         &context.temp_dir,
     );
 }
@@ -2375,15 +2358,17 @@ fn post_local_greater_than_post() {
     filters.push((r"post-local-greater-than-post-", "package-"));
 
     uv_snapshot!(filters, command(&context)
-        .arg("post-local-greater-than-post-a>1.2.3.post1")
+        .arg("post-local-greater-than-post-a>1.2.3.post0")
         , @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a<=1.2.3.post1+18446744073709551615 is available and you require package-a>1.2.3.post1+18446744073709551615, we can conclude that the requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3.post1
     "###);
 
     // The version '1.2.3.post1' satisfies the constraint '>1.2.3.post0'.

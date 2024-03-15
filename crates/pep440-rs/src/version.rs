@@ -322,6 +322,12 @@ impl Version {
         self.post().is_some()
     }
 
+    /// Whether this is a max version
+    #[inline]
+    fn is_max(&self) -> bool {
+        self.max().is_some()
+    }
+
     /// Whether this is a local version (e.g. `1.2.3+localsuffixesareweird`)
     ///
     /// When true, it is guaranteed that the slice returned by
@@ -569,7 +575,6 @@ impl Version {
         self.make_full().max = value;
         self
     }
-
 
     /// Convert this version to a "full" representation in-place and return a
     /// mutable borrow to the full type.
@@ -956,7 +961,11 @@ impl VersionSmall {
 
     #[inline]
     fn set_post(&mut self, value: Option<u64>) -> bool {
-        if self.min().is_some() || self.pre().is_some() || self.dev().is_some() || self.max().is_some() {
+        if self.min().is_some()
+            || self.pre().is_some()
+            || self.dev().is_some()
+            || self.max().is_some()
+        {
             return value.is_none();
         }
         match value {
@@ -999,7 +1008,11 @@ impl VersionSmall {
 
     #[inline]
     fn set_pre(&mut self, value: Option<PreRelease>) -> bool {
-        if self.min().is_some() || self.dev().is_some() || self.post().is_some() || self.max().is_some() {
+        if self.min().is_some()
+            || self.dev().is_some()
+            || self.post().is_some()
+            || self.max().is_some()
+        {
             return value.is_none();
         }
         match value {
@@ -1038,7 +1051,11 @@ impl VersionSmall {
 
     #[inline]
     fn set_dev(&mut self, value: Option<u64>) -> bool {
-        if self.min().is_some() || self.pre().is_some() || self.post().is_some() || self.max().is_some() {
+        if self.min().is_some()
+            || self.pre().is_some()
+            || self.post().is_some()
+            || self.max().is_some()
+        {
             return value.is_none();
         }
         match value {
@@ -1067,7 +1084,11 @@ impl VersionSmall {
 
     #[inline]
     fn set_min(&mut self, value: Option<u64>) -> bool {
-        if self.dev().is_some() || self.pre().is_some() || self.post().is_some() || self.max().is_some() {
+        if self.dev().is_some()
+            || self.pre().is_some()
+            || self.post().is_some()
+            || self.max().is_some()
+        {
             return value.is_none();
         }
         match value {
@@ -1096,7 +1117,11 @@ impl VersionSmall {
 
     #[inline]
     fn set_max(&mut self, value: Option<u64>) -> bool {
-        if self.dev().is_some() || self.pre().is_some() || self.post().is_some() || self.min().is_some() {
+        if self.dev().is_some()
+            || self.pre().is_some()
+            || self.post().is_some()
+            || self.min().is_some()
+        {
             return value.is_none();
         }
         match value {
@@ -2386,12 +2411,33 @@ pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
 /// implementation
 ///
 /// [pep440-suffix-ordering]: https://peps.python.org/pep-0440/#summary-of-permitted-suffixes-and-relative-ordering
-fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, Option<u64>, u64, &[LocalSegment]) {
-    match (version.pre(), version.post(), version.dev(), version.min()) {
+fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegment]) {
+    // If the version is a "max" version, use a post version larger than any possible post version.
+    let post = if version.is_max() {
+        // But don't convert a `dev` version to a `post` version. `1.0.dev0` should _not_ be greater
+        // than `1.0.post0.dev0`, since the latter means "a dev release of a post release of 1.0",
+        // not "a post release of a dev release of 1.0".
+        if version.is_dev() && !version.is_post() {
+            None
+        } else {
+            Some(u64::MAX)
+        }
+    } else {
+        version.post()
+    };
+
+    // If the version is a "max" version, use a local version larger than any possible local version.
+    let local = if version.is_max() {
+        &[LocalSegment::Number(u64::MAX)]
+    } else {
+        version.local()
+    };
+
+    match (version.pre(), post, version.dev(), version.min()) {
         // min release
-        (_pre, _post, _dev, Some(_), _max) => (0, 0, None, None, 0, version.local()),
+        (_pre, post, _dev, Some(n)) => (0, 0, post, n, local),
         // dev release
-        (None, None, Some(n), None, max) => (1, 0, max, None, n, version.local()),
+        (None, None, Some(n), None) => (1, 0, None, n, local),
         // alpha release
         (
             Some(PreRelease {
@@ -2401,8 +2447,7 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, Option<u64>, u64
             post,
             dev,
             None,
-            max
-        ) => (2, n, max, post, dev.unwrap_or(u64::MAX), version.local()),
+        ) => (2, n, post, dev.unwrap_or(u64::MAX), local),
         // beta release
         (
             Some(PreRelease {
@@ -2412,8 +2457,7 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, Option<u64>, u64
             post,
             dev,
             None,
-            max,
-        ) => (3, n, max, post, dev.unwrap_or(u64::MAX), version.local()),
+        ) => (3, n, post, dev.unwrap_or(u64::MAX), local),
         // alpha release
         (
             Some(PreRelease {
@@ -2423,14 +2467,11 @@ fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, Option<u64>, u64
             post,
             dev,
             None,
-            max,
-        ) => (4, n, max, post, dev.unwrap_or(u64::MAX), version.local()),
+        ) => (4, n, post, dev.unwrap_or(u64::MAX), local),
         // final release
-        (None, None, None, None, max) => (5, 0, max, None, 0, version.local()),
+        (None, None, None, None) => (5, 0, None, 0, local),
         // post release
-        (None, Some(post), dev, None, max) => {
-            (6, 0, max, Some(post), dev.unwrap_or(u64::MAX), version.local())
-        }
+        (None, Some(post), dev, None) => (6, 0, Some(post), dev.unwrap_or(u64::MAX), local),
     }
 }
 
@@ -3703,24 +3744,24 @@ mod tests {
 
         let versions = &[
             "1.dev0",
-            // "1.0.dev456",
-            // "1.0a1",
-            // "1.0a2.dev456",
-            // "1.0a12.dev456",
-            // "1.0a12",
-            // "1.0b1.dev456",
-            // "1.0b2",
-            // "1.0b2.post345.dev456",
-            // "1.0b2.post345",
-            // "1.0rc1.dev456",
-            // "1.0rc1",
-            // "1.0",
-            // "1.0+abc.5",
-            // "1.0+abc.7",
-            // "1.0+5",
-            // "1.0.post456.dev34",
-            // "1.0.post456",
-            // "1.0",
+            "1.0.dev456",
+            "1.0a1",
+            "1.0a2.dev456",
+            "1.0a12.dev456",
+            "1.0a12",
+            "1.0b1.dev456",
+            "1.0b2",
+            "1.0b2.post345.dev456",
+            "1.0b2.post345",
+            "1.0rc1.dev456",
+            "1.0rc1",
+            "1.0",
+            "1.0+abc.5",
+            "1.0+abc.7",
+            "1.0+5",
+            "1.0.post456.dev34",
+            "1.0.post456",
+            "1.0",
         ];
 
         for less in versions.iter() {
@@ -3737,14 +3778,68 @@ mod tests {
         // Ensure that the `.max` suffix plays nicely with dev versions.
         let greater = Version::new([1, 0]).with_dev(Some(5)).with_max(Some(0));
 
-        let versions = &[
-            "1.dev5",
-            "1.dev5+local",
-            "1.0",
-        ];
+        let versions = &["1.dev5", "1.dev5+local"];
 
         for less in versions.iter() {
             let less = less.parse::<Version>().unwrap();
+            assert_eq!(
+                less.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                less.as_bloated_debug(),
+                greater.as_bloated_debug()
+            );
+        }
+
+        // Ensure that the `.max` suffix plays nicely with dev versions.
+        let less = Version::new([1, 0]).with_dev(Some(5)).with_max(Some(0));
+
+        let versions = &["1.post1.dev5", "1.0"];
+
+        for greater in versions.iter() {
+            let greater = greater.parse::<Version>().unwrap();
+            assert_eq!(
+                less.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                less.as_bloated_debug(),
+                greater.as_bloated_debug()
+            );
+        }
+
+        // Ensure that the `.max` suffix plays nicely with pre-release versions.
+        let greater = Version::new([1, 0])
+            .with_pre(Some(PreRelease {
+                kind: PreReleaseKind::Alpha,
+                number: 1,
+            }))
+            .with_max(Some(0));
+
+        let versions = &["1.0a1", "1.0a1+local", "1.0a1.post1"];
+
+        for less in versions.iter() {
+            let less = less.parse::<Version>().unwrap();
+            assert_eq!(
+                less.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                less.as_bloated_debug(),
+                greater.as_bloated_debug()
+            );
+        }
+
+        // Ensure that the `.max` suffix plays nicely with pre-release versions.
+        let less = Version::new([1, 0])
+            .with_pre(Some(PreRelease {
+                kind: PreReleaseKind::Alpha,
+                number: 1,
+            }))
+            .with_max(Some(0));
+
+        let versions = &["1.0b1", "1.0b1+local", "1.0b1.post1", "1.0"];
+
+        for greater in versions.iter() {
+            let greater = greater.parse::<Version>().unwrap();
             assert_eq!(
                 less.cmp(&greater),
                 Ordering::Less,
@@ -3823,6 +3918,7 @@ mod tests {
                 .field("dev", &self.0.dev())
                 .field("local", &self.0.local())
                 .field("min", &self.0.min())
+                .field("max", &self.0.max())
                 .finish()
         }
     }
