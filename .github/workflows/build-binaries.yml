@@ -272,6 +272,10 @@ jobs:
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: armv7-unknown-linux-gnueabihf
             arch: armv7
+          - target: armv7-unknown-linux-musleabihf
+            arch: armv7
+          - target: arm-unknown-linux-musleabihf
+            arch: arm
 
     steps:
       - uses: actions/checkout@v4
@@ -284,15 +288,15 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          manylinux: 2_28
+          # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
+          manylinux: ${{ matrix.platform.arch == 'aarch64' && '2_28' || 'auto' }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist
       - uses: uraimo/run-on-arch-action@v2
-        if: matrix.platform.arch != 'ppc64'
         name: Test wheel
         with:
-          arch: ${{ matrix.platform.arch }}
-          distro: ubuntu20.04
+          arch: ${{ matrix.platform.arch == 'arm' && 'armv6' || matrix.platform.arch }}
+          distro: ${{ matrix.platform.arch == 'arm' && 'bullseye' || 'ubuntu20.04' }}
           githubToken: ${{ github.token }}
           install: |
             apt-get update
@@ -302,6 +306,8 @@ jobs:
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
       - name: "Upload wheels"
+        # Skip for `arm`, which is not supported by PyPI.
+        if: ${{ matrix.platform.arch != 'arm' }}
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.platform.target }}
@@ -534,8 +540,6 @@ jobs:
           - target: aarch64-unknown-linux-musl
             arch: aarch64
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-          - target: armv7-unknown-linux-musleabihf
-            arch: armv7
 
     steps:
       - uses: actions/checkout@v4

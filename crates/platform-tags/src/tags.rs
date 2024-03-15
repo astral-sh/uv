@@ -336,18 +336,19 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
     let platform_tags = match (&os, arch) {
         (Os::Manylinux { major, minor }, _) => {
             let mut platform_tags = vec![format!("linux_{}", arch)];
-            platform_tags.extend(
-                (arch.get_minimum_manylinux_minor()..=*minor)
-                    .map(|minor| format!("manylinux_{major}_{minor}_{arch}")),
-            );
-            if (arch.get_minimum_manylinux_minor()..=*minor).contains(&12) {
-                platform_tags.push(format!("manylinux2010_{arch}"));
-            }
-            if (arch.get_minimum_manylinux_minor()..=*minor).contains(&17) {
-                platform_tags.push(format!("manylinux2014_{arch}"));
-            }
-            if (arch.get_minimum_manylinux_minor()..=*minor).contains(&5) {
-                platform_tags.push(format!("manylinux1_{arch}"));
+            if let Some(min_minor) = arch.get_minimum_manylinux_minor() {
+                platform_tags.extend(
+                    (min_minor..=*minor).map(|minor| format!("manylinux_{major}_{minor}_{arch}")),
+                );
+                if (min_minor..=*minor).contains(&12) {
+                    platform_tags.push(format!("manylinux2010_{arch}"));
+                }
+                if (min_minor..=*minor).contains(&17) {
+                    platform_tags.push(format!("manylinux2014_{arch}"));
+                }
+                if (min_minor..=*minor).contains(&5) {
+                    platform_tags.push(format!("manylinux1_{arch}"));
+                }
             }
             platform_tags
         }
