@@ -52,8 +52,7 @@ async fn test_client_with_netrc_credentials() -> Result<()> {
 
     // Send request to our dummy server
     let res = client
-        .cached_client()
-        .uncached()
+        .uncached_client()
         .get(format!("http://{addr}"))
         .send()
         .await?;

@@ -431,7 +431,6 @@ impl CachedClient {
         debug!("Sending revalidation request for: {url}");
         let response = self
             .0
-            .client()
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
@@ -471,7 +470,6 @@ impl CachedClient {
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let response = self
             .0
-            .client()
             .execute(req)
             .await
             .map_err(ErrorKind::from)?

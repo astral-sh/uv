@@ -250,8 +250,7 @@ impl RegistryClient {
         };
 
         let simple_request = self
-            .client
-            .uncached()
+            .uncached_client()
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
@@ -300,7 +299,7 @@ impl RegistryClient {
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
         let result = self
-            .client
+            .cached_client()
             .get_cacheable(
                 simple_request,
                 &cache_entry,
@@ -413,13 +412,12 @@ impl RegistryClient {
                     })
             };
             let req = self
-                .client
-                .uncached()
+                .uncached_client()
                 .get(url.clone())
                 .build()
                 .map_err(ErrorKind::from)?;
             Ok(self
-                .client
+                .cached_client()
                 .get_serde(req, &cache_entry, cache_control, response_callback)
                 .await?)
         } else {
@@ -453,8 +451,7 @@ impl RegistryClient {
         };
 
         let req = self
-            .client
-            .uncached()
+            .uncached_client()
             .head(url.clone())
             .header(
                 "accept-encoding",
@@ -474,7 +471,7 @@ impl RegistryClient {
         let read_metadata_range_request = |response: Response| {
             async {
                 let mut reader = AsyncHttpRangeReader::from_head_response(
-                    self.client.uncached().client(),
+                    self.uncached_client().client(),
                     response,
                     headers,
                 )
@@ -496,7 +493,7 @@ impl RegistryClient {
         };
 
         let result = self
-            .client
+            .cached_client()
             .get_serde(
                 req,
                 &cache_entry,
@@ -521,8 +518,7 @@ impl RegistryClient {
 
         // Create a request to stream the file.
         let req = self
-            .client
-            .uncached()
+            .uncached_client()
             .get(url.clone())
             .header(
                 // `reqwest` defaults to accepting compressed responses.
@@ -547,7 +543,7 @@ impl RegistryClient {
             .instrument(info_span!("read_metadata_stream", wheel = %filename))
         };
 
-        self.client
+        self.cached_client()
             .get_serde(req, &cache_entry, cache_control, read_metadata_stream)
             .await
             .map_err(crate::Error::from)
