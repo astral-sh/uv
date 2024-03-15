@@ -44,8 +44,7 @@ async fn test_user_agent_has_version() -> Result<()> {
 
     // Send request to our dummy server
     let res = client
-        .cached_client()
-        .uncached()
+        .uncached_client()
         .get(format!("http://{addr}"))
         .send()
         .await?;

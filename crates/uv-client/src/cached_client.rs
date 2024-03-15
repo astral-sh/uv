@@ -2,7 +2,6 @@ use std::{borrow::Cow, future::Future, path::Path};
 
 use futures::FutureExt;
 use reqwest::{Request, Response};
-use reqwest_middleware::ClientWithMiddleware;
 use rkyv::util::AlignedVec;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -11,6 +10,7 @@ use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use uv_cache::{CacheEntry, Freshness};
 use uv_fs::write_atomic;
 
+use crate::BaseClient;
 use crate::{
     httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder},
     rkyvutil::OwnedArchive,
@@ -158,15 +158,15 @@ impl From<Freshness> for CacheControl {
 /// Again unlike `http-cache`, the caller gets full control over the cache key with the assumption
 /// that it's a file.
 #[derive(Debug, Clone)]
-pub struct CachedClient(ClientWithMiddleware);
+pub struct CachedClient(BaseClient);
 
 impl CachedClient {
-    pub fn new(client: ClientWithMiddleware) -> Self {
+    pub fn new(client: BaseClient) -> Self {
         Self(client)
     }
 
-    /// The middleware is the retry strategy
-    pub fn uncached(&self) -> ClientWithMiddleware {
+    /// The base client
+    pub fn uncached(&self) -> BaseClient {
         self.0.clone()
     }
 

@@ -143,10 +143,9 @@ impl<'a> FlatIndexClient<'a> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let cached_client = self.client.cached_client();
-
-        let flat_index_request = cached_client
-            .uncached()
+        let flat_index_request = self
+            .client
+            .uncached_client()
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", "text/html")
@@ -180,7 +179,9 @@ impl<'a> FlatIndexClient<'a> {
             .boxed()
             .instrument(info_span!("parse_flat_index_html", url = % url))
         };
-        let response = cached_client
+        let response = self
+            .client
+            .cached_client()
             .get_serde(
                 flat_index_request,
                 &cache_entry,
