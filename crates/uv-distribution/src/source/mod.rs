@@ -306,6 +306,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .client
             .cached_client()
             .uncached()
+            .client()
             .get(url.clone())
             .header(
                 // `reqwest` defaults to accepting compressed responses.
@@ -416,6 +417,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .client
             .cached_client()
             .uncached()
+            .client()
             .get(url.clone())
             .header(
                 // `reqwest` defaults to accepting compressed responses.

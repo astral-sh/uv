@@ -147,6 +147,7 @@ impl<'a> FlatIndexClient<'a> {
 
         let flat_index_request = cached_client
             .uncached()
+            .client()
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", "text/html")
