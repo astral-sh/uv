@@ -398,6 +398,19 @@ impl Version {
         }
     }
 
+    /// Returns the max-release part of this version, if it exists.
+    ///
+    /// The "max" component is internal-only, and does not exist in PEP 440.
+    /// The version `1.0max0` is larger than all other `1.0` versions,
+    /// like `1.0.post1`, `1.0+local`, etc.
+    #[inline]
+    pub fn max(&self) -> Option<u64> {
+        match *self.inner {
+            VersionInner::Small { ref small } => small.max(),
+            VersionInner::Full { ref full } => full.max,
+        }
+    }
+
     /// Set the release numbers and return the updated version.
     ///
     /// Usually one can just use `Version::new` to create a new version with
@@ -532,12 +545,35 @@ impl Version {
     /// like `1.0a1`, `1.0dev0`, etc.
     #[inline]
     pub fn with_min(mut self, value: Option<u64>) -> Self {
+        debug_assert!(!self.is_pre(), "min is not allowed on pre-release versions");
+        debug_assert!(!self.is_dev(), "min is not allowed on dev versions");
         if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_min(value) {
                 return self;
             }
         }
         self.make_full().min = value;
+        self
+    }
+
+    /// Set the max-release component and return the updated version.
+    ///
+    /// The "max" component is internal-only, and does not exist in PEP 440.
+    /// The version `1.0max0` is larger than all other `1.0` versions,
+    /// like `1.0.post1`, `1.0+local`, etc.
+    #[inline]
+    pub fn with_max(mut self, value: Option<u64>) -> Self {
+        debug_assert!(
+            !self.is_post(),
+            "max is not allowed on post-release versions"
+        );
+        debug_assert!(!self.is_dev(), "max is not allowed on dev versions");
+        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+            if small.set_max(value) {
+                return self;
+            }
+        }
+        self.make_full().max = value;
         self
     }
 
@@ -549,6 +585,7 @@ impl Version {
                 epoch: small.epoch(),
                 release: small.release().to_vec(),
                 min: small.min(),
+                max: small.max(),
                 pre: small.pre(),
                 post: small.post(),
                 dev: small.dev(),
@@ -774,13 +811,15 @@ impl FromStr for Version {
 /// * Bytes 5, 4 and 3 correspond to the second, third and fourth release
 /// segments, respectively.
 /// * Bytes 2, 1 and 0 represent *one* of the following:
-///   `min, .devN, aN, bN, rcN, <no suffix>, .postN`.
+///   `min, .devN, aN, bN, rcN, <no suffix>, .postN, max`.
 ///   Its representation is thus:
 ///   * The most significant 3 bits of Byte 2 corresponds to a value in
 ///   the range 0-6 inclusive, corresponding to min, dev, pre-a, pre-b, pre-rc,
 ///   no-suffix or post releases, respectively. `min` is a special version that
 ///   does not exist in PEP 440, but is used here to represent the smallest
-///   possible version, preceding any `dev`, `pre`, `post` or releases.
+///   possible version, preceding any `dev`, `pre`, `post` or releases. `max` is
+///   an analogous concept for the largest possible version, following any `post`
+///   or local releases.
 ///   * The low 5 bits combined with the bits in bytes 1 and 0 correspond
 ///   to the release number of the suffix, if one exists. If there is no
 ///   suffix, then this bits are always 0.
@@ -789,7 +828,7 @@ impl FromStr for Version {
 /// encoded at a less significant location than the release numbers, so that
 /// `1.2.3 < 1.2.3.post4`.
 ///
-/// In a previous representation, we tried to enocode the suffixes in different
+/// In a previous representation, we tried to encode the suffixes in different
 /// locations so that, in theory, you could represent `1.2.3.dev2.post3` in the
 /// packed form. But getting the ordering right for this is difficult (perhaps
 /// impossible without extra space?). So we limited to only storing one suffix.
@@ -850,6 +889,7 @@ impl VersionSmall {
     const SUFFIX_PRE_RC: u64 = 4;
     const SUFFIX_NONE: u64 = 5;
     const SUFFIX_POST: u64 = 6;
+    const SUFFIX_MAX: u64 = 7;
     const SUFFIX_MAX_VERSION: u64 = 0x1FFFFF;
 
     #[inline]
@@ -922,7 +962,11 @@ impl VersionSmall {
 
     #[inline]
     fn set_post(&mut self, value: Option<u64>) -> bool {
-        if self.min().is_some() || self.pre().is_some() || self.dev().is_some() {
+        if self.min().is_some()
+            || self.pre().is_some()
+            || self.dev().is_some()
+            || self.max().is_some()
+        {
             return value.is_none();
         }
         match value {
@@ -965,7 +1009,11 @@ impl VersionSmall {
 
     #[inline]
     fn set_pre(&mut self, value: Option<PreRelease>) -> bool {
-        if self.min().is_some() || self.dev().is_some() || self.post().is_some() {
+        if self.min().is_some()
+            || self.dev().is_some()
+            || self.post().is_some()
+            || self.max().is_some()
+        {
             return value.is_none();
         }
         match value {
@@ -1004,7 +1052,11 @@ impl VersionSmall {
 
     #[inline]
     fn set_dev(&mut self, value: Option<u64>) -> bool {
-        if self.min().is_some() || self.pre().is_some() || self.post().is_some() {
+        if self.min().is_some()
+            || self.pre().is_some()
+            || self.post().is_some()
+            || self.max().is_some()
+        {
             return value.is_none();
         }
         match value {
@@ -1033,7 +1085,11 @@ impl VersionSmall {
 
     #[inline]
     fn set_min(&mut self, value: Option<u64>) -> bool {
-        if self.dev().is_some() || self.pre().is_some() || self.post().is_some() {
+        if self.dev().is_some()
+            || self.pre().is_some()
+            || self.post().is_some()
+            || self.max().is_some()
+        {
             return value.is_none();
         }
         match value {
@@ -1052,6 +1108,39 @@ impl VersionSmall {
     }
 
     #[inline]
+    fn max(&self) -> Option<u64> {
+        if self.suffix_kind() == Self::SUFFIX_MAX {
+            Some(self.suffix_version())
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn set_max(&mut self, value: Option<u64>) -> bool {
+        if self.dev().is_some()
+            || self.pre().is_some()
+            || self.post().is_some()
+            || self.min().is_some()
+        {
+            return value.is_none();
+        }
+        match value {
+            None => {
+                self.set_suffix_kind(Self::SUFFIX_NONE);
+            }
+            Some(number) => {
+                if number > Self::SUFFIX_MAX_VERSION {
+                    return false;
+                }
+                self.set_suffix_kind(Self::SUFFIX_MAX);
+                self.set_suffix_version(number);
+            }
+        }
+        true
+    }
+
+    #[inline]
     fn local(&self) -> &[LocalSegment] {
         // A "small" version is never used if the version has a non-zero number
         // of local segments.
@@ -1061,13 +1150,13 @@ impl VersionSmall {
     #[inline]
     fn suffix_kind(&self) -> u64 {
         let kind = (self.repr >> 21) & 0b111;
-        debug_assert!(kind <= Self::SUFFIX_POST);
+        debug_assert!(kind <= Self::SUFFIX_MAX);
         kind
     }
 
     #[inline]
     fn set_suffix_kind(&mut self, kind: u64) {
-        debug_assert!(kind <= Self::SUFFIX_POST);
+        debug_assert!(kind <= Self::SUFFIX_MAX);
         self.repr &= !0xE00000;
         self.repr |= kind << 21;
         if kind == Self::SUFFIX_NONE {
@@ -1146,6 +1235,10 @@ struct VersionFull {
     /// represent the smallest possible version of a release, preceding any
     /// `dev`, `pre`, `post` or releases.
     min: Option<u64>,
+    /// An internal-only segment that does not exist in PEP 440, used to
+    /// represent the largest possible version of a release, following any
+    /// `post` or local releases.
+    max: Option<u64>,
 }
 
 /// A version number pattern.
@@ -2320,7 +2413,13 @@ pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
 ///
 /// [pep440-suffix-ordering]: https://peps.python.org/pep-0440/#summary-of-permitted-suffixes-and-relative-ordering
 fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, &[LocalSegment]) {
-    match (version.pre(), version.post(), version.dev(), version.min()) {
+    // If the version is a "max" version, use a post version larger than any possible post version.
+    let post = if version.max().is_some() {
+        Some(u64::MAX)
+    } else {
+        version.post()
+    };
+    match (version.pre(), post, version.dev(), version.min()) {
         // min release
         (_pre, post, _dev, Some(n)) => (0, 0, post, n, version.local()),
         // dev release
@@ -3626,6 +3725,87 @@ mod tests {
         }
     }
 
+    #[test]
+    fn max_version() {
+        // Ensure that the `.max` suffix succeeds all other suffixes.
+        let greater = Version::new([1, 0]).with_max(Some(0));
+
+        let versions = &[
+            "1.dev0",
+            "1.0.dev456",
+            "1.0a1",
+            "1.0a2.dev456",
+            "1.0a12.dev456",
+            "1.0a12",
+            "1.0b1.dev456",
+            "1.0b2",
+            "1.0b2.post345.dev456",
+            "1.0b2.post345",
+            "1.0rc1.dev456",
+            "1.0rc1",
+            "1.0",
+            "1.0+abc.5",
+            "1.0+abc.7",
+            "1.0+5",
+            "1.0.post456.dev34",
+            "1.0.post456",
+            "1.0",
+        ];
+
+        for less in versions.iter() {
+            let less = less.parse::<Version>().unwrap();
+            assert_eq!(
+                less.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                less.as_bloated_debug(),
+                greater.as_bloated_debug()
+            );
+        }
+
+        // Ensure that the `.max` suffix plays nicely with pre-release versions.
+        let greater = Version::new([1, 0])
+            .with_pre(Some(PreRelease {
+                kind: PreReleaseKind::Alpha,
+                number: 1,
+            }))
+            .with_max(Some(0));
+
+        let versions = &["1.0a1", "1.0a1+local", "1.0a1.post1"];
+
+        for less in versions.iter() {
+            let less = less.parse::<Version>().unwrap();
+            assert_eq!(
+                less.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                less.as_bloated_debug(),
+                greater.as_bloated_debug()
+            );
+        }
+
+        // Ensure that the `.max` suffix plays nicely with pre-release versions.
+        let less = Version::new([1, 0])
+            .with_pre(Some(PreRelease {
+                kind: PreReleaseKind::Alpha,
+                number: 1,
+            }))
+            .with_max(Some(0));
+
+        let versions = &["1.0b1", "1.0b1+local", "1.0b1.post1", "1.0"];
+
+        for greater in versions.iter() {
+            let greater = greater.parse::<Version>().unwrap();
+            assert_eq!(
+                less.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                less.as_bloated_debug(),
+                greater.as_bloated_debug()
+            );
+        }
+    }
+
     // Tests our bespoke u64 decimal integer parser.
     #[test]
     fn parse_number_u64() {
@@ -3694,6 +3874,7 @@ mod tests {
                 .field("dev", &self.0.dev())
                 .field("local", &self.0.local())
                 .field("min", &self.0.min())
+                .field("max", &self.0.max())
                 .finish()
         }
     }
