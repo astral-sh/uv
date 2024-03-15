@@ -67,13 +67,16 @@ impl From<ExitStatus> for ExitCode {
 /// Format a duration as a human-readable string, Cargo-style.
 pub(super) fn elapsed(duration: Duration) -> String {
     let secs = duration.as_secs();
+    let ms = duration.subsec_millis();
 
     if secs >= 60 {
         format!("{}m {:02}s", secs / 60, secs % 60)
     } else if secs > 0 {
         format!("{}.{:02}s", secs, duration.subsec_nanos() / 10_000_000)
+    } else if ms > 0 {
+        format!("{ms}ms")
     } else {
-        format!("{}ms", duration.subsec_millis())
+        format!("0.{:02}ms", duration.subsec_nanos() / 10_000)
     }
 }
 

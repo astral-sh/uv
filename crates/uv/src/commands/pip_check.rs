@@ -1,24 +1,28 @@
 use std::fmt::Write;
 
 use anyhow::Result;
+use distribution_types::InstalledDist;
 use owo_colors::OwoColorize;
+use std::time::Instant;
 use tracing::debug;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
-use uv_installer::SitePackages;
+use uv_installer::{Diagnostic, SitePackages};
 use uv_interpreter::PythonEnvironment;
 
-use crate::commands::ExitStatus;
+use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
-/// Show information about one or more installed packages.
+/// Check for incompatibilties in installed packages.
 pub(crate) fn pip_check(
     python: Option<&str>,
     system: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let start = Instant::now();
+
     // Detect the current Python interpreter.
     let venv = if let Some(python) = python {
         PythonEnvironment::from_requested_python(python, cache)?
@@ -42,18 +46,50 @@ pub(crate) fn pip_check(
 
     // Build the installed index.
     let site_packages = SitePackages::from_executable(&venv)?;
+    let packages: Vec<&InstalledDist> = site_packages.iter().collect();
 
-    let mut is_compatible = true;
-    // This loop is entered if and only if there is at least one conflict.
-    for diagnostic in site_packages.diagnostics()? {
-        is_compatible = false;
-        writeln!(printer.stdout(), "{}", diagnostic.message())?;
+    let s = if packages.len() == 1 { "" } else { "s" };
+    writeln!(
+        printer.stderr(),
+        "{}",
+        format!(
+            "Checked {} in {}",
+            format!("{} package{}", packages.len(), s).bold(),
+            elapsed(start.elapsed())
+        )
+        .dimmed()
+    )?;
+
+    let diagnostics: Vec<Diagnostic> = site_packages.diagnostics()?.into_iter().collect();
+
+    if diagnostics.is_empty() {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            "All installed packages are compatible".to_string().dimmed()
+        )?;
+
+        Ok(ExitStatus::Success)
+    } else {
+        let incompats = if diagnostics.len() == 1 {
+            "incompatibility"
+        } else {
+            "incompatibilities"
+        };
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Found {}",
+                format!("{} {}", diagnostics.len(), incompats).bold()
+            )
+            .dimmed()
+        )?;
+
+        for diagnostic in &diagnostics {
+            writeln!(printer.stderr(), "{}", diagnostic.message().bold())?;
+        }
+
+        Ok(ExitStatus::Failure)
     }
-
-    if !is_compatible {
-        return Ok(ExitStatus::Failure);
-    }
-
-    writeln!(printer.stdout(), "Installed packages pass the check.").unwrap();
-    Ok(ExitStatus::Success)
 }

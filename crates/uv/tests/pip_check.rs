@@ -32,6 +32,20 @@ fn install_command(context: &TestContext) -> Command {
     command
 }
 
+/// Create a `pip check` command with options shared across scenarios.
+fn check_command(context: &TestContext) -> Command {
+    let mut command = Command::new(get_bin());
+    command
+        .arg("pip")
+        .arg("check")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir);
+
+    command
+}
+
 #[test]
 fn check_compatible_packages() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -60,20 +74,14 @@ fn check_compatible_packages() -> Result<()> {
     "###
     );
 
-    // Guards against the package names being sorted.
-    uv_snapshot!([], Command::new(get_bin())
-        .arg("pip")
-        .arg("check")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(check_command(&context), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Installed packages pass the check.
 
     ----- stderr -----
+    Checked 5 packages in [TIME]
+    All installed packages are compatible
     "###
     );
 
@@ -132,20 +140,15 @@ fn check_incompatible_packages() -> Result<()> {
     "###
     );
 
-    // Guards against the package names being sorted.
-    uv_snapshot!([], Command::new(get_bin())
-        .arg("pip")
-        .arg("check")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(check_command(&context), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
-    The package `requests` requires `idna <4, >=2.5`, but `2.4` is installed.
 
     ----- stderr -----
+    Checked 5 packages in [TIME]
+    Found 1 incompatibility
+    The package `requests` requires `idna <4, >=2.5`, but `2.4` is installed.
     "###
     );
 
@@ -208,21 +211,16 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     "###
     );
 
-    // Guards against the package names being sorted.
-    uv_snapshot!([], Command::new(get_bin())
-        .arg("pip")
-        .arg("check")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(check_command(&context), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
-    The package `requests` requires `idna <4, >=2.5`, but `2.4` is installed.
-    The package `requests` requires `urllib3 <3, >=1.21.1`, but `1.20` is installed.
 
     ----- stderr -----
+    Checked 5 packages in [TIME]
+    Found 2 incompatibilities
+    The package `requests` requires `idna <4, >=2.5`, but `2.4` is installed.
+    The package `requests` requires `urllib3 <3, >=1.21.1`, but `1.20` is installed.
     "###
     );
 
