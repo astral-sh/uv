@@ -126,11 +126,13 @@ fn list_editable() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 2 packages in [TIME]
-     + numpy==1.26.2
+    Resolved 4 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + sniffio==1.3.0
     "###
     );
 
@@ -183,8 +185,10 @@ fn list_editable() -> Result<()> {
     ----- stdout -----
     Package         Version Editable project location
     --------------- ------- ---------------------------------------------------------
-    numpy           1.26.2
+    anyio           4.0.0
+    idna            3.4
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
+    sniffio         1.3.0
 
     ----- stderr -----
     "###
@@ -219,11 +223,13 @@ fn list_editable_only() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 2 packages in [TIME]
-     + numpy==1.26.2
+    Resolved 4 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + sniffio==1.3.0
     "###
     );
 
@@ -289,7 +295,9 @@ fn list_editable_only() -> Result<()> {
     ----- stdout -----
     Package Version
     ------- -------
-    numpy   1.26.2
+    anyio   4.0.0
+    idna    3.4
+    sniffio 1.3.0
 
     ----- stderr -----
     "###
@@ -341,11 +349,13 @@ fn list_exclude() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 2 packages in [TIME]
-     + numpy==1.26.2
+    Resolved 4 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + sniffio==1.3.0
     "###
     );
 
@@ -393,7 +403,10 @@ fn list_exclude() -> Result<()> {
     ----- stdout -----
     Package         Version Editable project location
     --------------- ------- ---------------------------------------------------------
+    anyio           4.0.0
+    idna            3.4
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
+    sniffio         1.3.0
 
     ----- stderr -----
     "###
@@ -413,7 +426,9 @@ fn list_exclude() -> Result<()> {
     ----- stdout -----
     Package Version
     ------- -------
-    numpy   1.26.2
+    anyio   4.0.0
+    idna    3.4
+    sniffio 1.3.0
 
     ----- stderr -----
     "###
@@ -433,6 +448,11 @@ fn list_exclude() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+    Package Version
+    ------- -------
+    anyio   4.0.0
+    idna    3.4
+    sniffio 1.3.0
 
     ----- stderr -----
     "###
@@ -470,11 +490,13 @@ fn list_format_json() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 2 packages in [TIME]
-     + numpy==1.26.2
+    Resolved 4 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + sniffio==1.3.0
     "###
     );
 
@@ -526,7 +548,7 @@ fn list_format_json() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"numpy","version":"1.26.2"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable"}]
+    [{"name":"anyio","version":"4.0.0"},{"name":"idna","version":"3.4"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable"},{"name":"sniffio","version":"1.3.0"}]
 
     ----- stderr -----
     "###
@@ -562,7 +584,7 @@ fn list_format_json() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"numpy","version":"1.26.2"}]
+    [{"name":"anyio","version":"4.0.0"},{"name":"idna","version":"3.4"},{"name":"sniffio","version":"1.3.0"}]
 
     ----- stderr -----
     "###
@@ -617,11 +639,13 @@ fn list_format_freeze() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 2 packages in [TIME]
-     + numpy==1.26.2
+    Resolved 4 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + sniffio==1.3.0
     "###
     );
 
@@ -666,8 +690,10 @@ fn list_format_freeze() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    numpy==1.26.2
+    anyio==4.0.0
+    idna==3.4
     poetry-editable==0.1.0
+    sniffio==1.3.0
 
     ----- stderr -----
     "###
@@ -703,7 +729,9 @@ fn list_format_freeze() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    numpy==1.26.2
+    anyio==4.0.0
+    idna==3.4
+    sniffio==1.3.0
 
     ----- stderr -----
     "###

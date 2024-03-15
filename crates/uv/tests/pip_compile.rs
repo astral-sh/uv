@@ -2553,6 +2553,8 @@ fn compile_editable() -> Result<()> {
         # via black
     aiosignal==1.3.1
         # via aiohttp
+    anyio==4.0.0
+        # via poetry-editable
     attrs==23.1.0
         # via aiohttp
     boltons==23.1.1
@@ -2561,13 +2563,15 @@ fn compile_editable() -> Result<()> {
         #   aiohttp
         #   aiosignal
     idna==3.4
-        # via yarl
+        # via
+        #   anyio
+        #   yarl
     multidict==6.0.4
         # via
         #   aiohttp
         #   yarl
-    numpy==1.26.2
-        # via poetry-editable
+    sniffio==1.3.0
+        # via anyio
     uvloop==0.19.0
         # via black
     yarl==1.9.2
@@ -2575,7 +2579,7 @@ fn compile_editable() -> Result<()> {
 
     ----- stderr -----
     Built 3 editables in [TIME]
-    Resolved 13 packages in [TIME]
+    Resolved 14 packages in [TIME]
     "###);
 
     Ok(())

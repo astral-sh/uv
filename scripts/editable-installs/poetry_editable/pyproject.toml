@@ -6,7 +6,7 @@ authors = ["Astral Software Inc. <hey@astral.sh>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-numpy = "^1"
+anyio = "^4"
 
 [build-system]
 requires = ["poetry-core"]
