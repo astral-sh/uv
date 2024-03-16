@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/sync.sh
-//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.10/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.12/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -27,9 +27,9 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg("compile")
         .arg("requirements.in")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.10/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.12/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.10/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.12/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())

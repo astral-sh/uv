@@ -595,7 +595,7 @@ impl MarkerExpression {
                     Some(operator) => operator,
                 };
 
-                let specifier = match VersionSpecifier::new(operator, r_vpat) {
+                let specifier = match VersionSpecifier::from_pattern(operator, r_vpat) {
                     Ok(specifier) => specifier,
                     Err(err) => {
                         reporter(
@@ -674,7 +674,7 @@ impl MarkerExpression {
                             Some(operator) => operator,
                         };
 
-                        let specifier = match VersionSpecifier::new(
+                        let specifier = match VersionSpecifier::from_pattern(
                             operator,
                             VersionPattern::verbatim(r_version.clone()),
                         ) {
@@ -784,7 +784,7 @@ impl MarkerExpression {
                     let r_vpat = r_string.parse::<VersionPattern>().ok()?;
                     let operator = operator.to_pep440_operator()?;
                     // operator and right hand side make the specifier
-                    let specifier = VersionSpecifier::new(operator, r_vpat).ok()?;
+                    let specifier = VersionSpecifier::from_pattern(operator, r_vpat).ok()?;
 
                     let compatible = python_versions
                         .iter()
@@ -808,7 +808,7 @@ impl MarkerExpression {
                     let compatible = python_versions.iter().any(|r_version| {
                         // operator and right hand side make the specifier and in this case the
                         // right hand is `python_version` so changes every iteration
-                        match VersionSpecifier::new(
+                        match VersionSpecifier::from_pattern(
                             operator,
                             VersionPattern::verbatim(r_version.clone()),
                         ) {

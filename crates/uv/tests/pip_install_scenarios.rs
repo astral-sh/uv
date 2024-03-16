@@ -1461,19 +1461,31 @@ fn local_transitive() {
         .arg("local-transitive-a")
                 .arg("local-transitive-b==2.0.0+foo")
         , @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a depend on package-b==2.0.0.
-          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==2.0.0+foo
     "###);
 
     // The version '2.0.0+foo' satisfies both ==2.0.0 and ==2.0.0+foo.
-    assert_not_installed(&context.venv, "local_transitive_a", &context.temp_dir);
-    assert_not_installed(&context.venv, "local_transitive_b", &context.temp_dir);
+    assert_installed(
+        &context.venv,
+        "local_transitive_a",
+        "1.0.0",
+        &context.temp_dir,
+    );
+    assert_installed(
+        &context.venv,
+        "local_transitive_b",
+        "2.0.0+foo",
+        &context.temp_dir,
+    );
 }
 
 /// A transitive constraint on a local version should not match an exclusive ordered
@@ -1671,25 +1683,29 @@ fn local_transitive_less_than_or_equal() {
         .arg("local-transitive-less-than-or-equal-a")
                 .arg("local-transitive-less-than-or-equal-b==2.0.0+foo")
         , @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b<=2.0.0, we can conclude that all versions of package-a depend on package-b<=2.0.0.
-          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==2.0.0+foo
     "###);
 
     // The version '2.0.0+foo' satisfies both <=2.0.0 and ==2.0.0+foo.
-    assert_not_installed(
+    assert_installed(
         &context.venv,
         "local_transitive_less_than_or_equal_a",
+        "1.0.0",
         &context.temp_dir,
     );
-    assert_not_installed(
+    assert_installed(
         &context.venv,
         "local_transitive_less_than_or_equal_b",
+        "2.0.0+foo",
         &context.temp_dir,
     );
 }
@@ -1832,32 +1848,29 @@ fn local_transitive_backtrack() {
         .arg("local-transitive-backtrack-a")
                 .arg("local-transitive-backtrack-b==2.0.0+foo")
         , @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
-              package-a==1.0.0
-              package-a==2.0.0
-          and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that package-a<2.0.0 depends on package-b==2.0.0.
-          And because package-a==2.0.0 depends on package-b==2.0.0+bar, we can conclude that all versions of package-a depend on one of:
-              package-b==2.0.0
-              package-b==2.0.0+bar
-
-          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==2.0.0+foo
     "###);
 
     // Backtracking to '1.0.0' gives us compatible local versions of b.
-    assert_not_installed(
+    assert_installed(
         &context.venv,
         "local_transitive_backtrack_a",
+        "1.0.0",
         &context.temp_dir,
     );
-    assert_not_installed(
+    assert_installed(
         &context.venv,
         "local_transitive_backtrack_b",
+        "2.0.0+foo",
         &context.temp_dir,
     );
 }

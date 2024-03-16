@@ -342,16 +342,12 @@ impl Serialize for VersionSpecifier {
 impl VersionSpecifier {
     /// Build from parts, validating that the operator is allowed with that version. The last
     /// parameter indicates a trailing `.*`, to differentiate between `1.1.*` and `1.1`
-    pub fn new(
+    pub fn from_pattern(
         operator: Operator,
         version_pattern: VersionPattern,
     ) -> Result<Self, VersionSpecifierBuildError> {
         let star = version_pattern.is_wildcard();
         let version = version_pattern.into_version();
-        // "Local version identifiers are NOT permitted in this version specifier."
-        if version.is_local() && !operator.is_local_compatible() {
-            return Err(BuildErrorKind::OperatorLocalCombo { operator, version }.into());
-        }
 
         // Check if there are star versions and if so, switch operator to star version
         let operator = if star {
@@ -364,6 +360,19 @@ impl VersionSpecifier {
         } else {
             operator
         };
+
+        Self::from_version(operator, version)
+    }
+
+    /// Create a new version specifier from an operator and a version.
+    pub fn from_version(
+        operator: Operator,
+        version: Version,
+    ) -> Result<Self, VersionSpecifierBuildError> {
+        // "Local version identifiers are NOT permitted in this version specifier."
+        if version.is_local() && !operator.is_local_compatible() {
+            return Err(BuildErrorKind::OperatorLocalCombo { operator, version }.into());
+        }
 
         if operator == Operator::TildeEqual && version.release().len() < 2 {
             return Err(BuildErrorKind::CompatibleRelease.into());
@@ -545,7 +554,7 @@ impl FromStr for VersionSpecifier {
         }
         let vpat = version.parse().map_err(ParseErrorKind::InvalidVersion)?;
         let version_specifier =
-            Self::new(operator, vpat).map_err(ParseErrorKind::InvalidSpecifier)?;
+            Self::from_pattern(operator, vpat).map_err(ParseErrorKind::InvalidSpecifier)?;
         s.eat_while(|c: char| c.is_whitespace());
         if !s.done() {
             return Err(ParseErrorKind::InvalidTrailing(s.after().to_string()).into());
@@ -1664,7 +1673,7 @@ Failed to parse version: Unexpected end of version specifier, expected operator:
         let op = Operator::TildeEqual;
         let v = Version::new([5]);
         let vpat = VersionPattern::verbatim(v);
-        assert_eq!(err, VersionSpecifier::new(op, vpat).unwrap_err());
+        assert_eq!(err, VersionSpecifier::from_pattern(op, vpat).unwrap_err());
         assert_eq!(
             err.to_string(),
             "The ~= operator requires at least two segments in the release version"

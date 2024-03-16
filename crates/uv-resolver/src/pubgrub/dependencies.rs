@@ -11,7 +11,7 @@ use crate::constraints::Constraints;
 use crate::overrides::Overrides;
 use crate::pubgrub::specifier::PubGrubSpecifier;
 use crate::pubgrub::PubGrubPackage;
-use crate::resolver::Urls;
+use crate::resolver::{Locals, Urls};
 use crate::ResolveError;
 
 #[derive(Debug)]
@@ -19,6 +19,7 @@ pub struct PubGrubDependencies(Vec<(PubGrubPackage, Range<Version>)>);
 
 impl PubGrubDependencies {
     /// Generate a set of `PubGrub` dependencies from a set of requirements.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_requirements(
         requirements: &[Requirement],
         constraints: &Constraints,
@@ -26,6 +27,7 @@ impl PubGrubDependencies {
         source_name: Option<&PackageName>,
         source_extra: Option<&ExtraName>,
         urls: &Urls,
+        locals: &Locals,
         env: &MarkerEnvironment,
     ) -> Result<Self, ResolveError> {
         let mut dependencies = Vec::default();
@@ -42,12 +44,12 @@ impl PubGrubDependencies {
             }
 
             // Add the package, plus any extra variants.
-            for result in std::iter::once(to_pubgrub(requirement, None, urls)).chain(
+            for result in std::iter::once(to_pubgrub(requirement, None, urls, locals)).chain(
                 requirement
                     .extras
                     .clone()
                     .into_iter()
-                    .map(|extra| to_pubgrub(requirement, Some(extra), urls)),
+                    .map(|extra| to_pubgrub(requirement, Some(extra), urls, locals)),
             ) {
                 let (mut package, version) = result?;
 
@@ -76,12 +78,12 @@ impl PubGrubDependencies {
                     }
 
                     // Add the package, plus any extra variants.
-                    for result in std::iter::once(to_pubgrub(constraint, None, urls)).chain(
+                    for result in std::iter::once(to_pubgrub(constraint, None, urls, locals)).chain(
                         constraint
                             .extras
                             .clone()
                             .into_iter()
-                            .map(|extra| to_pubgrub(constraint, Some(extra), urls)),
+                            .map(|extra| to_pubgrub(constraint, Some(extra), urls, locals)),
                     ) {
                         let (mut package, version) = result?;
 
@@ -128,6 +130,7 @@ fn to_pubgrub(
     requirement: &Requirement,
     extra: Option<ExtraName>,
     urls: &Urls,
+    locals: &Locals,
 ) -> Result<(PubGrubPackage, Range<Version>), ResolveError> {
     match requirement.version_or_url.as_ref() {
         // The requirement has no specifier (e.g., `flask`).
@@ -138,12 +141,28 @@ fn to_pubgrub(
 
         // The requirement has a specifier (e.g., `flask>=1.0`).
         Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
-            let version = specifiers
-                .iter()
-                .map(PubGrubSpecifier::try_from)
-                .fold_ok(Range::full(), |range, specifier| {
-                    range.intersection(&specifier.into())
-                })?;
+            // If the specifier is an exact version, and the user requested a local version that's
+            // more precise than the specifier, use the local version instead.
+            let version = if let Some(expected) = locals.get(&requirement.name) {
+                specifiers
+                    .iter()
+                    .map(|specifier| {
+                        Locals::map(expected, specifier)
+                            .map_err(ResolveError::InvalidVersion)
+                            .and_then(|specifier| PubGrubSpecifier::try_from(&specifier))
+                    })
+                    .fold_ok(Range::full(), |range, specifier| {
+                        range.intersection(&specifier.into())
+                    })?
+            } else {
+                specifiers
+                    .iter()
+                    .map(PubGrubSpecifier::try_from)
+                    .fold_ok(Range::full(), |range, specifier| {
+                        range.intersection(&specifier.into())
+                    })?
+            };
+
             Ok((
                 PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
                 version,

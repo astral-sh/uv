@@ -55,8 +55,10 @@ pub use crate::resolver::reporter::{BuildId, Reporter};
 
 use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Options};
+pub(crate) use locals::Locals;
 
 mod index;
+mod locals;
 mod provider;
 mod reporter;
 mod urls;
@@ -94,6 +96,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     overrides: Overrides,
     editables: Editables,
     urls: Urls,
+    locals: Locals,
     dependency_mode: DependencyMode,
     markers: &'a MarkerEnvironment,
     python_requirement: PythonRequirement,
@@ -162,6 +165,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, markers)?,
+            locals: Locals::from_manifest(&manifest, markers),
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: Constraints::from_requirements(manifest.constraints),
@@ -751,6 +755,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     None,
                     None,
                     &self.urls,
+                    &self.locals,
                     self.markers,
                 );
 
@@ -826,6 +831,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         Some(package_name),
                         extra.as_ref(),
                         &self.urls,
+                        &self.locals,
                         self.markers,
                     )?;
 
@@ -882,6 +888,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     Some(package_name),
                     extra.as_ref(),
                     &self.urls,
+                    &self.locals,
                     self.markers,
                 )?;
 
