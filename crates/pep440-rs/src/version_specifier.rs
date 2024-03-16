@@ -340,15 +340,6 @@ impl Serialize for VersionSpecifier {
 }
 
 impl VersionSpecifier {
-    /// Create a new version specifier from an operator and a version.
-    ///
-    /// Warning: This function is not recommended for general use. It is intended for use in
-    /// situations where the operator and version are known to be valid. For general use, prefer
-    /// [`VersionSpecifier::from_pattern`].
-    pub fn new(operator: Operator, version: Version) -> Self {
-        Self { operator, version }
-    }
-
     /// Build from parts, validating that the operator is allowed with that version. The last
     /// parameter indicates a trailing `.*`, to differentiate between `1.1.*` and `1.1`
     pub fn from_pattern(
@@ -357,10 +348,6 @@ impl VersionSpecifier {
     ) -> Result<Self, VersionSpecifierBuildError> {
         let star = version_pattern.is_wildcard();
         let version = version_pattern.into_version();
-        // "Local version identifiers are NOT permitted in this version specifier."
-        if version.is_local() && !operator.is_local_compatible() {
-            return Err(BuildErrorKind::OperatorLocalCombo { operator, version }.into());
-        }
 
         // Check if there are star versions and if so, switch operator to star version
         let operator = if star {
@@ -373,6 +360,19 @@ impl VersionSpecifier {
         } else {
             operator
         };
+
+        Self::from_version(operator, version)
+    }
+
+    /// Create a new version specifier from an operator and a version.
+    pub fn from_version(
+        operator: Operator,
+        version: Version,
+    ) -> Result<Self, VersionSpecifierBuildError> {
+        // "Local version identifiers are NOT permitted in this version specifier."
+        if version.is_local() && !operator.is_local_compatible() {
+            return Err(BuildErrorKind::OperatorLocalCombo { operator, version }.into());
+        }
 
         if operator == Operator::TildeEqual && version.release().len() < 2 {
             return Err(BuildErrorKind::CompatibleRelease.into());

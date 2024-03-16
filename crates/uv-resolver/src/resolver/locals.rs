@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap;
 
-use pep440_rs::{Operator, Version, VersionSpecifier};
+use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifierBuildError};
 use pep508_rs::{MarkerEnvironment, VersionOrUrl};
 use uv_normalize::PackageName;
 
@@ -63,63 +63,71 @@ impl Locals {
 
     /// Given a specifier that may include the version _without_ a local segment, return a specifier
     /// that includes the local segment from the expected version.
-    pub(crate) fn map(local: &Version, specifier: &VersionSpecifier) -> VersionSpecifier {
+    pub(crate) fn map(
+        local: &Version,
+        specifier: &VersionSpecifier,
+    ) -> Result<VersionSpecifier, VersionSpecifierBuildError> {
         match specifier.operator() {
             Operator::Equal | Operator::EqualStar => {
                 // Given `foo==1.0.0`, if the local version is `1.0.0+local`, map to
-                // `foo==1.0.0+local`. This has the intended effect of allowing `1.0.0+local`.
+                // `foo==1.0.0+local`.
+                //
+                // This has the intended effect of allowing `1.0.0+local`.
                 if is_compatible(local, specifier.version()) {
-                    VersionSpecifier::new(Operator::Equal, local.clone())
+                    VersionSpecifier::from_version(Operator::Equal, local.clone())
                 } else {
-                    specifier.clone()
+                    Ok(specifier.clone())
                 }
             }
             Operator::NotEqual | Operator::NotEqualStar => {
                 // Given `foo!=1.0.0`, if the local version is `1.0.0+local`, map to
-                // `foo!=1.0.0+local`. This has the intended effect of disallowing `1.0.0+local`.
-                // There's no risk of including `foo @ 1.0.0` in the resolution, since we _know_
-                // `foo @ 1.0.0+local` is required and would conflict.
+                // `foo!=1.0.0+local`.
+                //
+                // This has the intended effect of disallowing `1.0.0+local`.
+                //
+                // There's no risk of accidentally including `foo @ 1.0.0` in the resolution, since
+                // we _know_ `foo @ 1.0.0+local` is required and would therefore conflict.
                 if is_compatible(local, specifier.version()) {
-                    VersionSpecifier::new(Operator::NotEqual, local.clone())
+                    VersionSpecifier::from_version(Operator::NotEqual, local.clone())
                 } else {
-                    specifier.clone()
+                    Ok(specifier.clone())
                 }
             }
             Operator::LessThanEqual => {
                 // Given `foo<=1.0.0`, if the local version is `1.0.0+local`, map to
-                // `foo<=1.0.0+local`. This has the intended effect of allowing `1.0.0+local`.
-                // There's no risk of including `foo @ 1.0.0.post1` in the resolution, since we
-                // _know_ `foo @ 1.0.0+local` is required and would conflict.
+                // `foo==1.0.0+local`.
+                //
+                // This has the intended effect of allowing `1.0.0+local`.
+                //
+                // Since `foo==1.0.0+local` is already required, we know that to satisfy
+                // `foo<=1.0.0`, we _must_ satisfy `foo==1.0.0+local`. We _could_ map to
+                // `foo<=1.0.0+local`, but local versions are _not_ allowed in exclusive ordered
+                // specifiers, so introducing `foo<=1.0.0+local` would risk breaking invariants.
                 if is_compatible(local, specifier.version()) {
-                    VersionSpecifier::new(Operator::LessThanEqual, local.clone())
+                    VersionSpecifier::from_version(Operator::Equal, local.clone())
                 } else {
-                    specifier.clone()
+                    Ok(specifier.clone())
                 }
             }
             Operator::GreaterThan => {
-                // Given `foo>1.0.0`, if the local version is `1.0.0+local`, map to
-                // `foo>1.0.0+local`. This has the intended effect of disallowing `1.0.0+local`.
-                if is_compatible(local, specifier.version()) {
-                    VersionSpecifier::new(Operator::GreaterThan, local.clone())
-                } else {
-                    specifier.clone()
-                }
+                // Given `foo>1.0.0`, `foo @ 1.0.0+local` is already (correctly) disallowed.
+                Ok(specifier.clone())
             }
             Operator::ExactEqual => {
-                // Given `foo===1.0.0`, `1.0.0+local` is already disallowed.
-                specifier.clone()
+                // Given `foo===1.0.0`, `1.0.0+local` is already (correctly) disallowed.
+                Ok(specifier.clone())
             }
             Operator::TildeEqual => {
-                // Given `foo~=1.0.0`, `foo~=1.0.0+local` is already allowed.
-                specifier.clone()
+                // Given `foo~=1.0.0`, `foo~=1.0.0+local` is already (correctly) allowed.
+                Ok(specifier.clone())
             }
             Operator::LessThan => {
-                // Given `foo<1.0.0`, `1.0.0+local` is already disallowed.
-                specifier.clone()
+                // Given `foo<1.0.0`, `1.0.0+local` is already (correctly) disallowed.
+                Ok(specifier.clone())
             }
             Operator::GreaterThanEqual => {
-                // Given `foo>=1.0.0`, `foo>1.0.0+local` is already allowed.
-                specifier.clone()
+                // Given `foo>=1.0.0`, `foo @ 1.0.0+local` is already (correctly) allowed.
+                Ok(specifier.clone())
             }
         }
     }
@@ -162,4 +170,83 @@ fn to_local(specifier: &VersionSpecifier) -> Option<&Version> {
     }
 
     Some(specifier.version())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use anyhow::Result;
+
+    use pep440_rs::{Operator, Version, VersionSpecifier};
+
+    use super::Locals;
+
+    #[test]
+    fn map_version() -> Result<()> {
+        // Given `==1.0.0`, if the local version is `1.0.0+local`, map to `==1.0.0+local`.
+        let local = Version::from_str("1.0.0+local")?;
+        let specifier =
+            VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0")?)?;
+        assert_eq!(
+            Locals::map(&local, &specifier)?,
+            VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+local")?)?
+        );
+
+        // Given `!=1.0.0`, if the local version is `1.0.0+local`, map to `!=1.0.0+local`.
+        let local = Version::from_str("1.0.0+local")?;
+        let specifier =
+            VersionSpecifier::from_version(Operator::NotEqual, Version::from_str("1.0.0")?)?;
+        assert_eq!(
+            Locals::map(&local, &specifier)?,
+            VersionSpecifier::from_version(Operator::NotEqual, Version::from_str("1.0.0+local")?)?
+        );
+
+        // Given `<=1.0.0`, if the local version is `1.0.0+local`, map to `==1.0.0+local`.
+        let local = Version::from_str("1.0.0+local")?;
+        let specifier =
+            VersionSpecifier::from_version(Operator::LessThanEqual, Version::from_str("1.0.0")?)?;
+        assert_eq!(
+            Locals::map(&local, &specifier)?,
+            VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+local")?)?
+        );
+
+        // Given `>1.0.0`, `1.0.0+local` is already (correctly) disallowed.
+        let local = Version::from_str("1.0.0+local")?;
+        let specifier =
+            VersionSpecifier::from_version(Operator::GreaterThan, Version::from_str("1.0.0")?)?;
+        assert_eq!(
+            Locals::map(&local, &specifier)?,
+            VersionSpecifier::from_version(Operator::GreaterThan, Version::from_str("1.0.0")?)?
+        );
+
+        // Given `===1.0.0`, `1.0.0+local` is already (correctly) disallowed.
+        let local = Version::from_str("1.0.0+local")?;
+        let specifier =
+            VersionSpecifier::from_version(Operator::ExactEqual, Version::from_str("1.0.0")?)?;
+        assert_eq!(
+            Locals::map(&local, &specifier)?,
+            VersionSpecifier::from_version(Operator::ExactEqual, Version::from_str("1.0.0")?)?
+        );
+
+        // Given `==1.0.0+local`, `1.0.0+local` is already (correctly) allowed.
+        let local = Version::from_str("1.0.0+local")?;
+        let specifier =
+            VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+local")?)?;
+        assert_eq!(
+            Locals::map(&local, &specifier)?,
+            VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+local")?)?
+        );
+
+        // Given `==1.0.0+other`, `1.0.0+local` is already (correctly) disallowed.
+        let local = Version::from_str("1.0.0+local")?;
+        let specifier =
+            VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+other")?)?;
+        assert_eq!(
+            Locals::map(&local, &specifier)?,
+            VersionSpecifier::from_version(Operator::Equal, Version::from_str("1.0.0+other")?)?
+        );
+
+        Ok(())
+    }
 }

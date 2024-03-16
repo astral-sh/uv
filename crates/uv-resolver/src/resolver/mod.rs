@@ -881,7 +881,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     .await
                     .ok_or(ResolveError::Unregistered)?;
 
-                let constraints = PubGrubDependencies::from_requirements(
+                let mut constraints = PubGrubDependencies::from_requirements(
                     &metadata.requires_dist,
                     &self.constraints,
                     &self.overrides,
@@ -890,14 +890,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     &self.urls,
                     &self.locals,
                     self.markers,
-                );
-
-                let mut constraints = match constraints {
-                    Ok(constraints) => constraints,
-                    Err(err) => {
-                        return Ok(Dependencies::Unavailable(uncapitalize(err.to_string())));
-                    }
-                };
+                )?;
 
                 for (package, version) in constraints.iter() {
                     debug!("Adding transitive dependency: {package}{version}");

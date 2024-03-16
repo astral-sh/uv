@@ -84,6 +84,9 @@ pub enum ResolveError {
         version: Box<Version>,
     },
 
+    #[error("Attempted to construct an invalid version specifier")]
+    InvalidVersion(#[from] pep440_rs::VersionSpecifierBuildError),
+
     /// Something unexpected happened.
     #[error("{0}")]
     Failure(String),

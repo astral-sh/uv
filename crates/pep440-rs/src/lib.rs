@@ -41,7 +41,10 @@ pub use {
         LocalSegment, Operator, OperatorParseError, PreRelease, PreReleaseKind, Version,
         VersionParseError, VersionPattern, VersionPatternParseError, MIN_VERSION,
     },
-    version_specifier::{VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError},
+    version_specifier::{
+        VersionSpecifier, VersionSpecifierBuildError, VersionSpecifiers,
+        VersionSpecifiersParseError,
+    },
 };
 
 mod version;
