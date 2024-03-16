@@ -4301,6 +4301,7 @@ dependencies = [
  "insta",
  "itertools 0.12.1",
  "once_cell",
+ "pep440_rs",
  "pep508_rs",
  "pypi-types",
  "pyproject-toml",
