@@ -30,7 +30,7 @@ pub static GLOBAL_AUTH_STORE: Lazy<AuthenticationStore> = Lazy::new(Authenticati
 //
 // The host must always be an exact match.
 //
-// The port is only allowed to differ if it it matches the "default port" for the scheme.
+// The port is only allowed to differ if it matches the "default port" for the scheme.
 // However, `url` (and therefore `reqwest`) sets the `port` to `None` if it matches the default port
 // so we do not need any special handling here.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
