@@ -106,11 +106,6 @@ impl Tags {
                 implementation.abi_tag(python_version, implementation_version),
                 platform_tag.clone(),
             ));
-            tags.push((
-                implementation.language_tag(python_version),
-                "none".to_string(),
-                platform_tag.clone(),
-            ));
         }
         // 2. abi3 and no abi (e.g. executable binary)
         if matches!(implementation, Implementation::CPython) {
@@ -120,6 +115,13 @@ impl Tags {
                     tags.push((
                         implementation.language_tag((python_version.0, minor)),
                         "abi3".to_string(),
+                        platform_tag.clone(),
+                    ));
+                }
+                for platform_tag in &platform_tags {
+                    tags.push((
+                        implementation.language_tag((python_version.0, minor)),
+                        "none".to_string(),
                         platform_tag.clone(),
                     ));
                 }
@@ -764,61 +766,33 @@ mod tests {
             tags,
             @r###"
         cp39-cp39-manylinux_2_28_x86_64
-        cp39-none-manylinux_2_28_x86_64
         cp39-cp39-manylinux_2_27_x86_64
-        cp39-none-manylinux_2_27_x86_64
         cp39-cp39-manylinux_2_26_x86_64
-        cp39-none-manylinux_2_26_x86_64
         cp39-cp39-manylinux_2_25_x86_64
-        cp39-none-manylinux_2_25_x86_64
         cp39-cp39-manylinux_2_24_x86_64
-        cp39-none-manylinux_2_24_x86_64
         cp39-cp39-manylinux_2_23_x86_64
-        cp39-none-manylinux_2_23_x86_64
         cp39-cp39-manylinux_2_22_x86_64
-        cp39-none-manylinux_2_22_x86_64
         cp39-cp39-manylinux_2_21_x86_64
-        cp39-none-manylinux_2_21_x86_64
         cp39-cp39-manylinux_2_20_x86_64
-        cp39-none-manylinux_2_20_x86_64
         cp39-cp39-manylinux_2_19_x86_64
-        cp39-none-manylinux_2_19_x86_64
         cp39-cp39-manylinux_2_18_x86_64
-        cp39-none-manylinux_2_18_x86_64
         cp39-cp39-manylinux_2_17_x86_64
-        cp39-none-manylinux_2_17_x86_64
         cp39-cp39-manylinux2014_x86_64
-        cp39-none-manylinux2014_x86_64
         cp39-cp39-manylinux_2_16_x86_64
-        cp39-none-manylinux_2_16_x86_64
         cp39-cp39-manylinux_2_15_x86_64
-        cp39-none-manylinux_2_15_x86_64
         cp39-cp39-manylinux_2_14_x86_64
-        cp39-none-manylinux_2_14_x86_64
         cp39-cp39-manylinux_2_13_x86_64
-        cp39-none-manylinux_2_13_x86_64
         cp39-cp39-manylinux_2_12_x86_64
-        cp39-none-manylinux_2_12_x86_64
         cp39-cp39-manylinux2010_x86_64
-        cp39-none-manylinux2010_x86_64
         cp39-cp39-manylinux_2_11_x86_64
-        cp39-none-manylinux_2_11_x86_64
         cp39-cp39-manylinux_2_10_x86_64
-        cp39-none-manylinux_2_10_x86_64
         cp39-cp39-manylinux_2_9_x86_64
-        cp39-none-manylinux_2_9_x86_64
         cp39-cp39-manylinux_2_8_x86_64
-        cp39-none-manylinux_2_8_x86_64
         cp39-cp39-manylinux_2_7_x86_64
-        cp39-none-manylinux_2_7_x86_64
         cp39-cp39-manylinux_2_6_x86_64
-        cp39-none-manylinux_2_6_x86_64
         cp39-cp39-manylinux_2_5_x86_64
-        cp39-none-manylinux_2_5_x86_64
         cp39-cp39-manylinux1_x86_64
-        cp39-none-manylinux1_x86_64
         cp39-cp39-linux_x86_64
-        cp39-none-linux_x86_64
         cp39-abi3-manylinux_2_28_x86_64
         cp39-abi3-manylinux_2_27_x86_64
         cp39-abi3-manylinux_2_26_x86_64
@@ -847,6 +821,34 @@ mod tests {
         cp39-abi3-manylinux_2_5_x86_64
         cp39-abi3-manylinux1_x86_64
         cp39-abi3-linux_x86_64
+        cp39-none-manylinux_2_28_x86_64
+        cp39-none-manylinux_2_27_x86_64
+        cp39-none-manylinux_2_26_x86_64
+        cp39-none-manylinux_2_25_x86_64
+        cp39-none-manylinux_2_24_x86_64
+        cp39-none-manylinux_2_23_x86_64
+        cp39-none-manylinux_2_22_x86_64
+        cp39-none-manylinux_2_21_x86_64
+        cp39-none-manylinux_2_20_x86_64
+        cp39-none-manylinux_2_19_x86_64
+        cp39-none-manylinux_2_18_x86_64
+        cp39-none-manylinux_2_17_x86_64
+        cp39-none-manylinux2014_x86_64
+        cp39-none-manylinux_2_16_x86_64
+        cp39-none-manylinux_2_15_x86_64
+        cp39-none-manylinux_2_14_x86_64
+        cp39-none-manylinux_2_13_x86_64
+        cp39-none-manylinux_2_12_x86_64
+        cp39-none-manylinux2010_x86_64
+        cp39-none-manylinux_2_11_x86_64
+        cp39-none-manylinux_2_10_x86_64
+        cp39-none-manylinux_2_9_x86_64
+        cp39-none-manylinux_2_8_x86_64
+        cp39-none-manylinux_2_7_x86_64
+        cp39-none-manylinux_2_6_x86_64
+        cp39-none-manylinux_2_5_x86_64
+        cp39-none-manylinux1_x86_64
+        cp39-none-linux_x86_64
         cp38-abi3-manylinux_2_28_x86_64
         cp38-abi3-manylinux_2_27_x86_64
         cp38-abi3-manylinux_2_26_x86_64
@@ -875,6 +877,34 @@ mod tests {
         cp38-abi3-manylinux_2_5_x86_64
         cp38-abi3-manylinux1_x86_64
         cp38-abi3-linux_x86_64
+        cp38-none-manylinux_2_28_x86_64
+        cp38-none-manylinux_2_27_x86_64
+        cp38-none-manylinux_2_26_x86_64
+        cp38-none-manylinux_2_25_x86_64
+        cp38-none-manylinux_2_24_x86_64
+        cp38-none-manylinux_2_23_x86_64
+        cp38-none-manylinux_2_22_x86_64
+        cp38-none-manylinux_2_21_x86_64
+        cp38-none-manylinux_2_20_x86_64
+        cp38-none-manylinux_2_19_x86_64
+        cp38-none-manylinux_2_18_x86_64
+        cp38-none-manylinux_2_17_x86_64
+        cp38-none-manylinux2014_x86_64
+        cp38-none-manylinux_2_16_x86_64
+        cp38-none-manylinux_2_15_x86_64
+        cp38-none-manylinux_2_14_x86_64
+        cp38-none-manylinux_2_13_x86_64
+        cp38-none-manylinux_2_12_x86_64
+        cp38-none-manylinux2010_x86_64
+        cp38-none-manylinux_2_11_x86_64
+        cp38-none-manylinux_2_10_x86_64
+        cp38-none-manylinux_2_9_x86_64
+        cp38-none-manylinux_2_8_x86_64
+        cp38-none-manylinux_2_7_x86_64
+        cp38-none-manylinux_2_6_x86_64
+        cp38-none-manylinux_2_5_x86_64
+        cp38-none-manylinux1_x86_64
+        cp38-none-linux_x86_64
         cp37-abi3-manylinux_2_28_x86_64
         cp37-abi3-manylinux_2_27_x86_64
         cp37-abi3-manylinux_2_26_x86_64
@@ -903,6 +933,34 @@ mod tests {
         cp37-abi3-manylinux_2_5_x86_64
         cp37-abi3-manylinux1_x86_64
         cp37-abi3-linux_x86_64
+        cp37-none-manylinux_2_28_x86_64
+        cp37-none-manylinux_2_27_x86_64
+        cp37-none-manylinux_2_26_x86_64
+        cp37-none-manylinux_2_25_x86_64
+        cp37-none-manylinux_2_24_x86_64
+        cp37-none-manylinux_2_23_x86_64
+        cp37-none-manylinux_2_22_x86_64
+        cp37-none-manylinux_2_21_x86_64
+        cp37-none-manylinux_2_20_x86_64
+        cp37-none-manylinux_2_19_x86_64
+        cp37-none-manylinux_2_18_x86_64
+        cp37-none-manylinux_2_17_x86_64
+        cp37-none-manylinux2014_x86_64
+        cp37-none-manylinux_2_16_x86_64
+        cp37-none-manylinux_2_15_x86_64
+        cp37-none-manylinux_2_14_x86_64
+        cp37-none-manylinux_2_13_x86_64
+        cp37-none-manylinux_2_12_x86_64
+        cp37-none-manylinux2010_x86_64
+        cp37-none-manylinux_2_11_x86_64
+        cp37-none-manylinux_2_10_x86_64
+        cp37-none-manylinux_2_9_x86_64
+        cp37-none-manylinux_2_8_x86_64
+        cp37-none-manylinux_2_7_x86_64
+        cp37-none-manylinux_2_6_x86_64
+        cp37-none-manylinux_2_5_x86_64
+        cp37-none-manylinux1_x86_64
+        cp37-none-linux_x86_64
         cp36-abi3-manylinux_2_28_x86_64
         cp36-abi3-manylinux_2_27_x86_64
         cp36-abi3-manylinux_2_26_x86_64
@@ -931,6 +989,34 @@ mod tests {
         cp36-abi3-manylinux_2_5_x86_64
         cp36-abi3-manylinux1_x86_64
         cp36-abi3-linux_x86_64
+        cp36-none-manylinux_2_28_x86_64
+        cp36-none-manylinux_2_27_x86_64
+        cp36-none-manylinux_2_26_x86_64
+        cp36-none-manylinux_2_25_x86_64
+        cp36-none-manylinux_2_24_x86_64
+        cp36-none-manylinux_2_23_x86_64
+        cp36-none-manylinux_2_22_x86_64
+        cp36-none-manylinux_2_21_x86_64
+        cp36-none-manylinux_2_20_x86_64
+        cp36-none-manylinux_2_19_x86_64
+        cp36-none-manylinux_2_18_x86_64
+        cp36-none-manylinux_2_17_x86_64
+        cp36-none-manylinux2014_x86_64
+        cp36-none-manylinux_2_16_x86_64
+        cp36-none-manylinux_2_15_x86_64
+        cp36-none-manylinux_2_14_x86_64
+        cp36-none-manylinux_2_13_x86_64
+        cp36-none-manylinux_2_12_x86_64
+        cp36-none-manylinux2010_x86_64
+        cp36-none-manylinux_2_11_x86_64
+        cp36-none-manylinux_2_10_x86_64
+        cp36-none-manylinux_2_9_x86_64
+        cp36-none-manylinux_2_8_x86_64
+        cp36-none-manylinux_2_7_x86_64
+        cp36-none-manylinux_2_6_x86_64
+        cp36-none-manylinux_2_5_x86_64
+        cp36-none-manylinux1_x86_64
+        cp36-none-linux_x86_64
         cp35-abi3-manylinux_2_28_x86_64
         cp35-abi3-manylinux_2_27_x86_64
         cp35-abi3-manylinux_2_26_x86_64
@@ -959,6 +1045,34 @@ mod tests {
         cp35-abi3-manylinux_2_5_x86_64
         cp35-abi3-manylinux1_x86_64
         cp35-abi3-linux_x86_64
+        cp35-none-manylinux_2_28_x86_64
+        cp35-none-manylinux_2_27_x86_64
+        cp35-none-manylinux_2_26_x86_64
+        cp35-none-manylinux_2_25_x86_64
+        cp35-none-manylinux_2_24_x86_64
+        cp35-none-manylinux_2_23_x86_64
+        cp35-none-manylinux_2_22_x86_64
+        cp35-none-manylinux_2_21_x86_64
+        cp35-none-manylinux_2_20_x86_64
+        cp35-none-manylinux_2_19_x86_64
+        cp35-none-manylinux_2_18_x86_64
+        cp35-none-manylinux_2_17_x86_64
+        cp35-none-manylinux2014_x86_64
+        cp35-none-manylinux_2_16_x86_64
+        cp35-none-manylinux_2_15_x86_64
+        cp35-none-manylinux_2_14_x86_64
+        cp35-none-manylinux_2_13_x86_64
+        cp35-none-manylinux_2_12_x86_64
+        cp35-none-manylinux2010_x86_64
+        cp35-none-manylinux_2_11_x86_64
+        cp35-none-manylinux_2_10_x86_64
+        cp35-none-manylinux_2_9_x86_64
+        cp35-none-manylinux_2_8_x86_64
+        cp35-none-manylinux_2_7_x86_64
+        cp35-none-manylinux_2_6_x86_64
+        cp35-none-manylinux_2_5_x86_64
+        cp35-none-manylinux1_x86_64
+        cp35-none-linux_x86_64
         cp34-abi3-manylinux_2_28_x86_64
         cp34-abi3-manylinux_2_27_x86_64
         cp34-abi3-manylinux_2_26_x86_64
@@ -987,6 +1101,34 @@ mod tests {
         cp34-abi3-manylinux_2_5_x86_64
         cp34-abi3-manylinux1_x86_64
         cp34-abi3-linux_x86_64
+        cp34-none-manylinux_2_28_x86_64
+        cp34-none-manylinux_2_27_x86_64
+        cp34-none-manylinux_2_26_x86_64
+        cp34-none-manylinux_2_25_x86_64
+        cp34-none-manylinux_2_24_x86_64
+        cp34-none-manylinux_2_23_x86_64
+        cp34-none-manylinux_2_22_x86_64
+        cp34-none-manylinux_2_21_x86_64
+        cp34-none-manylinux_2_20_x86_64
+        cp34-none-manylinux_2_19_x86_64
+        cp34-none-manylinux_2_18_x86_64
+        cp34-none-manylinux_2_17_x86_64
+        cp34-none-manylinux2014_x86_64
+        cp34-none-manylinux_2_16_x86_64
+        cp34-none-manylinux_2_15_x86_64
+        cp34-none-manylinux_2_14_x86_64
+        cp34-none-manylinux_2_13_x86_64
+        cp34-none-manylinux_2_12_x86_64
+        cp34-none-manylinux2010_x86_64
+        cp34-none-manylinux_2_11_x86_64
+        cp34-none-manylinux_2_10_x86_64
+        cp34-none-manylinux_2_9_x86_64
+        cp34-none-manylinux_2_8_x86_64
+        cp34-none-manylinux_2_7_x86_64
+        cp34-none-manylinux_2_6_x86_64
+        cp34-none-manylinux_2_5_x86_64
+        cp34-none-manylinux1_x86_64
+        cp34-none-linux_x86_64
         cp33-abi3-manylinux_2_28_x86_64
         cp33-abi3-manylinux_2_27_x86_64
         cp33-abi3-manylinux_2_26_x86_64
@@ -1015,6 +1157,34 @@ mod tests {
         cp33-abi3-manylinux_2_5_x86_64
         cp33-abi3-manylinux1_x86_64
         cp33-abi3-linux_x86_64
+        cp33-none-manylinux_2_28_x86_64
+        cp33-none-manylinux_2_27_x86_64
+        cp33-none-manylinux_2_26_x86_64
+        cp33-none-manylinux_2_25_x86_64
+        cp33-none-manylinux_2_24_x86_64
+        cp33-none-manylinux_2_23_x86_64
+        cp33-none-manylinux_2_22_x86_64
+        cp33-none-manylinux_2_21_x86_64
+        cp33-none-manylinux_2_20_x86_64
+        cp33-none-manylinux_2_19_x86_64
+        cp33-none-manylinux_2_18_x86_64
+        cp33-none-manylinux_2_17_x86_64
+        cp33-none-manylinux2014_x86_64
+        cp33-none-manylinux_2_16_x86_64
+        cp33-none-manylinux_2_15_x86_64
+        cp33-none-manylinux_2_14_x86_64
+        cp33-none-manylinux_2_13_x86_64
+        cp33-none-manylinux_2_12_x86_64
+        cp33-none-manylinux2010_x86_64
+        cp33-none-manylinux_2_11_x86_64
+        cp33-none-manylinux_2_10_x86_64
+        cp33-none-manylinux_2_9_x86_64
+        cp33-none-manylinux_2_8_x86_64
+        cp33-none-manylinux_2_7_x86_64
+        cp33-none-manylinux_2_6_x86_64
+        cp33-none-manylinux_2_5_x86_64
+        cp33-none-manylinux1_x86_64
+        cp33-none-linux_x86_64
         cp32-abi3-manylinux_2_28_x86_64
         cp32-abi3-manylinux_2_27_x86_64
         cp32-abi3-manylinux_2_26_x86_64
@@ -1043,6 +1213,34 @@ mod tests {
         cp32-abi3-manylinux_2_5_x86_64
         cp32-abi3-manylinux1_x86_64
         cp32-abi3-linux_x86_64
+        cp32-none-manylinux_2_28_x86_64
+        cp32-none-manylinux_2_27_x86_64
+        cp32-none-manylinux_2_26_x86_64
+        cp32-none-manylinux_2_25_x86_64
+        cp32-none-manylinux_2_24_x86_64
+        cp32-none-manylinux_2_23_x86_64
+        cp32-none-manylinux_2_22_x86_64
+        cp32-none-manylinux_2_21_x86_64
+        cp32-none-manylinux_2_20_x86_64
+        cp32-none-manylinux_2_19_x86_64
+        cp32-none-manylinux_2_18_x86_64
+        cp32-none-manylinux_2_17_x86_64
+        cp32-none-manylinux2014_x86_64
+        cp32-none-manylinux_2_16_x86_64
+        cp32-none-manylinux_2_15_x86_64
+        cp32-none-manylinux_2_14_x86_64
+        cp32-none-manylinux_2_13_x86_64
+        cp32-none-manylinux_2_12_x86_64
+        cp32-none-manylinux2010_x86_64
+        cp32-none-manylinux_2_11_x86_64
+        cp32-none-manylinux_2_10_x86_64
+        cp32-none-manylinux_2_9_x86_64
+        cp32-none-manylinux_2_8_x86_64
+        cp32-none-manylinux_2_7_x86_64
+        cp32-none-manylinux_2_6_x86_64
+        cp32-none-manylinux_2_5_x86_64
+        cp32-none-manylinux1_x86_64
+        cp32-none-linux_x86_64
         py39-none-manylinux_2_28_x86_64
         py39-none-manylinux_2_27_x86_64
         py39-none-manylinux_2_26_x86_64
@@ -1385,51 +1583,28 @@ mod tests {
             tags,
             @r###"
         cp39-cp39-macosx_14_0_arm64
-        cp39-none-macosx_14_0_arm64
         cp39-cp39-macosx_14_0_universal2
-        cp39-none-macosx_14_0_universal2
         cp39-cp39-macosx_13_0_arm64
-        cp39-none-macosx_13_0_arm64
         cp39-cp39-macosx_13_0_universal2
-        cp39-none-macosx_13_0_universal2
         cp39-cp39-macosx_12_0_arm64
-        cp39-none-macosx_12_0_arm64
         cp39-cp39-macosx_12_0_universal2
-        cp39-none-macosx_12_0_universal2
         cp39-cp39-macosx_11_0_arm64
-        cp39-none-macosx_11_0_arm64
         cp39-cp39-macosx_11_0_universal2
-        cp39-none-macosx_11_0_universal2
         cp39-cp39-macosx_10_0_arm64
-        cp39-none-macosx_10_0_arm64
         cp39-cp39-macosx_10_0_universal2
-        cp39-none-macosx_10_0_universal2
         cp39-cp39-macosx_10_16_universal2
-        cp39-none-macosx_10_16_universal2
         cp39-cp39-macosx_10_15_universal2
-        cp39-none-macosx_10_15_universal2
         cp39-cp39-macosx_10_14_universal2
-        cp39-none-macosx_10_14_universal2
         cp39-cp39-macosx_10_13_universal2
-        cp39-none-macosx_10_13_universal2
         cp39-cp39-macosx_10_12_universal2
-        cp39-none-macosx_10_12_universal2
         cp39-cp39-macosx_10_11_universal2
-        cp39-none-macosx_10_11_universal2
         cp39-cp39-macosx_10_10_universal2
-        cp39-none-macosx_10_10_universal2
         cp39-cp39-macosx_10_9_universal2
-        cp39-none-macosx_10_9_universal2
         cp39-cp39-macosx_10_8_universal2
-        cp39-none-macosx_10_8_universal2
         cp39-cp39-macosx_10_7_universal2
-        cp39-none-macosx_10_7_universal2
         cp39-cp39-macosx_10_6_universal2
-        cp39-none-macosx_10_6_universal2
         cp39-cp39-macosx_10_5_universal2
-        cp39-none-macosx_10_5_universal2
         cp39-cp39-macosx_10_4_universal2
-        cp39-none-macosx_10_4_universal2
         cp39-abi3-macosx_14_0_arm64
         cp39-abi3-macosx_14_0_universal2
         cp39-abi3-macosx_13_0_arm64
@@ -1453,6 +1628,29 @@ mod tests {
         cp39-abi3-macosx_10_6_universal2
         cp39-abi3-macosx_10_5_universal2
         cp39-abi3-macosx_10_4_universal2
+        cp39-none-macosx_14_0_arm64
+        cp39-none-macosx_14_0_universal2
+        cp39-none-macosx_13_0_arm64
+        cp39-none-macosx_13_0_universal2
+        cp39-none-macosx_12_0_arm64
+        cp39-none-macosx_12_0_universal2
+        cp39-none-macosx_11_0_arm64
+        cp39-none-macosx_11_0_universal2
+        cp39-none-macosx_10_0_arm64
+        cp39-none-macosx_10_0_universal2
+        cp39-none-macosx_10_16_universal2
+        cp39-none-macosx_10_15_universal2
+        cp39-none-macosx_10_14_universal2
+        cp39-none-macosx_10_13_universal2
+        cp39-none-macosx_10_12_universal2
+        cp39-none-macosx_10_11_universal2
+        cp39-none-macosx_10_10_universal2
+        cp39-none-macosx_10_9_universal2
+        cp39-none-macosx_10_8_universal2
+        cp39-none-macosx_10_7_universal2
+        cp39-none-macosx_10_6_universal2
+        cp39-none-macosx_10_5_universal2
+        cp39-none-macosx_10_4_universal2
         cp38-abi3-macosx_14_0_arm64
         cp38-abi3-macosx_14_0_universal2
         cp38-abi3-macosx_13_0_arm64
@@ -1476,6 +1674,29 @@ mod tests {
         cp38-abi3-macosx_10_6_universal2
         cp38-abi3-macosx_10_5_universal2
         cp38-abi3-macosx_10_4_universal2
+        cp38-none-macosx_14_0_arm64
+        cp38-none-macosx_14_0_universal2
+        cp38-none-macosx_13_0_arm64
+        cp38-none-macosx_13_0_universal2
+        cp38-none-macosx_12_0_arm64
+        cp38-none-macosx_12_0_universal2
+        cp38-none-macosx_11_0_arm64
+        cp38-none-macosx_11_0_universal2
+        cp38-none-macosx_10_0_arm64
+        cp38-none-macosx_10_0_universal2
+        cp38-none-macosx_10_16_universal2
+        cp38-none-macosx_10_15_universal2
+        cp38-none-macosx_10_14_universal2
+        cp38-none-macosx_10_13_universal2
+        cp38-none-macosx_10_12_universal2
+        cp38-none-macosx_10_11_universal2
+        cp38-none-macosx_10_10_universal2
+        cp38-none-macosx_10_9_universal2
+        cp38-none-macosx_10_8_universal2
+        cp38-none-macosx_10_7_universal2
+        cp38-none-macosx_10_6_universal2
+        cp38-none-macosx_10_5_universal2
+        cp38-none-macosx_10_4_universal2
         cp37-abi3-macosx_14_0_arm64
         cp37-abi3-macosx_14_0_universal2
         cp37-abi3-macosx_13_0_arm64
@@ -1499,6 +1720,29 @@ mod tests {
         cp37-abi3-macosx_10_6_universal2
         cp37-abi3-macosx_10_5_universal2
         cp37-abi3-macosx_10_4_universal2
+        cp37-none-macosx_14_0_arm64
+        cp37-none-macosx_14_0_universal2
+        cp37-none-macosx_13_0_arm64
+        cp37-none-macosx_13_0_universal2
+        cp37-none-macosx_12_0_arm64
+        cp37-none-macosx_12_0_universal2
+        cp37-none-macosx_11_0_arm64
+        cp37-none-macosx_11_0_universal2
+        cp37-none-macosx_10_0_arm64
+        cp37-none-macosx_10_0_universal2
+        cp37-none-macosx_10_16_universal2
+        cp37-none-macosx_10_15_universal2
+        cp37-none-macosx_10_14_universal2
+        cp37-none-macosx_10_13_universal2
+        cp37-none-macosx_10_12_universal2
+        cp37-none-macosx_10_11_universal2
+        cp37-none-macosx_10_10_universal2
+        cp37-none-macosx_10_9_universal2
+        cp37-none-macosx_10_8_universal2
+        cp37-none-macosx_10_7_universal2
+        cp37-none-macosx_10_6_universal2
+        cp37-none-macosx_10_5_universal2
+        cp37-none-macosx_10_4_universal2
         cp36-abi3-macosx_14_0_arm64
         cp36-abi3-macosx_14_0_universal2
         cp36-abi3-macosx_13_0_arm64
@@ -1522,6 +1766,29 @@ mod tests {
         cp36-abi3-macosx_10_6_universal2
         cp36-abi3-macosx_10_5_universal2
         cp36-abi3-macosx_10_4_universal2
+        cp36-none-macosx_14_0_arm64
+        cp36-none-macosx_14_0_universal2
+        cp36-none-macosx_13_0_arm64
+        cp36-none-macosx_13_0_universal2
+        cp36-none-macosx_12_0_arm64
+        cp36-none-macosx_12_0_universal2
+        cp36-none-macosx_11_0_arm64
+        cp36-none-macosx_11_0_universal2
+        cp36-none-macosx_10_0_arm64
+        cp36-none-macosx_10_0_universal2
+        cp36-none-macosx_10_16_universal2
+        cp36-none-macosx_10_15_universal2
+        cp36-none-macosx_10_14_universal2
+        cp36-none-macosx_10_13_universal2
+        cp36-none-macosx_10_12_universal2
+        cp36-none-macosx_10_11_universal2
+        cp36-none-macosx_10_10_universal2
+        cp36-none-macosx_10_9_universal2
+        cp36-none-macosx_10_8_universal2
+        cp36-none-macosx_10_7_universal2
+        cp36-none-macosx_10_6_universal2
+        cp36-none-macosx_10_5_universal2
+        cp36-none-macosx_10_4_universal2
         cp35-abi3-macosx_14_0_arm64
         cp35-abi3-macosx_14_0_universal2
         cp35-abi3-macosx_13_0_arm64
@@ -1545,6 +1812,29 @@ mod tests {
         cp35-abi3-macosx_10_6_universal2
         cp35-abi3-macosx_10_5_universal2
         cp35-abi3-macosx_10_4_universal2
+        cp35-none-macosx_14_0_arm64
+        cp35-none-macosx_14_0_universal2
+        cp35-none-macosx_13_0_arm64
+        cp35-none-macosx_13_0_universal2
+        cp35-none-macosx_12_0_arm64
+        cp35-none-macosx_12_0_universal2
+        cp35-none-macosx_11_0_arm64
+        cp35-none-macosx_11_0_universal2
+        cp35-none-macosx_10_0_arm64
+        cp35-none-macosx_10_0_universal2
+        cp35-none-macosx_10_16_universal2
+        cp35-none-macosx_10_15_universal2
+        cp35-none-macosx_10_14_universal2
+        cp35-none-macosx_10_13_universal2
+        cp35-none-macosx_10_12_universal2
+        cp35-none-macosx_10_11_universal2
+        cp35-none-macosx_10_10_universal2
+        cp35-none-macosx_10_9_universal2
+        cp35-none-macosx_10_8_universal2
+        cp35-none-macosx_10_7_universal2
+        cp35-none-macosx_10_6_universal2
+        cp35-none-macosx_10_5_universal2
+        cp35-none-macosx_10_4_universal2
         cp34-abi3-macosx_14_0_arm64
         cp34-abi3-macosx_14_0_universal2
         cp34-abi3-macosx_13_0_arm64
@@ -1568,6 +1858,29 @@ mod tests {
         cp34-abi3-macosx_10_6_universal2
         cp34-abi3-macosx_10_5_universal2
         cp34-abi3-macosx_10_4_universal2
+        cp34-none-macosx_14_0_arm64
+        cp34-none-macosx_14_0_universal2
+        cp34-none-macosx_13_0_arm64
+        cp34-none-macosx_13_0_universal2
+        cp34-none-macosx_12_0_arm64
+        cp34-none-macosx_12_0_universal2
+        cp34-none-macosx_11_0_arm64
+        cp34-none-macosx_11_0_universal2
+        cp34-none-macosx_10_0_arm64
+        cp34-none-macosx_10_0_universal2
+        cp34-none-macosx_10_16_universal2
+        cp34-none-macosx_10_15_universal2
+        cp34-none-macosx_10_14_universal2
+        cp34-none-macosx_10_13_universal2
+        cp34-none-macosx_10_12_universal2
+        cp34-none-macosx_10_11_universal2
+        cp34-none-macosx_10_10_universal2
+        cp34-none-macosx_10_9_universal2
+        cp34-none-macosx_10_8_universal2
+        cp34-none-macosx_10_7_universal2
+        cp34-none-macosx_10_6_universal2
+        cp34-none-macosx_10_5_universal2
+        cp34-none-macosx_10_4_universal2
         cp33-abi3-macosx_14_0_arm64
         cp33-abi3-macosx_14_0_universal2
         cp33-abi3-macosx_13_0_arm64
@@ -1591,6 +1904,29 @@ mod tests {
         cp33-abi3-macosx_10_6_universal2
         cp33-abi3-macosx_10_5_universal2
         cp33-abi3-macosx_10_4_universal2
+        cp33-none-macosx_14_0_arm64
+        cp33-none-macosx_14_0_universal2
+        cp33-none-macosx_13_0_arm64
+        cp33-none-macosx_13_0_universal2
+        cp33-none-macosx_12_0_arm64
+        cp33-none-macosx_12_0_universal2
+        cp33-none-macosx_11_0_arm64
+        cp33-none-macosx_11_0_universal2
+        cp33-none-macosx_10_0_arm64
+        cp33-none-macosx_10_0_universal2
+        cp33-none-macosx_10_16_universal2
+        cp33-none-macosx_10_15_universal2
+        cp33-none-macosx_10_14_universal2
+        cp33-none-macosx_10_13_universal2
+        cp33-none-macosx_10_12_universal2
+        cp33-none-macosx_10_11_universal2
+        cp33-none-macosx_10_10_universal2
+        cp33-none-macosx_10_9_universal2
+        cp33-none-macosx_10_8_universal2
+        cp33-none-macosx_10_7_universal2
+        cp33-none-macosx_10_6_universal2
+        cp33-none-macosx_10_5_universal2
+        cp33-none-macosx_10_4_universal2
         cp32-abi3-macosx_14_0_arm64
         cp32-abi3-macosx_14_0_universal2
         cp32-abi3-macosx_13_0_arm64
@@ -1614,6 +1950,29 @@ mod tests {
         cp32-abi3-macosx_10_6_universal2
         cp32-abi3-macosx_10_5_universal2
         cp32-abi3-macosx_10_4_universal2
+        cp32-none-macosx_14_0_arm64
+        cp32-none-macosx_14_0_universal2
+        cp32-none-macosx_13_0_arm64
+        cp32-none-macosx_13_0_universal2
+        cp32-none-macosx_12_0_arm64
+        cp32-none-macosx_12_0_universal2
+        cp32-none-macosx_11_0_arm64
+        cp32-none-macosx_11_0_universal2
+        cp32-none-macosx_10_0_arm64
+        cp32-none-macosx_10_0_universal2
+        cp32-none-macosx_10_16_universal2
+        cp32-none-macosx_10_15_universal2
+        cp32-none-macosx_10_14_universal2
+        cp32-none-macosx_10_13_universal2
+        cp32-none-macosx_10_12_universal2
+        cp32-none-macosx_10_11_universal2
+        cp32-none-macosx_10_10_universal2
+        cp32-none-macosx_10_9_universal2
+        cp32-none-macosx_10_8_universal2
+        cp32-none-macosx_10_7_universal2
+        cp32-none-macosx_10_6_universal2
+        cp32-none-macosx_10_5_universal2
+        cp32-none-macosx_10_4_universal2
         py39-none-macosx_14_0_arm64
         py39-none-macosx_14_0_universal2
         py39-none-macosx_13_0_arm64
