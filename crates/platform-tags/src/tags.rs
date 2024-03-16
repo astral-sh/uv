@@ -529,7 +529,7 @@ mod tests {
         let tags = compatible_tags(&Platform::new(
             Os::Manylinux {
                 major: 2,
-                minor: 28,
+                minor: 20,
             },
             Arch::X86_64,
         ))
@@ -555,14 +555,6 @@ mod tests {
             "manylinux_2_18_x86_64",
             "manylinux_2_19_x86_64",
             "manylinux_2_20_x86_64",
-            "manylinux_2_21_x86_64",
-            "manylinux_2_22_x86_64",
-            "manylinux_2_23_x86_64",
-            "manylinux_2_24_x86_64",
-            "manylinux_2_25_x86_64",
-            "manylinux_2_26_x86_64",
-            "manylinux_2_27_x86_64",
-            "manylinux_2_28_x86_64",
             "manylinux2010_x86_64",
             "manylinux2014_x86_64",
             "manylinux1_x86_64",
@@ -744,126 +736,70 @@ mod tests {
                 },
                 Arch::X86_64,
             ),
-            (3, 11),
+            (3, 9),
             "cpython",
-            (3, 11),
+            (3, 9),
         )
         .unwrap();
         assert_snapshot!(
             tags,
             @r###"
-        cp311-cp311-linux_x86_64
-        cp311-none-linux_x86_64
-        cp311-cp311-manylinux_2_5_x86_64
-        cp311-none-manylinux_2_5_x86_64
-        cp311-cp311-manylinux_2_6_x86_64
-        cp311-none-manylinux_2_6_x86_64
-        cp311-cp311-manylinux_2_7_x86_64
-        cp311-none-manylinux_2_7_x86_64
-        cp311-cp311-manylinux_2_8_x86_64
-        cp311-none-manylinux_2_8_x86_64
-        cp311-cp311-manylinux_2_9_x86_64
-        cp311-none-manylinux_2_9_x86_64
-        cp311-cp311-manylinux_2_10_x86_64
-        cp311-none-manylinux_2_10_x86_64
-        cp311-cp311-manylinux_2_11_x86_64
-        cp311-none-manylinux_2_11_x86_64
-        cp311-cp311-manylinux_2_12_x86_64
-        cp311-none-manylinux_2_12_x86_64
-        cp311-cp311-manylinux_2_13_x86_64
-        cp311-none-manylinux_2_13_x86_64
-        cp311-cp311-manylinux_2_14_x86_64
-        cp311-none-manylinux_2_14_x86_64
-        cp311-cp311-manylinux_2_15_x86_64
-        cp311-none-manylinux_2_15_x86_64
-        cp311-cp311-manylinux_2_16_x86_64
-        cp311-none-manylinux_2_16_x86_64
-        cp311-cp311-manylinux_2_17_x86_64
-        cp311-none-manylinux_2_17_x86_64
-        cp311-cp311-manylinux_2_18_x86_64
-        cp311-none-manylinux_2_18_x86_64
-        cp311-cp311-manylinux_2_19_x86_64
-        cp311-none-manylinux_2_19_x86_64
-        cp311-cp311-manylinux_2_20_x86_64
-        cp311-none-manylinux_2_20_x86_64
-        cp311-cp311-manylinux_2_21_x86_64
-        cp311-none-manylinux_2_21_x86_64
-        cp311-cp311-manylinux_2_22_x86_64
-        cp311-none-manylinux_2_22_x86_64
-        cp311-cp311-manylinux_2_23_x86_64
-        cp311-none-manylinux_2_23_x86_64
-        cp311-cp311-manylinux_2_24_x86_64
-        cp311-none-manylinux_2_24_x86_64
-        cp311-cp311-manylinux_2_25_x86_64
-        cp311-none-manylinux_2_25_x86_64
-        cp311-cp311-manylinux_2_26_x86_64
-        cp311-none-manylinux_2_26_x86_64
-        cp311-cp311-manylinux_2_27_x86_64
-        cp311-none-manylinux_2_27_x86_64
-        cp311-cp311-manylinux_2_28_x86_64
-        cp311-none-manylinux_2_28_x86_64
-        cp311-cp311-manylinux2010_x86_64
-        cp311-none-manylinux2010_x86_64
-        cp311-cp311-manylinux2014_x86_64
-        cp311-none-manylinux2014_x86_64
-        cp311-cp311-manylinux1_x86_64
-        cp311-none-manylinux1_x86_64
-        cp311-abi3-linux_x86_64
-        cp311-abi3-manylinux_2_5_x86_64
-        cp311-abi3-manylinux_2_6_x86_64
-        cp311-abi3-manylinux_2_7_x86_64
-        cp311-abi3-manylinux_2_8_x86_64
-        cp311-abi3-manylinux_2_9_x86_64
-        cp311-abi3-manylinux_2_10_x86_64
-        cp311-abi3-manylinux_2_11_x86_64
-        cp311-abi3-manylinux_2_12_x86_64
-        cp311-abi3-manylinux_2_13_x86_64
-        cp311-abi3-manylinux_2_14_x86_64
-        cp311-abi3-manylinux_2_15_x86_64
-        cp311-abi3-manylinux_2_16_x86_64
-        cp311-abi3-manylinux_2_17_x86_64
-        cp311-abi3-manylinux_2_18_x86_64
-        cp311-abi3-manylinux_2_19_x86_64
-        cp311-abi3-manylinux_2_20_x86_64
-        cp311-abi3-manylinux_2_21_x86_64
-        cp311-abi3-manylinux_2_22_x86_64
-        cp311-abi3-manylinux_2_23_x86_64
-        cp311-abi3-manylinux_2_24_x86_64
-        cp311-abi3-manylinux_2_25_x86_64
-        cp311-abi3-manylinux_2_26_x86_64
-        cp311-abi3-manylinux_2_27_x86_64
-        cp311-abi3-manylinux_2_28_x86_64
-        cp311-abi3-manylinux2010_x86_64
-        cp311-abi3-manylinux2014_x86_64
-        cp311-abi3-manylinux1_x86_64
-        cp310-abi3-linux_x86_64
-        cp310-abi3-manylinux_2_5_x86_64
-        cp310-abi3-manylinux_2_6_x86_64
-        cp310-abi3-manylinux_2_7_x86_64
-        cp310-abi3-manylinux_2_8_x86_64
-        cp310-abi3-manylinux_2_9_x86_64
-        cp310-abi3-manylinux_2_10_x86_64
-        cp310-abi3-manylinux_2_11_x86_64
-        cp310-abi3-manylinux_2_12_x86_64
-        cp310-abi3-manylinux_2_13_x86_64
-        cp310-abi3-manylinux_2_14_x86_64
-        cp310-abi3-manylinux_2_15_x86_64
-        cp310-abi3-manylinux_2_16_x86_64
-        cp310-abi3-manylinux_2_17_x86_64
-        cp310-abi3-manylinux_2_18_x86_64
-        cp310-abi3-manylinux_2_19_x86_64
-        cp310-abi3-manylinux_2_20_x86_64
-        cp310-abi3-manylinux_2_21_x86_64
-        cp310-abi3-manylinux_2_22_x86_64
-        cp310-abi3-manylinux_2_23_x86_64
-        cp310-abi3-manylinux_2_24_x86_64
-        cp310-abi3-manylinux_2_25_x86_64
-        cp310-abi3-manylinux_2_26_x86_64
-        cp310-abi3-manylinux_2_27_x86_64
-        cp310-abi3-manylinux_2_28_x86_64
-        cp310-abi3-manylinux2010_x86_64
-        cp310-abi3-manylinux2014_x86_64
-        cp310-abi3-manylinux1_x86_64
+        cp39-cp39-linux_x86_64
+        cp39-none-linux_x86_64
+        cp39-cp39-manylinux_2_5_x86_64
+        cp39-none-manylinux_2_5_x86_64
+        cp39-cp39-manylinux_2_6_x86_64
+        cp39-none-manylinux_2_6_x86_64
+        cp39-cp39-manylinux_2_7_x86_64
+        cp39-none-manylinux_2_7_x86_64
+        cp39-cp39-manylinux_2_8_x86_64
+        cp39-none-manylinux_2_8_x86_64
+        cp39-cp39-manylinux_2_9_x86_64
+        cp39-none-manylinux_2_9_x86_64
+        cp39-cp39-manylinux_2_10_x86_64
+        cp39-none-manylinux_2_10_x86_64
+        cp39-cp39-manylinux_2_11_x86_64
+        cp39-none-manylinux_2_11_x86_64
+        cp39-cp39-manylinux_2_12_x86_64
+        cp39-none-manylinux_2_12_x86_64
+        cp39-cp39-manylinux_2_13_x86_64
+        cp39-none-manylinux_2_13_x86_64
+        cp39-cp39-manylinux_2_14_x86_64
+        cp39-none-manylinux_2_14_x86_64
+        cp39-cp39-manylinux_2_15_x86_64
+        cp39-none-manylinux_2_15_x86_64
+        cp39-cp39-manylinux_2_16_x86_64
+        cp39-none-manylinux_2_16_x86_64
+        cp39-cp39-manylinux_2_17_x86_64
+        cp39-none-manylinux_2_17_x86_64
+        cp39-cp39-manylinux_2_18_x86_64
+        cp39-none-manylinux_2_18_x86_64
+        cp39-cp39-manylinux_2_19_x86_64
+        cp39-none-manylinux_2_19_x86_64
+        cp39-cp39-manylinux_2_20_x86_64
+        cp39-none-manylinux_2_20_x86_64
+        cp39-cp39-manylinux_2_21_x86_64
+        cp39-none-manylinux_2_21_x86_64
+        cp39-cp39-manylinux_2_22_x86_64
+        cp39-none-manylinux_2_22_x86_64
+        cp39-cp39-manylinux_2_23_x86_64
+        cp39-none-manylinux_2_23_x86_64
+        cp39-cp39-manylinux_2_24_x86_64
+        cp39-none-manylinux_2_24_x86_64
+        cp39-cp39-manylinux_2_25_x86_64
+        cp39-none-manylinux_2_25_x86_64
+        cp39-cp39-manylinux_2_26_x86_64
+        cp39-none-manylinux_2_26_x86_64
+        cp39-cp39-manylinux_2_27_x86_64
+        cp39-none-manylinux_2_27_x86_64
+        cp39-cp39-manylinux_2_28_x86_64
+        cp39-none-manylinux_2_28_x86_64
+        cp39-cp39-manylinux2010_x86_64
+        cp39-none-manylinux2010_x86_64
+        cp39-cp39-manylinux2014_x86_64
+        cp39-none-manylinux2014_x86_64
+        cp39-cp39-manylinux1_x86_64
+        cp39-none-manylinux1_x86_64
         cp39-abi3-linux_x86_64
         cp39-abi3-manylinux_2_5_x86_64
         cp39-abi3-manylinux_2_6_x86_64
@@ -1088,62 +1024,6 @@ mod tests {
         cp32-abi3-manylinux2010_x86_64
         cp32-abi3-manylinux2014_x86_64
         cp32-abi3-manylinux1_x86_64
-        py311-none-linux_x86_64
-        py311-none-manylinux_2_5_x86_64
-        py311-none-manylinux_2_6_x86_64
-        py311-none-manylinux_2_7_x86_64
-        py311-none-manylinux_2_8_x86_64
-        py311-none-manylinux_2_9_x86_64
-        py311-none-manylinux_2_10_x86_64
-        py311-none-manylinux_2_11_x86_64
-        py311-none-manylinux_2_12_x86_64
-        py311-none-manylinux_2_13_x86_64
-        py311-none-manylinux_2_14_x86_64
-        py311-none-manylinux_2_15_x86_64
-        py311-none-manylinux_2_16_x86_64
-        py311-none-manylinux_2_17_x86_64
-        py311-none-manylinux_2_18_x86_64
-        py311-none-manylinux_2_19_x86_64
-        py311-none-manylinux_2_20_x86_64
-        py311-none-manylinux_2_21_x86_64
-        py311-none-manylinux_2_22_x86_64
-        py311-none-manylinux_2_23_x86_64
-        py311-none-manylinux_2_24_x86_64
-        py311-none-manylinux_2_25_x86_64
-        py311-none-manylinux_2_26_x86_64
-        py311-none-manylinux_2_27_x86_64
-        py311-none-manylinux_2_28_x86_64
-        py311-none-manylinux2010_x86_64
-        py311-none-manylinux2014_x86_64
-        py311-none-manylinux1_x86_64
-        py310-none-linux_x86_64
-        py310-none-manylinux_2_5_x86_64
-        py310-none-manylinux_2_6_x86_64
-        py310-none-manylinux_2_7_x86_64
-        py310-none-manylinux_2_8_x86_64
-        py310-none-manylinux_2_9_x86_64
-        py310-none-manylinux_2_10_x86_64
-        py310-none-manylinux_2_11_x86_64
-        py310-none-manylinux_2_12_x86_64
-        py310-none-manylinux_2_13_x86_64
-        py310-none-manylinux_2_14_x86_64
-        py310-none-manylinux_2_15_x86_64
-        py310-none-manylinux_2_16_x86_64
-        py310-none-manylinux_2_17_x86_64
-        py310-none-manylinux_2_18_x86_64
-        py310-none-manylinux_2_19_x86_64
-        py310-none-manylinux_2_20_x86_64
-        py310-none-manylinux_2_21_x86_64
-        py310-none-manylinux_2_22_x86_64
-        py310-none-manylinux_2_23_x86_64
-        py310-none-manylinux_2_24_x86_64
-        py310-none-manylinux_2_25_x86_64
-        py310-none-manylinux_2_26_x86_64
-        py310-none-manylinux_2_27_x86_64
-        py310-none-manylinux_2_28_x86_64
-        py310-none-manylinux2010_x86_64
-        py310-none-manylinux2014_x86_64
-        py310-none-manylinux1_x86_64
         py39-none-linux_x86_64
         py39-none-manylinux_2_5_x86_64
         py39-none-manylinux_2_6_x86_64
@@ -1452,8 +1332,6 @@ mod tests {
         py3-none-manylinux2010_x86_64
         py3-none-manylinux2014_x86_64
         py3-none-manylinux1_x86_64
-        py311-none-any
-        py310-none-any
         py39-none-any
         py38-none-any
         py37-none-any
@@ -1479,106 +1357,60 @@ mod tests {
                 },
                 Arch::Aarch64,
             ),
-            (3, 11),
+            (3, 9),
             "cpython",
-            (3, 11),
+            (3, 9),
         )
         .unwrap();
         assert_snapshot!(
             tags,
             @r###"
-        cp311-cp311-macosx_14_0_arm64
-        cp311-none-macosx_14_0_arm64
-        cp311-cp311-macosx_14_0_universal2
-        cp311-none-macosx_14_0_universal2
-        cp311-cp311-macosx_13_0_arm64
-        cp311-none-macosx_13_0_arm64
-        cp311-cp311-macosx_13_0_universal2
-        cp311-none-macosx_13_0_universal2
-        cp311-cp311-macosx_12_0_arm64
-        cp311-none-macosx_12_0_arm64
-        cp311-cp311-macosx_12_0_universal2
-        cp311-none-macosx_12_0_universal2
-        cp311-cp311-macosx_11_0_arm64
-        cp311-none-macosx_11_0_arm64
-        cp311-cp311-macosx_11_0_universal2
-        cp311-none-macosx_11_0_universal2
-        cp311-cp311-macosx_10_0_arm64
-        cp311-none-macosx_10_0_arm64
-        cp311-cp311-macosx_10_0_universal2
-        cp311-none-macosx_10_0_universal2
-        cp311-cp311-macosx_10_16_universal2
-        cp311-none-macosx_10_16_universal2
-        cp311-cp311-macosx_10_15_universal2
-        cp311-none-macosx_10_15_universal2
-        cp311-cp311-macosx_10_14_universal2
-        cp311-none-macosx_10_14_universal2
-        cp311-cp311-macosx_10_13_universal2
-        cp311-none-macosx_10_13_universal2
-        cp311-cp311-macosx_10_12_universal2
-        cp311-none-macosx_10_12_universal2
-        cp311-cp311-macosx_10_11_universal2
-        cp311-none-macosx_10_11_universal2
-        cp311-cp311-macosx_10_10_universal2
-        cp311-none-macosx_10_10_universal2
-        cp311-cp311-macosx_10_9_universal2
-        cp311-none-macosx_10_9_universal2
-        cp311-cp311-macosx_10_8_universal2
-        cp311-none-macosx_10_8_universal2
-        cp311-cp311-macosx_10_7_universal2
-        cp311-none-macosx_10_7_universal2
-        cp311-cp311-macosx_10_6_universal2
-        cp311-none-macosx_10_6_universal2
-        cp311-cp311-macosx_10_5_universal2
-        cp311-none-macosx_10_5_universal2
-        cp311-cp311-macosx_10_4_universal2
-        cp311-none-macosx_10_4_universal2
-        cp311-abi3-macosx_14_0_arm64
-        cp311-abi3-macosx_14_0_universal2
-        cp311-abi3-macosx_13_0_arm64
-        cp311-abi3-macosx_13_0_universal2
-        cp311-abi3-macosx_12_0_arm64
-        cp311-abi3-macosx_12_0_universal2
-        cp311-abi3-macosx_11_0_arm64
-        cp311-abi3-macosx_11_0_universal2
-        cp311-abi3-macosx_10_0_arm64
-        cp311-abi3-macosx_10_0_universal2
-        cp311-abi3-macosx_10_16_universal2
-        cp311-abi3-macosx_10_15_universal2
-        cp311-abi3-macosx_10_14_universal2
-        cp311-abi3-macosx_10_13_universal2
-        cp311-abi3-macosx_10_12_universal2
-        cp311-abi3-macosx_10_11_universal2
-        cp311-abi3-macosx_10_10_universal2
-        cp311-abi3-macosx_10_9_universal2
-        cp311-abi3-macosx_10_8_universal2
-        cp311-abi3-macosx_10_7_universal2
-        cp311-abi3-macosx_10_6_universal2
-        cp311-abi3-macosx_10_5_universal2
-        cp311-abi3-macosx_10_4_universal2
-        cp310-abi3-macosx_14_0_arm64
-        cp310-abi3-macosx_14_0_universal2
-        cp310-abi3-macosx_13_0_arm64
-        cp310-abi3-macosx_13_0_universal2
-        cp310-abi3-macosx_12_0_arm64
-        cp310-abi3-macosx_12_0_universal2
-        cp310-abi3-macosx_11_0_arm64
-        cp310-abi3-macosx_11_0_universal2
-        cp310-abi3-macosx_10_0_arm64
-        cp310-abi3-macosx_10_0_universal2
-        cp310-abi3-macosx_10_16_universal2
-        cp310-abi3-macosx_10_15_universal2
-        cp310-abi3-macosx_10_14_universal2
-        cp310-abi3-macosx_10_13_universal2
-        cp310-abi3-macosx_10_12_universal2
-        cp310-abi3-macosx_10_11_universal2
-        cp310-abi3-macosx_10_10_universal2
-        cp310-abi3-macosx_10_9_universal2
-        cp310-abi3-macosx_10_8_universal2
-        cp310-abi3-macosx_10_7_universal2
-        cp310-abi3-macosx_10_6_universal2
-        cp310-abi3-macosx_10_5_universal2
-        cp310-abi3-macosx_10_4_universal2
+        cp39-cp39-macosx_14_0_arm64
+        cp39-none-macosx_14_0_arm64
+        cp39-cp39-macosx_14_0_universal2
+        cp39-none-macosx_14_0_universal2
+        cp39-cp39-macosx_13_0_arm64
+        cp39-none-macosx_13_0_arm64
+        cp39-cp39-macosx_13_0_universal2
+        cp39-none-macosx_13_0_universal2
+        cp39-cp39-macosx_12_0_arm64
+        cp39-none-macosx_12_0_arm64
+        cp39-cp39-macosx_12_0_universal2
+        cp39-none-macosx_12_0_universal2
+        cp39-cp39-macosx_11_0_arm64
+        cp39-none-macosx_11_0_arm64
+        cp39-cp39-macosx_11_0_universal2
+        cp39-none-macosx_11_0_universal2
+        cp39-cp39-macosx_10_0_arm64
+        cp39-none-macosx_10_0_arm64
+        cp39-cp39-macosx_10_0_universal2
+        cp39-none-macosx_10_0_universal2
+        cp39-cp39-macosx_10_16_universal2
+        cp39-none-macosx_10_16_universal2
+        cp39-cp39-macosx_10_15_universal2
+        cp39-none-macosx_10_15_universal2
+        cp39-cp39-macosx_10_14_universal2
+        cp39-none-macosx_10_14_universal2
+        cp39-cp39-macosx_10_13_universal2
+        cp39-none-macosx_10_13_universal2
+        cp39-cp39-macosx_10_12_universal2
+        cp39-none-macosx_10_12_universal2
+        cp39-cp39-macosx_10_11_universal2
+        cp39-none-macosx_10_11_universal2
+        cp39-cp39-macosx_10_10_universal2
+        cp39-none-macosx_10_10_universal2
+        cp39-cp39-macosx_10_9_universal2
+        cp39-none-macosx_10_9_universal2
+        cp39-cp39-macosx_10_8_universal2
+        cp39-none-macosx_10_8_universal2
+        cp39-cp39-macosx_10_7_universal2
+        cp39-none-macosx_10_7_universal2
+        cp39-cp39-macosx_10_6_universal2
+        cp39-none-macosx_10_6_universal2
+        cp39-cp39-macosx_10_5_universal2
+        cp39-none-macosx_10_5_universal2
+        cp39-cp39-macosx_10_4_universal2
+        cp39-none-macosx_10_4_universal2
         cp39-abi3-macosx_14_0_arm64
         cp39-abi3-macosx_14_0_universal2
         cp39-abi3-macosx_13_0_arm64
@@ -1763,52 +1595,6 @@ mod tests {
         cp32-abi3-macosx_10_6_universal2
         cp32-abi3-macosx_10_5_universal2
         cp32-abi3-macosx_10_4_universal2
-        py311-none-macosx_14_0_arm64
-        py311-none-macosx_14_0_universal2
-        py311-none-macosx_13_0_arm64
-        py311-none-macosx_13_0_universal2
-        py311-none-macosx_12_0_arm64
-        py311-none-macosx_12_0_universal2
-        py311-none-macosx_11_0_arm64
-        py311-none-macosx_11_0_universal2
-        py311-none-macosx_10_0_arm64
-        py311-none-macosx_10_0_universal2
-        py311-none-macosx_10_16_universal2
-        py311-none-macosx_10_15_universal2
-        py311-none-macosx_10_14_universal2
-        py311-none-macosx_10_13_universal2
-        py311-none-macosx_10_12_universal2
-        py311-none-macosx_10_11_universal2
-        py311-none-macosx_10_10_universal2
-        py311-none-macosx_10_9_universal2
-        py311-none-macosx_10_8_universal2
-        py311-none-macosx_10_7_universal2
-        py311-none-macosx_10_6_universal2
-        py311-none-macosx_10_5_universal2
-        py311-none-macosx_10_4_universal2
-        py310-none-macosx_14_0_arm64
-        py310-none-macosx_14_0_universal2
-        py310-none-macosx_13_0_arm64
-        py310-none-macosx_13_0_universal2
-        py310-none-macosx_12_0_arm64
-        py310-none-macosx_12_0_universal2
-        py310-none-macosx_11_0_arm64
-        py310-none-macosx_11_0_universal2
-        py310-none-macosx_10_0_arm64
-        py310-none-macosx_10_0_universal2
-        py310-none-macosx_10_16_universal2
-        py310-none-macosx_10_15_universal2
-        py310-none-macosx_10_14_universal2
-        py310-none-macosx_10_13_universal2
-        py310-none-macosx_10_12_universal2
-        py310-none-macosx_10_11_universal2
-        py310-none-macosx_10_10_universal2
-        py310-none-macosx_10_9_universal2
-        py310-none-macosx_10_8_universal2
-        py310-none-macosx_10_7_universal2
-        py310-none-macosx_10_6_universal2
-        py310-none-macosx_10_5_universal2
-        py310-none-macosx_10_4_universal2
         py39-none-macosx_14_0_arm64
         py39-none-macosx_14_0_universal2
         py39-none-macosx_13_0_arm64
@@ -2062,8 +1848,6 @@ mod tests {
         py3-none-macosx_10_6_universal2
         py3-none-macosx_10_5_universal2
         py3-none-macosx_10_4_universal2
-        py311-none-any
-        py310-none-any
         py39-none-any
         py38-none-any
         py37-none-any
