@@ -355,21 +355,26 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
 
     let platform_tags = match (&os, arch) {
         (Os::Manylinux { major, minor }, _) => {
-            let mut platform_tags = vec![format!("linux_{}", arch)];
+            let mut platform_tags = Vec::new();
             if let Some(min_minor) = arch.get_minimum_manylinux_minor() {
-                platform_tags.extend(
-                    (min_minor..=*minor).map(|minor| format!("manylinux_{major}_{minor}_{arch}")),
-                );
-                if (min_minor..=*minor).contains(&12) {
-                    platform_tags.push(format!("manylinux2010_{arch}"));
-                }
-                if (min_minor..=*minor).contains(&17) {
-                    platform_tags.push(format!("manylinux2014_{arch}"));
-                }
-                if (min_minor..=*minor).contains(&5) {
-                    platform_tags.push(format!("manylinux1_{arch}"));
+                for minor in (min_minor..=*minor).rev() {
+                    platform_tags.push(format!("manylinux_{major}_{minor}_{arch}"));
+                    // Support legacy manylinux tags with lower priority
+                    // <https://peps.python.org/pep-0600/#legacy-manylinux-tags>
+                    if minor == 12 {
+                        platform_tags.push(format!("manylinux2010_{arch}"));
+                    }
+                    if minor == 17 {
+                        platform_tags.push(format!("manylinux2014_{arch}"));
+                    }
+                    if minor == 5 {
+                        platform_tags.push(format!("manylinux1_{arch}"));
+                    }
                 }
             }
+            // Non-manylinux is lowest priority
+            // <https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L444>
+            platform_tags.push(format!("linux_{arch}"));
             platform_tags
         }
         (Os::Musllinux { major, minor }, _) => {
@@ -524,6 +529,13 @@ mod tests {
 
     use super::*;
 
+    /// Check platform tag ordering.
+    /// The list is displayed in decreasing priority.
+    ///
+    /// A reference list can be generated with:
+    /// ```
+    /// $ python -c "from packaging import tags; [print(tag) for tag in tags.platform_tags()]"`
+    /// ````
     #[test]
     fn test_platform_tags_manylinux() {
         let tags = compatible_tags(&Platform::new(
@@ -538,26 +550,26 @@ mod tests {
             tags,
             @r###"
         [
-            "linux_x86_64",
-            "manylinux_2_5_x86_64",
-            "manylinux_2_6_x86_64",
-            "manylinux_2_7_x86_64",
-            "manylinux_2_8_x86_64",
-            "manylinux_2_9_x86_64",
-            "manylinux_2_10_x86_64",
-            "manylinux_2_11_x86_64",
-            "manylinux_2_12_x86_64",
-            "manylinux_2_13_x86_64",
-            "manylinux_2_14_x86_64",
-            "manylinux_2_15_x86_64",
-            "manylinux_2_16_x86_64",
-            "manylinux_2_17_x86_64",
-            "manylinux_2_18_x86_64",
-            "manylinux_2_19_x86_64",
             "manylinux_2_20_x86_64",
-            "manylinux2010_x86_64",
+            "manylinux_2_19_x86_64",
+            "manylinux_2_18_x86_64",
+            "manylinux_2_17_x86_64",
             "manylinux2014_x86_64",
+            "manylinux_2_16_x86_64",
+            "manylinux_2_15_x86_64",
+            "manylinux_2_14_x86_64",
+            "manylinux_2_13_x86_64",
+            "manylinux_2_12_x86_64",
+            "manylinux2010_x86_64",
+            "manylinux_2_11_x86_64",
+            "manylinux_2_10_x86_64",
+            "manylinux_2_9_x86_64",
+            "manylinux_2_8_x86_64",
+            "manylinux_2_7_x86_64",
+            "manylinux_2_6_x86_64",
+            "manylinux_2_5_x86_64",
             "manylinux1_x86_64",
+            "linux_x86_64",
         ]
         "###
         );
@@ -726,6 +738,13 @@ mod tests {
         );
     }
 
+    /// Check full tag ordering.
+    /// The list is displayed in decreasing priority.
+    ///
+    /// A reference list can be generated with:
+    /// ```
+    /// $ python -c "from packaging import tags; [print(tag) for tag in tags.sys_tags()]"`
+    /// ```
     #[test]
     fn test_system_tags_manylinux() {
         let tags = Tags::from_env(
@@ -744,594 +763,594 @@ mod tests {
         assert_snapshot!(
             tags,
             @r###"
-        cp39-cp39-linux_x86_64
-        cp39-none-linux_x86_64
-        cp39-cp39-manylinux_2_5_x86_64
-        cp39-none-manylinux_2_5_x86_64
-        cp39-cp39-manylinux_2_6_x86_64
-        cp39-none-manylinux_2_6_x86_64
-        cp39-cp39-manylinux_2_7_x86_64
-        cp39-none-manylinux_2_7_x86_64
-        cp39-cp39-manylinux_2_8_x86_64
-        cp39-none-manylinux_2_8_x86_64
-        cp39-cp39-manylinux_2_9_x86_64
-        cp39-none-manylinux_2_9_x86_64
-        cp39-cp39-manylinux_2_10_x86_64
-        cp39-none-manylinux_2_10_x86_64
-        cp39-cp39-manylinux_2_11_x86_64
-        cp39-none-manylinux_2_11_x86_64
-        cp39-cp39-manylinux_2_12_x86_64
-        cp39-none-manylinux_2_12_x86_64
-        cp39-cp39-manylinux_2_13_x86_64
-        cp39-none-manylinux_2_13_x86_64
-        cp39-cp39-manylinux_2_14_x86_64
-        cp39-none-manylinux_2_14_x86_64
-        cp39-cp39-manylinux_2_15_x86_64
-        cp39-none-manylinux_2_15_x86_64
-        cp39-cp39-manylinux_2_16_x86_64
-        cp39-none-manylinux_2_16_x86_64
-        cp39-cp39-manylinux_2_17_x86_64
-        cp39-none-manylinux_2_17_x86_64
-        cp39-cp39-manylinux_2_18_x86_64
-        cp39-none-manylinux_2_18_x86_64
-        cp39-cp39-manylinux_2_19_x86_64
-        cp39-none-manylinux_2_19_x86_64
-        cp39-cp39-manylinux_2_20_x86_64
-        cp39-none-manylinux_2_20_x86_64
-        cp39-cp39-manylinux_2_21_x86_64
-        cp39-none-manylinux_2_21_x86_64
-        cp39-cp39-manylinux_2_22_x86_64
-        cp39-none-manylinux_2_22_x86_64
-        cp39-cp39-manylinux_2_23_x86_64
-        cp39-none-manylinux_2_23_x86_64
-        cp39-cp39-manylinux_2_24_x86_64
-        cp39-none-manylinux_2_24_x86_64
-        cp39-cp39-manylinux_2_25_x86_64
-        cp39-none-manylinux_2_25_x86_64
-        cp39-cp39-manylinux_2_26_x86_64
-        cp39-none-manylinux_2_26_x86_64
-        cp39-cp39-manylinux_2_27_x86_64
-        cp39-none-manylinux_2_27_x86_64
         cp39-cp39-manylinux_2_28_x86_64
         cp39-none-manylinux_2_28_x86_64
-        cp39-cp39-manylinux2010_x86_64
-        cp39-none-manylinux2010_x86_64
+        cp39-cp39-manylinux_2_27_x86_64
+        cp39-none-manylinux_2_27_x86_64
+        cp39-cp39-manylinux_2_26_x86_64
+        cp39-none-manylinux_2_26_x86_64
+        cp39-cp39-manylinux_2_25_x86_64
+        cp39-none-manylinux_2_25_x86_64
+        cp39-cp39-manylinux_2_24_x86_64
+        cp39-none-manylinux_2_24_x86_64
+        cp39-cp39-manylinux_2_23_x86_64
+        cp39-none-manylinux_2_23_x86_64
+        cp39-cp39-manylinux_2_22_x86_64
+        cp39-none-manylinux_2_22_x86_64
+        cp39-cp39-manylinux_2_21_x86_64
+        cp39-none-manylinux_2_21_x86_64
+        cp39-cp39-manylinux_2_20_x86_64
+        cp39-none-manylinux_2_20_x86_64
+        cp39-cp39-manylinux_2_19_x86_64
+        cp39-none-manylinux_2_19_x86_64
+        cp39-cp39-manylinux_2_18_x86_64
+        cp39-none-manylinux_2_18_x86_64
+        cp39-cp39-manylinux_2_17_x86_64
+        cp39-none-manylinux_2_17_x86_64
         cp39-cp39-manylinux2014_x86_64
         cp39-none-manylinux2014_x86_64
+        cp39-cp39-manylinux_2_16_x86_64
+        cp39-none-manylinux_2_16_x86_64
+        cp39-cp39-manylinux_2_15_x86_64
+        cp39-none-manylinux_2_15_x86_64
+        cp39-cp39-manylinux_2_14_x86_64
+        cp39-none-manylinux_2_14_x86_64
+        cp39-cp39-manylinux_2_13_x86_64
+        cp39-none-manylinux_2_13_x86_64
+        cp39-cp39-manylinux_2_12_x86_64
+        cp39-none-manylinux_2_12_x86_64
+        cp39-cp39-manylinux2010_x86_64
+        cp39-none-manylinux2010_x86_64
+        cp39-cp39-manylinux_2_11_x86_64
+        cp39-none-manylinux_2_11_x86_64
+        cp39-cp39-manylinux_2_10_x86_64
+        cp39-none-manylinux_2_10_x86_64
+        cp39-cp39-manylinux_2_9_x86_64
+        cp39-none-manylinux_2_9_x86_64
+        cp39-cp39-manylinux_2_8_x86_64
+        cp39-none-manylinux_2_8_x86_64
+        cp39-cp39-manylinux_2_7_x86_64
+        cp39-none-manylinux_2_7_x86_64
+        cp39-cp39-manylinux_2_6_x86_64
+        cp39-none-manylinux_2_6_x86_64
+        cp39-cp39-manylinux_2_5_x86_64
+        cp39-none-manylinux_2_5_x86_64
         cp39-cp39-manylinux1_x86_64
         cp39-none-manylinux1_x86_64
-        cp39-abi3-linux_x86_64
-        cp39-abi3-manylinux_2_5_x86_64
-        cp39-abi3-manylinux_2_6_x86_64
-        cp39-abi3-manylinux_2_7_x86_64
-        cp39-abi3-manylinux_2_8_x86_64
-        cp39-abi3-manylinux_2_9_x86_64
-        cp39-abi3-manylinux_2_10_x86_64
-        cp39-abi3-manylinux_2_11_x86_64
-        cp39-abi3-manylinux_2_12_x86_64
-        cp39-abi3-manylinux_2_13_x86_64
-        cp39-abi3-manylinux_2_14_x86_64
-        cp39-abi3-manylinux_2_15_x86_64
-        cp39-abi3-manylinux_2_16_x86_64
-        cp39-abi3-manylinux_2_17_x86_64
-        cp39-abi3-manylinux_2_18_x86_64
-        cp39-abi3-manylinux_2_19_x86_64
-        cp39-abi3-manylinux_2_20_x86_64
-        cp39-abi3-manylinux_2_21_x86_64
-        cp39-abi3-manylinux_2_22_x86_64
-        cp39-abi3-manylinux_2_23_x86_64
-        cp39-abi3-manylinux_2_24_x86_64
-        cp39-abi3-manylinux_2_25_x86_64
-        cp39-abi3-manylinux_2_26_x86_64
-        cp39-abi3-manylinux_2_27_x86_64
+        cp39-cp39-linux_x86_64
+        cp39-none-linux_x86_64
         cp39-abi3-manylinux_2_28_x86_64
-        cp39-abi3-manylinux2010_x86_64
+        cp39-abi3-manylinux_2_27_x86_64
+        cp39-abi3-manylinux_2_26_x86_64
+        cp39-abi3-manylinux_2_25_x86_64
+        cp39-abi3-manylinux_2_24_x86_64
+        cp39-abi3-manylinux_2_23_x86_64
+        cp39-abi3-manylinux_2_22_x86_64
+        cp39-abi3-manylinux_2_21_x86_64
+        cp39-abi3-manylinux_2_20_x86_64
+        cp39-abi3-manylinux_2_19_x86_64
+        cp39-abi3-manylinux_2_18_x86_64
+        cp39-abi3-manylinux_2_17_x86_64
         cp39-abi3-manylinux2014_x86_64
+        cp39-abi3-manylinux_2_16_x86_64
+        cp39-abi3-manylinux_2_15_x86_64
+        cp39-abi3-manylinux_2_14_x86_64
+        cp39-abi3-manylinux_2_13_x86_64
+        cp39-abi3-manylinux_2_12_x86_64
+        cp39-abi3-manylinux2010_x86_64
+        cp39-abi3-manylinux_2_11_x86_64
+        cp39-abi3-manylinux_2_10_x86_64
+        cp39-abi3-manylinux_2_9_x86_64
+        cp39-abi3-manylinux_2_8_x86_64
+        cp39-abi3-manylinux_2_7_x86_64
+        cp39-abi3-manylinux_2_6_x86_64
+        cp39-abi3-manylinux_2_5_x86_64
         cp39-abi3-manylinux1_x86_64
-        cp38-abi3-linux_x86_64
-        cp38-abi3-manylinux_2_5_x86_64
-        cp38-abi3-manylinux_2_6_x86_64
-        cp38-abi3-manylinux_2_7_x86_64
-        cp38-abi3-manylinux_2_8_x86_64
-        cp38-abi3-manylinux_2_9_x86_64
-        cp38-abi3-manylinux_2_10_x86_64
-        cp38-abi3-manylinux_2_11_x86_64
-        cp38-abi3-manylinux_2_12_x86_64
-        cp38-abi3-manylinux_2_13_x86_64
-        cp38-abi3-manylinux_2_14_x86_64
-        cp38-abi3-manylinux_2_15_x86_64
-        cp38-abi3-manylinux_2_16_x86_64
-        cp38-abi3-manylinux_2_17_x86_64
-        cp38-abi3-manylinux_2_18_x86_64
-        cp38-abi3-manylinux_2_19_x86_64
-        cp38-abi3-manylinux_2_20_x86_64
-        cp38-abi3-manylinux_2_21_x86_64
-        cp38-abi3-manylinux_2_22_x86_64
-        cp38-abi3-manylinux_2_23_x86_64
-        cp38-abi3-manylinux_2_24_x86_64
-        cp38-abi3-manylinux_2_25_x86_64
-        cp38-abi3-manylinux_2_26_x86_64
-        cp38-abi3-manylinux_2_27_x86_64
+        cp39-abi3-linux_x86_64
         cp38-abi3-manylinux_2_28_x86_64
-        cp38-abi3-manylinux2010_x86_64
+        cp38-abi3-manylinux_2_27_x86_64
+        cp38-abi3-manylinux_2_26_x86_64
+        cp38-abi3-manylinux_2_25_x86_64
+        cp38-abi3-manylinux_2_24_x86_64
+        cp38-abi3-manylinux_2_23_x86_64
+        cp38-abi3-manylinux_2_22_x86_64
+        cp38-abi3-manylinux_2_21_x86_64
+        cp38-abi3-manylinux_2_20_x86_64
+        cp38-abi3-manylinux_2_19_x86_64
+        cp38-abi3-manylinux_2_18_x86_64
+        cp38-abi3-manylinux_2_17_x86_64
         cp38-abi3-manylinux2014_x86_64
+        cp38-abi3-manylinux_2_16_x86_64
+        cp38-abi3-manylinux_2_15_x86_64
+        cp38-abi3-manylinux_2_14_x86_64
+        cp38-abi3-manylinux_2_13_x86_64
+        cp38-abi3-manylinux_2_12_x86_64
+        cp38-abi3-manylinux2010_x86_64
+        cp38-abi3-manylinux_2_11_x86_64
+        cp38-abi3-manylinux_2_10_x86_64
+        cp38-abi3-manylinux_2_9_x86_64
+        cp38-abi3-manylinux_2_8_x86_64
+        cp38-abi3-manylinux_2_7_x86_64
+        cp38-abi3-manylinux_2_6_x86_64
+        cp38-abi3-manylinux_2_5_x86_64
         cp38-abi3-manylinux1_x86_64
-        cp37-abi3-linux_x86_64
-        cp37-abi3-manylinux_2_5_x86_64
-        cp37-abi3-manylinux_2_6_x86_64
-        cp37-abi3-manylinux_2_7_x86_64
-        cp37-abi3-manylinux_2_8_x86_64
-        cp37-abi3-manylinux_2_9_x86_64
-        cp37-abi3-manylinux_2_10_x86_64
-        cp37-abi3-manylinux_2_11_x86_64
-        cp37-abi3-manylinux_2_12_x86_64
-        cp37-abi3-manylinux_2_13_x86_64
-        cp37-abi3-manylinux_2_14_x86_64
-        cp37-abi3-manylinux_2_15_x86_64
-        cp37-abi3-manylinux_2_16_x86_64
-        cp37-abi3-manylinux_2_17_x86_64
-        cp37-abi3-manylinux_2_18_x86_64
-        cp37-abi3-manylinux_2_19_x86_64
-        cp37-abi3-manylinux_2_20_x86_64
-        cp37-abi3-manylinux_2_21_x86_64
-        cp37-abi3-manylinux_2_22_x86_64
-        cp37-abi3-manylinux_2_23_x86_64
-        cp37-abi3-manylinux_2_24_x86_64
-        cp37-abi3-manylinux_2_25_x86_64
-        cp37-abi3-manylinux_2_26_x86_64
-        cp37-abi3-manylinux_2_27_x86_64
+        cp38-abi3-linux_x86_64
         cp37-abi3-manylinux_2_28_x86_64
-        cp37-abi3-manylinux2010_x86_64
+        cp37-abi3-manylinux_2_27_x86_64
+        cp37-abi3-manylinux_2_26_x86_64
+        cp37-abi3-manylinux_2_25_x86_64
+        cp37-abi3-manylinux_2_24_x86_64
+        cp37-abi3-manylinux_2_23_x86_64
+        cp37-abi3-manylinux_2_22_x86_64
+        cp37-abi3-manylinux_2_21_x86_64
+        cp37-abi3-manylinux_2_20_x86_64
+        cp37-abi3-manylinux_2_19_x86_64
+        cp37-abi3-manylinux_2_18_x86_64
+        cp37-abi3-manylinux_2_17_x86_64
         cp37-abi3-manylinux2014_x86_64
+        cp37-abi3-manylinux_2_16_x86_64
+        cp37-abi3-manylinux_2_15_x86_64
+        cp37-abi3-manylinux_2_14_x86_64
+        cp37-abi3-manylinux_2_13_x86_64
+        cp37-abi3-manylinux_2_12_x86_64
+        cp37-abi3-manylinux2010_x86_64
+        cp37-abi3-manylinux_2_11_x86_64
+        cp37-abi3-manylinux_2_10_x86_64
+        cp37-abi3-manylinux_2_9_x86_64
+        cp37-abi3-manylinux_2_8_x86_64
+        cp37-abi3-manylinux_2_7_x86_64
+        cp37-abi3-manylinux_2_6_x86_64
+        cp37-abi3-manylinux_2_5_x86_64
         cp37-abi3-manylinux1_x86_64
-        cp36-abi3-linux_x86_64
-        cp36-abi3-manylinux_2_5_x86_64
-        cp36-abi3-manylinux_2_6_x86_64
-        cp36-abi3-manylinux_2_7_x86_64
-        cp36-abi3-manylinux_2_8_x86_64
-        cp36-abi3-manylinux_2_9_x86_64
-        cp36-abi3-manylinux_2_10_x86_64
-        cp36-abi3-manylinux_2_11_x86_64
-        cp36-abi3-manylinux_2_12_x86_64
-        cp36-abi3-manylinux_2_13_x86_64
-        cp36-abi3-manylinux_2_14_x86_64
-        cp36-abi3-manylinux_2_15_x86_64
-        cp36-abi3-manylinux_2_16_x86_64
-        cp36-abi3-manylinux_2_17_x86_64
-        cp36-abi3-manylinux_2_18_x86_64
-        cp36-abi3-manylinux_2_19_x86_64
-        cp36-abi3-manylinux_2_20_x86_64
-        cp36-abi3-manylinux_2_21_x86_64
-        cp36-abi3-manylinux_2_22_x86_64
-        cp36-abi3-manylinux_2_23_x86_64
-        cp36-abi3-manylinux_2_24_x86_64
-        cp36-abi3-manylinux_2_25_x86_64
-        cp36-abi3-manylinux_2_26_x86_64
-        cp36-abi3-manylinux_2_27_x86_64
+        cp37-abi3-linux_x86_64
         cp36-abi3-manylinux_2_28_x86_64
-        cp36-abi3-manylinux2010_x86_64
+        cp36-abi3-manylinux_2_27_x86_64
+        cp36-abi3-manylinux_2_26_x86_64
+        cp36-abi3-manylinux_2_25_x86_64
+        cp36-abi3-manylinux_2_24_x86_64
+        cp36-abi3-manylinux_2_23_x86_64
+        cp36-abi3-manylinux_2_22_x86_64
+        cp36-abi3-manylinux_2_21_x86_64
+        cp36-abi3-manylinux_2_20_x86_64
+        cp36-abi3-manylinux_2_19_x86_64
+        cp36-abi3-manylinux_2_18_x86_64
+        cp36-abi3-manylinux_2_17_x86_64
         cp36-abi3-manylinux2014_x86_64
+        cp36-abi3-manylinux_2_16_x86_64
+        cp36-abi3-manylinux_2_15_x86_64
+        cp36-abi3-manylinux_2_14_x86_64
+        cp36-abi3-manylinux_2_13_x86_64
+        cp36-abi3-manylinux_2_12_x86_64
+        cp36-abi3-manylinux2010_x86_64
+        cp36-abi3-manylinux_2_11_x86_64
+        cp36-abi3-manylinux_2_10_x86_64
+        cp36-abi3-manylinux_2_9_x86_64
+        cp36-abi3-manylinux_2_8_x86_64
+        cp36-abi3-manylinux_2_7_x86_64
+        cp36-abi3-manylinux_2_6_x86_64
+        cp36-abi3-manylinux_2_5_x86_64
         cp36-abi3-manylinux1_x86_64
-        cp35-abi3-linux_x86_64
-        cp35-abi3-manylinux_2_5_x86_64
-        cp35-abi3-manylinux_2_6_x86_64
-        cp35-abi3-manylinux_2_7_x86_64
-        cp35-abi3-manylinux_2_8_x86_64
-        cp35-abi3-manylinux_2_9_x86_64
-        cp35-abi3-manylinux_2_10_x86_64
-        cp35-abi3-manylinux_2_11_x86_64
-        cp35-abi3-manylinux_2_12_x86_64
-        cp35-abi3-manylinux_2_13_x86_64
-        cp35-abi3-manylinux_2_14_x86_64
-        cp35-abi3-manylinux_2_15_x86_64
-        cp35-abi3-manylinux_2_16_x86_64
-        cp35-abi3-manylinux_2_17_x86_64
-        cp35-abi3-manylinux_2_18_x86_64
-        cp35-abi3-manylinux_2_19_x86_64
-        cp35-abi3-manylinux_2_20_x86_64
-        cp35-abi3-manylinux_2_21_x86_64
-        cp35-abi3-manylinux_2_22_x86_64
-        cp35-abi3-manylinux_2_23_x86_64
-        cp35-abi3-manylinux_2_24_x86_64
-        cp35-abi3-manylinux_2_25_x86_64
-        cp35-abi3-manylinux_2_26_x86_64
-        cp35-abi3-manylinux_2_27_x86_64
+        cp36-abi3-linux_x86_64
         cp35-abi3-manylinux_2_28_x86_64
-        cp35-abi3-manylinux2010_x86_64
+        cp35-abi3-manylinux_2_27_x86_64
+        cp35-abi3-manylinux_2_26_x86_64
+        cp35-abi3-manylinux_2_25_x86_64
+        cp35-abi3-manylinux_2_24_x86_64
+        cp35-abi3-manylinux_2_23_x86_64
+        cp35-abi3-manylinux_2_22_x86_64
+        cp35-abi3-manylinux_2_21_x86_64
+        cp35-abi3-manylinux_2_20_x86_64
+        cp35-abi3-manylinux_2_19_x86_64
+        cp35-abi3-manylinux_2_18_x86_64
+        cp35-abi3-manylinux_2_17_x86_64
         cp35-abi3-manylinux2014_x86_64
+        cp35-abi3-manylinux_2_16_x86_64
+        cp35-abi3-manylinux_2_15_x86_64
+        cp35-abi3-manylinux_2_14_x86_64
+        cp35-abi3-manylinux_2_13_x86_64
+        cp35-abi3-manylinux_2_12_x86_64
+        cp35-abi3-manylinux2010_x86_64
+        cp35-abi3-manylinux_2_11_x86_64
+        cp35-abi3-manylinux_2_10_x86_64
+        cp35-abi3-manylinux_2_9_x86_64
+        cp35-abi3-manylinux_2_8_x86_64
+        cp35-abi3-manylinux_2_7_x86_64
+        cp35-abi3-manylinux_2_6_x86_64
+        cp35-abi3-manylinux_2_5_x86_64
         cp35-abi3-manylinux1_x86_64
-        cp34-abi3-linux_x86_64
-        cp34-abi3-manylinux_2_5_x86_64
-        cp34-abi3-manylinux_2_6_x86_64
-        cp34-abi3-manylinux_2_7_x86_64
-        cp34-abi3-manylinux_2_8_x86_64
-        cp34-abi3-manylinux_2_9_x86_64
-        cp34-abi3-manylinux_2_10_x86_64
-        cp34-abi3-manylinux_2_11_x86_64
-        cp34-abi3-manylinux_2_12_x86_64
-        cp34-abi3-manylinux_2_13_x86_64
-        cp34-abi3-manylinux_2_14_x86_64
-        cp34-abi3-manylinux_2_15_x86_64
-        cp34-abi3-manylinux_2_16_x86_64
-        cp34-abi3-manylinux_2_17_x86_64
-        cp34-abi3-manylinux_2_18_x86_64
-        cp34-abi3-manylinux_2_19_x86_64
-        cp34-abi3-manylinux_2_20_x86_64
-        cp34-abi3-manylinux_2_21_x86_64
-        cp34-abi3-manylinux_2_22_x86_64
-        cp34-abi3-manylinux_2_23_x86_64
-        cp34-abi3-manylinux_2_24_x86_64
-        cp34-abi3-manylinux_2_25_x86_64
-        cp34-abi3-manylinux_2_26_x86_64
-        cp34-abi3-manylinux_2_27_x86_64
+        cp35-abi3-linux_x86_64
         cp34-abi3-manylinux_2_28_x86_64
-        cp34-abi3-manylinux2010_x86_64
+        cp34-abi3-manylinux_2_27_x86_64
+        cp34-abi3-manylinux_2_26_x86_64
+        cp34-abi3-manylinux_2_25_x86_64
+        cp34-abi3-manylinux_2_24_x86_64
+        cp34-abi3-manylinux_2_23_x86_64
+        cp34-abi3-manylinux_2_22_x86_64
+        cp34-abi3-manylinux_2_21_x86_64
+        cp34-abi3-manylinux_2_20_x86_64
+        cp34-abi3-manylinux_2_19_x86_64
+        cp34-abi3-manylinux_2_18_x86_64
+        cp34-abi3-manylinux_2_17_x86_64
         cp34-abi3-manylinux2014_x86_64
+        cp34-abi3-manylinux_2_16_x86_64
+        cp34-abi3-manylinux_2_15_x86_64
+        cp34-abi3-manylinux_2_14_x86_64
+        cp34-abi3-manylinux_2_13_x86_64
+        cp34-abi3-manylinux_2_12_x86_64
+        cp34-abi3-manylinux2010_x86_64
+        cp34-abi3-manylinux_2_11_x86_64
+        cp34-abi3-manylinux_2_10_x86_64
+        cp34-abi3-manylinux_2_9_x86_64
+        cp34-abi3-manylinux_2_8_x86_64
+        cp34-abi3-manylinux_2_7_x86_64
+        cp34-abi3-manylinux_2_6_x86_64
+        cp34-abi3-manylinux_2_5_x86_64
         cp34-abi3-manylinux1_x86_64
-        cp33-abi3-linux_x86_64
-        cp33-abi3-manylinux_2_5_x86_64
-        cp33-abi3-manylinux_2_6_x86_64
-        cp33-abi3-manylinux_2_7_x86_64
-        cp33-abi3-manylinux_2_8_x86_64
-        cp33-abi3-manylinux_2_9_x86_64
-        cp33-abi3-manylinux_2_10_x86_64
-        cp33-abi3-manylinux_2_11_x86_64
-        cp33-abi3-manylinux_2_12_x86_64
-        cp33-abi3-manylinux_2_13_x86_64
-        cp33-abi3-manylinux_2_14_x86_64
-        cp33-abi3-manylinux_2_15_x86_64
-        cp33-abi3-manylinux_2_16_x86_64
-        cp33-abi3-manylinux_2_17_x86_64
-        cp33-abi3-manylinux_2_18_x86_64
-        cp33-abi3-manylinux_2_19_x86_64
-        cp33-abi3-manylinux_2_20_x86_64
-        cp33-abi3-manylinux_2_21_x86_64
-        cp33-abi3-manylinux_2_22_x86_64
-        cp33-abi3-manylinux_2_23_x86_64
-        cp33-abi3-manylinux_2_24_x86_64
-        cp33-abi3-manylinux_2_25_x86_64
-        cp33-abi3-manylinux_2_26_x86_64
-        cp33-abi3-manylinux_2_27_x86_64
+        cp34-abi3-linux_x86_64
         cp33-abi3-manylinux_2_28_x86_64
-        cp33-abi3-manylinux2010_x86_64
+        cp33-abi3-manylinux_2_27_x86_64
+        cp33-abi3-manylinux_2_26_x86_64
+        cp33-abi3-manylinux_2_25_x86_64
+        cp33-abi3-manylinux_2_24_x86_64
+        cp33-abi3-manylinux_2_23_x86_64
+        cp33-abi3-manylinux_2_22_x86_64
+        cp33-abi3-manylinux_2_21_x86_64
+        cp33-abi3-manylinux_2_20_x86_64
+        cp33-abi3-manylinux_2_19_x86_64
+        cp33-abi3-manylinux_2_18_x86_64
+        cp33-abi3-manylinux_2_17_x86_64
         cp33-abi3-manylinux2014_x86_64
+        cp33-abi3-manylinux_2_16_x86_64
+        cp33-abi3-manylinux_2_15_x86_64
+        cp33-abi3-manylinux_2_14_x86_64
+        cp33-abi3-manylinux_2_13_x86_64
+        cp33-abi3-manylinux_2_12_x86_64
+        cp33-abi3-manylinux2010_x86_64
+        cp33-abi3-manylinux_2_11_x86_64
+        cp33-abi3-manylinux_2_10_x86_64
+        cp33-abi3-manylinux_2_9_x86_64
+        cp33-abi3-manylinux_2_8_x86_64
+        cp33-abi3-manylinux_2_7_x86_64
+        cp33-abi3-manylinux_2_6_x86_64
+        cp33-abi3-manylinux_2_5_x86_64
         cp33-abi3-manylinux1_x86_64
-        cp32-abi3-linux_x86_64
-        cp32-abi3-manylinux_2_5_x86_64
-        cp32-abi3-manylinux_2_6_x86_64
-        cp32-abi3-manylinux_2_7_x86_64
-        cp32-abi3-manylinux_2_8_x86_64
-        cp32-abi3-manylinux_2_9_x86_64
-        cp32-abi3-manylinux_2_10_x86_64
-        cp32-abi3-manylinux_2_11_x86_64
-        cp32-abi3-manylinux_2_12_x86_64
-        cp32-abi3-manylinux_2_13_x86_64
-        cp32-abi3-manylinux_2_14_x86_64
-        cp32-abi3-manylinux_2_15_x86_64
-        cp32-abi3-manylinux_2_16_x86_64
-        cp32-abi3-manylinux_2_17_x86_64
-        cp32-abi3-manylinux_2_18_x86_64
-        cp32-abi3-manylinux_2_19_x86_64
-        cp32-abi3-manylinux_2_20_x86_64
-        cp32-abi3-manylinux_2_21_x86_64
-        cp32-abi3-manylinux_2_22_x86_64
-        cp32-abi3-manylinux_2_23_x86_64
-        cp32-abi3-manylinux_2_24_x86_64
-        cp32-abi3-manylinux_2_25_x86_64
-        cp32-abi3-manylinux_2_26_x86_64
-        cp32-abi3-manylinux_2_27_x86_64
+        cp33-abi3-linux_x86_64
         cp32-abi3-manylinux_2_28_x86_64
-        cp32-abi3-manylinux2010_x86_64
+        cp32-abi3-manylinux_2_27_x86_64
+        cp32-abi3-manylinux_2_26_x86_64
+        cp32-abi3-manylinux_2_25_x86_64
+        cp32-abi3-manylinux_2_24_x86_64
+        cp32-abi3-manylinux_2_23_x86_64
+        cp32-abi3-manylinux_2_22_x86_64
+        cp32-abi3-manylinux_2_21_x86_64
+        cp32-abi3-manylinux_2_20_x86_64
+        cp32-abi3-manylinux_2_19_x86_64
+        cp32-abi3-manylinux_2_18_x86_64
+        cp32-abi3-manylinux_2_17_x86_64
         cp32-abi3-manylinux2014_x86_64
+        cp32-abi3-manylinux_2_16_x86_64
+        cp32-abi3-manylinux_2_15_x86_64
+        cp32-abi3-manylinux_2_14_x86_64
+        cp32-abi3-manylinux_2_13_x86_64
+        cp32-abi3-manylinux_2_12_x86_64
+        cp32-abi3-manylinux2010_x86_64
+        cp32-abi3-manylinux_2_11_x86_64
+        cp32-abi3-manylinux_2_10_x86_64
+        cp32-abi3-manylinux_2_9_x86_64
+        cp32-abi3-manylinux_2_8_x86_64
+        cp32-abi3-manylinux_2_7_x86_64
+        cp32-abi3-manylinux_2_6_x86_64
+        cp32-abi3-manylinux_2_5_x86_64
         cp32-abi3-manylinux1_x86_64
-        py39-none-linux_x86_64
-        py39-none-manylinux_2_5_x86_64
-        py39-none-manylinux_2_6_x86_64
-        py39-none-manylinux_2_7_x86_64
-        py39-none-manylinux_2_8_x86_64
-        py39-none-manylinux_2_9_x86_64
-        py39-none-manylinux_2_10_x86_64
-        py39-none-manylinux_2_11_x86_64
-        py39-none-manylinux_2_12_x86_64
-        py39-none-manylinux_2_13_x86_64
-        py39-none-manylinux_2_14_x86_64
-        py39-none-manylinux_2_15_x86_64
-        py39-none-manylinux_2_16_x86_64
-        py39-none-manylinux_2_17_x86_64
-        py39-none-manylinux_2_18_x86_64
-        py39-none-manylinux_2_19_x86_64
-        py39-none-manylinux_2_20_x86_64
-        py39-none-manylinux_2_21_x86_64
-        py39-none-manylinux_2_22_x86_64
-        py39-none-manylinux_2_23_x86_64
-        py39-none-manylinux_2_24_x86_64
-        py39-none-manylinux_2_25_x86_64
-        py39-none-manylinux_2_26_x86_64
-        py39-none-manylinux_2_27_x86_64
+        cp32-abi3-linux_x86_64
         py39-none-manylinux_2_28_x86_64
-        py39-none-manylinux2010_x86_64
+        py39-none-manylinux_2_27_x86_64
+        py39-none-manylinux_2_26_x86_64
+        py39-none-manylinux_2_25_x86_64
+        py39-none-manylinux_2_24_x86_64
+        py39-none-manylinux_2_23_x86_64
+        py39-none-manylinux_2_22_x86_64
+        py39-none-manylinux_2_21_x86_64
+        py39-none-manylinux_2_20_x86_64
+        py39-none-manylinux_2_19_x86_64
+        py39-none-manylinux_2_18_x86_64
+        py39-none-manylinux_2_17_x86_64
         py39-none-manylinux2014_x86_64
+        py39-none-manylinux_2_16_x86_64
+        py39-none-manylinux_2_15_x86_64
+        py39-none-manylinux_2_14_x86_64
+        py39-none-manylinux_2_13_x86_64
+        py39-none-manylinux_2_12_x86_64
+        py39-none-manylinux2010_x86_64
+        py39-none-manylinux_2_11_x86_64
+        py39-none-manylinux_2_10_x86_64
+        py39-none-manylinux_2_9_x86_64
+        py39-none-manylinux_2_8_x86_64
+        py39-none-manylinux_2_7_x86_64
+        py39-none-manylinux_2_6_x86_64
+        py39-none-manylinux_2_5_x86_64
         py39-none-manylinux1_x86_64
-        py38-none-linux_x86_64
-        py38-none-manylinux_2_5_x86_64
-        py38-none-manylinux_2_6_x86_64
-        py38-none-manylinux_2_7_x86_64
-        py38-none-manylinux_2_8_x86_64
-        py38-none-manylinux_2_9_x86_64
-        py38-none-manylinux_2_10_x86_64
-        py38-none-manylinux_2_11_x86_64
-        py38-none-manylinux_2_12_x86_64
-        py38-none-manylinux_2_13_x86_64
-        py38-none-manylinux_2_14_x86_64
-        py38-none-manylinux_2_15_x86_64
-        py38-none-manylinux_2_16_x86_64
-        py38-none-manylinux_2_17_x86_64
-        py38-none-manylinux_2_18_x86_64
-        py38-none-manylinux_2_19_x86_64
-        py38-none-manylinux_2_20_x86_64
-        py38-none-manylinux_2_21_x86_64
-        py38-none-manylinux_2_22_x86_64
-        py38-none-manylinux_2_23_x86_64
-        py38-none-manylinux_2_24_x86_64
-        py38-none-manylinux_2_25_x86_64
-        py38-none-manylinux_2_26_x86_64
-        py38-none-manylinux_2_27_x86_64
+        py39-none-linux_x86_64
         py38-none-manylinux_2_28_x86_64
-        py38-none-manylinux2010_x86_64
+        py38-none-manylinux_2_27_x86_64
+        py38-none-manylinux_2_26_x86_64
+        py38-none-manylinux_2_25_x86_64
+        py38-none-manylinux_2_24_x86_64
+        py38-none-manylinux_2_23_x86_64
+        py38-none-manylinux_2_22_x86_64
+        py38-none-manylinux_2_21_x86_64
+        py38-none-manylinux_2_20_x86_64
+        py38-none-manylinux_2_19_x86_64
+        py38-none-manylinux_2_18_x86_64
+        py38-none-manylinux_2_17_x86_64
         py38-none-manylinux2014_x86_64
+        py38-none-manylinux_2_16_x86_64
+        py38-none-manylinux_2_15_x86_64
+        py38-none-manylinux_2_14_x86_64
+        py38-none-manylinux_2_13_x86_64
+        py38-none-manylinux_2_12_x86_64
+        py38-none-manylinux2010_x86_64
+        py38-none-manylinux_2_11_x86_64
+        py38-none-manylinux_2_10_x86_64
+        py38-none-manylinux_2_9_x86_64
+        py38-none-manylinux_2_8_x86_64
+        py38-none-manylinux_2_7_x86_64
+        py38-none-manylinux_2_6_x86_64
+        py38-none-manylinux_2_5_x86_64
         py38-none-manylinux1_x86_64
-        py37-none-linux_x86_64
-        py37-none-manylinux_2_5_x86_64
-        py37-none-manylinux_2_6_x86_64
-        py37-none-manylinux_2_7_x86_64
-        py37-none-manylinux_2_8_x86_64
-        py37-none-manylinux_2_9_x86_64
-        py37-none-manylinux_2_10_x86_64
-        py37-none-manylinux_2_11_x86_64
-        py37-none-manylinux_2_12_x86_64
-        py37-none-manylinux_2_13_x86_64
-        py37-none-manylinux_2_14_x86_64
-        py37-none-manylinux_2_15_x86_64
-        py37-none-manylinux_2_16_x86_64
-        py37-none-manylinux_2_17_x86_64
-        py37-none-manylinux_2_18_x86_64
-        py37-none-manylinux_2_19_x86_64
-        py37-none-manylinux_2_20_x86_64
-        py37-none-manylinux_2_21_x86_64
-        py37-none-manylinux_2_22_x86_64
-        py37-none-manylinux_2_23_x86_64
-        py37-none-manylinux_2_24_x86_64
-        py37-none-manylinux_2_25_x86_64
-        py37-none-manylinux_2_26_x86_64
-        py37-none-manylinux_2_27_x86_64
+        py38-none-linux_x86_64
         py37-none-manylinux_2_28_x86_64
-        py37-none-manylinux2010_x86_64
+        py37-none-manylinux_2_27_x86_64
+        py37-none-manylinux_2_26_x86_64
+        py37-none-manylinux_2_25_x86_64
+        py37-none-manylinux_2_24_x86_64
+        py37-none-manylinux_2_23_x86_64
+        py37-none-manylinux_2_22_x86_64
+        py37-none-manylinux_2_21_x86_64
+        py37-none-manylinux_2_20_x86_64
+        py37-none-manylinux_2_19_x86_64
+        py37-none-manylinux_2_18_x86_64
+        py37-none-manylinux_2_17_x86_64
         py37-none-manylinux2014_x86_64
+        py37-none-manylinux_2_16_x86_64
+        py37-none-manylinux_2_15_x86_64
+        py37-none-manylinux_2_14_x86_64
+        py37-none-manylinux_2_13_x86_64
+        py37-none-manylinux_2_12_x86_64
+        py37-none-manylinux2010_x86_64
+        py37-none-manylinux_2_11_x86_64
+        py37-none-manylinux_2_10_x86_64
+        py37-none-manylinux_2_9_x86_64
+        py37-none-manylinux_2_8_x86_64
+        py37-none-manylinux_2_7_x86_64
+        py37-none-manylinux_2_6_x86_64
+        py37-none-manylinux_2_5_x86_64
         py37-none-manylinux1_x86_64
-        py36-none-linux_x86_64
-        py36-none-manylinux_2_5_x86_64
-        py36-none-manylinux_2_6_x86_64
-        py36-none-manylinux_2_7_x86_64
-        py36-none-manylinux_2_8_x86_64
-        py36-none-manylinux_2_9_x86_64
-        py36-none-manylinux_2_10_x86_64
-        py36-none-manylinux_2_11_x86_64
-        py36-none-manylinux_2_12_x86_64
-        py36-none-manylinux_2_13_x86_64
-        py36-none-manylinux_2_14_x86_64
-        py36-none-manylinux_2_15_x86_64
-        py36-none-manylinux_2_16_x86_64
-        py36-none-manylinux_2_17_x86_64
-        py36-none-manylinux_2_18_x86_64
-        py36-none-manylinux_2_19_x86_64
-        py36-none-manylinux_2_20_x86_64
-        py36-none-manylinux_2_21_x86_64
-        py36-none-manylinux_2_22_x86_64
-        py36-none-manylinux_2_23_x86_64
-        py36-none-manylinux_2_24_x86_64
-        py36-none-manylinux_2_25_x86_64
-        py36-none-manylinux_2_26_x86_64
-        py36-none-manylinux_2_27_x86_64
+        py37-none-linux_x86_64
         py36-none-manylinux_2_28_x86_64
-        py36-none-manylinux2010_x86_64
+        py36-none-manylinux_2_27_x86_64
+        py36-none-manylinux_2_26_x86_64
+        py36-none-manylinux_2_25_x86_64
+        py36-none-manylinux_2_24_x86_64
+        py36-none-manylinux_2_23_x86_64
+        py36-none-manylinux_2_22_x86_64
+        py36-none-manylinux_2_21_x86_64
+        py36-none-manylinux_2_20_x86_64
+        py36-none-manylinux_2_19_x86_64
+        py36-none-manylinux_2_18_x86_64
+        py36-none-manylinux_2_17_x86_64
         py36-none-manylinux2014_x86_64
+        py36-none-manylinux_2_16_x86_64
+        py36-none-manylinux_2_15_x86_64
+        py36-none-manylinux_2_14_x86_64
+        py36-none-manylinux_2_13_x86_64
+        py36-none-manylinux_2_12_x86_64
+        py36-none-manylinux2010_x86_64
+        py36-none-manylinux_2_11_x86_64
+        py36-none-manylinux_2_10_x86_64
+        py36-none-manylinux_2_9_x86_64
+        py36-none-manylinux_2_8_x86_64
+        py36-none-manylinux_2_7_x86_64
+        py36-none-manylinux_2_6_x86_64
+        py36-none-manylinux_2_5_x86_64
         py36-none-manylinux1_x86_64
-        py35-none-linux_x86_64
-        py35-none-manylinux_2_5_x86_64
-        py35-none-manylinux_2_6_x86_64
-        py35-none-manylinux_2_7_x86_64
-        py35-none-manylinux_2_8_x86_64
-        py35-none-manylinux_2_9_x86_64
-        py35-none-manylinux_2_10_x86_64
-        py35-none-manylinux_2_11_x86_64
-        py35-none-manylinux_2_12_x86_64
-        py35-none-manylinux_2_13_x86_64
-        py35-none-manylinux_2_14_x86_64
-        py35-none-manylinux_2_15_x86_64
-        py35-none-manylinux_2_16_x86_64
-        py35-none-manylinux_2_17_x86_64
-        py35-none-manylinux_2_18_x86_64
-        py35-none-manylinux_2_19_x86_64
-        py35-none-manylinux_2_20_x86_64
-        py35-none-manylinux_2_21_x86_64
-        py35-none-manylinux_2_22_x86_64
-        py35-none-manylinux_2_23_x86_64
-        py35-none-manylinux_2_24_x86_64
-        py35-none-manylinux_2_25_x86_64
-        py35-none-manylinux_2_26_x86_64
-        py35-none-manylinux_2_27_x86_64
+        py36-none-linux_x86_64
         py35-none-manylinux_2_28_x86_64
-        py35-none-manylinux2010_x86_64
+        py35-none-manylinux_2_27_x86_64
+        py35-none-manylinux_2_26_x86_64
+        py35-none-manylinux_2_25_x86_64
+        py35-none-manylinux_2_24_x86_64
+        py35-none-manylinux_2_23_x86_64
+        py35-none-manylinux_2_22_x86_64
+        py35-none-manylinux_2_21_x86_64
+        py35-none-manylinux_2_20_x86_64
+        py35-none-manylinux_2_19_x86_64
+        py35-none-manylinux_2_18_x86_64
+        py35-none-manylinux_2_17_x86_64
         py35-none-manylinux2014_x86_64
+        py35-none-manylinux_2_16_x86_64
+        py35-none-manylinux_2_15_x86_64
+        py35-none-manylinux_2_14_x86_64
+        py35-none-manylinux_2_13_x86_64
+        py35-none-manylinux_2_12_x86_64
+        py35-none-manylinux2010_x86_64
+        py35-none-manylinux_2_11_x86_64
+        py35-none-manylinux_2_10_x86_64
+        py35-none-manylinux_2_9_x86_64
+        py35-none-manylinux_2_8_x86_64
+        py35-none-manylinux_2_7_x86_64
+        py35-none-manylinux_2_6_x86_64
+        py35-none-manylinux_2_5_x86_64
         py35-none-manylinux1_x86_64
-        py34-none-linux_x86_64
-        py34-none-manylinux_2_5_x86_64
-        py34-none-manylinux_2_6_x86_64
-        py34-none-manylinux_2_7_x86_64
-        py34-none-manylinux_2_8_x86_64
-        py34-none-manylinux_2_9_x86_64
-        py34-none-manylinux_2_10_x86_64
-        py34-none-manylinux_2_11_x86_64
-        py34-none-manylinux_2_12_x86_64
-        py34-none-manylinux_2_13_x86_64
-        py34-none-manylinux_2_14_x86_64
-        py34-none-manylinux_2_15_x86_64
-        py34-none-manylinux_2_16_x86_64
-        py34-none-manylinux_2_17_x86_64
-        py34-none-manylinux_2_18_x86_64
-        py34-none-manylinux_2_19_x86_64
-        py34-none-manylinux_2_20_x86_64
-        py34-none-manylinux_2_21_x86_64
-        py34-none-manylinux_2_22_x86_64
-        py34-none-manylinux_2_23_x86_64
-        py34-none-manylinux_2_24_x86_64
-        py34-none-manylinux_2_25_x86_64
-        py34-none-manylinux_2_26_x86_64
-        py34-none-manylinux_2_27_x86_64
+        py35-none-linux_x86_64
         py34-none-manylinux_2_28_x86_64
-        py34-none-manylinux2010_x86_64
+        py34-none-manylinux_2_27_x86_64
+        py34-none-manylinux_2_26_x86_64
+        py34-none-manylinux_2_25_x86_64
+        py34-none-manylinux_2_24_x86_64
+        py34-none-manylinux_2_23_x86_64
+        py34-none-manylinux_2_22_x86_64
+        py34-none-manylinux_2_21_x86_64
+        py34-none-manylinux_2_20_x86_64
+        py34-none-manylinux_2_19_x86_64
+        py34-none-manylinux_2_18_x86_64
+        py34-none-manylinux_2_17_x86_64
         py34-none-manylinux2014_x86_64
+        py34-none-manylinux_2_16_x86_64
+        py34-none-manylinux_2_15_x86_64
+        py34-none-manylinux_2_14_x86_64
+        py34-none-manylinux_2_13_x86_64
+        py34-none-manylinux_2_12_x86_64
+        py34-none-manylinux2010_x86_64
+        py34-none-manylinux_2_11_x86_64
+        py34-none-manylinux_2_10_x86_64
+        py34-none-manylinux_2_9_x86_64
+        py34-none-manylinux_2_8_x86_64
+        py34-none-manylinux_2_7_x86_64
+        py34-none-manylinux_2_6_x86_64
+        py34-none-manylinux_2_5_x86_64
         py34-none-manylinux1_x86_64
-        py33-none-linux_x86_64
-        py33-none-manylinux_2_5_x86_64
-        py33-none-manylinux_2_6_x86_64
-        py33-none-manylinux_2_7_x86_64
-        py33-none-manylinux_2_8_x86_64
-        py33-none-manylinux_2_9_x86_64
-        py33-none-manylinux_2_10_x86_64
-        py33-none-manylinux_2_11_x86_64
-        py33-none-manylinux_2_12_x86_64
-        py33-none-manylinux_2_13_x86_64
-        py33-none-manylinux_2_14_x86_64
-        py33-none-manylinux_2_15_x86_64
-        py33-none-manylinux_2_16_x86_64
-        py33-none-manylinux_2_17_x86_64
-        py33-none-manylinux_2_18_x86_64
-        py33-none-manylinux_2_19_x86_64
-        py33-none-manylinux_2_20_x86_64
-        py33-none-manylinux_2_21_x86_64
-        py33-none-manylinux_2_22_x86_64
-        py33-none-manylinux_2_23_x86_64
-        py33-none-manylinux_2_24_x86_64
-        py33-none-manylinux_2_25_x86_64
-        py33-none-manylinux_2_26_x86_64
-        py33-none-manylinux_2_27_x86_64
+        py34-none-linux_x86_64
         py33-none-manylinux_2_28_x86_64
-        py33-none-manylinux2010_x86_64
+        py33-none-manylinux_2_27_x86_64
+        py33-none-manylinux_2_26_x86_64
+        py33-none-manylinux_2_25_x86_64
+        py33-none-manylinux_2_24_x86_64
+        py33-none-manylinux_2_23_x86_64
+        py33-none-manylinux_2_22_x86_64
+        py33-none-manylinux_2_21_x86_64
+        py33-none-manylinux_2_20_x86_64
+        py33-none-manylinux_2_19_x86_64
+        py33-none-manylinux_2_18_x86_64
+        py33-none-manylinux_2_17_x86_64
         py33-none-manylinux2014_x86_64
+        py33-none-manylinux_2_16_x86_64
+        py33-none-manylinux_2_15_x86_64
+        py33-none-manylinux_2_14_x86_64
+        py33-none-manylinux_2_13_x86_64
+        py33-none-manylinux_2_12_x86_64
+        py33-none-manylinux2010_x86_64
+        py33-none-manylinux_2_11_x86_64
+        py33-none-manylinux_2_10_x86_64
+        py33-none-manylinux_2_9_x86_64
+        py33-none-manylinux_2_8_x86_64
+        py33-none-manylinux_2_7_x86_64
+        py33-none-manylinux_2_6_x86_64
+        py33-none-manylinux_2_5_x86_64
         py33-none-manylinux1_x86_64
-        py32-none-linux_x86_64
-        py32-none-manylinux_2_5_x86_64
-        py32-none-manylinux_2_6_x86_64
-        py32-none-manylinux_2_7_x86_64
-        py32-none-manylinux_2_8_x86_64
-        py32-none-manylinux_2_9_x86_64
-        py32-none-manylinux_2_10_x86_64
-        py32-none-manylinux_2_11_x86_64
-        py32-none-manylinux_2_12_x86_64
-        py32-none-manylinux_2_13_x86_64
-        py32-none-manylinux_2_14_x86_64
-        py32-none-manylinux_2_15_x86_64
-        py32-none-manylinux_2_16_x86_64
-        py32-none-manylinux_2_17_x86_64
-        py32-none-manylinux_2_18_x86_64
-        py32-none-manylinux_2_19_x86_64
-        py32-none-manylinux_2_20_x86_64
-        py32-none-manylinux_2_21_x86_64
-        py32-none-manylinux_2_22_x86_64
-        py32-none-manylinux_2_23_x86_64
-        py32-none-manylinux_2_24_x86_64
-        py32-none-manylinux_2_25_x86_64
-        py32-none-manylinux_2_26_x86_64
-        py32-none-manylinux_2_27_x86_64
+        py33-none-linux_x86_64
         py32-none-manylinux_2_28_x86_64
-        py32-none-manylinux2010_x86_64
+        py32-none-manylinux_2_27_x86_64
+        py32-none-manylinux_2_26_x86_64
+        py32-none-manylinux_2_25_x86_64
+        py32-none-manylinux_2_24_x86_64
+        py32-none-manylinux_2_23_x86_64
+        py32-none-manylinux_2_22_x86_64
+        py32-none-manylinux_2_21_x86_64
+        py32-none-manylinux_2_20_x86_64
+        py32-none-manylinux_2_19_x86_64
+        py32-none-manylinux_2_18_x86_64
+        py32-none-manylinux_2_17_x86_64
         py32-none-manylinux2014_x86_64
+        py32-none-manylinux_2_16_x86_64
+        py32-none-manylinux_2_15_x86_64
+        py32-none-manylinux_2_14_x86_64
+        py32-none-manylinux_2_13_x86_64
+        py32-none-manylinux_2_12_x86_64
+        py32-none-manylinux2010_x86_64
+        py32-none-manylinux_2_11_x86_64
+        py32-none-manylinux_2_10_x86_64
+        py32-none-manylinux_2_9_x86_64
+        py32-none-manylinux_2_8_x86_64
+        py32-none-manylinux_2_7_x86_64
+        py32-none-manylinux_2_6_x86_64
+        py32-none-manylinux_2_5_x86_64
         py32-none-manylinux1_x86_64
-        py31-none-linux_x86_64
-        py31-none-manylinux_2_5_x86_64
-        py31-none-manylinux_2_6_x86_64
-        py31-none-manylinux_2_7_x86_64
-        py31-none-manylinux_2_8_x86_64
-        py31-none-manylinux_2_9_x86_64
-        py31-none-manylinux_2_10_x86_64
-        py31-none-manylinux_2_11_x86_64
-        py31-none-manylinux_2_12_x86_64
-        py31-none-manylinux_2_13_x86_64
-        py31-none-manylinux_2_14_x86_64
-        py31-none-manylinux_2_15_x86_64
-        py31-none-manylinux_2_16_x86_64
-        py31-none-manylinux_2_17_x86_64
-        py31-none-manylinux_2_18_x86_64
-        py31-none-manylinux_2_19_x86_64
-        py31-none-manylinux_2_20_x86_64
-        py31-none-manylinux_2_21_x86_64
-        py31-none-manylinux_2_22_x86_64
-        py31-none-manylinux_2_23_x86_64
-        py31-none-manylinux_2_24_x86_64
-        py31-none-manylinux_2_25_x86_64
-        py31-none-manylinux_2_26_x86_64
-        py31-none-manylinux_2_27_x86_64
+        py32-none-linux_x86_64
         py31-none-manylinux_2_28_x86_64
-        py31-none-manylinux2010_x86_64
+        py31-none-manylinux_2_27_x86_64
+        py31-none-manylinux_2_26_x86_64
+        py31-none-manylinux_2_25_x86_64
+        py31-none-manylinux_2_24_x86_64
+        py31-none-manylinux_2_23_x86_64
+        py31-none-manylinux_2_22_x86_64
+        py31-none-manylinux_2_21_x86_64
+        py31-none-manylinux_2_20_x86_64
+        py31-none-manylinux_2_19_x86_64
+        py31-none-manylinux_2_18_x86_64
+        py31-none-manylinux_2_17_x86_64
         py31-none-manylinux2014_x86_64
+        py31-none-manylinux_2_16_x86_64
+        py31-none-manylinux_2_15_x86_64
+        py31-none-manylinux_2_14_x86_64
+        py31-none-manylinux_2_13_x86_64
+        py31-none-manylinux_2_12_x86_64
+        py31-none-manylinux2010_x86_64
+        py31-none-manylinux_2_11_x86_64
+        py31-none-manylinux_2_10_x86_64
+        py31-none-manylinux_2_9_x86_64
+        py31-none-manylinux_2_8_x86_64
+        py31-none-manylinux_2_7_x86_64
+        py31-none-manylinux_2_6_x86_64
+        py31-none-manylinux_2_5_x86_64
         py31-none-manylinux1_x86_64
-        py30-none-linux_x86_64
-        py30-none-manylinux_2_5_x86_64
-        py30-none-manylinux_2_6_x86_64
-        py30-none-manylinux_2_7_x86_64
-        py30-none-manylinux_2_8_x86_64
-        py30-none-manylinux_2_9_x86_64
-        py30-none-manylinux_2_10_x86_64
-        py30-none-manylinux_2_11_x86_64
-        py30-none-manylinux_2_12_x86_64
-        py30-none-manylinux_2_13_x86_64
-        py30-none-manylinux_2_14_x86_64
-        py30-none-manylinux_2_15_x86_64
-        py30-none-manylinux_2_16_x86_64
-        py30-none-manylinux_2_17_x86_64
-        py30-none-manylinux_2_18_x86_64
-        py30-none-manylinux_2_19_x86_64
-        py30-none-manylinux_2_20_x86_64
-        py30-none-manylinux_2_21_x86_64
-        py30-none-manylinux_2_22_x86_64
-        py30-none-manylinux_2_23_x86_64
-        py30-none-manylinux_2_24_x86_64
-        py30-none-manylinux_2_25_x86_64
-        py30-none-manylinux_2_26_x86_64
-        py30-none-manylinux_2_27_x86_64
+        py31-none-linux_x86_64
         py30-none-manylinux_2_28_x86_64
-        py30-none-manylinux2010_x86_64
+        py30-none-manylinux_2_27_x86_64
+        py30-none-manylinux_2_26_x86_64
+        py30-none-manylinux_2_25_x86_64
+        py30-none-manylinux_2_24_x86_64
+        py30-none-manylinux_2_23_x86_64
+        py30-none-manylinux_2_22_x86_64
+        py30-none-manylinux_2_21_x86_64
+        py30-none-manylinux_2_20_x86_64
+        py30-none-manylinux_2_19_x86_64
+        py30-none-manylinux_2_18_x86_64
+        py30-none-manylinux_2_17_x86_64
         py30-none-manylinux2014_x86_64
+        py30-none-manylinux_2_16_x86_64
+        py30-none-manylinux_2_15_x86_64
+        py30-none-manylinux_2_14_x86_64
+        py30-none-manylinux_2_13_x86_64
+        py30-none-manylinux_2_12_x86_64
+        py30-none-manylinux2010_x86_64
+        py30-none-manylinux_2_11_x86_64
+        py30-none-manylinux_2_10_x86_64
+        py30-none-manylinux_2_9_x86_64
+        py30-none-manylinux_2_8_x86_64
+        py30-none-manylinux_2_7_x86_64
+        py30-none-manylinux_2_6_x86_64
+        py30-none-manylinux_2_5_x86_64
         py30-none-manylinux1_x86_64
-        py3-none-linux_x86_64
-        py3-none-manylinux_2_5_x86_64
-        py3-none-manylinux_2_6_x86_64
-        py3-none-manylinux_2_7_x86_64
-        py3-none-manylinux_2_8_x86_64
-        py3-none-manylinux_2_9_x86_64
-        py3-none-manylinux_2_10_x86_64
-        py3-none-manylinux_2_11_x86_64
-        py3-none-manylinux_2_12_x86_64
-        py3-none-manylinux_2_13_x86_64
-        py3-none-manylinux_2_14_x86_64
-        py3-none-manylinux_2_15_x86_64
-        py3-none-manylinux_2_16_x86_64
-        py3-none-manylinux_2_17_x86_64
-        py3-none-manylinux_2_18_x86_64
-        py3-none-manylinux_2_19_x86_64
-        py3-none-manylinux_2_20_x86_64
-        py3-none-manylinux_2_21_x86_64
-        py3-none-manylinux_2_22_x86_64
-        py3-none-manylinux_2_23_x86_64
-        py3-none-manylinux_2_24_x86_64
-        py3-none-manylinux_2_25_x86_64
-        py3-none-manylinux_2_26_x86_64
-        py3-none-manylinux_2_27_x86_64
+        py30-none-linux_x86_64
         py3-none-manylinux_2_28_x86_64
-        py3-none-manylinux2010_x86_64
+        py3-none-manylinux_2_27_x86_64
+        py3-none-manylinux_2_26_x86_64
+        py3-none-manylinux_2_25_x86_64
+        py3-none-manylinux_2_24_x86_64
+        py3-none-manylinux_2_23_x86_64
+        py3-none-manylinux_2_22_x86_64
+        py3-none-manylinux_2_21_x86_64
+        py3-none-manylinux_2_20_x86_64
+        py3-none-manylinux_2_19_x86_64
+        py3-none-manylinux_2_18_x86_64
+        py3-none-manylinux_2_17_x86_64
         py3-none-manylinux2014_x86_64
+        py3-none-manylinux_2_16_x86_64
+        py3-none-manylinux_2_15_x86_64
+        py3-none-manylinux_2_14_x86_64
+        py3-none-manylinux_2_13_x86_64
+        py3-none-manylinux_2_12_x86_64
+        py3-none-manylinux2010_x86_64
+        py3-none-manylinux_2_11_x86_64
+        py3-none-manylinux_2_10_x86_64
+        py3-none-manylinux_2_9_x86_64
+        py3-none-manylinux_2_8_x86_64
+        py3-none-manylinux_2_7_x86_64
+        py3-none-manylinux_2_6_x86_64
+        py3-none-manylinux_2_5_x86_64
         py3-none-manylinux1_x86_64
+        py3-none-linux_x86_64
         py39-none-any
         py38-none-any
         py37-none-any
