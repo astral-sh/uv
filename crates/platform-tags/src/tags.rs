@@ -151,6 +151,13 @@ impl Tags {
             }
         }
         // 4. no binary
+        if matches!(implementation, Implementation::CPython) {
+            tags.push((
+                format!("cp{}{}", python_version.0, python_version.1),
+                "none".to_string(),
+                "any".to_string(),
+            ));
+        }
         for minor in (0..=python_version.1).rev() {
             tags.push((
                 format!("py{}{}", python_version.0, minor),
@@ -1361,6 +1368,7 @@ mod tests {
         py30-none-manylinux_2_5_x86_64
         py30-none-manylinux1_x86_64
         py30-none-linux_x86_64
+        cp39-none-any
         py39-none-any
         py3-none-any
         py38-none-any
@@ -1877,6 +1885,7 @@ mod tests {
         py30-none-macosx_10_6_universal2
         py30-none-macosx_10_5_universal2
         py30-none-macosx_10_4_universal2
+        cp39-none-any
         py39-none-any
         py3-none-any
         py38-none-any
