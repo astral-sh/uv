@@ -99,7 +99,7 @@ impl<'a> SitePackages<'a> {
         self.distributions.iter().flatten()
     }
 
-    /// Returns an iterator over the the installed distributions, represented as requirements.
+    /// Returns an iterator over the installed distributions, represented as requirements.
     pub fn requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.iter().map(|dist| Requirement {
             name: dist.name().clone(),
