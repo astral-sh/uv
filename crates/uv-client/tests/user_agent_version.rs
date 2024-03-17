@@ -134,7 +134,9 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     let body = res.text().await?;
 
     // Unpack User-Agent with linehaul
-    let (uv_version, uv_linehaul) = body.split_once(' ').expect("Failed to split User-Agent.");
+    let (uv_version, uv_linehaul) = body
+        .split_once(' ')
+        .expect("Failed to split User-Agent header.");
 
     // Deserializing Linehaul
     let linehaul: LineHaul = serde_json::from_str(uv_linehaul)?;
