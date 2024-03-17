@@ -408,7 +408,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
                 10 => {
                     // Prior to Mac OS 11, each yearly release of Mac OS bumped the "minor" version
                     // number. The major version was always 10.
-                    for minor in (0..=*minor).rev() {
+                    for minor in (4..=*minor).rev() {
                         for binary_format in get_mac_binary_formats(*major, minor, arch) {
                             platform_tags.push(format!("macosx_{major}_{minor}_{binary_format}"));
                         }
@@ -417,7 +417,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
                 value if *value >= 11 => {
                     // Starting with Mac OS 11, each yearly release bumps the major version number.
                     // The minor versions are now the midyear updates.
-                    for major in (10..=*major).rev() {
+                    for major in (11..=*major).rev() {
                         for binary_format in get_mac_binary_formats(major, 0, arch) {
                             platform_tags.push(format!("macosx_{}_{}_{}", major, 0, binary_format));
                         }
