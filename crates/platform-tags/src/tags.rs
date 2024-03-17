@@ -444,7 +444,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
             let mut platform_tags = vec![];
             // Starting with Mac OS 11, each yearly release bumps the major version number.
             // The minor versions are now the midyear updates.
-            for major in (10..=*major).rev() {
+            for major in (11..=*major).rev() {
                 for binary_format in get_mac_binary_formats(major, 0, arch) {
                     platform_tags.push(format!("macosx_{}_{}_{}", major, 0, binary_format));
                 }
@@ -1410,8 +1410,6 @@ mod tests {
         cp39-cp39-macosx_12_0_universal2
         cp39-cp39-macosx_11_0_arm64
         cp39-cp39-macosx_11_0_universal2
-        cp39-cp39-macosx_10_0_arm64
-        cp39-cp39-macosx_10_0_universal2
         cp39-cp39-macosx_10_16_universal2
         cp39-cp39-macosx_10_15_universal2
         cp39-cp39-macosx_10_14_universal2
@@ -1433,8 +1431,6 @@ mod tests {
         cp39-abi3-macosx_12_0_universal2
         cp39-abi3-macosx_11_0_arm64
         cp39-abi3-macosx_11_0_universal2
-        cp39-abi3-macosx_10_0_arm64
-        cp39-abi3-macosx_10_0_universal2
         cp39-abi3-macosx_10_16_universal2
         cp39-abi3-macosx_10_15_universal2
         cp39-abi3-macosx_10_14_universal2
@@ -1456,8 +1452,6 @@ mod tests {
         cp39-none-macosx_12_0_universal2
         cp39-none-macosx_11_0_arm64
         cp39-none-macosx_11_0_universal2
-        cp39-none-macosx_10_0_arm64
-        cp39-none-macosx_10_0_universal2
         cp39-none-macosx_10_16_universal2
         cp39-none-macosx_10_15_universal2
         cp39-none-macosx_10_14_universal2
@@ -1479,8 +1473,6 @@ mod tests {
         cp38-abi3-macosx_12_0_universal2
         cp38-abi3-macosx_11_0_arm64
         cp38-abi3-macosx_11_0_universal2
-        cp38-abi3-macosx_10_0_arm64
-        cp38-abi3-macosx_10_0_universal2
         cp38-abi3-macosx_10_16_universal2
         cp38-abi3-macosx_10_15_universal2
         cp38-abi3-macosx_10_14_universal2
@@ -1502,8 +1494,6 @@ mod tests {
         cp37-abi3-macosx_12_0_universal2
         cp37-abi3-macosx_11_0_arm64
         cp37-abi3-macosx_11_0_universal2
-        cp37-abi3-macosx_10_0_arm64
-        cp37-abi3-macosx_10_0_universal2
         cp37-abi3-macosx_10_16_universal2
         cp37-abi3-macosx_10_15_universal2
         cp37-abi3-macosx_10_14_universal2
@@ -1525,8 +1515,6 @@ mod tests {
         cp36-abi3-macosx_12_0_universal2
         cp36-abi3-macosx_11_0_arm64
         cp36-abi3-macosx_11_0_universal2
-        cp36-abi3-macosx_10_0_arm64
-        cp36-abi3-macosx_10_0_universal2
         cp36-abi3-macosx_10_16_universal2
         cp36-abi3-macosx_10_15_universal2
         cp36-abi3-macosx_10_14_universal2
@@ -1548,8 +1536,6 @@ mod tests {
         cp35-abi3-macosx_12_0_universal2
         cp35-abi3-macosx_11_0_arm64
         cp35-abi3-macosx_11_0_universal2
-        cp35-abi3-macosx_10_0_arm64
-        cp35-abi3-macosx_10_0_universal2
         cp35-abi3-macosx_10_16_universal2
         cp35-abi3-macosx_10_15_universal2
         cp35-abi3-macosx_10_14_universal2
@@ -1571,8 +1557,6 @@ mod tests {
         cp34-abi3-macosx_12_0_universal2
         cp34-abi3-macosx_11_0_arm64
         cp34-abi3-macosx_11_0_universal2
-        cp34-abi3-macosx_10_0_arm64
-        cp34-abi3-macosx_10_0_universal2
         cp34-abi3-macosx_10_16_universal2
         cp34-abi3-macosx_10_15_universal2
         cp34-abi3-macosx_10_14_universal2
@@ -1594,8 +1578,6 @@ mod tests {
         cp33-abi3-macosx_12_0_universal2
         cp33-abi3-macosx_11_0_arm64
         cp33-abi3-macosx_11_0_universal2
-        cp33-abi3-macosx_10_0_arm64
-        cp33-abi3-macosx_10_0_universal2
         cp33-abi3-macosx_10_16_universal2
         cp33-abi3-macosx_10_15_universal2
         cp33-abi3-macosx_10_14_universal2
@@ -1617,8 +1599,6 @@ mod tests {
         cp32-abi3-macosx_12_0_universal2
         cp32-abi3-macosx_11_0_arm64
         cp32-abi3-macosx_11_0_universal2
-        cp32-abi3-macosx_10_0_arm64
-        cp32-abi3-macosx_10_0_universal2
         cp32-abi3-macosx_10_16_universal2
         cp32-abi3-macosx_10_15_universal2
         cp32-abi3-macosx_10_14_universal2
@@ -1640,8 +1620,6 @@ mod tests {
         py39-none-macosx_12_0_universal2
         py39-none-macosx_11_0_arm64
         py39-none-macosx_11_0_universal2
-        py39-none-macosx_10_0_arm64
-        py39-none-macosx_10_0_universal2
         py39-none-macosx_10_16_universal2
         py39-none-macosx_10_15_universal2
         py39-none-macosx_10_14_universal2
@@ -1663,8 +1641,6 @@ mod tests {
         py3-none-macosx_12_0_universal2
         py3-none-macosx_11_0_arm64
         py3-none-macosx_11_0_universal2
-        py3-none-macosx_10_0_arm64
-        py3-none-macosx_10_0_universal2
         py3-none-macosx_10_16_universal2
         py3-none-macosx_10_15_universal2
         py3-none-macosx_10_14_universal2
@@ -1686,8 +1662,6 @@ mod tests {
         py38-none-macosx_12_0_universal2
         py38-none-macosx_11_0_arm64
         py38-none-macosx_11_0_universal2
-        py38-none-macosx_10_0_arm64
-        py38-none-macosx_10_0_universal2
         py38-none-macosx_10_16_universal2
         py38-none-macosx_10_15_universal2
         py38-none-macosx_10_14_universal2
@@ -1709,8 +1683,6 @@ mod tests {
         py37-none-macosx_12_0_universal2
         py37-none-macosx_11_0_arm64
         py37-none-macosx_11_0_universal2
-        py37-none-macosx_10_0_arm64
-        py37-none-macosx_10_0_universal2
         py37-none-macosx_10_16_universal2
         py37-none-macosx_10_15_universal2
         py37-none-macosx_10_14_universal2
@@ -1732,8 +1704,6 @@ mod tests {
         py36-none-macosx_12_0_universal2
         py36-none-macosx_11_0_arm64
         py36-none-macosx_11_0_universal2
-        py36-none-macosx_10_0_arm64
-        py36-none-macosx_10_0_universal2
         py36-none-macosx_10_16_universal2
         py36-none-macosx_10_15_universal2
         py36-none-macosx_10_14_universal2
@@ -1755,8 +1725,6 @@ mod tests {
         py35-none-macosx_12_0_universal2
         py35-none-macosx_11_0_arm64
         py35-none-macosx_11_0_universal2
-        py35-none-macosx_10_0_arm64
-        py35-none-macosx_10_0_universal2
         py35-none-macosx_10_16_universal2
         py35-none-macosx_10_15_universal2
         py35-none-macosx_10_14_universal2
@@ -1778,8 +1746,6 @@ mod tests {
         py34-none-macosx_12_0_universal2
         py34-none-macosx_11_0_arm64
         py34-none-macosx_11_0_universal2
-        py34-none-macosx_10_0_arm64
-        py34-none-macosx_10_0_universal2
         py34-none-macosx_10_16_universal2
         py34-none-macosx_10_15_universal2
         py34-none-macosx_10_14_universal2
@@ -1801,8 +1767,6 @@ mod tests {
         py33-none-macosx_12_0_universal2
         py33-none-macosx_11_0_arm64
         py33-none-macosx_11_0_universal2
-        py33-none-macosx_10_0_arm64
-        py33-none-macosx_10_0_universal2
         py33-none-macosx_10_16_universal2
         py33-none-macosx_10_15_universal2
         py33-none-macosx_10_14_universal2
@@ -1824,8 +1788,6 @@ mod tests {
         py32-none-macosx_12_0_universal2
         py32-none-macosx_11_0_arm64
         py32-none-macosx_11_0_universal2
-        py32-none-macosx_10_0_arm64
-        py32-none-macosx_10_0_universal2
         py32-none-macosx_10_16_universal2
         py32-none-macosx_10_15_universal2
         py32-none-macosx_10_14_universal2
@@ -1847,8 +1809,6 @@ mod tests {
         py31-none-macosx_12_0_universal2
         py31-none-macosx_11_0_arm64
         py31-none-macosx_11_0_universal2
-        py31-none-macosx_10_0_arm64
-        py31-none-macosx_10_0_universal2
         py31-none-macosx_10_16_universal2
         py31-none-macosx_10_15_universal2
         py31-none-macosx_10_14_universal2
@@ -1870,8 +1830,6 @@ mod tests {
         py30-none-macosx_12_0_universal2
         py30-none-macosx_11_0_arm64
         py30-none-macosx_11_0_universal2
-        py30-none-macosx_10_0_arm64
-        py30-none-macosx_10_0_universal2
         py30-none-macosx_10_16_universal2
         py30-none-macosx_10_15_universal2
         py30-none-macosx_10_14_universal2
