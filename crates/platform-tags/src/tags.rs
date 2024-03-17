@@ -409,7 +409,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
                     // Prior to Mac OS 11, each yearly release of Mac OS bumped the "minor" version
                     // number. The major version was always 10.
                     for minor in (4..=*minor).rev() {
-                        for binary_format in get_mac_binary_formats(*major, minor, arch) {
+                        for binary_format in get_mac_binary_formats(arch) {
                             platform_tags.push(format!("macosx_{major}_{minor}_{binary_format}"));
                         }
                     }
@@ -418,14 +418,14 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
                     // Starting with Mac OS 11, each yearly release bumps the major version number.
                     // The minor versions are now the midyear updates.
                     for major in (11..=*major).rev() {
-                        for binary_format in get_mac_binary_formats(major, 0, arch) {
+                        for binary_format in get_mac_binary_formats(arch) {
                             platform_tags.push(format!("macosx_{}_{}_{}", major, 0, binary_format));
                         }
                     }
                     // The "universal2" binary format can have a macOS version earlier than 11.0
                     // when the x86_64 part of the binary supports that version of macOS.
                     for minor in (4..=16).rev() {
-                        for binary_format in get_mac_binary_formats(10, minor, arch) {
+                        for binary_format in get_mac_binary_formats(arch) {
                             platform_tags
                                 .push(format!("macosx_{}_{}_{}", 10, minor, binary_format));
                         }
@@ -445,7 +445,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
             // Starting with Mac OS 11, each yearly release bumps the major version number.
             // The minor versions are now the midyear updates.
             for major in (11..=*major).rev() {
-                for binary_format in get_mac_binary_formats(major, 0, arch) {
+                for binary_format in get_mac_binary_formats(arch) {
                     platform_tags.push(format!("macosx_{}_{}_{}", major, 0, binary_format));
                 }
             }
@@ -512,16 +512,13 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
 
 /// Determine the appropriate binary formats for a macOS version.
 /// Source: <https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L314>
-fn get_mac_binary_formats(major: u16, minor: u16, arch: Arch) -> Vec<String> {
+fn get_mac_binary_formats(arch: Arch) -> Vec<String> {
     let mut formats = vec![match arch {
         Arch::Aarch64 => "arm64".to_string(),
         _ => arch.to_string(),
     }];
 
     if matches!(arch, Arch::X86_64) {
-        if (major, minor) < (10, 4) {
-            return vec![];
-        }
         formats.extend([
             "intel".to_string(),
             "fat64".to_string(),
