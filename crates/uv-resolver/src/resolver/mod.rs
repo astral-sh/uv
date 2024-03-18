@@ -33,7 +33,7 @@ use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
 use uv_traits::BuildContext;
 
-use crate::candidate_selector::{CandidateDist, CandidateSelector};
+use crate::candidate_selector::{Candidate, CandidateDist, CandidateSelector};
 use crate::constraints::Constraints;
 use crate::editables::Editables;
 use crate::error::ResolveError;
@@ -199,7 +199,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         let requests_fut = self.fetch(request_stream).fuse();
 
         // Run the solver.
-        let resolve_fut = self.solve(request_sink).fuse();
+        let resolve_fut = self.solve(request_sink).boxed().fuse();
 
         // Wait for both to complete.
         match tokio::try_join!(requests_fut, resolve_fut) {
@@ -235,6 +235,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         request_sink: tokio::sync::mpsc::Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::Root(self.project.clone());
+        let mut tried_versions = FxHashMap::default();
+        let mut last_prefetch = FxHashMap::default();
 
         // Keep track of the packages for which we've requested metadata.
         let mut pins = FilePins::default();
@@ -282,6 +284,8 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 );
             };
             next = highest_priority_pkg;
+
+            *tried_versions.entry(next.clone()).or_default() += 1;
 
             let term_intersection = state
                 .partial_solution
@@ -383,6 +387,68 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     continue;
                 }
             };
+
+            if let PubGrubPackage::Package(package_name, _, _) = &next {
+                let num_tried: usize = tried_versions.get(&next).copied().unwrap_or_default();
+                let previous_prefetch: usize =
+                    last_prefetch.get(&next).copied().unwrap_or_default();
+                // Do this more often than the amount we prefetch as some prefetched version
+                // may have been eliminated meanwhile.
+                if num_tried - previous_prefetch >= 10 {
+                    let mut range = term_intersection.unwrap_positive().clone();
+                    let mut new_exclusions = Range::strictly_lower_than(version.clone());
+
+                    // This is immediate, we already fetched the version map.
+                    let versions_response = self
+                        .index
+                        .packages
+                        .wait(package_name)
+                        .await
+                        .ok_or(ResolveError::Unregistered)?;
+
+                    if let VersionsResponse::Found(ref version_map) = *versions_response {
+                        for _ in 0..40 {
+                            let candidate = if let Some(candidate) =
+                                self.selector.select(package_name, &range, version_map)
+                            {
+                                range = range.intersection(
+                                    &Range::singleton(candidate.version().clone()).complement(),
+                                );
+                                candidate
+                            } else if let Some(candidate) =
+                                version_map.iter().rev().find_map(|(version_, maybe_dist)| {
+                                    if !new_exclusions.contains(version_) {
+                                        None
+                                    } else if let Some(dist) = maybe_dist.prioritized_dist() {
+                                        Some(Candidate::new(package_name, version_, dist))
+                                    } else {
+                                        None
+                                    }
+                                })
+                            {
+                                new_exclusions = new_exclusions.intersection(
+                                    &Range::singleton(candidate.version().clone()).complement(),
+                                );
+                                candidate
+                            } else {
+                                break;
+                            };
+
+                            let CandidateDist::Compatible(dist) = candidate.dist() else {
+                                break;
+                            };
+
+                            // Emit a request to fetch the metadata for this version.
+                            if self.index.distributions.register(candidate.package_id()) {
+                                let dist = dist.for_resolution().clone();
+                                request_sink.send(Request::Dist(dist)).await?;
+                            }
+                        }
+                    }
+
+                    last_prefetch.insert(next.clone(), num_tried);
+                }
+            }
 
             self.on_progress(&next, &version);
 

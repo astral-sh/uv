@@ -103,7 +103,7 @@ impl CandidateSelector {
     pub(crate) fn select<'a>(
         &'a self,
         package_name: &'a PackageName,
-        range: &'a Range<Version>,
+        range: &Range<Version>,
         version_map: &'a VersionMap,
     ) -> Option<Candidate<'a>> {
         // If the package has a preference (e.g., an existing version from an existing lockfile),
@@ -327,7 +327,11 @@ pub(crate) struct Candidate<'a> {
 }
 
 impl<'a> Candidate<'a> {
-    fn new(name: &'a PackageName, version: &'a Version, dist: &'a PrioritizedDist) -> Self {
+    pub(crate) fn new(
+        name: &'a PackageName,
+        version: &'a Version,
+        dist: &'a PrioritizedDist,
+    ) -> Self {
         Self {
             name,
             version,
