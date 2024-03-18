@@ -106,11 +106,6 @@ impl Tags {
                 implementation.abi_tag(python_version, implementation_version),
                 platform_tag.clone(),
             ));
-            tags.push((
-                implementation.language_tag(python_version),
-                "none".to_string(),
-                platform_tag.clone(),
-            ));
         }
         // 2. abi3 and no abi (e.g. executable binary)
         if matches!(implementation, Implementation::CPython) {
@@ -123,6 +118,16 @@ impl Tags {
                         platform_tag.clone(),
                     ));
                 }
+                // Only include `none` tags for the current CPython version
+                if minor == python_version.1 {
+                    for platform_tag in &platform_tags {
+                        tags.push((
+                            implementation.language_tag((python_version.0, minor)),
+                            "none".to_string(),
+                            platform_tag.clone(),
+                        ));
+                    }
+                }
             }
         }
         // 3. no abi (e.g. executable binary)
@@ -134,28 +139,40 @@ impl Tags {
                     platform_tag.clone(),
                 ));
             }
+            // After the matching version emit `none` tags for the major version i.e. `py3`
+            if minor == python_version.1 {
+                for platform_tag in &platform_tags {
+                    tags.push((
+                        format!("py{}", python_version.0),
+                        "none".to_string(),
+                        platform_tag.clone(),
+                    ));
+                }
+            }
         }
-        // 4. major only
-        for platform_tag in platform_tags {
+        // 4. no binary
+        if matches!(implementation, Implementation::CPython) {
             tags.push((
-                format!("py{}", python_version.0),
+                format!("cp{}{}", python_version.0, python_version.1),
                 "none".to_string(),
-                platform_tag,
+                "any".to_string(),
             ));
         }
-        // 5. no binary
         for minor in (0..=python_version.1).rev() {
             tags.push((
                 format!("py{}{}", python_version.0, minor),
                 "none".to_string(),
                 "any".to_string(),
             ));
+            // After the matching version emit `none` tags for the major version i.e. `py3`
+            if minor == python_version.1 {
+                tags.push((
+                    format!("py{}", python_version.0),
+                    "none".to_string(),
+                    "any".to_string(),
+                ));
+            }
         }
-        tags.push((
-            format!("py{}", python_version.0),
-            "none".to_string(),
-            "any".to_string(),
-        ));
         Ok(Self::new(tags))
     }
 
@@ -764,61 +781,33 @@ mod tests {
             tags,
             @r###"
         cp39-cp39-manylinux_2_28_x86_64
-        cp39-none-manylinux_2_28_x86_64
         cp39-cp39-manylinux_2_27_x86_64
-        cp39-none-manylinux_2_27_x86_64
         cp39-cp39-manylinux_2_26_x86_64
-        cp39-none-manylinux_2_26_x86_64
         cp39-cp39-manylinux_2_25_x86_64
-        cp39-none-manylinux_2_25_x86_64
         cp39-cp39-manylinux_2_24_x86_64
-        cp39-none-manylinux_2_24_x86_64
         cp39-cp39-manylinux_2_23_x86_64
-        cp39-none-manylinux_2_23_x86_64
         cp39-cp39-manylinux_2_22_x86_64
-        cp39-none-manylinux_2_22_x86_64
         cp39-cp39-manylinux_2_21_x86_64
-        cp39-none-manylinux_2_21_x86_64
         cp39-cp39-manylinux_2_20_x86_64
-        cp39-none-manylinux_2_20_x86_64
         cp39-cp39-manylinux_2_19_x86_64
-        cp39-none-manylinux_2_19_x86_64
         cp39-cp39-manylinux_2_18_x86_64
-        cp39-none-manylinux_2_18_x86_64
         cp39-cp39-manylinux_2_17_x86_64
-        cp39-none-manylinux_2_17_x86_64
         cp39-cp39-manylinux2014_x86_64
-        cp39-none-manylinux2014_x86_64
         cp39-cp39-manylinux_2_16_x86_64
-        cp39-none-manylinux_2_16_x86_64
         cp39-cp39-manylinux_2_15_x86_64
-        cp39-none-manylinux_2_15_x86_64
         cp39-cp39-manylinux_2_14_x86_64
-        cp39-none-manylinux_2_14_x86_64
         cp39-cp39-manylinux_2_13_x86_64
-        cp39-none-manylinux_2_13_x86_64
         cp39-cp39-manylinux_2_12_x86_64
-        cp39-none-manylinux_2_12_x86_64
         cp39-cp39-manylinux2010_x86_64
-        cp39-none-manylinux2010_x86_64
         cp39-cp39-manylinux_2_11_x86_64
-        cp39-none-manylinux_2_11_x86_64
         cp39-cp39-manylinux_2_10_x86_64
-        cp39-none-manylinux_2_10_x86_64
         cp39-cp39-manylinux_2_9_x86_64
-        cp39-none-manylinux_2_9_x86_64
         cp39-cp39-manylinux_2_8_x86_64
-        cp39-none-manylinux_2_8_x86_64
         cp39-cp39-manylinux_2_7_x86_64
-        cp39-none-manylinux_2_7_x86_64
         cp39-cp39-manylinux_2_6_x86_64
-        cp39-none-manylinux_2_6_x86_64
         cp39-cp39-manylinux_2_5_x86_64
-        cp39-none-manylinux_2_5_x86_64
         cp39-cp39-manylinux1_x86_64
-        cp39-none-manylinux1_x86_64
         cp39-cp39-linux_x86_64
-        cp39-none-linux_x86_64
         cp39-abi3-manylinux_2_28_x86_64
         cp39-abi3-manylinux_2_27_x86_64
         cp39-abi3-manylinux_2_26_x86_64
@@ -847,6 +836,34 @@ mod tests {
         cp39-abi3-manylinux_2_5_x86_64
         cp39-abi3-manylinux1_x86_64
         cp39-abi3-linux_x86_64
+        cp39-none-manylinux_2_28_x86_64
+        cp39-none-manylinux_2_27_x86_64
+        cp39-none-manylinux_2_26_x86_64
+        cp39-none-manylinux_2_25_x86_64
+        cp39-none-manylinux_2_24_x86_64
+        cp39-none-manylinux_2_23_x86_64
+        cp39-none-manylinux_2_22_x86_64
+        cp39-none-manylinux_2_21_x86_64
+        cp39-none-manylinux_2_20_x86_64
+        cp39-none-manylinux_2_19_x86_64
+        cp39-none-manylinux_2_18_x86_64
+        cp39-none-manylinux_2_17_x86_64
+        cp39-none-manylinux2014_x86_64
+        cp39-none-manylinux_2_16_x86_64
+        cp39-none-manylinux_2_15_x86_64
+        cp39-none-manylinux_2_14_x86_64
+        cp39-none-manylinux_2_13_x86_64
+        cp39-none-manylinux_2_12_x86_64
+        cp39-none-manylinux2010_x86_64
+        cp39-none-manylinux_2_11_x86_64
+        cp39-none-manylinux_2_10_x86_64
+        cp39-none-manylinux_2_9_x86_64
+        cp39-none-manylinux_2_8_x86_64
+        cp39-none-manylinux_2_7_x86_64
+        cp39-none-manylinux_2_6_x86_64
+        cp39-none-manylinux_2_5_x86_64
+        cp39-none-manylinux1_x86_64
+        cp39-none-linux_x86_64
         cp38-abi3-manylinux_2_28_x86_64
         cp38-abi3-manylinux_2_27_x86_64
         cp38-abi3-manylinux_2_26_x86_64
@@ -1071,6 +1088,34 @@ mod tests {
         py39-none-manylinux_2_5_x86_64
         py39-none-manylinux1_x86_64
         py39-none-linux_x86_64
+        py3-none-manylinux_2_28_x86_64
+        py3-none-manylinux_2_27_x86_64
+        py3-none-manylinux_2_26_x86_64
+        py3-none-manylinux_2_25_x86_64
+        py3-none-manylinux_2_24_x86_64
+        py3-none-manylinux_2_23_x86_64
+        py3-none-manylinux_2_22_x86_64
+        py3-none-manylinux_2_21_x86_64
+        py3-none-manylinux_2_20_x86_64
+        py3-none-manylinux_2_19_x86_64
+        py3-none-manylinux_2_18_x86_64
+        py3-none-manylinux_2_17_x86_64
+        py3-none-manylinux2014_x86_64
+        py3-none-manylinux_2_16_x86_64
+        py3-none-manylinux_2_15_x86_64
+        py3-none-manylinux_2_14_x86_64
+        py3-none-manylinux_2_13_x86_64
+        py3-none-manylinux_2_12_x86_64
+        py3-none-manylinux2010_x86_64
+        py3-none-manylinux_2_11_x86_64
+        py3-none-manylinux_2_10_x86_64
+        py3-none-manylinux_2_9_x86_64
+        py3-none-manylinux_2_8_x86_64
+        py3-none-manylinux_2_7_x86_64
+        py3-none-manylinux_2_6_x86_64
+        py3-none-manylinux_2_5_x86_64
+        py3-none-manylinux1_x86_64
+        py3-none-linux_x86_64
         py38-none-manylinux_2_28_x86_64
         py38-none-manylinux_2_27_x86_64
         py38-none-manylinux_2_26_x86_64
@@ -1323,35 +1368,9 @@ mod tests {
         py30-none-manylinux_2_5_x86_64
         py30-none-manylinux1_x86_64
         py30-none-linux_x86_64
-        py3-none-manylinux_2_28_x86_64
-        py3-none-manylinux_2_27_x86_64
-        py3-none-manylinux_2_26_x86_64
-        py3-none-manylinux_2_25_x86_64
-        py3-none-manylinux_2_24_x86_64
-        py3-none-manylinux_2_23_x86_64
-        py3-none-manylinux_2_22_x86_64
-        py3-none-manylinux_2_21_x86_64
-        py3-none-manylinux_2_20_x86_64
-        py3-none-manylinux_2_19_x86_64
-        py3-none-manylinux_2_18_x86_64
-        py3-none-manylinux_2_17_x86_64
-        py3-none-manylinux2014_x86_64
-        py3-none-manylinux_2_16_x86_64
-        py3-none-manylinux_2_15_x86_64
-        py3-none-manylinux_2_14_x86_64
-        py3-none-manylinux_2_13_x86_64
-        py3-none-manylinux_2_12_x86_64
-        py3-none-manylinux2010_x86_64
-        py3-none-manylinux_2_11_x86_64
-        py3-none-manylinux_2_10_x86_64
-        py3-none-manylinux_2_9_x86_64
-        py3-none-manylinux_2_8_x86_64
-        py3-none-manylinux_2_7_x86_64
-        py3-none-manylinux_2_6_x86_64
-        py3-none-manylinux_2_5_x86_64
-        py3-none-manylinux1_x86_64
-        py3-none-linux_x86_64
+        cp39-none-any
         py39-none-any
+        py3-none-any
         py38-none-any
         py37-none-any
         py36-none-any
@@ -1361,7 +1380,6 @@ mod tests {
         py32-none-any
         py31-none-any
         py30-none-any
-        py3-none-any
         "###
         );
     }
@@ -1385,51 +1403,28 @@ mod tests {
             tags,
             @r###"
         cp39-cp39-macosx_14_0_arm64
-        cp39-none-macosx_14_0_arm64
         cp39-cp39-macosx_14_0_universal2
-        cp39-none-macosx_14_0_universal2
         cp39-cp39-macosx_13_0_arm64
-        cp39-none-macosx_13_0_arm64
         cp39-cp39-macosx_13_0_universal2
-        cp39-none-macosx_13_0_universal2
         cp39-cp39-macosx_12_0_arm64
-        cp39-none-macosx_12_0_arm64
         cp39-cp39-macosx_12_0_universal2
-        cp39-none-macosx_12_0_universal2
         cp39-cp39-macosx_11_0_arm64
-        cp39-none-macosx_11_0_arm64
         cp39-cp39-macosx_11_0_universal2
-        cp39-none-macosx_11_0_universal2
         cp39-cp39-macosx_10_0_arm64
-        cp39-none-macosx_10_0_arm64
         cp39-cp39-macosx_10_0_universal2
-        cp39-none-macosx_10_0_universal2
         cp39-cp39-macosx_10_16_universal2
-        cp39-none-macosx_10_16_universal2
         cp39-cp39-macosx_10_15_universal2
-        cp39-none-macosx_10_15_universal2
         cp39-cp39-macosx_10_14_universal2
-        cp39-none-macosx_10_14_universal2
         cp39-cp39-macosx_10_13_universal2
-        cp39-none-macosx_10_13_universal2
         cp39-cp39-macosx_10_12_universal2
-        cp39-none-macosx_10_12_universal2
         cp39-cp39-macosx_10_11_universal2
-        cp39-none-macosx_10_11_universal2
         cp39-cp39-macosx_10_10_universal2
-        cp39-none-macosx_10_10_universal2
         cp39-cp39-macosx_10_9_universal2
-        cp39-none-macosx_10_9_universal2
         cp39-cp39-macosx_10_8_universal2
-        cp39-none-macosx_10_8_universal2
         cp39-cp39-macosx_10_7_universal2
-        cp39-none-macosx_10_7_universal2
         cp39-cp39-macosx_10_6_universal2
-        cp39-none-macosx_10_6_universal2
         cp39-cp39-macosx_10_5_universal2
-        cp39-none-macosx_10_5_universal2
         cp39-cp39-macosx_10_4_universal2
-        cp39-none-macosx_10_4_universal2
         cp39-abi3-macosx_14_0_arm64
         cp39-abi3-macosx_14_0_universal2
         cp39-abi3-macosx_13_0_arm64
@@ -1453,6 +1448,29 @@ mod tests {
         cp39-abi3-macosx_10_6_universal2
         cp39-abi3-macosx_10_5_universal2
         cp39-abi3-macosx_10_4_universal2
+        cp39-none-macosx_14_0_arm64
+        cp39-none-macosx_14_0_universal2
+        cp39-none-macosx_13_0_arm64
+        cp39-none-macosx_13_0_universal2
+        cp39-none-macosx_12_0_arm64
+        cp39-none-macosx_12_0_universal2
+        cp39-none-macosx_11_0_arm64
+        cp39-none-macosx_11_0_universal2
+        cp39-none-macosx_10_0_arm64
+        cp39-none-macosx_10_0_universal2
+        cp39-none-macosx_10_16_universal2
+        cp39-none-macosx_10_15_universal2
+        cp39-none-macosx_10_14_universal2
+        cp39-none-macosx_10_13_universal2
+        cp39-none-macosx_10_12_universal2
+        cp39-none-macosx_10_11_universal2
+        cp39-none-macosx_10_10_universal2
+        cp39-none-macosx_10_9_universal2
+        cp39-none-macosx_10_8_universal2
+        cp39-none-macosx_10_7_universal2
+        cp39-none-macosx_10_6_universal2
+        cp39-none-macosx_10_5_universal2
+        cp39-none-macosx_10_4_universal2
         cp38-abi3-macosx_14_0_arm64
         cp38-abi3-macosx_14_0_universal2
         cp38-abi3-macosx_13_0_arm64
@@ -1637,6 +1655,29 @@ mod tests {
         py39-none-macosx_10_6_universal2
         py39-none-macosx_10_5_universal2
         py39-none-macosx_10_4_universal2
+        py3-none-macosx_14_0_arm64
+        py3-none-macosx_14_0_universal2
+        py3-none-macosx_13_0_arm64
+        py3-none-macosx_13_0_universal2
+        py3-none-macosx_12_0_arm64
+        py3-none-macosx_12_0_universal2
+        py3-none-macosx_11_0_arm64
+        py3-none-macosx_11_0_universal2
+        py3-none-macosx_10_0_arm64
+        py3-none-macosx_10_0_universal2
+        py3-none-macosx_10_16_universal2
+        py3-none-macosx_10_15_universal2
+        py3-none-macosx_10_14_universal2
+        py3-none-macosx_10_13_universal2
+        py3-none-macosx_10_12_universal2
+        py3-none-macosx_10_11_universal2
+        py3-none-macosx_10_10_universal2
+        py3-none-macosx_10_9_universal2
+        py3-none-macosx_10_8_universal2
+        py3-none-macosx_10_7_universal2
+        py3-none-macosx_10_6_universal2
+        py3-none-macosx_10_5_universal2
+        py3-none-macosx_10_4_universal2
         py38-none-macosx_14_0_arm64
         py38-none-macosx_14_0_universal2
         py38-none-macosx_13_0_arm64
@@ -1844,30 +1885,9 @@ mod tests {
         py30-none-macosx_10_6_universal2
         py30-none-macosx_10_5_universal2
         py30-none-macosx_10_4_universal2
-        py3-none-macosx_14_0_arm64
-        py3-none-macosx_14_0_universal2
-        py3-none-macosx_13_0_arm64
-        py3-none-macosx_13_0_universal2
-        py3-none-macosx_12_0_arm64
-        py3-none-macosx_12_0_universal2
-        py3-none-macosx_11_0_arm64
-        py3-none-macosx_11_0_universal2
-        py3-none-macosx_10_0_arm64
-        py3-none-macosx_10_0_universal2
-        py3-none-macosx_10_16_universal2
-        py3-none-macosx_10_15_universal2
-        py3-none-macosx_10_14_universal2
-        py3-none-macosx_10_13_universal2
-        py3-none-macosx_10_12_universal2
-        py3-none-macosx_10_11_universal2
-        py3-none-macosx_10_10_universal2
-        py3-none-macosx_10_9_universal2
-        py3-none-macosx_10_8_universal2
-        py3-none-macosx_10_7_universal2
-        py3-none-macosx_10_6_universal2
-        py3-none-macosx_10_5_universal2
-        py3-none-macosx_10_4_universal2
+        cp39-none-any
         py39-none-any
+        py3-none-any
         py38-none-any
         py37-none-any
         py36-none-any
@@ -1877,7 +1897,6 @@ mod tests {
         py32-none-any
         py31-none-any
         py30-none-any
-        py3-none-any
         "###
         );
     }
