@@ -17,7 +17,7 @@ def numpy():
     """sys.version_info"""
     logging.info("Installing the package `numpy`.")
     subprocess.run(
-        [uv, "pip", "install", "numpy", "--system"],
+        [uv, "pip", "install", "numpy", "--system"] + allow_externally_managed,
         cwd=temp_dir,
         check=True,
     )
