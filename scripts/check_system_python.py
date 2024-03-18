@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
-"""Install `pylint` into the system Python."""
+"""Install `pylint` and `numpy` into the system Python.
+
+To run locally, create a venv with seed packages.
+"""
 
 import argparse
 import logging
@@ -8,6 +11,25 @@ import os
 import subprocess
 import sys
 import tempfile
+
+
+def numpy():
+    """sys.version_info"""
+    logging.info("Installing the package `numpy`.")
+    subprocess.run(
+        [uv, "pip", "install", "numpy", "--system"] + allow_externally_managed,
+        cwd=temp_dir,
+        check=True,
+    )
+    # Check that the native libraries of numpy work.
+    logging.info("Checking that `numpy` can be imported.")
+    code = subprocess.run(
+        [sys.executable, "-c", "import numpy"],
+        cwd=temp_dir,
+    )
+    if code.returncode != 0:
+        raise Exception("Could not import numpy.")
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -135,3 +157,7 @@ if __name__ == "__main__":
             raise Exception(
                 "The package `pylint` isn't installed in the virtual environment."
             )
+
+        # Numpy doesn't have wheels for python 3.13 (at the time of writing)
+        if sys.version_info < (3, 13):
+            numpy()

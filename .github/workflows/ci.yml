@@ -418,6 +418,9 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.10 on windows"
     runs-on: windows-latest
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -440,6 +443,9 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.13 on windows"
     runs-on: windows-latest
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -464,6 +470,9 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.12 via chocolatey"
     runs-on: windows-latest
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
     steps:
       - uses: actions/checkout@v4
 
