@@ -2,7 +2,8 @@
 
 """Install `pylint` and `numpy` into the system Python.
 
-To run locally, create a venv with seed packages."""
+To run locally, create a venv with seed packages.
+"""
 
 import argparse
 import logging
