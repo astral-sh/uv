@@ -51,7 +51,7 @@ url = { workspace = true }
 urlencoding = { workspace = true }
 
 # These must be kept in-sync with those used by `reqwest`.
-rustls = { version = "0.21.10" }
+rustls = { version = "0.23.2" }
 rustls-native-certs = { version = "0.6.3" }
 webpki-roots = { version = "0.25.4" }
 
