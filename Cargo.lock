@@ -4467,7 +4467,7 @@ dependencies = [
  "fs-err",
  "futures",
  "html-escape",
- "http 0.2.12",
+ "http 1.1.0",
  "hyper 0.14.28",
  "insta",
  "install-wheel-rs",
