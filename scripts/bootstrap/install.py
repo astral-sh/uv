@@ -185,17 +185,20 @@ def install(version, install_dir):
     print(f"Installed executables for python{version}")
 
 
-if INSTALL_DIR.exists():
-    print("Removing existing installations...")
-    shutil.rmtree(INSTALL_DIR)
+if __name__ == "__main__":
+    if INSTALL_DIR.exists():
+        print("Removing existing installations...")
+        shutil.rmtree(INSTALL_DIR)
 
-# Download in parallel
-with concurrent.futures.ThreadPoolExecutor(max_workers=len(versions)) as executor:
-    futures = [(version, executor.submit(download, version)) for version in versions]
+    # Download in parallel
+    with concurrent.futures.ProcessPoolExecutor(max_workers=len(versions)) as executor:
+        futures = [
+            (version, executor.submit(download, version)) for version in versions
+        ]
 
-# Install sequentially so overrides are respected
-for version, future in futures:
-    install_dir = future.result()
-    install(version, install_dir)
+    # Install sequentially so overrides are respected
+    for version, future in futures:
+        install_dir = future.result()
+        install(version, install_dir)
 
-print("Done!")
+    print("Done!")
