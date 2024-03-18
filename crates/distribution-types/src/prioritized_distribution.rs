@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 use pep440_rs::VersionSpecifiers;
 use platform_tags::{IncompatibleTag, TagCompatibility, TagPriority};
 use pypi_types::{Hashes, Yanked};
@@ -42,6 +44,68 @@ pub enum IncompatibleDist {
     Source(IncompatibleSource),
     /// No distributions are available
     Unavailable,
+}
+
+impl Display for IncompatibleDist {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Wheel(incompatibility) => match incompatibility {
+                IncompatibleWheel::NoBinary => {
+                    f.write_str("no source distribution is available and using wheels is disabled")
+                }
+                IncompatibleWheel::Tag(tag) => match tag {
+                    IncompatibleTag::Invalid => {
+                        f.write_str("no wheels are available with valid tags")
+                    }
+                    IncompatibleTag::Python => {
+                        f.write_str("no wheels are available with a matching Python implementation")
+                    }
+                    IncompatibleTag::Abi => {
+                        f.write_str("no wheels are available with a matching Python ABI")
+                    }
+                    IncompatibleTag::Platform => {
+                        f.write_str("no wheels are available with a matching platform")
+                    }
+                },
+                IncompatibleWheel::Yanked(yanked) => match yanked {
+                    Yanked::Bool(_) => f.write_str("it was yanked"),
+                    Yanked::Reason(reason) => write!(
+                        f,
+                        "it was yanked (reason: {})",
+                        reason.trim().trim_end_matches('.')
+                    ),
+                },
+                IncompatibleWheel::ExcludeNewer(ts) => match ts {
+                    Some(_) => f.write_str("it was published after the exclude newer time"),
+                    None => f.write_str("it has no publish time"),
+                },
+                IncompatibleWheel::RequiresPython(python) => {
+                    write!(f, "it requires at python {python}")
+                }
+            },
+            Self::Source(incompatibility) => match incompatibility {
+                IncompatibleSource::NoBuild => {
+                    f.write_str("no wheels are usable and building from source is disabled")
+                }
+                IncompatibleSource::Yanked(yanked) => match yanked {
+                    Yanked::Bool(_) => f.write_str("it was yanked"),
+                    Yanked::Reason(reason) => write!(
+                        f,
+                        "it was yanked (reason: {})",
+                        reason.trim().trim_end_matches('.')
+                    ),
+                },
+                IncompatibleSource::ExcludeNewer(ts) => match ts {
+                    Some(_) => f.write_str("it was published after the exclude newer time"),
+                    None => f.write_str("it has no publish time"),
+                },
+                IncompatibleSource::RequiresPython(python) => {
+                    write!(f, "it requires python {python}")
+                }
+            },
+            Self::Unavailable => f.write_str("no distributions are available"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
