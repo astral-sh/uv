@@ -190,3 +190,12 @@ impl InstalledMetadata for InstalledDist {
         }
     }
 }
+
+impl InstalledDirectUrlDist {
+    /// Get the direct url json for a direct url dist
+    /// useful function for installers that want to check the
+    /// `direct_url.json` metadata
+    pub fn direct_url(&self) -> Result<Option<pypi_types::DirectUrl>, anyhow::Error> {
+        InstalledDist::direct_url(&self.path)
+    }
+}
