@@ -69,17 +69,25 @@ impl LineHaul {
         let distro: Option<Distro> = if cfg!(target_os = "linux") {
             // Gather distribution info from /etc/os-release.
             sys_info::linux_os_release().ok().map(|info| Distro {
-                id: info.version_codename, // e.g., Jammy, Focal, etc.
-                name: info.name,           // e.g., Ubuntu, Fedora, etc.
-                version: info.version_id,  // e.g., 22.04, etc.
-                libc: None,                // Skip in uv, likely way too slow.
+                // e.g., Jammy, Focal, etc.
+                id: info.version_codename,
+                // e.g., Ubuntu, Fedora, etc.
+                name: info.name,
+                // e.g., 22.04, etc.
+                version: info.version_id,
+                // Skip in uv, likely way too slow.
+                libc: None,
             })
         } else if cfg!(target_os = "macos") {
             Some(Distro {
-                id: None,                                               // N/A
-                name: Some("macOS".to_string()), // pip hardcodes distro name to macOS.
-                version: crate::mac_version::get_mac_os_version().ok(), // Same as python's platform.mac_ver[0].
-                libc: None,                                             // N/A
+                // N/A
+                id: None,
+                // pip hardcodes distro name to macOS.
+                name: Some("macOS".to_string()),
+                // Same as python's platform.mac_ver[0].
+                version: crate::mac_version::get_mac_os_version().ok(),
+                // N/A
+                libc: None,
             })
         } else {
             // Always empty on Windows.
