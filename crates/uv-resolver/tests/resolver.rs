@@ -18,7 +18,7 @@ use uv_client::{FlatIndex, RegistryClientBuilder};
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
-    ResolutionGraph, ResolutionMode, Resolver,
+    Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_traits::{
     BuildContext, BuildIsolation, BuildKind, NoBinary, NoBuild, SetupPyStrategy, SourceBuildTrait,
@@ -422,10 +422,12 @@ async fn black_lowest_direct() -> Result<()> {
 #[tokio::test]
 async fn black_respect_preference() -> Result<()> {
     let manifest = Manifest::new(
-        vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![Requirement::from_str("black<=23.9.1")?],
         vec![],
         vec![],
-        vec![Requirement::from_str("black==23.9.0").unwrap()],
+        vec![Preference::from_requirement(Requirement::from_str(
+            "black==23.9.0",
+        )?)],
         None,
         vec![],
     );
@@ -455,10 +457,12 @@ async fn black_respect_preference() -> Result<()> {
 #[tokio::test]
 async fn black_ignore_preference() -> Result<()> {
     let manifest = Manifest::new(
-        vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![Requirement::from_str("black<=23.9.1")?],
         vec![],
         vec![],
-        vec![Requirement::from_str("black==23.9.2").unwrap()],
+        vec![Preference::from_requirement(Requirement::from_str(
+            "black==23.9.2",
+        )?)],
         None,
         vec![],
     );

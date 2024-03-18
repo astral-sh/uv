@@ -11,10 +11,12 @@ use tracing::{instrument, Level};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::Requirement;
+use pypi_types::HashError;
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 use uv_client::Connectivity;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
+use uv_resolver::Preference;
 use uv_warnings::warn_user;
 
 use crate::commands::Upgrade;
@@ -445,7 +447,7 @@ fn flatten_extra(
 pub(crate) async fn read_lockfile(
     output_file: Option<&Path>,
     upgrade: Upgrade,
-) -> Result<Vec<Requirement>> {
+) -> Result<Vec<Preference>> {
     // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
     let Some(output_file) = output_file
         .filter(|_| !upgrade.is_all())
@@ -458,28 +460,23 @@ pub(crate) async fn read_lockfile(
     let requirements_txt =
         RequirementsTxt::parse(output_file, std::env::current_dir()?, Connectivity::Offline)
             .await?;
-    let requirements = requirements_txt
+    let preferences = requirements_txt
         .requirements
         .into_iter()
-        .filter_map(|entry| {
-            if entry.editable {
-                None
-            } else {
-                Some(entry.requirement)
-            }
-        })
-        .collect::<Vec<_>>();
+        .filter(|entry| !entry.editable)
+        .map(Preference::from_entry)
+        .collect::<Result<Vec<_>, HashError>>()?;
 
     // Apply the upgrade strategy to the requirements.
     Ok(match upgrade {
         // Respect all pinned versions from the existing lockfile.
-        Upgrade::None => requirements,
+        Upgrade::None => preferences,
         // Ignore all pinned versions from the existing lockfile.
         Upgrade::All => vec![],
         // Ignore pinned versions for the specified packages.
-        Upgrade::Packages(packages) => requirements
+        Upgrade::Packages(packages) => preferences
             .into_iter()
-            .filter(|requirement| !packages.contains(&requirement.name))
+            .filter(|preference| !packages.contains(preference.name()))
             .collect(),
     })
 }

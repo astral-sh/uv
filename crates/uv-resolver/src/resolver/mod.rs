@@ -40,6 +40,7 @@ use crate::error::ResolveError;
 use crate::manifest::Manifest;
 use crate::overrides::Overrides;
 use crate::pins::FilePins;
+use crate::preferences::Preferences;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPriorities, PubGrubPython,
     PubGrubSpecifier,
@@ -93,6 +94,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     requirements: Vec<Requirement>,
     constraints: Constraints,
     overrides: Overrides,
+    preferences: Preferences,
     editables: Editables,
     urls: Urls,
     locals: Locals,
@@ -169,6 +171,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             requirements: manifest.requirements,
             constraints: Constraints::from_requirements(manifest.constraints),
             overrides: Overrides::from_requirements(manifest.overrides),
+            preferences: Preferences::from_requirements(manifest.preferences, markers),
             editables: Editables::from_requirements(manifest.editables),
             markers,
             python_requirement,
@@ -278,6 +281,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     &self.index.distributions,
                     &self.index.redirects,
                     &state,
+                    &self.preferences,
                     self.editables.clone(),
                 );
             };
@@ -641,7 +645,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
 
                 // Find a version.
-                let Some(candidate) = self.selector.select(package_name, range, version_map) else {
+                let Some(candidate) =
+                    self.selector
+                        .select(package_name, range, version_map, &self.preferences)
+                else {
                     // Short circuit: we couldn't find _any_ versions for a package.
                     return Ok(None);
                 };
@@ -1002,7 +1009,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit.
-                let Some(candidate) = self.selector.select(&package_name, &range, version_map)
+                let Some(candidate) =
+                    self.selector
+                        .select(&package_name, &range, version_map, &self.preferences)
                 else {
                     return Ok(None);
                 };

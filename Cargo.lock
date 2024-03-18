@@ -4798,6 +4798,7 @@ dependencies = [
  "platform-tags",
  "pubgrub",
  "pypi-types",
+ "requirements-txt",
  "reqwest",
  "rkyv",
  "rustc-hash",

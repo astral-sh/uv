@@ -162,3 +162,93 @@ impl Hashes {
         self.sha256.as_deref().or(self.md5.as_deref())
     }
 }
+
+impl FromStr for Hashes {
+    type Err = HashError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.split(':');
+
+        // Extract the key and value.
+        let name = parts
+            .next()
+            .ok_or_else(|| HashError::InvalidStructure(s.to_string()))?;
+        let value = parts
+            .next()
+            .ok_or_else(|| HashError::InvalidStructure(s.to_string()))?;
+
+        // Ensure there are no more parts.
+        if parts.next().is_some() {
+            return Err(HashError::InvalidStructure(s.to_string()));
+        }
+
+        match name {
+            "md5" => {
+                let md5 = value.to_string();
+                Ok(Hashes {
+                    md5: Some(md5),
+                    sha256: None,
+                })
+            }
+            "sha256" => {
+                let sha256 = value.to_string();
+                Ok(Hashes {
+                    md5: None,
+                    sha256: Some(sha256),
+                })
+            }
+            _ => Err(HashError::UnsupportedHashAlgorithm(s.to_string())),
+        }
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum HashError {
+    #[error("Unexpected hash (expected `sha256:<hash>` or `md5:<hash>`) on: {0}")]
+    InvalidStructure(String),
+
+    #[error("Unsupported hash algorithm (expected `sha256` or `md5`) on: {0}")]
+    UnsupportedHashAlgorithm(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{HashError, Hashes};
+
+    #[test]
+    fn parse_hashes() -> Result<(), HashError> {
+        let hashes: Hashes =
+            "sha256:40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".parse()?;
+        assert_eq!(
+            hashes,
+            Hashes {
+                md5: None,
+                sha256: Some(
+                    "40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".to_string()
+                )
+            }
+        );
+
+        let hashes: Hashes =
+            "md5:090376d812fb6ac5f171e5938e82e7f2d7adc2b629101cec0db8b267815c85e2".parse()?;
+        assert_eq!(
+            hashes,
+            Hashes {
+                md5: Some(
+                    "090376d812fb6ac5f171e5938e82e7f2d7adc2b629101cec0db8b267815c85e2".to_string()
+                ),
+                sha256: None
+            }
+        );
+
+        let result = "sha256=40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f"
+            .parse::<Hashes>();
+        assert!(result.is_err());
+
+        let result = "sha512:55f44b440d491028addb3b88f72207d71eeebfb7b5dbf0643f7c023ae1fba619"
+            .parse::<Hashes>();
+        assert!(result.is_err());
+
+        Ok(())
+    }
+}

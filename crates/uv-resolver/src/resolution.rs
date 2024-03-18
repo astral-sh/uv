@@ -20,6 +20,7 @@ use uv_normalize::{ExtraName, PackageName};
 
 use crate::editables::Editables;
 use crate::pins::FilePins;
+use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority};
 use crate::redirect::apply_redirect;
 use crate::resolver::VersionsResponse;
@@ -53,6 +54,7 @@ pub struct ResolutionGraph {
 
 impl ResolutionGraph {
     /// Create a new graph from the resolved `PubGrub` state.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, Version>,
         pins: &FilePins,
@@ -60,6 +62,7 @@ impl ResolutionGraph {
         distributions: &OnceMap<PackageId, Metadata23>,
         redirects: &DashMap<Url, Url>,
         state: &State<PubGrubPackage, Range<Version>, PubGrubPriority>,
+        preferences: &Preferences,
         editables: Editables,
     ) -> Result<Self, ResolveError> {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
@@ -84,13 +87,16 @@ impl ResolutionGraph {
                             .clone()
                     };
 
-                    // Add its hashes to the index.
-                    if let Some(versions_response) = packages.get(package_name) {
+                    // Add its hashes to the index, preserving those that were already present in
+                    // the lockfile if necessary.
+                    if let Some(hash) = preferences.match_hashes(package_name, version) {
+                        hashes.insert(package_name.clone(), hash.to_vec());
+                    } else if let Some(versions_response) = packages.get(package_name) {
                         if let VersionsResponse::Found(ref version_map) = *versions_response {
                             hashes.insert(package_name.clone(), {
-                                let mut hashes = version_map.hashes(version);
-                                hashes.sort_unstable();
-                                hashes
+                                let mut hash = version_map.hashes(version);
+                                hash.sort_unstable();
+                                hash
                             });
                         }
                     }
@@ -111,13 +117,16 @@ impl ResolutionGraph {
                         Dist::from_url(package_name.clone(), url)?
                     };
 
-                    // Add its hashes to the index.
-                    if let Some(versions_response) = packages.get(package_name) {
+                    // Add its hashes to the index, preserving those that were already present in
+                    // the lockfile if necessary.
+                    if let Some(hash) = preferences.match_hashes(package_name, version) {
+                        hashes.insert(package_name.clone(), hash.to_vec());
+                    } else if let Some(versions_response) = packages.get(package_name) {
                         if let VersionsResponse::Found(ref version_map) = *versions_response {
                             hashes.insert(package_name.clone(), {
-                                let mut hashes = version_map.hashes(version);
-                                hashes.sort_unstable();
-                                hashes
+                                let mut hash = version_map.hashes(version);
+                                hash.sort_unstable();
+                                hash
                             });
                         }
                     }
