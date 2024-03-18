@@ -28,6 +28,7 @@
 #
 # Version metadata can be updated with `fetch-version-metadata.py`
 
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -97,19 +98,20 @@ def sha256_file(path: Path):
 versions_metadata = json.loads(VERSIONS_METADATA_FILE.read_text())
 versions = VERSIONS_FILE.read_text().splitlines()
 
-if INSTALL_DIR.exists():
-    print("Removing existing installations...")
-    shutil.rmtree(INSTALL_DIR)
 
-# Install each version
-for version in versions:
+def get_key(version):
     if platform.system() == "Linux":
         libc = sysconfig.get_config_var("SOABI").split("-")[-1]
     else:
         libc = "none"
     key = f"{INTERPRETER}-{version}-{PLATFORM_MAP.get(PLATFORM, PLATFORM)}-{ARCH_MAP.get(ARCH, ARCH)}-{libc}"
+    return key
+
+
+def download(version):
+    key = get_key(version)
     install_dir = INSTALL_DIR / f"{INTERPRETER}@{version}"
-    print(f"Installing {key}")
+    print(f"Downloading {key}")
 
     url = versions_metadata[key]["url"]
 
@@ -141,8 +143,14 @@ for version in versions:
 
     decompress_file(THIS_DIR / filename, install_dir.with_suffix(".tmp"))
 
-    # Setup the installation
     (install_dir.with_suffix(".tmp") / "python").rename(install_dir)
+    install_dir.with_suffix(".tmp").rmdir()
+
+    return install_dir
+
+
+def install(version, install_dir):
+    key = get_key(version)
 
     if PLATFORM == "win32":
         executable = install_dir / "install" / "python.exe"
@@ -174,7 +182,21 @@ for version in versions:
     print(f"Installed executables for python{version}")
 
     # Cleanup
-    install_dir.with_suffix(".tmp").rmdir()
+    filename = versions_metadata[key]["url"].split("/")[-1]
     (THIS_DIR / filename).unlink()
+
+
+if INSTALL_DIR.exists():
+    print("Removing existing installations...")
+    shutil.rmtree(INSTALL_DIR)
+
+# Download in parallel
+with concurrent.futures.ThreadPoolExecutor(max_workers=len(versions)) as executor:
+    futures = [(version, executor.submit(download, version)) for version in versions]
+
+# Install sequentially so overrides are respected
+for version, future in futures:
+    install_dir = future.result()
+    install(version, install_dir)
 
 print("Done!")
