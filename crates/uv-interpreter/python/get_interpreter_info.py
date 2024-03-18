@@ -480,7 +480,6 @@ def get_operating_system_and_architecture():
         "illumos",
         "haiku",
     ]:
-        version = platform.mac_ver()[0].split(".")
         operating_system = {
             "name": operating_system,
             "release": version,
