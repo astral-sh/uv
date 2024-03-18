@@ -1,4 +1,5 @@
 use url::Url;
+use uv_normalize::PackageName;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -19,4 +20,7 @@ pub enum Error {
 
     #[error("Unsupported scheme `{0}` on URL: {1} ({2})")]
     UnsupportedScheme(String, String, String),
+
+    #[error("Requested package name `{0}` does not match `{1}` in the distribution filename: {2}")]
+    PackageNameMismatch(PackageName, PackageName, String),
 }
