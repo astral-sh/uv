@@ -141,10 +141,13 @@ def download(version):
     print("Extracting to", install_dir)
     install_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    decompress_file(THIS_DIR / filename, install_dir.with_suffix(".tmp"))
+    # n.b. do not use `.with_suffix` as it will replace the patch Python version
+    extract_dir = Path(str(install_dir) + ".tmp")
 
-    (install_dir.with_suffix(".tmp") / "python").rename(install_dir)
-    install_dir.with_suffix(".tmp").rmdir()
+    decompress_file(THIS_DIR / filename, extract_dir)
+    (extract_dir / "python").rename(install_dir)
+    (THIS_DIR / filename).unlink()
+    extract_dir.rmdir()
 
     return install_dir
 
@@ -180,10 +183,6 @@ def install(version, install_dir):
             target.symlink_to(executable)
 
     print(f"Installed executables for python{version}")
-
-    # Cleanup
-    filename = versions_metadata[key]["url"].split("/")[-1]
-    (THIS_DIR / filename).unlink()
 
 
 if INSTALL_DIR.exists():
