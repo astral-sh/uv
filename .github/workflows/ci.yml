@@ -53,7 +53,7 @@ jobs:
           # For Ubuntu and Windows, this requires Organization-level configuration
           # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
           - { os: "ubuntu", runner: "ubuntu-latest-large" }
-          - { os: "windows", runner: "windows-latest-large" }
+          - { os: "windows", runner: "windows-latest-xlarge" }
           - { os: "macos", runner: "macos-14" }
       fail-fast: false
     runs-on:
