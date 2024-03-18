@@ -408,8 +408,8 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
                 10 => {
                     // Prior to Mac OS 11, each yearly release of Mac OS bumped the "minor" version
                     // number. The major version was always 10.
-                    for minor in (0..=*minor).rev() {
-                        for binary_format in get_mac_binary_formats(*major, minor, arch) {
+                    for minor in (4..=*minor).rev() {
+                        for binary_format in get_mac_binary_formats(arch) {
                             platform_tags.push(format!("macosx_{major}_{minor}_{binary_format}"));
                         }
                     }
@@ -417,15 +417,15 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
                 value if *value >= 11 => {
                     // Starting with Mac OS 11, each yearly release bumps the major version number.
                     // The minor versions are now the midyear updates.
-                    for major in (10..=*major).rev() {
-                        for binary_format in get_mac_binary_formats(major, 0, arch) {
+                    for major in (11..=*major).rev() {
+                        for binary_format in get_mac_binary_formats(arch) {
                             platform_tags.push(format!("macosx_{}_{}_{}", major, 0, binary_format));
                         }
                     }
                     // The "universal2" binary format can have a macOS version earlier than 11.0
                     // when the x86_64 part of the binary supports that version of macOS.
                     for minor in (4..=16).rev() {
-                        for binary_format in get_mac_binary_formats(10, minor, arch) {
+                        for binary_format in get_mac_binary_formats(arch) {
                             platform_tags
                                 .push(format!("macosx_{}_{}_{}", 10, minor, binary_format));
                         }
@@ -444,8 +444,8 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
             let mut platform_tags = vec![];
             // Starting with Mac OS 11, each yearly release bumps the major version number.
             // The minor versions are now the midyear updates.
-            for major in (10..=*major).rev() {
-                for binary_format in get_mac_binary_formats(major, 0, arch) {
+            for major in (11..=*major).rev() {
+                for binary_format in get_mac_binary_formats(arch) {
                     platform_tags.push(format!("macosx_{}_{}_{}", major, 0, binary_format));
                 }
             }
@@ -512,16 +512,13 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
 
 /// Determine the appropriate binary formats for a macOS version.
 /// Source: <https://github.com/pypa/packaging/blob/fd4f11139d1c884a637be8aa26bb60a31fbc9411/packaging/tags.py#L314>
-fn get_mac_binary_formats(major: u16, minor: u16, arch: Arch) -> Vec<String> {
+fn get_mac_binary_formats(arch: Arch) -> Vec<String> {
     let mut formats = vec![match arch {
         Arch::Aarch64 => "arm64".to_string(),
         _ => arch.to_string(),
     }];
 
     if matches!(arch, Arch::X86_64) {
-        if (major, minor) < (10, 4) {
-            return vec![];
-        }
         formats.extend([
             "intel".to_string(),
             "fat64".to_string(),
@@ -732,6 +729,158 @@ mod tests {
             "macosx_10_7_fat32",
             "macosx_10_7_universal2",
             "macosx_10_7_universal",
+            "macosx_10_6_x86_64",
+            "macosx_10_6_intel",
+            "macosx_10_6_fat64",
+            "macosx_10_6_fat32",
+            "macosx_10_6_universal2",
+            "macosx_10_6_universal",
+            "macosx_10_5_x86_64",
+            "macosx_10_5_intel",
+            "macosx_10_5_fat64",
+            "macosx_10_5_fat32",
+            "macosx_10_5_universal2",
+            "macosx_10_5_universal",
+            "macosx_10_4_x86_64",
+            "macosx_10_4_intel",
+            "macosx_10_4_fat64",
+            "macosx_10_4_fat32",
+            "macosx_10_4_universal2",
+            "macosx_10_4_universal",
+        ]
+        "###
+        );
+
+        let tags = compatible_tags(&Platform::new(
+            Os::Macos {
+                major: 14,
+                minor: 0,
+            },
+            Arch::X86_64,
+        ))
+        .unwrap();
+        assert_debug_snapshot!(
+            tags,
+            @r###"
+        [
+            "macosx_14_0_x86_64",
+            "macosx_14_0_intel",
+            "macosx_14_0_fat64",
+            "macosx_14_0_fat32",
+            "macosx_14_0_universal2",
+            "macosx_14_0_universal",
+            "macosx_13_0_x86_64",
+            "macosx_13_0_intel",
+            "macosx_13_0_fat64",
+            "macosx_13_0_fat32",
+            "macosx_13_0_universal2",
+            "macosx_13_0_universal",
+            "macosx_12_0_x86_64",
+            "macosx_12_0_intel",
+            "macosx_12_0_fat64",
+            "macosx_12_0_fat32",
+            "macosx_12_0_universal2",
+            "macosx_12_0_universal",
+            "macosx_11_0_x86_64",
+            "macosx_11_0_intel",
+            "macosx_11_0_fat64",
+            "macosx_11_0_fat32",
+            "macosx_11_0_universal2",
+            "macosx_11_0_universal",
+            "macosx_10_16_x86_64",
+            "macosx_10_16_intel",
+            "macosx_10_16_fat64",
+            "macosx_10_16_fat32",
+            "macosx_10_16_universal2",
+            "macosx_10_16_universal",
+            "macosx_10_15_x86_64",
+            "macosx_10_15_intel",
+            "macosx_10_15_fat64",
+            "macosx_10_15_fat32",
+            "macosx_10_15_universal2",
+            "macosx_10_15_universal",
+            "macosx_10_14_x86_64",
+            "macosx_10_14_intel",
+            "macosx_10_14_fat64",
+            "macosx_10_14_fat32",
+            "macosx_10_14_universal2",
+            "macosx_10_14_universal",
+            "macosx_10_13_x86_64",
+            "macosx_10_13_intel",
+            "macosx_10_13_fat64",
+            "macosx_10_13_fat32",
+            "macosx_10_13_universal2",
+            "macosx_10_13_universal",
+            "macosx_10_12_x86_64",
+            "macosx_10_12_intel",
+            "macosx_10_12_fat64",
+            "macosx_10_12_fat32",
+            "macosx_10_12_universal2",
+            "macosx_10_12_universal",
+            "macosx_10_11_x86_64",
+            "macosx_10_11_intel",
+            "macosx_10_11_fat64",
+            "macosx_10_11_fat32",
+            "macosx_10_11_universal2",
+            "macosx_10_11_universal",
+            "macosx_10_10_x86_64",
+            "macosx_10_10_intel",
+            "macosx_10_10_fat64",
+            "macosx_10_10_fat32",
+            "macosx_10_10_universal2",
+            "macosx_10_10_universal",
+            "macosx_10_9_x86_64",
+            "macosx_10_9_intel",
+            "macosx_10_9_fat64",
+            "macosx_10_9_fat32",
+            "macosx_10_9_universal2",
+            "macosx_10_9_universal",
+            "macosx_10_8_x86_64",
+            "macosx_10_8_intel",
+            "macosx_10_8_fat64",
+            "macosx_10_8_fat32",
+            "macosx_10_8_universal2",
+            "macosx_10_8_universal",
+            "macosx_10_7_x86_64",
+            "macosx_10_7_intel",
+            "macosx_10_7_fat64",
+            "macosx_10_7_fat32",
+            "macosx_10_7_universal2",
+            "macosx_10_7_universal",
+            "macosx_10_6_x86_64",
+            "macosx_10_6_intel",
+            "macosx_10_6_fat64",
+            "macosx_10_6_fat32",
+            "macosx_10_6_universal2",
+            "macosx_10_6_universal",
+            "macosx_10_5_x86_64",
+            "macosx_10_5_intel",
+            "macosx_10_5_fat64",
+            "macosx_10_5_fat32",
+            "macosx_10_5_universal2",
+            "macosx_10_5_universal",
+            "macosx_10_4_x86_64",
+            "macosx_10_4_intel",
+            "macosx_10_4_fat64",
+            "macosx_10_4_fat32",
+            "macosx_10_4_universal2",
+            "macosx_10_4_universal",
+        ]
+        "###
+        );
+
+        let tags = compatible_tags(&Platform::new(
+            Os::Macos {
+                major: 10,
+                minor: 6,
+            },
+            Arch::X86_64,
+        ))
+        .unwrap();
+        assert_debug_snapshot!(
+            tags,
+            @r###"
+        [
             "macosx_10_6_x86_64",
             "macosx_10_6_intel",
             "macosx_10_6_fat64",
@@ -1410,8 +1559,6 @@ mod tests {
         cp39-cp39-macosx_12_0_universal2
         cp39-cp39-macosx_11_0_arm64
         cp39-cp39-macosx_11_0_universal2
-        cp39-cp39-macosx_10_0_arm64
-        cp39-cp39-macosx_10_0_universal2
         cp39-cp39-macosx_10_16_universal2
         cp39-cp39-macosx_10_15_universal2
         cp39-cp39-macosx_10_14_universal2
@@ -1433,8 +1580,6 @@ mod tests {
         cp39-abi3-macosx_12_0_universal2
         cp39-abi3-macosx_11_0_arm64
         cp39-abi3-macosx_11_0_universal2
-        cp39-abi3-macosx_10_0_arm64
-        cp39-abi3-macosx_10_0_universal2
         cp39-abi3-macosx_10_16_universal2
         cp39-abi3-macosx_10_15_universal2
         cp39-abi3-macosx_10_14_universal2
@@ -1456,8 +1601,6 @@ mod tests {
         cp39-none-macosx_12_0_universal2
         cp39-none-macosx_11_0_arm64
         cp39-none-macosx_11_0_universal2
-        cp39-none-macosx_10_0_arm64
-        cp39-none-macosx_10_0_universal2
         cp39-none-macosx_10_16_universal2
         cp39-none-macosx_10_15_universal2
         cp39-none-macosx_10_14_universal2
@@ -1479,8 +1622,6 @@ mod tests {
         cp38-abi3-macosx_12_0_universal2
         cp38-abi3-macosx_11_0_arm64
         cp38-abi3-macosx_11_0_universal2
-        cp38-abi3-macosx_10_0_arm64
-        cp38-abi3-macosx_10_0_universal2
         cp38-abi3-macosx_10_16_universal2
         cp38-abi3-macosx_10_15_universal2
         cp38-abi3-macosx_10_14_universal2
@@ -1502,8 +1643,6 @@ mod tests {
         cp37-abi3-macosx_12_0_universal2
         cp37-abi3-macosx_11_0_arm64
         cp37-abi3-macosx_11_0_universal2
-        cp37-abi3-macosx_10_0_arm64
-        cp37-abi3-macosx_10_0_universal2
         cp37-abi3-macosx_10_16_universal2
         cp37-abi3-macosx_10_15_universal2
         cp37-abi3-macosx_10_14_universal2
@@ -1525,8 +1664,6 @@ mod tests {
         cp36-abi3-macosx_12_0_universal2
         cp36-abi3-macosx_11_0_arm64
         cp36-abi3-macosx_11_0_universal2
-        cp36-abi3-macosx_10_0_arm64
-        cp36-abi3-macosx_10_0_universal2
         cp36-abi3-macosx_10_16_universal2
         cp36-abi3-macosx_10_15_universal2
         cp36-abi3-macosx_10_14_universal2
@@ -1548,8 +1685,6 @@ mod tests {
         cp35-abi3-macosx_12_0_universal2
         cp35-abi3-macosx_11_0_arm64
         cp35-abi3-macosx_11_0_universal2
-        cp35-abi3-macosx_10_0_arm64
-        cp35-abi3-macosx_10_0_universal2
         cp35-abi3-macosx_10_16_universal2
         cp35-abi3-macosx_10_15_universal2
         cp35-abi3-macosx_10_14_universal2
@@ -1571,8 +1706,6 @@ mod tests {
         cp34-abi3-macosx_12_0_universal2
         cp34-abi3-macosx_11_0_arm64
         cp34-abi3-macosx_11_0_universal2
-        cp34-abi3-macosx_10_0_arm64
-        cp34-abi3-macosx_10_0_universal2
         cp34-abi3-macosx_10_16_universal2
         cp34-abi3-macosx_10_15_universal2
         cp34-abi3-macosx_10_14_universal2
@@ -1594,8 +1727,6 @@ mod tests {
         cp33-abi3-macosx_12_0_universal2
         cp33-abi3-macosx_11_0_arm64
         cp33-abi3-macosx_11_0_universal2
-        cp33-abi3-macosx_10_0_arm64
-        cp33-abi3-macosx_10_0_universal2
         cp33-abi3-macosx_10_16_universal2
         cp33-abi3-macosx_10_15_universal2
         cp33-abi3-macosx_10_14_universal2
@@ -1617,8 +1748,6 @@ mod tests {
         cp32-abi3-macosx_12_0_universal2
         cp32-abi3-macosx_11_0_arm64
         cp32-abi3-macosx_11_0_universal2
-        cp32-abi3-macosx_10_0_arm64
-        cp32-abi3-macosx_10_0_universal2
         cp32-abi3-macosx_10_16_universal2
         cp32-abi3-macosx_10_15_universal2
         cp32-abi3-macosx_10_14_universal2
@@ -1640,8 +1769,6 @@ mod tests {
         py39-none-macosx_12_0_universal2
         py39-none-macosx_11_0_arm64
         py39-none-macosx_11_0_universal2
-        py39-none-macosx_10_0_arm64
-        py39-none-macosx_10_0_universal2
         py39-none-macosx_10_16_universal2
         py39-none-macosx_10_15_universal2
         py39-none-macosx_10_14_universal2
@@ -1663,8 +1790,6 @@ mod tests {
         py3-none-macosx_12_0_universal2
         py3-none-macosx_11_0_arm64
         py3-none-macosx_11_0_universal2
-        py3-none-macosx_10_0_arm64
-        py3-none-macosx_10_0_universal2
         py3-none-macosx_10_16_universal2
         py3-none-macosx_10_15_universal2
         py3-none-macosx_10_14_universal2
@@ -1686,8 +1811,6 @@ mod tests {
         py38-none-macosx_12_0_universal2
         py38-none-macosx_11_0_arm64
         py38-none-macosx_11_0_universal2
-        py38-none-macosx_10_0_arm64
-        py38-none-macosx_10_0_universal2
         py38-none-macosx_10_16_universal2
         py38-none-macosx_10_15_universal2
         py38-none-macosx_10_14_universal2
@@ -1709,8 +1832,6 @@ mod tests {
         py37-none-macosx_12_0_universal2
         py37-none-macosx_11_0_arm64
         py37-none-macosx_11_0_universal2
-        py37-none-macosx_10_0_arm64
-        py37-none-macosx_10_0_universal2
         py37-none-macosx_10_16_universal2
         py37-none-macosx_10_15_universal2
         py37-none-macosx_10_14_universal2
@@ -1732,8 +1853,6 @@ mod tests {
         py36-none-macosx_12_0_universal2
         py36-none-macosx_11_0_arm64
         py36-none-macosx_11_0_universal2
-        py36-none-macosx_10_0_arm64
-        py36-none-macosx_10_0_universal2
         py36-none-macosx_10_16_universal2
         py36-none-macosx_10_15_universal2
         py36-none-macosx_10_14_universal2
@@ -1755,8 +1874,6 @@ mod tests {
         py35-none-macosx_12_0_universal2
         py35-none-macosx_11_0_arm64
         py35-none-macosx_11_0_universal2
-        py35-none-macosx_10_0_arm64
-        py35-none-macosx_10_0_universal2
         py35-none-macosx_10_16_universal2
         py35-none-macosx_10_15_universal2
         py35-none-macosx_10_14_universal2
@@ -1778,8 +1895,6 @@ mod tests {
         py34-none-macosx_12_0_universal2
         py34-none-macosx_11_0_arm64
         py34-none-macosx_11_0_universal2
-        py34-none-macosx_10_0_arm64
-        py34-none-macosx_10_0_universal2
         py34-none-macosx_10_16_universal2
         py34-none-macosx_10_15_universal2
         py34-none-macosx_10_14_universal2
@@ -1801,8 +1916,6 @@ mod tests {
         py33-none-macosx_12_0_universal2
         py33-none-macosx_11_0_arm64
         py33-none-macosx_11_0_universal2
-        py33-none-macosx_10_0_arm64
-        py33-none-macosx_10_0_universal2
         py33-none-macosx_10_16_universal2
         py33-none-macosx_10_15_universal2
         py33-none-macosx_10_14_universal2
@@ -1824,8 +1937,6 @@ mod tests {
         py32-none-macosx_12_0_universal2
         py32-none-macosx_11_0_arm64
         py32-none-macosx_11_0_universal2
-        py32-none-macosx_10_0_arm64
-        py32-none-macosx_10_0_universal2
         py32-none-macosx_10_16_universal2
         py32-none-macosx_10_15_universal2
         py32-none-macosx_10_14_universal2
@@ -1847,8 +1958,6 @@ mod tests {
         py31-none-macosx_12_0_universal2
         py31-none-macosx_11_0_arm64
         py31-none-macosx_11_0_universal2
-        py31-none-macosx_10_0_arm64
-        py31-none-macosx_10_0_universal2
         py31-none-macosx_10_16_universal2
         py31-none-macosx_10_15_universal2
         py31-none-macosx_10_14_universal2
@@ -1870,8 +1979,6 @@ mod tests {
         py30-none-macosx_12_0_universal2
         py30-none-macosx_11_0_arm64
         py30-none-macosx_11_0_universal2
-        py30-none-macosx_10_0_arm64
-        py30-none-macosx_10_0_universal2
         py30-none-macosx_10_16_universal2
         py30-none-macosx_10_15_universal2
         py30-none-macosx_10_14_universal2
