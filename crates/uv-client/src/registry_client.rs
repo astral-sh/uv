@@ -17,6 +17,8 @@ use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{BuiltDist, File, FileLocation, IndexUrl, IndexUrls, Name};
 use install_wheel_rs::metadata::{find_archive_dist_info, is_metadata_entry};
 use pep440_rs::Version;
+use pep508_rs::MarkerEnvironment;
+use platform_tags::Platform;
 use pypi_types::{Metadata23, SimpleJson};
 use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheBucket, WheelCache};
@@ -31,7 +33,7 @@ use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
-pub struct RegistryClientBuilder {
+pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     keyring_provider: KeyringProvider,
     native_tls: bool,
@@ -39,9 +41,11 @@ pub struct RegistryClientBuilder {
     connectivity: Connectivity,
     cache: Cache,
     client: Option<Client>,
+    markers: Option<&'a MarkerEnvironment>,
+    platform: Option<&'a Platform>,
 }
 
-impl RegistryClientBuilder {
+impl RegistryClientBuilder<'_> {
     pub fn new(cache: Cache) -> Self {
         Self {
             index_urls: IndexUrls::default(),
@@ -51,11 +55,13 @@ impl RegistryClientBuilder {
             connectivity: Connectivity::Online,
             retries: 3,
             client: None,
+            markers: None,
+            platform: None,
         }
     }
 }
 
-impl RegistryClientBuilder {
+impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
         self.index_urls = index_urls;
@@ -98,12 +104,32 @@ impl RegistryClientBuilder {
         self
     }
 
+    #[must_use]
+    pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
+        self.markers = Some(markers);
+        self
+    }
+
+    #[must_use]
+    pub fn platform(mut self, platform: &'a Platform) -> Self {
+        self.platform = Some(platform);
+        self
+    }
+
     pub fn build(self) -> RegistryClient {
         // Build a base client
         let mut builder = BaseClientBuilder::new();
 
         if let Some(client) = self.client {
             builder = builder.client(client)
+        }
+
+        if let Some(markers) = self.markers {
+            builder = builder.markers(markers)
+        }
+
+        if let Some(platform) = self.platform {
+            builder = builder.platform(platform)
         }
 
         let client = builder

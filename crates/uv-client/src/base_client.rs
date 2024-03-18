@@ -1,3 +1,5 @@
+use pep508_rs::MarkerEnvironment;
+use platform_tags::Platform;
 use reqwest::{Client, ClientBuilder};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
@@ -12,21 +14,24 @@ use uv_fs::Simplified;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
+use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::Roots;
 use crate::{tls, Connectivity};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
-pub struct BaseClientBuilder {
+pub struct BaseClientBuilder<'a> {
     keyring_provider: KeyringProvider,
     native_tls: bool,
     retries: u32,
     connectivity: Connectivity,
     client: Option<Client>,
+    markers: Option<&'a MarkerEnvironment>,
+    platform: Option<&'a Platform>,
 }
 
-impl BaseClientBuilder {
+impl BaseClientBuilder<'_> {
     pub fn new() -> Self {
         Self {
             keyring_provider: KeyringProvider::default(),
@@ -34,11 +39,13 @@ impl BaseClientBuilder {
             connectivity: Connectivity::Online,
             retries: 3,
             client: None,
+            markers: None,
+            platform: None,
         }
     }
 }
 
-impl BaseClientBuilder {
+impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn keyring_provider(mut self, keyring_provider: KeyringProvider) -> Self {
         self.keyring_provider = keyring_provider;
@@ -69,9 +76,29 @@ impl BaseClientBuilder {
         self
     }
 
+    #[must_use]
+    pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
+        self.markers = Some(markers);
+        self
+    }
+
+    #[must_use]
+    pub fn platform(mut self, platform: &'a Platform) -> Self {
+        self.platform = Some(platform);
+        self
+    }
+
     pub fn build(self) -> BaseClient {
         // Create user agent.
-        let user_agent_string = format!("uv/{}", version());
+        let mut user_agent_string = format!("uv/{}", version());
+
+        // Add linehaul metadata.
+        if let Some(markers) = self.markers {
+            let linehaul = LineHaul::new(markers, self.platform);
+            if let Ok(output) = serde_json::to_string(&linehaul) {
+                user_agent_string += &format!(" {}", output);
+            }
+        }
 
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6

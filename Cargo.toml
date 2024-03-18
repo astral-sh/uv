@@ -68,6 +68,7 @@ owo-colors = { version = "4.0.0" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
+plist = { version = "1.6.0" }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "addbaf184891d66a2dfd93d241a66d13bfe5de86" }
 pyo3 = { version = "0.20.3" }
 pyo3-log = { version = "0.9.0" }
@@ -89,6 +90,7 @@ serde = { version = "1.0.197" }
 serde_json = { version = "1.0.114" }
 sha1 = { version = "0.10.6" }
 sha2 = { version = "0.10.8" }
+sys-info = { version = "0.9.1" }
 target-lexicon = { version = "0.12.14" }
 task-local-extensions = { version = "0.1.4" }
 tempfile = { version = "3.9.0" }
