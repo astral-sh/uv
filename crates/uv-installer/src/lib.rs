@@ -3,7 +3,7 @@ pub use downloader::{Downloader, Reporter as DownloadReporter};
 pub use editable::{is_dynamic, BuiltEditable, ResolvedEditable};
 pub use installer::{Installer, Reporter as InstallReporter};
 pub use plan::{Plan, Planner, Reinstall};
-pub use site_packages::SitePackages;
+pub use site_packages::{Diagnostic, SitePackages};
 pub use uninstall::uninstall;
 pub use uv_traits::NoBinary;
 
