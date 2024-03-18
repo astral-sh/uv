@@ -229,8 +229,18 @@ impl Dist {
                     .extension()
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
                 {
+                    // Validate that the name in the wheel matches that of the requirement.
+                    let filename = WheelFilename::from_str(&url.filename()?)?;
+                    if filename.name != name {
+                        return Err(Error::PackageNameMismatch(
+                            name,
+                            filename.name,
+                            url.verbatim().to_string(),
+                        ));
+                    }
+
                     Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
-                        filename: WheelFilename::from_str(&url.filename()?)?,
+                        filename,
                         url,
                     })))
                 } else {
@@ -258,8 +268,18 @@ impl Dist {
                     .extension()
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
                 {
+                    // Validate that the name in the wheel matches that of the requirement.
+                    let filename = WheelFilename::from_str(&url.filename()?)?;
+                    if filename.name != name {
+                        return Err(Error::PackageNameMismatch(
+                            name,
+                            filename.name,
+                            url.verbatim().to_string(),
+                        ));
+                    }
+
                     Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
-                        filename: WheelFilename::from_str(&url.filename()?)?,
+                        filename,
                         url,
                         path,
                     })))

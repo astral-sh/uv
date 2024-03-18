@@ -5186,3 +5186,25 @@ fn compile_root_uri() -> Result<()> {
 
     Ok(())
 }
+
+/// Request a local wheel with a mismatched package name.
+#[test]
+fn requirement_wheel_name_mismatch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("dateutil @ https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl")?;
+
+    uv_snapshot!(context.compile()
+        .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requested package name `dateutil` does not match `python-dateutil` in the distribution filename: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+    "###
+    );
+
+    Ok(())
+}

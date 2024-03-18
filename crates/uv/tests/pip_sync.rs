@@ -1104,7 +1104,7 @@ fn mismatched_name() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
-        "tomli @ {}",
+        "foo @ {}",
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
