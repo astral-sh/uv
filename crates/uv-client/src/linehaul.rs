@@ -3,6 +3,7 @@ use std::env;
 use serde::{Deserialize, Serialize};
 
 use pep508_rs::MarkerEnvironment;
+use platform_tags::{Os, Platform};
 use uv_version::version;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -59,11 +60,23 @@ pub struct LineHaul {
 /// This metadata is added to the user agent to enrich PyPI statistics.
 impl LineHaul {
     /// Initializes Linehaul information based on PEP 508 markers.
-    pub fn new(markers: &MarkerEnvironment) -> Self {
+    pub fn new(markers: &MarkerEnvironment, platform: Option<&Platform>) -> Self {
         // https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/session.py#L87
         let looks_like_ci = ["BUILD_BUILDID", "BUILD_ID", "CI", "PIP_IS_CI"]
             .iter()
             .find_map(|&var_name| env::var(var_name).ok().map(|_| true));
+
+        let libc = match platform.map(|platform| platform.os()) {
+            Some(Os::Manylinux { major, minor }) => Some(Libc {
+                lib: Some("glibc".to_string()),
+                version: Some(format!("{major}.{minor}")),
+            }),
+            Some(Os::Musllinux { major, minor }) => Some(Libc {
+                lib: Some("musl".to_string()),
+                version: Some(format!("{major}.{minor}")),
+            }),
+            _ => None,
+        };
 
         // Build Distro as Linehaul expects.
         let distro: Option<Distro> = if cfg!(target_os = "linux") {
@@ -75,8 +88,8 @@ impl LineHaul {
                 name: info.name,
                 // e.g., 22.04, etc.
                 version: info.version_id,
-                // Skip in uv, likely way too slow.
-                libc: None,
+                // e.g., glibc 2.38, musl 1.2
+                libc,
             })
         } else if cfg!(target_os = "macos") {
             Some(Distro {

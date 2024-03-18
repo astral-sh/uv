@@ -5,6 +5,7 @@ use hyper::server::conn::Http;
 use hyper::service::service_fn;
 use hyper::{Body, Request, Response};
 use pep508_rs::{MarkerEnvironment, StringVersion};
+use platform_tags::{Arch, Os, Platform};
 use tokio::net::TcpListener;
 use uv_cache::Cache;
 use uv_client::LineHaul;
@@ -113,10 +114,23 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         },
         sys_platform: "linux".to_string(),
     };
+    // Linux only
+    let platform = Platform::new(
+        Os::Manylinux {
+            major: 2,
+            minor: 38,
+        },
+        Arch::X86_64,
+    );
 
     // Initialize uv-client
     let cache = Cache::temp()?;
-    let client = RegistryClientBuilder::new(cache).markers(&markers).build();
+    let mut builder = RegistryClientBuilder::new(cache).markers(&markers);
+
+    if cfg!(target_os = "linux") {
+        builder = builder.platform(&platform);
+    }
+    let client = builder.build();
 
     // Send request to our dummy server
     let res = client
@@ -183,7 +197,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         assert_eq!(distro_info.id.unwrap(), info.codename().unwrap());
         assert_eq!(distro_info.name.unwrap(), info.os_type().to_string());
         assert_eq!(distro_info.version.unwrap(), info.version().to_string());
-        assert_eq!(distro_info.libc, None);
+        assert!(distro_info.libc.is_some());
     }
 
     // Using os_info as sys-info yields Darwin version, and not mac release version.

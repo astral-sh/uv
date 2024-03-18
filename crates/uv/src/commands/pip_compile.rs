@@ -199,6 +199,7 @@ pub(crate) async fn pip_compile(
         .index_urls(index_locations.index_urls())
         .keyring_provider(keyring_provider)
         .markers(&markers)
+        .platform(interpreter.platform())
         .build();
 
     // Resolve the flat indexes from `--find-links`.

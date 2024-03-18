@@ -1,4 +1,5 @@
 use pep508_rs::MarkerEnvironment;
+use platform_tags::Platform;
 use reqwest::{Client, ClientBuilder};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
@@ -27,6 +28,7 @@ pub struct BaseClientBuilder<'a> {
     connectivity: Connectivity,
     client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
+    platform: Option<&'a Platform>,
 }
 
 impl BaseClientBuilder<'_> {
@@ -38,6 +40,7 @@ impl BaseClientBuilder<'_> {
             retries: 3,
             client: None,
             markers: None,
+            platform: None,
         }
     }
 }
@@ -79,13 +82,19 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    #[must_use]
+    pub fn platform(mut self, platform: &'a Platform) -> Self {
+        self.platform = Some(platform);
+        self
+    }
+
     pub fn build(self) -> BaseClient {
         // Create user agent.
         let mut user_agent_string = format!("uv/{}", version());
 
         // Add linehaul metadata.
         if let Some(markers) = self.markers {
-            let linehaul = LineHaul::new(markers);
+            let linehaul = LineHaul::new(markers, self.platform);
             if let Ok(output) = serde_json::to_string(&linehaul) {
                 user_agent_string += &format!(" {}", output);
             }
