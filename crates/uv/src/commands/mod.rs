@@ -129,14 +129,17 @@ pub(super) async fn compile_bytecode(
     printer: Printer,
 ) -> anyhow::Result<()> {
     let start = std::time::Instant::now();
-    let files = compile_tree(venv.site_packages(), venv.python_executable(), cache.root())
-        .await
-        .with_context(|| {
-            format!(
-                "Failed to bytecode compile {}",
-                venv.site_packages().simplified_display()
-            )
-        })?;
+    let mut files = 0;
+    for site_packages in venv.site_packages() {
+        files += compile_tree(site_packages, venv.python_executable(), cache.root())
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to bytecode-compile Python file in: {}",
+                    site_packages.simplified_display()
+                )
+            })?;
+    }
     let s = if files == 1 { "" } else { "s" };
     writeln!(
         printer.stderr(),

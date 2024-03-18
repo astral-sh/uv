@@ -42,47 +42,51 @@ impl<'a> SitePackages<'a> {
         let mut by_name = FxHashMap::default();
         let mut by_url = FxHashMap::default();
 
-        // Read the site-packages directory.
-        let site_packages = match fs::read_dir(venv.site_packages()) {
-            Ok(site_packages) => site_packages,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(Self {
-                    venv,
-                    distributions,
-                    by_name,
-                    by_url,
-                });
-            }
-            Err(err) => return Err(err).context("Failed to read site-packages directory"),
-        };
-
-        // Index all installed packages by name.
-        for entry in site_packages {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                let path = entry.path();
-
-                let Some(dist_info) = InstalledDist::try_from_path(&path)
-                    .with_context(|| format!("Failed to read metadata: from {}", path.display()))?
-                else {
-                    continue;
-                };
-
-                let idx = distributions.len();
-
-                // Index the distribution by name.
-                by_name
-                    .entry(dist_info.name().clone())
-                    .or_insert_with(Vec::new)
-                    .push(idx);
-
-                // Index the distribution by URL.
-                if let Some(url) = dist_info.as_editable() {
-                    by_url.entry(url.clone()).or_insert_with(Vec::new).push(idx);
+        for site_packages in venv.site_packages() {
+            // Read the site-packages directory.
+            let site_packages = match fs::read_dir(site_packages) {
+                Ok(site_packages) => site_packages,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    return Ok(Self {
+                        venv,
+                        distributions,
+                        by_name,
+                        by_url,
+                    });
                 }
+                Err(err) => return Err(err).context("Failed to read site-packages directory"),
+            };
 
-                // Add the distribution to the database.
-                distributions.push(Some(dist_info));
+            // Index all installed packages by name.
+            for entry in site_packages {
+                let entry = entry?;
+                if entry.file_type()?.is_dir() {
+                    let path = entry.path();
+
+                    let Some(dist_info) =
+                        InstalledDist::try_from_path(&path).with_context(|| {
+                            format!("Failed to read metadata: from {}", path.display())
+                        })?
+                    else {
+                        continue;
+                    };
+
+                    let idx = distributions.len();
+
+                    // Index the distribution by name.
+                    by_name
+                        .entry(dist_info.name().clone())
+                        .or_insert_with(Vec::new)
+                        .push(idx);
+
+                    // Index the distribution by URL.
+                    if let Some(url) = dist_info.as_editable() {
+                        by_url.entry(url.clone()).or_insert_with(Vec::new).push(idx);
+                    }
+
+                    // Add the distribution to the database.
+                    distributions.push(Some(dist_info));
+                }
             }
         }
 
