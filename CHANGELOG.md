@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.22
+
+### Enhancements
+
+- Add support for PyTorch-style local version semantics ([#2430](https://github.com/astral-sh/uv/pull/2430))
+- Add support for Hatch's `{root:uri}` paths in editable installs ([#2492](https://github.com/astral-sh/uv/pull/2492))
+- Implement `uv pip check` ([#2397](https://github.com/astral-sh/uv/pull/2397))
+- Add pip-like linehaul information to user agent ([#2493](https://github.com/astral-sh/uv/pull/2493))
+- Add additional ARM targets to release ([#2417](https://github.com/astral-sh/uv/pull/2417))
+
+### Bug fixes
+
+- Allow direct file path requirements to include fragments ([#2502](https://github.com/astral-sh/uv/pull/2502))
+- Avoid panicking on cannot-be-a-base URLs ([#2461](https://github.com/astral-sh/uv/pull/2461))
+- Drop `macosx_10_0` from compatible wheel tags on `aarch64` ([#2496](https://github.com/astral-sh/uv/pull/2496))
+- Fix operating system detection on *BSD ([#2505](https://github.com/astral-sh/uv/pull/2505))
+- Fix priority of ABI tags ([#2489](https://github.com/astral-sh/uv/pull/2489))
+- Fix priority of platform tags for manylinux ([#2483](https://github.com/astral-sh/uv/pull/2483))
+- Make > operator exclude post and local releases ([#2471](https://github.com/astral-sh/uv/pull/2471))
+- Re-add support for pyenv shims ([#2503](https://github.com/astral-sh/uv/pull/2503))
+- Validate required package names against wheel package names ([#2516](https://github.com/astral-sh/uv/pull/2516))
+
 ## 0.1.21
 
 ### Enhancements
