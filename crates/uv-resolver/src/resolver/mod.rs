@@ -21,10 +21,11 @@ use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
     Name, RemoteSource, SourceDist, VersionOrUrl,
 };
+pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, Requirement};
-use platform_tags::{IncompatibleTag, Tags};
-use pypi_types::{Metadata23, Yanked};
+use platform_tags::Tags;
+use pypi_types::Metadata23;
 pub(crate) use urls::Urls;
 use uv_client::{FlatIndex, RegistryClient};
 use uv_distribution::DistributionDatabase;
@@ -52,10 +53,8 @@ pub use crate::resolver::provider::{
 };
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
-
 use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Options};
-pub(crate) use locals::Locals;
 
 mod index;
 mod locals;
@@ -347,8 +346,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         // them as incompatible dependencies instead of marking the package version
                         // as unavailable directly
                         UnavailableVersion::IncompatibleDist(
-                            IncompatibleDist::Source(IncompatibleSource::RequiresPython(requires_python))
-                            | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(requires_python))
+                            IncompatibleDist::Source(IncompatibleSource::RequiresPython(
+                                requires_python,
+                            ))
+                            | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
+                                requires_python,
+                            )),
                         ) => {
                             let python_version = requires_python
                                 .iter()
@@ -369,51 +372,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             continue;
                         }
                         UnavailableVersion::IncompatibleDist(incompatibility) => {
-                            match incompatibility {
-                                IncompatibleDist::Wheel(incompatibility) => {
-                                    match incompatibility {
-                                        IncompatibleWheel::NoBinary => "no source distribution is available and using wheels is disabled".to_string(),
-                                        IncompatibleWheel::Tag(tag) => {
-                                            match tag {
-                                                IncompatibleTag::Invalid => "no wheels are available with valid tags".to_string(),
-                                                IncompatibleTag::Python => "no wheels are available with a matching Python implementation".to_string(),
-                                                IncompatibleTag::Abi => "no wheels are available with a matching Python ABI".to_string(),
-                                                IncompatibleTag::Platform => "no wheels are available with a matching platform".to_string(),
-                                            }
-                                        }
-                                        IncompatibleWheel::Yanked(yanked) => match yanked {
-                                            Yanked::Bool(_) => "it was yanked".to_string(),
-                                            Yanked::Reason(reason) => format!(
-                                                "it was yanked (reason: {})",
-                                                reason.trim().trim_end_matches('.')
-                                            ),
-                                        },
-                                        IncompatibleWheel::ExcludeNewer(ts) => match ts {
-                                            Some(_) => "it was published after the exclude newer time".to_string(),
-                                            None => "it has no publish time".to_string()
-                                        }
-                                        IncompatibleWheel::RequiresPython(_) => unreachable!(),
-                                    }
-                                }
-                                IncompatibleDist::Source(incompatibility) => {
-                                    match incompatibility {
-                                        IncompatibleSource::NoBuild => "no wheels are usable and building from source is disabled".to_string(),
-                                        IncompatibleSource::Yanked(yanked) => match yanked {
-                                            Yanked::Bool(_) => "it was yanked".to_string(),
-                                            Yanked::Reason(reason) => format!(
-                                                "it was yanked (reason: {})",
-                                                reason.trim().trim_end_matches('.')
-                                            ),
-                                        },
-                                        IncompatibleSource::ExcludeNewer(ts) => match ts {
-                                            Some(_) => "it was published after the exclude newer time".to_string(),
-                                            None => "it has no publish time".to_string()
-                                        }
-                                        IncompatibleSource::RequiresPython(_) => unreachable!(),
-                                    }
-                                }
-                                IncompatibleDist::Unavailable => "no distributions are available".to_string()
-                            }
+                            incompatibility.to_string()
                         }
                     };
                     state.add_incompatibility(Incompatibility::unavailable(
