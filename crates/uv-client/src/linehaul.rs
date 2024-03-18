@@ -94,13 +94,17 @@ impl LineHaul {
                 libc,
             })
         } else if cfg!(target_os = "macos") {
+            let version = match platform.map(|platform| platform.os()) {
+                Some(Os::Macos { major, minor }) => Some(format!("{major}.{minor}")),
+                _ => None,
+            };
             Some(Distro {
                 // N/A
                 id: None,
                 // pip hardcodes distro name to macOS.
                 name: Some("macOS".to_string()),
-                // Same as python's platform.mac_ver[0].
-                version: crate::mac_version::get_mac_os_version().ok(),
+                // Same as python's platform.mac_ver()[0].
+                version,
                 // N/A
                 libc: None,
             })
@@ -125,9 +129,12 @@ impl LineHaul {
                 release: Some(markers.platform_release.to_string()),
             }),
             cpu: Some(markers.platform_machine.to_string()),
-            openssl_version: None,    // Should probably always be None in uv.
-            setuptools_version: None, // Should probably always be None in uv.
-            rustc_version: None,      // Calling rustc --version is likely too slow.
+            // Should probably always be None in uv.
+            openssl_version: None,
+            // Should probably always be None in uv.
+            setuptools_version: None,
+            // Calling rustc --version is likely too slow.
+            rustc_version: None,
             ci: looks_like_ci,
         }
     }

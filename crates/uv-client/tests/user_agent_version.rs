@@ -186,28 +186,25 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     assert_eq!(linehaul.setuptools_version, None);
     assert_eq!(linehaul.rustc_version, None);
 
-    #[cfg(windows)]
-    assert_eq!(linehaul.distro, None);
-
-    // Using os_info as to confirm our values are as expected in both Linux and OSX.
-    #[cfg(target_os = "linux")]
-    {
+    if cfg!(windows) {
+        assert_eq!(linehaul.distro, None);
+    } else if cfg!(target_os = "linux") {
+        // Using os_info as to confirm our values are as expected in both Linux and OSX.
         let info = os_info::get();
         let distro_info = linehaul.distro.unwrap();
         assert_eq!(distro_info.id.unwrap(), info.codename().unwrap());
         assert_eq!(distro_info.name.unwrap(), info.os_type().to_string());
         assert_eq!(distro_info.version.unwrap(), info.version().to_string());
         assert!(distro_info.libc.is_some());
-    }
-
-    // Using os_info as sys-info yields Darwin version, and not mac release version.
-    #[cfg(target_os = "macos")]
-    {
+    } else if cfg!(target_os = "macos") {
+        // Using os_info as to confirm our values are as expected in both Linux and OSX.
         let info = os_info::get();
         let distro_info = linehaul.distro.unwrap();
         assert_eq!(distro_info.id, None);
         assert_eq!(distro_info.name.unwrap(), "macOS");
-        assert_eq!(distro_info.version.unwrap(), info.version().to_string());
+        let os_info_version = info.version().to_string();
+        // We don't include the patch version for simplicity, so our string may be shorter.
+        assert!(os_info_version.starts_with(&distro_info.version.unwrap()));
         assert_eq!(distro_info.libc, None);
     }
 

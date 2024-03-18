@@ -16,7 +16,6 @@ mod flat_index;
 mod html;
 mod httpcache;
 mod linehaul;
-mod mac_version;
 mod middleware;
 mod registry_client;
 mod remote_metadata;
