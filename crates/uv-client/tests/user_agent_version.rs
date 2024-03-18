@@ -116,9 +116,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
 
     // Initialize uv-client
     let cache = Cache::temp()?;
-    let client = RegistryClientBuilder::new(cache)
-        .markers(markers.clone())
-        .build();
+    let client = RegistryClientBuilder::new(cache).markers(&markers).build();
 
     // Send request to our dummy server
     let res = client

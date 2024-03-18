@@ -126,7 +126,7 @@ pub(crate) async fn pip_sync(
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
         .keyring_provider(keyring_provider)
-        .markers(venv.interpreter().markers().clone())
+        .markers(venv.interpreter().markers())
         .build();
 
     // Resolve the flat indexes from `--find-links`.

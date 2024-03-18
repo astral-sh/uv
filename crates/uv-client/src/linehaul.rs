@@ -59,7 +59,7 @@ pub struct LineHaul {
 /// This metadata is added to the user agent to enrich PyPI statistics.
 impl LineHaul {
     /// Initializes Linehaul information based on PEP 508 markers.
-    pub fn new(markers: MarkerEnvironment) -> Self {
+    pub fn new(markers: &MarkerEnvironment) -> Self {
         // https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/session.py#L87
         let looks_like_ci = ["BUILD_BUILDID", "BUILD_ID", "CI", "PIP_IS_CI"]
             .iter()

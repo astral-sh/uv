@@ -32,7 +32,7 @@ use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
-pub struct RegistryClientBuilder {
+pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     keyring_provider: KeyringProvider,
     native_tls: bool,
@@ -40,10 +40,10 @@ pub struct RegistryClientBuilder {
     connectivity: Connectivity,
     cache: Cache,
     client: Option<Client>,
-    markers: Option<MarkerEnvironment>,
+    markers: Option<&'a MarkerEnvironment>,
 }
 
-impl RegistryClientBuilder {
+impl RegistryClientBuilder<'_> {
     pub fn new(cache: Cache) -> Self {
         Self {
             index_urls: IndexUrls::default(),
@@ -58,7 +58,7 @@ impl RegistryClientBuilder {
     }
 }
 
-impl RegistryClientBuilder {
+impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
         self.index_urls = index_urls;
@@ -102,7 +102,7 @@ impl RegistryClientBuilder {
     }
 
     #[must_use]
-    pub fn markers(mut self, markers: MarkerEnvironment) -> Self {
+    pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
         self.markers = Some(markers);
         self
     }

@@ -192,7 +192,7 @@ pub(crate) async fn pip_install(
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
         .keyring_provider(keyring_provider)
-        .markers(interpreter.markers().clone())
+        .markers(markers)
         .build();
 
     // Resolve the flat indexes from `--find-links`.

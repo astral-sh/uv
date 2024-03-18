@@ -151,7 +151,7 @@ async fn venv_impl(
             .index_urls(index_locations.index_urls())
             .keyring_provider(keyring_provider)
             .connectivity(connectivity)
-            .markers(interpreter.markers().clone())
+            .markers(interpreter.markers())
             .build();
 
         // Resolve the flat indexes from `--find-links`.

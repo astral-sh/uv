@@ -20,16 +20,16 @@ use crate::{tls, Connectivity};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
-pub struct BaseClientBuilder {
+pub struct BaseClientBuilder<'a> {
     keyring_provider: KeyringProvider,
     native_tls: bool,
     retries: u32,
     connectivity: Connectivity,
     client: Option<Client>,
-    markers: Option<MarkerEnvironment>,
+    markers: Option<&'a MarkerEnvironment>,
 }
 
-impl BaseClientBuilder {
+impl BaseClientBuilder<'_> {
     pub fn new() -> Self {
         Self {
             keyring_provider: KeyringProvider::default(),
@@ -42,7 +42,7 @@ impl BaseClientBuilder {
     }
 }
 
-impl BaseClientBuilder {
+impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn keyring_provider(mut self, keyring_provider: KeyringProvider) -> Self {
         self.keyring_provider = keyring_provider;
@@ -74,7 +74,7 @@ impl BaseClientBuilder {
     }
 
     #[must_use]
-    pub fn markers(mut self, markers: MarkerEnvironment) -> Self {
+    pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
         self.markers = Some(markers);
         self
     }
