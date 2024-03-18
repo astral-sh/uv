@@ -1744,4 +1744,35 @@ mod tests {
         let requirement = Requirement::from_str("pytest;'4.0'>=python_version").unwrap();
         assert_eq!(requirement.to_string(), "pytest ; '4.0' >= python_version");
     }
+
+    #[test]
+    fn path_with_fragment() {
+        let requirements = if cfg![not(windows)] {
+            &[
+                "wheel @ file:///Users/ferris/wheel-0.42.0.whl#hash=somehash",
+                "wheel @ /Users/ferris/wheel-0.42.0.whl#hash=somehash",
+            ]
+        } else {
+            &[
+                "wheel @ file:///C:/Users/ferris/wheel-0.42.0.whl#hash=somehash",
+                "wheel @ /C:/Users/ferris/wheel-0.42.0.whl#hash=somehash",
+            ]
+        };
+
+        for requirement in requirements {
+            if let VersionOrUrl::Url(url) = Requirement::from_str(requirement)
+                .unwrap()
+                .version_or_url
+                .unwrap()
+            {
+                assert!(url.path().ends_with("/Users/ferris/wheel-0.42.0.whl"));
+                assert_eq!(url.fragment(), Some("hash=somehash"));
+                assert!(url.given().unwrap().ends_with(&format!(
+                    "{}#{}",
+                    url.path(),
+                    url.fragment().unwrap_or("")
+                )));
+            }
+        }
+    }
 }

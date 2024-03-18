@@ -37,8 +37,17 @@ impl VerbatimUrl {
 
     /// Create a [`VerbatimUrl`] from a file path.
     pub fn from_path(path: impl AsRef<Path>) -> Self {
+        // Split fragment from path
+        let path_str = path.as_ref().to_string_lossy();
+        let (path, fragment) = split_fragment(path_str.as_ref());
+
         let path = normalize_path(path.as_ref());
-        let url = Url::from_file_path(path).expect("path is absolute");
+        let mut url = Url::from_file_path(path).expect("path is absolute");
+
+        // Set fragment for file url if exists
+        if fragment.is_some() {
+            url.set_fragment(fragment);
+        }
         Self { url, given: None }
     }
 
@@ -51,6 +60,10 @@ impl VerbatimUrl {
     /// Parse a URL from an absolute or relative path.
     #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
     pub fn parse_path(path: impl AsRef<Path>, working_dir: impl AsRef<Path>) -> Self {
+        // Split fragment from path
+        let path_str = path.as_ref().to_string_lossy();
+        let (path, fragment) = split_fragment(path_str.as_ref());
+
         // Convert the path to an absolute path, if necessary.
         let path = if path.as_ref().is_absolute() {
             path.as_ref().to_path_buf()
@@ -62,13 +75,22 @@ impl VerbatimUrl {
         let path = normalize_path(path);
 
         // Convert to a URL.
-        let url = Url::from_file_path(path).expect("path is absolute");
+        let mut url = Url::from_file_path(path).expect("path is absolute");
+
+        // Set fragment for file url if exists
+        if fragment.is_some() {
+            url.set_fragment(fragment);
+        }
 
         Self { url, given: None }
     }
 
     /// Parse a URL from an absolute path.
     pub fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, VerbatimUrlError> {
+        // Split fragment from path
+        let path_str = path.as_ref().to_string_lossy();
+        let (path, fragment) = split_fragment(path_str.as_ref());
+
         // Convert the path to an absolute path, if necessary.
         let path = if path.as_ref().is_absolute() {
             path.as_ref().to_path_buf()
@@ -80,7 +102,12 @@ impl VerbatimUrl {
         let path = normalize_path(path);
 
         // Convert to a URL.
-        let url = Url::from_file_path(path).expect("path is absolute");
+        let mut url = Url::from_file_path(path).expect("path is absolute");
+
+        // Set fragment for file url if exists
+        if fragment.is_some() {
+            url.set_fragment(fragment);
+        }
 
         Ok(Self { url, given: None })
     }
@@ -220,6 +247,12 @@ pub fn split_scheme(s: &str) -> Option<(&str, &str)> {
     let scheme = &s[..end];
     let rest = &s[end + 1..];
     Some((scheme, rest))
+}
+
+// split fragment from string
+fn split_fragment(s: &str) -> (impl AsRef<Path> + '_, Option<&str>) {
+    s.split_once('#')
+        .map_or_else(|| (s, None), |(path, fragment)| (path, Some(fragment)))
 }
 
 /// A supported URL scheme for PEP 508 direct-URL requirements.
@@ -362,5 +395,31 @@ mod tests {
             Some(("https", "//example.com"))
         );
         assert_eq!(split_scheme("https:"), Some(("https", "")));
+    }
+
+    #[test]
+    fn fragment() {
+        for (s, expected) in [
+            (
+                "file:///home/ferris/project/scripts#hash=somehash",
+                ("file:///home/ferris/project/scripts", Some("hash=somehash")),
+            ),
+            (
+                "file:home/ferris/project/scripts#hash=somehash",
+                ("file:home/ferris/project/scripts", Some("hash=somehash")),
+            ),
+            (
+                "/home/ferris/project/scripts#hash=somehash",
+                ("/home/ferris/project/scripts", Some("hash=somehash")),
+            ),
+            (
+                "file:///home/ferris/project/scripts",
+                ("file:///home/ferris/project/scripts", None),
+            ),
+            ("", ("", None)),
+        ] {
+            let (path, frag) = split_fragment(s);
+            assert_eq!((path.as_ref(), frag), (Path::new(expected.0), expected.1));
+        }
     }
 }
