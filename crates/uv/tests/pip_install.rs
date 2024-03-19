@@ -1,6 +1,6 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::process::Command;
+use std::{os::unix::fs::MetadataExt, process::Command};
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
@@ -2842,4 +2842,35 @@ fn install_index_with_relative_links_authenticated() {
     );
 
     context.assert_command("import anyio").success();
+}
+
+/// The modified time of `site-packages` should change on package installation.
+#[test]
+fn install_site_packages_mtime_updated() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let site_packages = context.site_packages();
+    let mtime = site_packages.metadata()?.mtime();
+
+    // Install a package.
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    assert!(site_packages.metadata()?.mtime() > mtime);
+
+    Ok(())
 }
