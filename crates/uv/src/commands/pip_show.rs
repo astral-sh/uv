@@ -22,6 +22,7 @@ pub(crate) fn pip_show(
     strict: bool,
     python: Option<&str>,
     system: bool,
+    user: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -39,7 +40,9 @@ pub(crate) fn pip_show(
     }
 
     // Detect the current Python interpreter.
-    let venv = if let Some(python) = python {
+    let venv = if user {
+        PythonEnvironment::from_user_scheme(python, cache)?
+    } else if let Some(python) = python {
         PythonEnvironment::from_requested_python(python, cache)?
     } else if system {
         PythonEnvironment::from_default_python(cache)?

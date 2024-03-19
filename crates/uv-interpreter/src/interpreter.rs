@@ -102,6 +102,15 @@ impl Interpreter {
         }
     }
 
+    /// Return a new [`Interpreter`] with user scheme.
+    pub fn with_user_scheme(self, cache: &Cache) -> Result<Self, Error> {
+        let info = InterpreterInfo::query_user_scheme_info(self.sys_executable(), cache)?;
+        Ok(Self {
+            scheme: info.scheme,
+            ..self
+        })
+    }
+
     /// Returns the path to the Python virtual environment.
     #[inline]
     pub fn platform(&self) -> &Platform {
@@ -523,6 +532,60 @@ impl InterpreterInfo {
         }
 
         Ok(info)
+    }
+
+    /// Return the [`InterpreterInfo`] for the given Python interpreter with user scheme.
+    pub(crate) fn query_user_scheme_info(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
+        let envs = vec![("_UV_USE_USER_SCHEME", "1")];
+        let tempdir = tempfile::tempdir_in(cache.root())?;
+        Self::setup_python_query_files(tempdir.path())?;
+
+        let output = Command::new(interpreter)
+            .arg("-m")
+            .arg("python.get_interpreter_info")
+            .envs(envs)
+            .current_dir(tempdir.path().simplified())
+            .output()
+            .map_err(|err| Error::PythonSubcommandLaunch {
+                interpreter: interpreter.to_path_buf(),
+                err,
+            })?;
+
+        // stderr isn't technically a criterion for success, but i don't know of any cases where there
+        // should be stderr output and if there is, we want to know
+        if !output.status.success() || !output.stderr.is_empty() {
+            return Err(Error::PythonSubcommandOutput {
+                message: format!(
+                    "Querying Python at `{}` failed with status {}",
+                    interpreter.display(),
+                    output.status,
+                ),
+                exit_code: output.status,
+                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            });
+        }
+
+        let result: InterpreterInfoResult =
+            serde_json::from_slice(&output.stdout).map_err(|err| {
+                Error::PythonSubcommandOutput {
+                    message: format!(
+                        "Querying Python at `{}` did not return the expected data: {err}",
+                        interpreter.display(),
+                    ),
+                    exit_code: output.status,
+                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                    stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                }
+            })?;
+
+        match result {
+            InterpreterInfoResult::Error(err) => Err(Error::QueryScript {
+                err,
+                interpreter: interpreter.to_path_buf(),
+            }),
+            InterpreterInfoResult::Success(data) => Ok(*data),
+        }
     }
 }
 

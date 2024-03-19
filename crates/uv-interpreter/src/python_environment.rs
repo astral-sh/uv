@@ -1,3 +1,4 @@
+use fs_err as fs;
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -65,6 +66,45 @@ impl PythonEnvironment {
             root: interpreter.prefix().to_path_buf(),
             interpreter,
         }
+    }
+
+    /// Create a [`PythonEnvironment`] with user scheme.
+    pub fn from_user_scheme(python: Option<&str>, cache: &Cache) -> Result<Self, Error> {
+        // Attempt to determine the interpreter based on the provided criteria
+        let interpreter = if let Some(requested_python) = python {
+            // If a specific Python version is requested
+            Self::from_requested_python(requested_python, cache)?.interpreter
+        } else if let Some(_venv) = detect_virtual_env()? {
+            // If a virtual environment is detected
+            Self::from_virtualenv(cache)?.interpreter
+        } else {
+            // Fallback to the default Python interpreter
+            Self::from_default_python(cache)?.interpreter
+        };
+
+        // Apply the user scheme to the determined interpreter
+        let interpreter_with_user_scheme = interpreter.with_user_scheme(cache)?;
+
+        // Ensure interpreter scheme directories exist, as per the model in pip
+        // <https://github.com/pypa/pip/blob/main/src/pip/_internal/models/scheme.py#L12>
+        let directories = vec![
+            interpreter_with_user_scheme.platlib(),
+            interpreter_with_user_scheme.purelib(),
+            interpreter_with_user_scheme.scripts(),
+            interpreter_with_user_scheme.data(),
+            interpreter_with_user_scheme.include(),
+        ];
+
+        for path in directories {
+            if !Path::new(path).exists() {
+                fs::create_dir_all(path)?;
+            }
+        }
+
+        Ok(Self {
+            root: interpreter_with_user_scheme.prefix().to_path_buf(),
+            interpreter: interpreter_with_user_scheme,
+        })
     }
 
     /// Returns the location of the Python interpreter.

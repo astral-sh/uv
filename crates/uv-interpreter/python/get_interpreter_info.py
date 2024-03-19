@@ -216,7 +216,7 @@ def get_virtualenv():
         }
 
 
-def get_scheme():
+def get_scheme(user: bool = False):
     """Return the Scheme for the current interpreter.
 
     The paths returned should be absolute.
@@ -225,7 +225,7 @@ def get_scheme():
         https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/locations/__init__.py#L230
     """
 
-    def get_sysconfig_scheme():
+    def get_sysconfig_scheme(user: bool = False):
         """Get the "scheme" corresponding to the input parameters.
 
         Uses the `sysconfig` module to get the scheme.
@@ -274,6 +274,20 @@ def get_scheme():
                 and is_osx_framework()
             )
 
+        def _infer_user() -> str:
+            """Try to find a user scheme for the current platform."""
+            if _PREFERRED_SCHEME_API:
+                return _PREFERRED_SCHEME_API("user")
+            if is_osx_framework() and not running_under_virtualenv():
+                suffixed = "osx_framework_user"
+            else:
+                suffixed = f"{os.name}_user"
+            if suffixed in _AVAILABLE_SCHEMES:
+                return suffixed
+            # Fall back to posix_user if user scheme is unavailable.
+            # `pip` would raise exeception when "posix_user" not in _AVAILABLE_SCHEMES
+            return "posix_user"
+
         def _infer_prefix() -> str:
             """Try to find a prefix scheme for the current platform.
 
@@ -300,11 +314,15 @@ def get_scheme():
             suffixed = f"{os.name}_prefix"
             if suffixed in _AVAILABLE_SCHEMES:
                 return suffixed
-            if os.name in _AVAILABLE_SCHEMES:  # On Windows, prefx is just called "nt".
+            if os.name in _AVAILABLE_SCHEMES:  # On Windows, prefix is just called "nt".
                 return os.name
             return "posix_prefix"
 
-        scheme_name = _infer_prefix()
+        if user:
+            scheme_name = _infer_user()
+        else:
+            scheme_name = _infer_prefix()
+
         paths = sysconfig.get_paths(scheme=scheme_name)
 
         # Logic here is very arbitrary, we're doing it for compatibility, don't ask.
@@ -321,7 +339,7 @@ def get_scheme():
             "data": paths["data"],
         }
 
-    def get_distutils_scheme():
+    def get_distutils_scheme(user: bool = False):
         """Get the "scheme" corresponding to the input parameters.
 
         Uses the deprecated `distutils` module to get the scheme.
@@ -360,6 +378,7 @@ def get_scheme():
             warnings.simplefilter("ignore")
             i = d.get_command_obj("install", create=True)
 
+        i.user = user
         i.finalize_options()
 
         scheme = {}
@@ -376,9 +395,13 @@ def get_scheme():
             scheme.update({"purelib": i.install_lib, "platlib": i.install_lib})
 
         if running_under_virtualenv():
+            if user:
+                prefix = i.install_userbase
+            else:
+                prefix = i.prefix
             # noinspection PyUnresolvedReferences
             scheme["headers"] = os.path.join(
-                i.prefix,
+                prefix,
                 "include",
                 "site",
                 f"python{get_major_minor_version()}",
@@ -402,10 +425,13 @@ def get_scheme():
     )
 
     if use_sysconfig:
-        return get_sysconfig_scheme()
+        return get_sysconfig_scheme(user)
     else:
-        return get_distutils_scheme()
+        return get_distutils_scheme(user)
 
+
+# Read the environment variable `_UV_USE_USER_SCHEME` to determine if we should use the user scheme.
+user = os.getenv("_UV_USE_USER_SCHEME", "False").upper() in {"TRUE", "1"}
 
 def get_operating_system_and_architecture():
     """Determine the Python interpreter architecture and operating system.
@@ -520,7 +546,7 @@ interpreter_info = {
     "base_executable": getattr(sys, "_base_executable", None),
     "sys_executable": sys.executable,
     "stdlib": sysconfig.get_path("stdlib"),
-    "scheme": get_scheme(),
+    "scheme": get_scheme(user),
     "virtualenv": get_virtualenv(),
     "platform": get_operating_system_and_architecture(),
 }

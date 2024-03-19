@@ -860,6 +860,21 @@ struct PipInstallArgs {
     #[clap(long, requires = "discovery")]
     break_system_packages: bool,
 
+    /// Install packages into user directory.
+    ///
+    /// When enabled, this option instructs `uv` to install to install packages to user install
+    /// directory specific to the platform. The installation location can be overriden by the
+    /// `PYTHONUSERBASE` environment variable.
+    ///
+    /// Searches for an interpreter in this order: `--python`/`-p` argument, active virtual
+    /// environment or the first Python in the system `PATH`.
+    ///
+    /// WARNING: `--user` is intended for use in continuous integration (CI) or multi-user machine.
+    /// It is generally recommended to manage Python packages using a virtual environment to
+    /// isolate pacakges.
+    #[clap(long, conflicts_with = "system", group = "discovery")]
+    user: bool,
+
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
     #[clap(long)]
@@ -1047,6 +1062,10 @@ struct PipFreezeArgs {
         group = "discovery"
     )]
     system: bool,
+
+    /// Use packages installed in user site.
+    #[clap(long, conflicts_with = "system", group = "discovery")]
+    user: bool,
 }
 
 #[derive(Args)]
@@ -1109,6 +1128,10 @@ struct PipListArgs {
         group = "discovery"
     )]
     system: bool,
+
+    /// List packages installed in user site.
+    #[clap(long, conflicts_with = "system", group = "discovery")]
+    user: bool,
 }
 
 #[derive(Args)]
@@ -1183,7 +1206,7 @@ struct PipShowArgs {
     )]
     python: Option<String>,
 
-    /// List packages for the system Python.
+    /// Show packages for the system Python.
     ///
     /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
     /// environment (`.venv`) located in the current working directory or any parent directory,
@@ -1199,6 +1222,10 @@ struct PipShowArgs {
         group = "discovery"
     )]
     system: bool,
+
+    /// Show packages installed in user site.
+    #[clap(long, conflicts_with = "system", group = "discovery")]
+    user: bool,
 }
 
 #[derive(Args)]
@@ -1678,9 +1705,10 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.system,
                 args.break_system_packages,
+                args.user,
                 cli.native_tls,
-                cache,
                 args.dry_run,
+                cache,
                 printer,
             )
             .await
@@ -1720,6 +1748,7 @@ async fn run() -> Result<ExitStatus> {
             args.strict,
             args.python.as_deref(),
             args.system,
+            args.user,
             &cache,
             printer,
         ),
@@ -1733,6 +1762,7 @@ async fn run() -> Result<ExitStatus> {
             &args.format,
             args.python.as_deref(),
             args.system,
+            args.user,
             &cache,
             printer,
         ),
@@ -1743,6 +1773,7 @@ async fn run() -> Result<ExitStatus> {
             args.strict,
             args.python.as_deref(),
             args.system,
+            args.user,
             &cache,
             printer,
         ),

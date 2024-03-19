@@ -70,9 +70,10 @@ pub(crate) async fn pip_install(
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
+    user: bool,
     native_tls: bool,
-    cache: Cache,
     dry_run: bool,
+    cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -109,7 +110,9 @@ pub(crate) async fn pip_install(
     }
 
     // Detect the current Python interpreter.
-    let venv = if let Some(python) = python.as_ref() {
+    let venv = if user {
+        PythonEnvironment::from_user_scheme(python.as_deref(), &cache)?
+    } else if let Some(python) = python.as_ref() {
         PythonEnvironment::from_requested_python(python, &cache)?
     } else if system {
         PythonEnvironment::from_default_python(&cache)?
@@ -140,6 +143,18 @@ pub(crate) async fn pip_install(
                 ))
             };
         }
+    }
+
+    // Check if virtualenv has access to the system site-packages
+    // <https://github.com/pypa/pip/blob/a33caa26f2bf525eafb4ec004f9c1bd18d238a31/src/pip/_internal/commands/install.py#L686>
+    if user
+        && venv.interpreter().is_virtualenv()
+        && !venv.cfg().unwrap().include_system_site_packages()
+    {
+        return Err(anyhow::anyhow!(
+                    "Can not perform a '--user' install. User site-packages are not visible in this virtualenv {}.",
+                    venv.root().simplified_display().cyan()
+                ));
     }
 
     let _lock = venv.lock()?;
