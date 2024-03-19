@@ -31,7 +31,7 @@ use uv_installer::{
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_resolver::{
-    DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
+    DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode, Preference,
     ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
@@ -500,7 +500,8 @@ async fn resolve(
         // Prefer current site packages, unless in the upgrade or reinstall lists
         site_packages
             .requirements()
-            .filter(|requirement| !exclusions.contains(&requirement.name))
+            .map(Preference::from_requirement)
+            .filter(|preference| !exclusions.contains(preference.name()))
             .collect()
     };
 

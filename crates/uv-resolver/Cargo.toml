@@ -22,6 +22,7 @@ pep440_rs = { path = "../pep440-rs", features = ["pubgrub"] }
 pep508_rs = { path = "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
 pypi-types = { path = "../pypi-types" }
+requirements-txt = { path = "../requirements-txt" }
 uv-cache = { path = "../uv-cache" }
 uv-client = { path = "../uv-client" }
 uv-distribution = { path = "../uv-distribution" }

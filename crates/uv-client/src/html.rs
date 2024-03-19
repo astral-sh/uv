@@ -221,7 +221,7 @@ pub enum Error {
     #[error("Unexpected fragment (expected `#sha256=...`) on URL: {0}")]
     FragmentParse(String),
 
-    #[error("Unsupported hash algorithm (expected `sha256`) on: {0}")]
+    #[error("Unsupported hash algorithm (expected `sha256` or `md5`) on: {0}")]
     UnsupportedHashAlgorithm(String),
 
     #[error("Invalid `requires-python` specifier: {0}")]
@@ -672,7 +672,7 @@ mod tests {
         "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected `sha256`) on: sha512=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61");
+        insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected `sha256` or `md5`) on: sha512=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61");
     }
 
     #[test]

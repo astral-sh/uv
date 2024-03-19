@@ -1,12 +1,12 @@
 use pubgrub::range::Range;
-use rustc_hash::FxHashMap;
 
 use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
+use crate::preferences::Preferences;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
@@ -16,7 +16,6 @@ use crate::{Manifest, Options};
 pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PreReleaseStrategy,
-    preferences: Preferences,
 }
 
 impl CandidateSelector {
@@ -37,7 +36,6 @@ impl CandidateSelector {
                 manifest,
                 markers,
             ),
-            preferences: Preferences::from_requirements(manifest.preferences.as_slice(), markers),
         }
     }
 
@@ -51,43 +49,6 @@ impl CandidateSelector {
     #[allow(dead_code)]
     pub(crate) fn prerelease_strategy(&self) -> &PreReleaseStrategy {
         &self.prerelease_strategy
-    }
-}
-
-/// A set of pinned packages that should be preserved during resolution, if possible.
-#[derive(Debug, Clone)]
-struct Preferences(FxHashMap<PackageName, Version>);
-
-impl Preferences {
-    /// Create a set of [`Preferences`] from a set of requirements.
-    fn from_requirements(requirements: &[Requirement], markers: &MarkerEnvironment) -> Self {
-        Self(
-            requirements
-                .iter()
-                .filter_map(|requirement| {
-                    if !requirement.evaluate_markers(markers, &[]) {
-                        return None;
-                    }
-                    let Some(VersionOrUrl::VersionSpecifier(version_specifiers)) =
-                        requirement.version_or_url.as_ref()
-                    else {
-                        return None;
-                    };
-                    let [version_specifier] = version_specifiers.as_ref() else {
-                        return None;
-                    };
-                    Some((
-                        requirement.name.clone(),
-                        version_specifier.version().clone(),
-                    ))
-                })
-                .collect(),
-        )
-    }
-
-    /// Return the pinned version for a package, if any.
-    fn get(&self, package_name: &PackageName) -> Option<&Version> {
-        self.0.get(package_name)
     }
 }
 
@@ -105,10 +66,11 @@ impl CandidateSelector {
         package_name: &'a PackageName,
         range: &'a Range<Version>,
         version_map: &'a VersionMap,
+        preferences: &'a Preferences,
     ) -> Option<Candidate<'a>> {
         // If the package has a preference (e.g., an existing version from an existing lockfile),
         // and the preference satisfies the current range, use that.
-        if let Some(version) = self.preferences.get(package_name) {
+        if let Some(version) = preferences.version(package_name) {
             if range.contains(version) {
                 if let Some(file) = version_map.get(version) {
                     return Some(Candidate::new(package_name, version, file));
