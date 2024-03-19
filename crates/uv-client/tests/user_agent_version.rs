@@ -114,21 +114,29 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         },
         sys_platform: "linux".to_string(),
     };
-    // Linux only
-    let platform = Platform::new(
+
+    // Initialize uv-client
+    let cache = Cache::temp()?;
+    let mut builder = RegistryClientBuilder::new(cache).markers(&markers);
+
+    let linux = Platform::new(
         Os::Manylinux {
             major: 2,
             minor: 38,
         },
         Arch::X86_64,
     );
-
-    // Initialize uv-client
-    let cache = Cache::temp()?;
-    let mut builder = RegistryClientBuilder::new(cache).markers(&markers);
-
+    let macos = Platform::new(
+        Os::Macos {
+            major: 14,
+            minor: 4,
+        },
+        Arch::Aarch64,
+    );
     if cfg!(target_os = "linux") {
-        builder = builder.platform(&platform);
+        builder = builder.platform(&linux);
+    } else if cfg!(target_os = "macos") {
+        builder = builder.platform(&macos);
     }
     let client = builder.build();
 
