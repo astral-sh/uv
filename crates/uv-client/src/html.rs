@@ -89,7 +89,7 @@ impl SimpleHtml {
         match name {
             "md5" => {
                 let md5 = std::str::from_utf8(value.as_bytes())?;
-                let md5 = md5.to_string();
+                let md5 = md5.to_owned().into_boxed_str();
                 Ok(Hashes {
                     md5: Some(md5),
                     sha256: None,
@@ -99,7 +99,7 @@ impl SimpleHtml {
             }
             "sha256" => {
                 let sha256 = std::str::from_utf8(value.as_bytes())?;
-                let sha256 = sha256.to_string();
+                let sha256 = sha256.to_owned().into_boxed_str();
                 Ok(Hashes {
                     md5: None,
                     sha256: Some(sha256),
@@ -109,7 +109,7 @@ impl SimpleHtml {
             }
             "sha384" => {
                 let sha384 = std::str::from_utf8(value.as_bytes())?;
-                let sha384 = sha384.to_string();
+                let sha384 = sha384.to_owned().into_boxed_str();
                 Ok(Hashes {
                     md5: None,
                     sha256: None,
@@ -119,7 +119,7 @@ impl SimpleHtml {
             }
             "sha512" => {
                 let sha512 = std::str::from_utf8(value.as_bytes())?;
-                let sha512 = sha512.to_string();
+                let sha512 = sha512.to_owned().into_boxed_str();
                 Ok(Hashes {
                     md5: None,
                     sha256: None,
