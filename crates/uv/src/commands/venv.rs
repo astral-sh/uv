@@ -29,7 +29,11 @@ use crate::printer::Printer;
 use crate::shell::Shell;
 
 /// Create a virtual environment.
-#[allow(clippy::unnecessary_wraps, clippy::too_many_arguments)]
+#[allow(
+    clippy::unnecessary_wraps,
+    clippy::too_many_arguments,
+    clippy::fn_params_excessive_bools
+)]
 pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
@@ -41,6 +45,7 @@ pub(crate) async fn venv(
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
+    force: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
     cache: &Cache,
@@ -57,6 +62,7 @@ pub(crate) async fn venv(
         system_site_packages,
         connectivity,
         seed,
+        force,
         exclude_newer,
         native_tls,
         cache,
@@ -92,7 +98,7 @@ enum VenvError {
 }
 
 /// Create a virtual environment.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
@@ -104,6 +110,7 @@ async fn venv_impl(
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
+    force: bool,
     exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
     cache: &Cache,
@@ -140,7 +147,7 @@ async fn venv_impl(
     .into_diagnostic()?;
 
     // Create the virtual environment.
-    let venv = uv_virtualenv::create_venv(path, interpreter, prompt, system_site_packages)
+    let venv = uv_virtualenv::create_venv(path, interpreter, prompt, system_site_packages, force)
         .map_err(VenvError::Creation)?;
 
     // Install seed packages.

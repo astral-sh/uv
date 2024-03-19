@@ -1679,6 +1679,15 @@ pub(crate) struct VenvArgs {
     #[arg(long)]
     pub(crate) seed: bool,
 
+    /// Overwrite the directory at the specified path when creating the virtual environment.
+    ///
+    /// By default, `uv venv` will remove an existing virtual environment at the given path, and
+    /// exit with an error if the path is non-empty but _not_ a virtual environment. The `--force`
+    /// option will instead write to the given path, regardless of its contents, and without
+    /// clearing it beforehand.
+    #[clap(long)]
+    pub(crate) force: bool,
+
     /// The path to the virtual environment to create.
     #[arg(default_value = ".venv")]
     pub(crate) name: PathBuf,
