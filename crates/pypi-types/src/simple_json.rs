@@ -124,8 +124,7 @@ impl Default for Yanked {
 
 /// A dictionary mapping a hash name to a hex encoded digest of the file.
 ///
-/// PEP 691 says multiple hashes can be included and the interpretation is left to the client, we
-/// only support SHA 256 atm.
+/// PEP 691 says multiple hashes can be included and the interpretation is left to the client.
 #[derive(
     Debug,
     Clone,
@@ -146,20 +145,36 @@ impl Default for Yanked {
 pub struct Hashes {
     pub md5: Option<String>,
     pub sha256: Option<String>,
+    pub sha384: Option<String>,
+    pub sha512: Option<String>,
 }
 
 impl Hashes {
     /// Format as `<algorithm>:<hash>`.
     pub fn to_string(&self) -> Option<String> {
-        self.sha256
+        self.sha512
             .as_ref()
-            .map(|sha256| format!("sha256:{sha256}"))
+            .map(|sha512| format!("sha512:{sha512}"))
+            .or_else(|| {
+                self.sha384
+                    .as_ref()
+                    .map(|sha384| format!("sha384:{sha384}"))
+            })
+            .or_else(|| {
+                self.sha256
+                    .as_ref()
+                    .map(|sha256| format!("sha256:{sha256}"))
+            })
             .or_else(|| self.md5.as_ref().map(|md5| format!("md5:{md5}")))
     }
 
     /// Return the hash digest.
     pub fn as_str(&self) -> Option<&str> {
-        self.sha256.as_deref().or(self.md5.as_deref())
+        self.sha512
+            .as_deref()
+            .or(self.sha384.as_deref())
+            .or(self.sha256.as_deref())
+            .or(self.md5.as_deref())
     }
 }
 
@@ -188,6 +203,8 @@ impl FromStr for Hashes {
                 Ok(Hashes {
                     md5: Some(md5),
                     sha256: None,
+                    sha384: None,
+                    sha512: None,
                 })
             }
             "sha256" => {
@@ -195,6 +212,26 @@ impl FromStr for Hashes {
                 Ok(Hashes {
                     md5: None,
                     sha256: Some(sha256),
+                    sha384: None,
+                    sha512: None,
+                })
+            }
+            "sha384" => {
+                let sha384 = value.to_string();
+                Ok(Hashes {
+                    md5: None,
+                    sha256: None,
+                    sha384: Some(sha384),
+                    sha512: None,
+                })
+            }
+            "sha512" => {
+                let sha512 = value.to_string();
+                Ok(Hashes {
+                    md5: None,
+                    sha256: None,
+                    sha384: None,
+                    sha512: Some(sha512),
                 })
             }
             _ => Err(HashError::UnsupportedHashAlgorithm(s.to_string())),
@@ -204,10 +241,12 @@ impl FromStr for Hashes {
 
 #[derive(thiserror::Error, Debug)]
 pub enum HashError {
-    #[error("Unexpected hash (expected `sha256:<hash>` or `md5:<hash>`) on: {0}")]
+    #[error("Unexpected hash (expected `<algorithm>:<hash>`): {0}")]
     InvalidStructure(String),
 
-    #[error("Unsupported hash algorithm (expected `sha256` or `md5`) on: {0}")]
+    #[error(
+        "Unsupported hash algorithm (expected `md5`, `sha256`, `sha384`, or `sha512`) on: {0}"
+    )]
     UnsupportedHashAlgorithm(String),
 }
 
@@ -218,6 +257,34 @@ mod tests {
     #[test]
     fn parse_hashes() -> Result<(), HashError> {
         let hashes: Hashes =
+            "sha512:40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".parse()?;
+        assert_eq!(
+            hashes,
+            Hashes {
+                md5: None,
+                sha256: None,
+                sha384: None,
+                sha512: Some(
+                    "40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".to_string()
+                ),
+            }
+        );
+
+        let hashes: Hashes =
+            "sha384:40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".parse()?;
+        assert_eq!(
+            hashes,
+            Hashes {
+                md5: None,
+                sha256: None,
+                sha384: Some(
+                    "40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".to_string()
+                ),
+                sha512: None
+            }
+        );
+
+        let hashes: Hashes =
             "sha256:40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".parse()?;
         assert_eq!(
             hashes,
@@ -225,7 +292,9 @@ mod tests {
                 md5: None,
                 sha256: Some(
                     "40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".to_string()
-                )
+                ),
+                sha384: None,
+                sha512: None
             }
         );
 
@@ -237,7 +306,9 @@ mod tests {
                 md5: Some(
                     "090376d812fb6ac5f171e5938e82e7f2d7adc2b629101cec0db8b267815c85e2".to_string()
                 ),
-                sha256: None
+                sha256: None,
+                sha384: None,
+                sha512: None
             }
         );
 
@@ -245,7 +316,7 @@ mod tests {
             .parse::<Hashes>();
         assert!(result.is_err());
 
-        let result = "sha512:55f44b440d491028addb3b88f72207d71eeebfb7b5dbf0643f7c023ae1fba619"
+        let result = "blake2:55f44b440d491028addb3b88f72207d71eeebfb7b5dbf0643f7c023ae1fba619"
             .parse::<Hashes>();
         assert!(result.is_err());
 
