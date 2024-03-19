@@ -24,6 +24,20 @@ impl<T: AsRef<Path>> Simplified for T {
     }
 }
 
+pub trait PythonExt {
+    /// Escape a [`Path`] for use in Python code.
+    fn escape_for_python(&self) -> String;
+}
+
+impl<T: AsRef<Path>> PythonExt for T {
+    fn escape_for_python(&self) -> String {
+        self.as_ref()
+            .to_string_lossy()
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+    }
+}
+
 /// Normalize the `path` component of a URL for use as a file path.
 ///
 /// For example, on Windows, transforms `C:\Users\ferris\wheel-0.42.0.tar.gz` to

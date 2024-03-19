@@ -15,7 +15,7 @@ use platform_tags::Platform;
 use platform_tags::{Tags, TagsError};
 use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
-use uv_fs::{write_atomic_sync, Simplified};
+use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 
 use crate::Error;
 use crate::Virtualenv;
@@ -369,11 +369,17 @@ impl InterpreterInfo {
         let tempdir = tempfile::tempdir_in(cache.root())?;
         Self::setup_python_query_files(tempdir.path())?;
 
+        // Sanitize the path by (1) running under isolated mode (`-I`) to ignore any site packages
+        // modifications, and then (2) adding the path containing our query script to the front of
+        // `sys.path` so that we can import it.
+        let script = format!(
+            r#"import sys; sys.path = ["{}"] + sys.path; from python.get_interpreter_info import main; main()"#,
+            tempdir.path().escape_for_python()
+        );
         let output = Command::new(interpreter)
-            .arg("-m")
-            .arg("python.get_interpreter_info")
-            .env("PYTHONPATH", tempdir.path())
-            .env("PYTHONSAFEPATH", "1")
+            .arg("-I")
+            .arg("-c")
+            .arg(script)
             .output()
             .map_err(|err| Error::PythonSubcommandLaunch {
                 interpreter: interpreter.to_path_buf(),

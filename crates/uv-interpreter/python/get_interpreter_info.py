@@ -498,30 +498,35 @@ def get_operating_system_and_architecture():
     return {"os": operating_system, "arch": architecture}
 
 
-markers = {
-    "implementation_name": implementation_name,
-    "implementation_version": implementation_version,
-    "os_name": os.name,
-    "platform_machine": platform.machine(),
-    "platform_python_implementation": platform.python_implementation(),
-    "platform_release": platform.release(),
-    "platform_system": platform.system(),
-    "platform_version": platform.version(),
-    "python_full_version": python_full_version,
-    "python_version": ".".join(platform.python_version_tuple()[:2]),
-    "sys_platform": sys.platform,
-}
-interpreter_info = {
-    "result": "success",
-    "markers": markers,
-    "base_prefix": sys.base_prefix,
-    "base_exec_prefix": sys.base_exec_prefix,
-    "prefix": sys.prefix,
-    "base_executable": getattr(sys, "_base_executable", None),
-    "sys_executable": sys.executable,
-    "stdlib": sysconfig.get_path("stdlib"),
-    "scheme": get_scheme(),
-    "virtualenv": get_virtualenv(),
-    "platform": get_operating_system_and_architecture(),
-}
-print(json.dumps(interpreter_info))
+def main() -> None:
+    markers = {
+        "implementation_name": implementation_name,
+        "implementation_version": implementation_version,
+        "os_name": os.name,
+        "platform_machine": platform.machine(),
+        "platform_python_implementation": platform.python_implementation(),
+        "platform_release": platform.release(),
+        "platform_system": platform.system(),
+        "platform_version": platform.version(),
+        "python_full_version": python_full_version,
+        "python_version": ".".join(platform.python_version_tuple()[:2]),
+        "sys_platform": sys.platform,
+    }
+    interpreter_info = {
+        "result": "success",
+        "markers": markers,
+        "base_prefix": sys.base_prefix,
+        "base_exec_prefix": sys.base_exec_prefix,
+        "prefix": sys.prefix,
+        "base_executable": getattr(sys, "_base_executable", None),
+        "sys_executable": sys.executable,
+        "stdlib": sysconfig.get_path("stdlib"),
+        "scheme": get_scheme(),
+        "virtualenv": get_virtualenv(),
+        "platform": get_operating_system_and_architecture(),
+    }
+    print(json.dumps(interpreter_info))
+
+
+if __name__ == "__main__":
+    main()

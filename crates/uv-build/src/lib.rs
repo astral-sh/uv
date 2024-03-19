@@ -28,7 +28,7 @@ use tracing::{debug, info_span, instrument, Instrument};
 use distribution_types::Resolution;
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::Requirement;
-use uv_fs::Simplified;
+use uv_fs::{PythonExt, Simplified};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_traits::{
     BuildContext, BuildIsolation, BuildKind, ConfigSettings, SetupPyStrategy, SourceBuildTrait,
@@ -637,7 +637,7 @@ impl SourceBuild {
             pep517_backend.backend_import(),
             escape_path_for_python(&metadata_directory),
             self.config_settings.escape_for_python(),
-            escape_path_for_python(&outfile),
+            outfile.escape_for_python(),
         };
         let span = info_span!(
             "run_python_script",
@@ -744,7 +744,7 @@ impl SourceBuild {
             .metadata_directory
             .as_deref()
             .map_or("None".to_string(), |path| {
-                format!(r#""{}""#, escape_path_for_python(path))
+                format!(r#""{}""#, path.escape_for_python())
             });
 
         // Write the hook output to a file so that we can read it back reliably.
@@ -767,10 +767,10 @@ impl SourceBuild {
             "#,
             pep517_backend.backend_import(),
             self.build_kind,
-            escape_path_for_python(wheel_dir),
+            wheel_dir.escape_for_python(),
             metadata_directory,
             self.config_settings.escape_for_python(),
-            escape_path_for_python(&outfile)
+            outfile.escape_for_python()
         };
         let span = info_span!(
             "run_python_script",
@@ -869,7 +869,7 @@ async fn create_pep517_build_environment(
         pep517_backend.backend_import(),
         build_kind,
         config_settings.escape_for_python(),
-        escape_path_for_python(&outfile)
+        outfile.escape_for_python()
     };
     let span = info_span!(
         "run_python_script",
