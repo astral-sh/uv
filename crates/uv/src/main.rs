@@ -316,6 +316,14 @@ struct PipCompileArgs {
     #[clap(long, short)]
     output_file: Option<PathBuf>,
 
+    /// Include extras in the output file.
+    ///
+    /// By default, `uv` strips extras, as any packages pulled in by the extras are already included
+    /// as dependencies in the output file directly. Further, output files generated with
+    /// `--no-strip-extras` cannot be used as constraints files in `install` and `sync` invocations.
+    #[clap(long)]
+    no_strip_extras: bool,
+
     /// Exclude comment annotations indicating the source of each package.
     #[clap(long)]
     no_annotate: bool,
@@ -1505,6 +1513,7 @@ async fn run() -> Result<ExitStatus> {
                 upgrade,
                 args.generate_hashes,
                 args.no_emit_package,
+                args.no_strip_extras,
                 !args.no_annotate,
                 !args.no_header,
                 args.emit_index_url,
