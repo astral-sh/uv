@@ -250,6 +250,20 @@ fn clone_wheel_files(
     let mut count = 0usize;
     let mut attempt = Attempt::default();
 
+    // On macOS, directly can be recursively copied with a single `clonefile` call.
+    // So we only need to iterate over the top-level of the directory, and copy each file or
+    // subdirectory unless the subdirectory exists already in which case we'll need to recursively
+    // merge its contents with the existing directory.
+    for entry in fs::read_dir(wheel.as_ref())? {
+        clone_recursive(
+            site_packages.as_ref(),
+            wheel.as_ref(),
+            &entry?,
+            &mut attempt,
+        )?;
+        count += 1;
+    }
+
     // The directory mtime is not updated when cloning and the mtime is used by CPython's
     // import mechanisms to determine if it should look for new packages in a directory.
     // Here, we force the mtime to be updated to ensure that packages are importable without
@@ -273,19 +287,6 @@ fn clone_wheel_files(
             "Failed to open {} to update mtime: {err}",
             site_packages.as_ref().display()
         ),
-    }
-    // On macOS, directly can be recursively copied with a single `clonefile` call.
-    // So we only need to iterate over the top-level of the directory, and copy each file or
-    // subdirectory unless the subdirectory exists already in which case we'll need to recursively
-    // merge its contents with the existing directory.
-    for entry in fs::read_dir(wheel.as_ref())? {
-        clone_recursive(
-            site_packages.as_ref(),
-            wheel.as_ref(),
-            &entry?,
-            &mut attempt,
-        )?;
-        count += 1;
     }
 
     Ok(count)
