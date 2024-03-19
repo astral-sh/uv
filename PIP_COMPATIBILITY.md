@@ -51,7 +51,7 @@ git+https://github.com/pallets/flask
 This is a common pattern in `pip` workflows, and is used to install a package from a direct URL
 without incorporating the package name upfront.
 
-`uv` supports direct URL dependencies from HTTP and VCS sources, but requires that the package name
+uv supports direct URL dependencies from HTTP and VCS sources, but requires that the package name
 be provided upfront, as in `uv install "flask @ git+https://github.com/pallets/flask"`, or:
 
 ```txt
@@ -59,7 +59,7 @@ be provided upfront, as in `uv install "flask @ git+https://github.com/pallets/f
 flask @ git+https://github.com/pallets/flask
 ```
 
-In the future, `uv` will support direct URL dependencies without package names. For more, see
+In the future, uv will support direct URL dependencies without package names. For more, see
 [#313](https://github.com/astral-sh/uv/issues/313).
 
 ## Transitive direct URL dependencies
@@ -297,17 +297,31 @@ are too loose, and that the user should consider tightening them. For example, i
 
 ## Hash-checking mode
 
-While `uv` will include hashes via `uv pip compile --generate-hashes`, it does not support
+While uv will include hashes via `uv pip compile --generate-hashes`, it does not support
 hash-checking mode, which is a feature of `pip` that allows users to verify the integrity of
 downloaded packages by checking their hashes against those provided in the `requirements.txt` file.
 
-In the future, `uv` will support hash-checking mode. For more, see [#474](https://github.com/astral-sh/uv/issues/474).
+In the future, uv will support hash-checking mode. For more, see [#474](https://github.com/astral-sh/uv/issues/474).
+
+## `pip check`
+
+At present, `uv pip check` will surface the following diagnostics:
+
+- A package has no `METADATA` file, or the `METADATA` file can't be parsed.
+- A package has a `Requires-Python` that doesn't match the Python version of the running interpreter.
+- A package has a dependency on a package that isn't installed.
+- A package has a dependency on a package that's installed, but at an incompatible version.
+- Multiple versions of a package are installed in the virtual environment.
+
+In some cases, `uv pip check` will surface diagnostics that `pip check` does not, and vice versa.
+For example, unlike `uv pip check`, `pip check` will _not_ warn when multiple versions of a package
+are installed in the current environment.
 
 ## Strictness and spec enforcement
 
 uv tends to be stricter than `pip`, and will often reject packages that `pip` would install.
-For example, uv omits packages with invalid version specifiers in its metadata, which `pip` plans
-to do in a [future release](https://github.com/pypa/pip/issues/12063).
+For example, uv omits packages with invalid version specifiers in its metadata, which `pip`
+similarly plans to exclude in a [future release](https://github.com/pypa/pip/issues/12063).
 
 In some cases, uv implements lenient behavior for popular packages that are known to have
 specific spec compliance issues.
@@ -333,17 +347,18 @@ issues to convey your interest.
 
 ## Registry authentication
 
-uv does not support `pip`'s `auto` or `import` options for `--keyring-provider` — only `subproces` is supported.
+uv does not support `pip`'s `auto` or `import` options for `--keyring-provider`. At present, only
+the `subproces` option is supported.
 
 Unlike `pip`, uv does not enable keyring authentication by default.
 
-Unlike `pip`, uv does not wait until a request returns a HTTP 401 before searching for authentication. uv attaches
-authentication to all requests for hosts with credentials available.
+Unlike `pip`, uv does not wait until a request returns a HTTP 401 before searching for
+authentication. uv attaches authentication to all requests for hosts with credentials available.
 
 ## Legacy features
 
-`uv` does not support features that are considered legacy or deprecated in `pip`. For example,
-`uv` does not support `.egg`-style distributions.
+uv does not support features that are considered legacy or deprecated in `pip`. For example,
+uv does not support `.egg`-style distributions.
 
-`uv` does not plan to support features that the `pip` maintainers explicitly recommend against,
+uv does not plan to support features that the `pip` maintainers explicitly recommend against,
 like `--target`.
