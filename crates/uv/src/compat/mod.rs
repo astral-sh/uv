@@ -73,9 +73,6 @@ pub(crate) struct PipCompileCompatArgs {
     strip_extras: bool,
 
     #[clap(long, hide = true)]
-    no_strip_extras: bool,
-
-    #[clap(long, hide = true)]
     pip_args: Option<String>,
 }
 
@@ -194,13 +191,9 @@ impl CompatArgs for PipCompileCompatArgs {
         }
 
         if self.strip_extras {
-            warn_user!("pip-compile's `--strip-extras` has no effect (uv always strips extras).");
-        }
-
-        if self.no_strip_extras {
-            return Err(anyhow!(
-                "pip-compile's `--no-strip-extras` is unsupported (uv always strips extras)."
-            ));
+            warn_user!(
+                "pip-compile's `--strip-extras` has no effect (uv strips extras by default)."
+            );
         }
 
         if self.pip_args.is_some() {

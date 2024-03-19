@@ -54,6 +54,7 @@ pub(crate) async fn pip_compile(
     upgrade: Upgrade,
     generate_hashes: bool,
     no_emit_packages: Vec<PackageName>,
+    include_extras: bool,
     include_annotations: bool,
     include_header: bool,
     include_index_url: bool,
@@ -408,6 +409,7 @@ pub(crate) async fn pip_compile(
             &resolution,
             &no_emit_packages,
             generate_hashes,
+            include_extras,
             include_annotations,
             annotation_style,
         )
