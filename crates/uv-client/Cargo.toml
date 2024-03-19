@@ -14,7 +14,6 @@ platform-tags = { path = "../platform-tags" }
 uv-auth = { path = "../uv-auth" }
 uv-cache = { path = "../uv-cache" }
 uv-fs = { path = "../uv-fs", features = ["tokio"] }
-uv-interpreter = { path = "../uv-interpreter" }
 uv-normalize = { path = "../uv-normalize" }
 uv-version = { path = "../uv-version" }
 uv-warnings = { path = "../uv-warnings" }
@@ -38,7 +37,6 @@ rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = { workspace = true }
 sys-info = { workspace = true }
 task-local-extensions = { workspace = true }
 tempfile = { workspace = true }
