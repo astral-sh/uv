@@ -143,10 +143,10 @@ impl Default for Yanked {
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 pub struct Hashes {
-    pub md5: Option<String>,
-    pub sha256: Option<String>,
-    pub sha384: Option<String>,
-    pub sha512: Option<String>,
+    pub md5: Option<Box<str>>,
+    pub sha256: Option<Box<str>>,
+    pub sha384: Option<Box<str>>,
+    pub sha512: Option<Box<str>>,
 }
 
 impl Hashes {
@@ -199,7 +199,7 @@ impl FromStr for Hashes {
 
         match name {
             "md5" => {
-                let md5 = value.to_string();
+                let md5 = value.to_owned().into_boxed_str();
                 Ok(Hashes {
                     md5: Some(md5),
                     sha256: None,
@@ -208,7 +208,7 @@ impl FromStr for Hashes {
                 })
             }
             "sha256" => {
-                let sha256 = value.to_string();
+                let sha256 = value.to_owned().into_boxed_str();
                 Ok(Hashes {
                     md5: None,
                     sha256: Some(sha256),
@@ -217,7 +217,7 @@ impl FromStr for Hashes {
                 })
             }
             "sha384" => {
-                let sha384 = value.to_string();
+                let sha384 = value.to_owned().into_boxed_str();
                 Ok(Hashes {
                     md5: None,
                     sha256: None,
@@ -226,7 +226,7 @@ impl FromStr for Hashes {
                 })
             }
             "sha512" => {
-                let sha512 = value.to_string();
+                let sha512 = value.to_owned().into_boxed_str();
                 Ok(Hashes {
                     md5: None,
                     sha256: None,
@@ -265,7 +265,7 @@ mod tests {
                 sha256: None,
                 sha384: None,
                 sha512: Some(
-                    "40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".to_string()
+                    "40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".into()
                 ),
             }
         );
@@ -278,7 +278,7 @@ mod tests {
                 md5: None,
                 sha256: None,
                 sha384: Some(
-                    "40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".to_string()
+                    "40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".into()
                 ),
                 sha512: None
             }
@@ -291,7 +291,7 @@ mod tests {
             Hashes {
                 md5: None,
                 sha256: Some(
-                    "40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".to_string()
+                    "40627dcf047dadb22cd25ea7ecfe9cbf3bbbad0482ee5920b582f3809c97654f".into()
                 ),
                 sha384: None,
                 sha512: None
@@ -304,7 +304,7 @@ mod tests {
             hashes,
             Hashes {
                 md5: Some(
-                    "090376d812fb6ac5f171e5938e82e7f2d7adc2b629101cec0db8b267815c85e2".to_string()
+                    "090376d812fb6ac5f171e5938e82e7f2d7adc2b629101cec0db8b267815c85e2".into()
                 ),
                 sha256: None,
                 sha384: None,
