@@ -1,13 +1,14 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::{os::unix::fs::MetadataExt, process::Command};
-
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::indoc;
 use itertools::Itertools;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+use std::process::Command;
 use url::Url;
 
 use common::{uv_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
@@ -2845,12 +2846,13 @@ fn install_index_with_relative_links_authenticated() {
 }
 
 /// The modified time of `site-packages` should change on package installation.
+#[cfg(unix)]
 #[test]
 fn install_site_packages_mtime_updated() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let site_packages = context.site_packages();
-    let mtime = site_packages.metadata()?.mtime();
+    let pre_mtime = site_packages.metadata()?.mtime();
 
     // Install a package.
     uv_snapshot!(command(&context)
@@ -2870,7 +2872,11 @@ fn install_site_packages_mtime_updated() -> Result<()> {
     "###
     );
 
-    assert!(site_packages.metadata()?.mtime() > mtime);
+    let post_mtime = site_packages.metadata()?.mtime();
+    assert!(
+        post_mtime > pre_mtime,
+        "Expected newer mtime than {pre_mtime} but got {post_mtime}"
+    );
 
     Ok(())
 }
