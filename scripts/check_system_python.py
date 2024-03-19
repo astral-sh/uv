@@ -13,22 +13,27 @@ import sys
 import tempfile
 
 
-def numpy():
-    """sys.version_info"""
-    logging.info("Installing the package `numpy`.")
+def install_package(*, uv: str, package: str):
+    """Install a package into the system Python."""
+
+    logging.info(f"Installing the package `{package}`.")
     subprocess.run(
-        [uv, "pip", "install", "numpy", "--system"] + allow_externally_managed,
+        [uv, "pip", "install", package, "--system"] + allow_externally_managed,
         cwd=temp_dir,
         check=True,
     )
-    # Check that the native libraries of numpy work.
-    logging.info("Checking that `numpy` can be imported.")
+
+    logging.info(f"Checking that `{package}` can be imported.")
     code = subprocess.run(
-        [sys.executable, "-c", "import numpy"],
+        [sys.executable, "-c", f"import {package}"],
         cwd=temp_dir,
     )
     if code.returncode != 0:
-        raise Exception("Could not import numpy.")
+        raise Exception(f"Could not import {package}.")
+
+    code = subprocess.run([uv, "pip", "show", package, "--system"])
+    if code.returncode != 0:
+        raise Exception(f"Could not show {package}.")
 
 
 if __name__ == "__main__":
@@ -158,6 +163,17 @@ if __name__ == "__main__":
                 "The package `pylint` isn't installed in the virtual environment."
             )
 
-        # Numpy doesn't have wheels for python 3.13 (at the time of writing)
+        # Attempt to install NumPy.
+        # This ensures that we can successfully install a package with native libraries.
+        #
+        # NumPy doesn't distribute wheels for Python 3.13 (at time of writing).
         if sys.version_info < (3, 13):
-            numpy()
+            install_package(uv=uv, package="numpy")
+
+        # Attempt to install `pydantic_core`.
+        # This ensures that we can successfully install and recognize a package that may
+        # be installed into `platlib`.
+        #
+        # `pydantic_core` doesn't distribute wheels for non-CPython interpreters.
+        if sys.implementation.name == "cpython":
+            install_package(uv=uv, package="pydantic_core")
