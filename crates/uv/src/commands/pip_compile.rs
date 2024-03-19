@@ -56,6 +56,7 @@ pub(crate) async fn pip_compile(
     no_emit_packages: Vec<PackageName>,
     include_annotations: bool,
     include_header: bool,
+    custom_compile_command: Option<String>,
     include_index_url: bool,
     include_find_links: bool,
     index_locations: IndexLocations,
@@ -369,7 +370,15 @@ pub(crate) async fn pip_compile(
         writeln!(
             writer,
             "{}",
-            format!("#    {}", cmd(include_index_url, include_find_links,)).green()
+            format!(
+                "#    {}",
+                cmd(
+                    include_index_url,
+                    include_find_links,
+                    custom_compile_command
+                )
+            )
+            .green()
         )?;
     }
 
@@ -435,7 +444,14 @@ pub(crate) async fn pip_compile(
 
 /// Format the `uv` command used to generate the output file.
 #[allow(clippy::fn_params_excessive_bools)]
-fn cmd(include_index_url: bool, include_find_links: bool) -> String {
+fn cmd(
+    include_index_url: bool,
+    include_find_links: bool,
+    custom_compile_command: Option<String>,
+) -> String {
+    if let Some(cmd_str) = custom_compile_command {
+        return cmd_str;
+    }
     let args = env::args_os()
         .skip(1)
         .map(|arg| arg.simplified_display().to_string())
