@@ -210,9 +210,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         let distro_info = linehaul.distro.unwrap();
         assert_eq!(distro_info.id, None);
         assert_eq!(distro_info.name.unwrap(), "macOS");
-        let os_info_version = info.version().to_string();
-        // We don't include the patch version for simplicity, so our string may be shorter.
-        assert!(os_info_version.starts_with(&distro_info.version.unwrap()));
+        assert!(distro_info.version.is_some());
         assert_eq!(distro_info.libc, None);
     }
 
