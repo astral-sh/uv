@@ -14,27 +14,22 @@ default-run = "uv"
 workspace = true
 
 [dependencies]
-distribution-filename = { path = "../distribution-filename" }
 distribution-types = { path = "../distribution-types" }
 install-wheel-rs = { path = "../install-wheel-rs", features = ["clap"], default-features = false }
-pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
 pypi-types = { path = "../pypi-types" }
 requirements-txt = { path = "../requirements-txt", features = ["reqwest"] }
 uv-auth = { path = "../uv-auth", features = ["clap"] }
-uv-build = { path = "../uv-build" }
 uv-cache = { path = "../uv-cache", features = ["clap"] }
 uv-client = { path = "../uv-client" }
 uv-dispatch = { path = "../uv-dispatch" }
-uv-distribution = { path = "../uv-distribution" }
 uv-fs = { path = "../uv-fs" }
 uv-installer = { path = "../uv-installer" }
 uv-interpreter = { path = "../uv-interpreter" }
 uv-normalize = { path = "../uv-normalize" }
 uv-resolver = { path = "../uv-resolver", features = ["clap"] }
 uv-traits = { path = "../uv-traits" }
-uv-version = { path = "../uv-version" }
 uv-virtualenv = { path = "../uv-virtualenv" }
 uv-warnings = { path = "../uv-warnings" }
 
@@ -46,16 +41,13 @@ clap = { workspace = true, features = ["derive", "string"] }
 clap_complete_command = { workspace = true }
 console = { workspace = true }
 ctrlc = { workspace = true }
-dunce = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
-futures = { workspace = true }
 indexmap = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
 owo-colors = { workspace = true }
-pubgrub = { workspace = true }
 pyproject-toml = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
@@ -71,7 +63,6 @@ tracing-subscriber = { workspace = true, features = ["json"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
-which = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = { version = "0.1.39" }

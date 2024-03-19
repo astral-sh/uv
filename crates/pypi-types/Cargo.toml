@@ -28,8 +28,3 @@ tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-indoc = { version = "2.0.4" }
-insta = { version = "1.36.1" }
-serde_json = { version = "1.0.114" }
-tempfile = { version = "3.9.0" }
-test-case = { version = "3.3.1" }

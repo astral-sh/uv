@@ -17,7 +17,6 @@ workspace = true
 distribution-types = { path = "../distribution-types" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
-pypi-types = { path = "../pypi-types" }
 uv-fs = { path = "../uv-fs" }
 uv-interpreter = { path = "../uv-interpreter" }
 uv-traits = { path = "../uv-traits", features = ["serde"] }
@@ -28,7 +27,6 @@ fs-err = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
-pyproject-toml = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
