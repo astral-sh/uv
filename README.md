@@ -84,8 +84,8 @@ To generate a set of locked dependencies:
 ```shell
 uv pip compile pyproject.toml -o requirements.txt   # Read a pyproject.toml file.
 uv pip compile requirements.in -o requirements.txt  # Read a requirements.in file.
-uv pip compile - -o requirements.txt  # Read from stdin.
-uv pip freeze | uv pip compile - -o requirements.txt  # Read from env packages.
+echo flask | uv pip compile - -o requirements.txt  # Read from stdin.
+uv pip freeze | uv pip compile - -o requirements.txt  # Lock the current environment.
 ```
 
 To sync a set of locked dependencies with the virtual environment:
