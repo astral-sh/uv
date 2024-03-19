@@ -2948,7 +2948,7 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-    error: Failed to bytecode compile [SITE-PACKAGES]
+    error: Failed to bytecode-compile Python file in: [SITE-PACKAGES]
       Caused by: Python process stderr:
     Invalid value for PYC_INVALIDATION_MODE "bogus", valid are "TIMESTAMP", "CHECKED_HASH", "UNCHECKED_HASH":
       Caused by: Bytecode compilation failed, expected "[SITE-PACKAGES]/[FIRST-FILE]", received: ""
