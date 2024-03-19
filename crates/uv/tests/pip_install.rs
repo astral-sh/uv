@@ -6,8 +6,6 @@ use assert_fs::prelude::*;
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::indoc;
 use itertools::Itertools;
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
 use std::process::Command;
 use url::Url;
 
@@ -2849,6 +2847,8 @@ fn install_index_with_relative_links_authenticated() {
 #[cfg(unix)]
 #[test]
 fn install_site_packages_mtime_updated() -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
     let context = TestContext::new("3.12");
 
     let site_packages = context.site_packages();
