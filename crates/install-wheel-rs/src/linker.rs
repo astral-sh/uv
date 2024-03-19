@@ -1,12 +1,15 @@
 //! Like `wheel.rs`, but for installing wheels that have already been unzipped, rather than
 //! reading from a zip file.
 
+use std::hash::Hasher;
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::str::FromStr;
 
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use reflink_copy as reflink;
+use rustc_hash::FxHasher;
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
 
@@ -248,6 +251,29 @@ fn clone_wheel_files(
 ) -> Result<usize, Error> {
     let mut count = 0usize;
     let mut attempt = Attempt::default();
+
+    if cfg!(target_os = "macos") {
+        // On macOS, the directory mtime is not updated when cloning occurs and the mtime is used
+        // by CPython's import mechanisms to determine if it should look for new packages in a directory.
+        // Here, we force the mtime to be updated to ensure that packages are importable without
+        // manual cache invalidation.
+        //
+        // <https://github.com/python/cpython/blob/8336cb2b6f428246803b02a4e97fce49d0bb1e09/Lib/importlib/_bootstrap_external.py#L1601>
+
+        // Construct a unique file name
+        let mut hasher = FxHasher::default();
+        hasher.write(wheel.as_ref().as_os_str().as_bytes());
+        let mtime_file = site_packages
+            .as_ref()
+            .join(format!("uv-mtime-{}", hasher.finish()));
+
+        // Create and remove the file
+        fs_err::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(&mtime_file)?;
+        fs_err::remove_file(&mtime_file)?;
+    }
 
     // On macOS, directly can be recursively copied with a single `clonefile` call.
     // So we only need to iterate over the top-level of the directory, and copy each file or
