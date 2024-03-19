@@ -495,6 +495,9 @@ struct PipSyncArgs {
     refresh_package: Vec<PackageName>,
 
     /// The method to use when installing packages from the global cache.
+    ///
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Windows.
     #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
     link_mode: install_wheel_rs::linker::LinkMode,
 
@@ -740,6 +743,9 @@ struct PipInstallArgs {
     no_deps: bool,
 
     /// The method to use when installing packages from the global cache.
+    ///
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Windows.
     #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
     link_mode: install_wheel_rs::linker::LinkMode,
 
