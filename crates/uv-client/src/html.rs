@@ -93,6 +93,8 @@ impl SimpleHtml {
                 Ok(Hashes {
                     md5: Some(md5),
                     sha256: None,
+                    sha384: None,
+                    sha512: None,
                 })
             }
             "sha256" => {
@@ -101,6 +103,28 @@ impl SimpleHtml {
                 Ok(Hashes {
                     md5: None,
                     sha256: Some(sha256),
+                    sha384: None,
+                    sha512: None,
+                })
+            }
+            "sha384" => {
+                let sha384 = std::str::from_utf8(value.as_bytes())?;
+                let sha384 = sha384.to_string();
+                Ok(Hashes {
+                    md5: None,
+                    sha256: None,
+                    sha384: Some(sha384),
+                    sha512: None,
+                })
+            }
+            "sha512" => {
+                let sha512 = std::str::from_utf8(value.as_bytes())?;
+                let sha512 = sha512.to_string();
+                Ok(Hashes {
+                    md5: None,
+                    sha256: None,
+                    sha384: None,
+                    sha512: Some(sha512),
                 })
             }
             _ => Err(Error::UnsupportedHashAlgorithm(fragment.to_string())),
@@ -218,10 +242,12 @@ pub enum Error {
     #[error("Missing hash attribute on URL: {0}")]
     MissingHash(String),
 
-    #[error("Unexpected fragment (expected `#sha256=...`) on URL: {0}")]
+    #[error("Unexpected fragment (expected `#sha256=...` or similar) on URL: {0}")]
     FragmentParse(String),
 
-    #[error("Unsupported hash algorithm (expected `sha256` or `md5`) on: {0}")]
+    #[error(
+        "Unsupported hash algorithm (expected `md5`, `sha256`, `sha384`, or `sha512`) on: {0}"
+    )]
     UnsupportedHashAlgorithm(String),
 
     #[error("Invalid `requires-python` specifier: {0}")]
@@ -274,6 +300,8 @@ mod tests {
                         sha256: Some(
                             "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
                         ),
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: None,
                     size: None,
@@ -328,6 +356,8 @@ mod tests {
                             "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
                         ),
                         sha256: None,
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: None,
                     size: None,
@@ -385,6 +415,8 @@ mod tests {
                         sha256: Some(
                             "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
                         ),
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: None,
                     size: None,
@@ -439,6 +471,8 @@ mod tests {
                         sha256: Some(
                             "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
                         ),
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: None,
                     size: None,
@@ -491,6 +525,8 @@ mod tests {
                     hashes: Hashes {
                         md5: None,
                         sha256: None,
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: None,
                     size: None,
@@ -543,6 +579,8 @@ mod tests {
                     hashes: Hashes {
                         md5: None,
                         sha256: None,
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: None,
                     size: None,
@@ -629,6 +667,8 @@ mod tests {
                     hashes: Hashes {
                         md5: None,
                         sha256: None,
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: None,
                     size: None,
@@ -655,7 +695,7 @@ mod tests {
         "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Unexpected fragment (expected `#sha256=...`) on URL: sha256");
+        insta::assert_snapshot!(result, @"Unexpected fragment (expected `#sha256=...` or similar) on URL: sha256");
     }
 
     #[test]
@@ -665,14 +705,14 @@ mod tests {
 <html>
   <body>
     <h1>Links for jinja2</h1>
-    <a href="/whl/Jinja2-3.1.2-py3-none-any.whl#sha512=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61">Jinja2-3.1.2-py3-none-any.whl</a><br/>
+    <a href="/whl/Jinja2-3.1.2-py3-none-any.whl#blake2=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61">Jinja2-3.1.2-py3-none-any.whl</a><br/>
   </body>
 </html>
 <!--TIMESTAMP 1703347410-->
         "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected `sha256` or `md5`) on: sha512=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61");
+        insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected `md5`, `sha256`, `sha384`, or `sha512`) on: blake2=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61");
     }
 
     #[test]
@@ -716,6 +756,8 @@ mod tests {
                     hashes: Hashes {
                         md5: None,
                         sha256: None,
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: None,
                     size: None,
@@ -729,6 +771,8 @@ mod tests {
                     hashes: Hashes {
                         md5: None,
                         sha256: None,
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: None,
                     size: None,
@@ -793,6 +837,8 @@ mod tests {
                         sha256: Some(
                             "9da884457e910bf0847d396cb4b778ad9f3c3d17db1c5997cb861937bd284237",
                         ),
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: None,
                     size: None,
@@ -808,6 +854,8 @@ mod tests {
                         sha256: Some(
                             "4c83829ff83d408b5e1d4995472265411d2c414112298f2eb4b359d9e4563373",
                         ),
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: None,
                     size: None,
@@ -823,6 +871,8 @@ mod tests {
                         sha256: Some(
                             "6489f51bb3666def6f314e15f19d50a1869a19ae0e8c9a3641ffe66c77d42403",
                         ),
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: Some(
                         Ok(
@@ -887,6 +937,8 @@ mod tests {
                         sha256: Some(
                             "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
                         ),
+                        sha384: None,
+                        sha512: None,
                     },
                     requires_python: Some(
                         Ok(
