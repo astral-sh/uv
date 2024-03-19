@@ -250,33 +250,30 @@ fn clone_wheel_files(
     let mut count = 0usize;
     let mut attempt = Attempt::default();
 
-    if cfg!(target_os = "macos") {
-        // On macOS, the directory mtime is not updated when cloning occurs and the mtime is used
-        // by CPython's import mechanisms to determine if it should look for new packages in a directory.
-        // Here, we force the mtime to be updated to ensure that packages are importable without
-        // manual cache invalidation.
-        //
-        // <https://github.com/python/cpython/blob/8336cb2b6f428246803b02a4e97fce49d0bb1e09/Lib/importlib/_bootstrap_external.py#L1601>
-        let now = SystemTime::now();
+    // The directory mtime is not updated when cloning and the mtime is used by CPython's
+    // import mechanisms to determine if it should look for new packages in a directory.
+    // Here, we force the mtime to be updated to ensure that packages are importable without
+    // manual cache invalidation.
+    //
+    // <https://github.com/python/cpython/blob/8336cb2b6f428246803b02a4e97fce49d0bb1e09/Lib/importlib/_bootstrap_external.py#L1601>
+    let now = SystemTime::now();
 
-        // `File.set_modified` is not available in `fs_err` yet
-        #[allow(clippy::disallowed_types)]
-        match std::fs::File::open(site_packages.as_ref()) {
-            Ok(dir) => {
-                if let Err(err) = dir.set_modified(now) {
-                    debug!(
-                        "Failed to update mtime for {}: {err}",
-                        site_packages.as_ref().display()
-                    );
-                }
+    // `File.set_modified` is not available in `fs_err` yet
+    #[allow(clippy::disallowed_types)]
+    match std::fs::File::open(site_packages.as_ref()) {
+        Ok(dir) => {
+            if let Err(err) = dir.set_modified(now) {
+                debug!(
+                    "Failed to update mtime for {}: {err}",
+                    site_packages.as_ref().display()
+                );
             }
-            Err(err) => debug!(
-                "Failed to open {} to update mtime: {err}",
-                site_packages.as_ref().display()
-            ),
         }
+        Err(err) => debug!(
+            "Failed to open {} to update mtime: {err}",
+            site_packages.as_ref().display()
+        ),
     }
-
     // On macOS, directly can be recursively copied with a single `clonefile` call.
     // So we only need to iterate over the top-level of the directory, and copy each file or
     // subdirectory unless the subdirectory exists already in which case we'll need to recursively
