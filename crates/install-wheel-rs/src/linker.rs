@@ -1,15 +1,13 @@
 //! Like `wheel.rs`, but for installing wheels that have already been unzipped, rather than
 //! reading from a zip file.
 
-use std::hash::Hasher;
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::str::FromStr;
+use std::time::SystemTime;
 
 use fs_err as fs;
 use fs_err::{DirEntry, File};
 use reflink_copy as reflink;
-use rustc_hash::FxHasher;
 use tempfile::tempdir_in;
 use tracing::{debug, instrument};
 
@@ -259,20 +257,24 @@ fn clone_wheel_files(
         // manual cache invalidation.
         //
         // <https://github.com/python/cpython/blob/8336cb2b6f428246803b02a4e97fce49d0bb1e09/Lib/importlib/_bootstrap_external.py#L1601>
+        let now = SystemTime::now();
 
-        // Construct a unique file name
-        let mut hasher = FxHasher::default();
-        hasher.write(wheel.as_ref().as_os_str().as_bytes());
-        let mtime_file = site_packages
-            .as_ref()
-            .join(format!("uv-mtime-{}", hasher.finish()));
-
-        // Create and remove the file
-        fs_err::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(&mtime_file)?;
-        fs_err::remove_file(&mtime_file)?;
+        // `File.set_modified` is not available in `fs_err` yet
+        #[allow(clippy::disallowed_types)]
+        match std::fs::File::open(site_packages.as_ref()) {
+            Ok(dir) => {
+                if let Err(err) = dir.set_modified(now) {
+                    debug!(
+                        "Failed to update mtime for {}: {err}",
+                        site_packages.as_ref().display()
+                    );
+                }
+            }
+            Err(err) => debug!(
+                "Failed to open {} to update mtime: {err}",
+                site_packages.as_ref().display()
+            ),
+        }
     }
 
     // On macOS, directly can be recursively copied with a single `clonefile` call.
