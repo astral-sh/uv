@@ -325,7 +325,7 @@ struct PipCompileArgs {
     no_header: bool,
 
     /// Change header comment to reflect custom command wrapping `uv pip compile`.
-    #[clap(long, env = "CUSTOM_COMPILE_COMMAND")]
+    #[clap(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
     custom_compile_command: Option<String>,
 
     /// Run offline, i.e., without accessing the network.
