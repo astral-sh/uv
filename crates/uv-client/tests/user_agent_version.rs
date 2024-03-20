@@ -197,7 +197,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     if cfg!(windows) {
         assert_eq!(linehaul.distro, None);
     } else if cfg!(target_os = "linux") {
-        // Using os_info as to confirm our values are as expected in both Linux and OSX.
+        // Using `os_info` to confirm our values are as expected in Linux
         let info = os_info::get();
         let distro_info = linehaul.distro.unwrap();
         assert_eq!(distro_info.id.unwrap(), info.codename().unwrap());
@@ -205,12 +205,11 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         assert_eq!(distro_info.version.unwrap(), info.version().to_string());
         assert!(distro_info.libc.is_some());
     } else if cfg!(target_os = "macos") {
-        // Using os_info as to confirm our values are as expected in both Linux and OSX.
-        let info = os_info::get();
+        // We mock the macOS version
         let distro_info = linehaul.distro.unwrap();
         assert_eq!(distro_info.id, None);
         assert_eq!(distro_info.name.unwrap(), "macOS");
-        assert!(distro_info.version.is_some());
+        assert_eq!(distro_info.version, Some("14.4".to_string()));
         assert_eq!(distro_info.libc, None);
     }
 
