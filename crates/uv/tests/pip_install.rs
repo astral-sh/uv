@@ -2852,7 +2852,9 @@ fn install_site_packages_mtime_updated() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let site_packages = context.site_packages();
-    let pre_mtime = site_packages.metadata()?.mtime();
+    let metadata = site_packages.metadata()?;
+    let pre_mtime = metadata.mtime();
+    let pre_mtime_ns = metadata.mtime_nsec();
 
     // Install a package.
     uv_snapshot!(command(&context)
@@ -2872,11 +2874,23 @@ fn install_site_packages_mtime_updated() -> Result<()> {
     "###
     );
 
-    let post_mtime = site_packages.metadata()?.mtime();
-    assert!(
-        post_mtime > pre_mtime,
-        "Expected newer mtime than {pre_mtime} but got {post_mtime}"
-    );
+    let metadata = site_packages.metadata()?;
+    let post_mtime = metadata.mtime();
+    let post_mtime_ns = metadata.mtime_nsec();
+
+    if post_mtime == pre_mtime {
+        // `mtime_nsec` is nanoseconds _since_ `mtime` so we only compare it if the
+        // `mtime` is equal which can happen if the install takes <1s
+        assert!(
+            post_mtime_ns > pre_mtime_ns,
+            "Expected newer mtime than {pre_mtime}ns but got {post_mtime}ns"
+        );
+    } else {
+        assert!(
+            post_mtime > pre_mtime,
+            "Expected newer mtime than {pre_mtime}s but got {post_mtime}s"
+        );
+    }
 
     Ok(())
 }
