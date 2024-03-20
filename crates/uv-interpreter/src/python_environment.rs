@@ -1,7 +1,7 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-use tracing::debug;
+use tracing::{debug, info};
 
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
@@ -124,32 +124,20 @@ impl PythonEnvironment {
 
 /// Locate the current virtual environment.
 pub(crate) fn detect_virtual_env() -> Result<Option<PathBuf>, Error> {
-    match (
-        env::var_os("VIRTUAL_ENV").filter(|value| !value.is_empty()),
-        env::var_os("CONDA_PREFIX").filter(|value| !value.is_empty()),
-    ) {
-        (Some(dir), None) => {
-            debug!(
-                "Found a virtualenv through VIRTUAL_ENV at: {}",
-                Path::new(&dir).display()
-            );
-            return Ok(Some(PathBuf::from(dir)));
-        }
-        (None, Some(dir)) => {
-            debug!(
-                "Found a virtualenv through CONDA_PREFIX at: {}",
-                Path::new(&dir).display()
-            );
-            return Ok(Some(PathBuf::from(dir)));
-        }
-        (Some(venv), Some(conda)) if venv == conda => return Ok(Some(PathBuf::from(venv))),
-        (Some(_), Some(_)) => {
-            return Err(Error::Conflict);
-        }
-        (None, None) => {
-            // No environment variables set. Try to find a virtualenv in the current directory.
-        }
-    };
+    if let Some(dir) = env::var_os("VIRTUAL_ENV").filter(|value| !value.is_empty()) {
+        info!(
+            "Found a virtualenv through VIRTUAL_ENV at: {}",
+            Path::new(&dir).display()
+        );
+        return Ok(Some(PathBuf::from(dir)));
+    }
+    if let Some(dir) = env::var_os("CONDA_PREFIX").filter(|value| !value.is_empty()) {
+        info!(
+            "Found a virtualenv through CONDA_PREFIX at: {}",
+            Path::new(&dir).display()
+        );
+        return Ok(Some(PathBuf::from(dir)));
+    }
 
     // Search for a `.venv` directory in the current or any parent directory.
     let current_dir = env::current_dir().expect("Failed to detect current directory");
