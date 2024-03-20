@@ -81,17 +81,8 @@ pub(crate) async fn pip_install(
     let start = Instant::now();
 
     // Read all requirements from the provided sources.
-    let NamedRequirements {
-        project,
-        requirements,
-        constraints,
-        overrides,
-        editables,
-        index_url,
-        extra_index_urls,
-        no_index,
-        find_links,
-    } = read_requirements(requirements, constraints, overrides, extras, connectivity).await?;
+    let spec =
+        read_requirements(requirements, constraints, overrides, extras, connectivity).await?;
 
     // Detect the current Python interpreter.
     let venv = if let Some(python) = python.as_ref() {
@@ -137,9 +128,9 @@ pub(crate) async fn pip_install(
     // magnitude faster to validate the environment than to resolve the requirements.
     if reinstall.is_none()
         && upgrade.is_none()
-        && site_packages.satisfies(&requirements, &editables, &constraints)?
+        && site_packages.satisfies(&spec.requirements, &spec.editables, &spec.constraints)?
     {
-        let num_requirements = requirements.len() + editables.len();
+        let num_requirements = spec.requirements.len() + spec.editables.len();
         let s = if num_requirements == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
@@ -156,6 +147,19 @@ pub(crate) async fn pip_install(
         }
         return Ok(ExitStatus::Success);
     }
+
+    // Convert from unnamed to named requirements.
+    let NamedRequirements {
+        project,
+        requirements,
+        constraints,
+        overrides,
+        editables,
+        index_url,
+        extra_index_urls,
+        no_index,
+        find_links,
+    } = NamedRequirements::from_spec(spec)?;
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let interpreter = venv.interpreter().clone();
@@ -338,7 +342,7 @@ async fn read_requirements(
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification<'_>,
     connectivity: Connectivity,
-) -> Result<NamedRequirements, Error> {
+) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a pyproject toml source
     if !matches!(extras, ExtrasSpecification::None)
         && !requirements
@@ -375,9 +379,6 @@ async fn read_requirements(
             .into());
         }
     }
-
-    // Convert from unnamed to named requirements.
-    let spec = NamedRequirements::from_spec(spec)?;
 
     Ok(spec)
 }

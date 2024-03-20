@@ -81,7 +81,8 @@ pub(crate) async fn pip_uninstall(
     // Index the current `site-packages` directory.
     let site_packages = uv_installer::SitePackages::from_executable(&venv)?;
 
-    // Sort and deduplicate the packages, which are keyed by name.
+    // Sort and deduplicate the packages, which are keyed by name. Like `pip`, we ignore the
+    // dependency specifier (even if it's a URL).
     let packages = {
         let mut packages = requirements
             .into_iter()

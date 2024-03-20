@@ -473,6 +473,69 @@ impl Requirement {
     }
 }
 
+impl UnnamedRequirement {
+    /// Returns whether the markers apply for the given environment
+    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
+        if let Some(marker) = &self.marker {
+            marker.evaluate(env, extras)
+        } else {
+            true
+        }
+    }
+}
+
+impl RequirementsTxtRequirement {
+    /// Returns whether the markers apply for the given environment
+    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
+        match self {
+            Self::Pep508(requirement) => requirement.evaluate_markers(env, extras),
+            Self::Unnamed(requirement) => requirement.evaluate_markers(env, extras),
+        }
+    }
+
+    /// Returns the extras for the requirement.
+    pub fn extras(&self) -> &[ExtraName] {
+        match self {
+            Self::Pep508(requirement) => requirement.extras.as_slice(),
+            Self::Unnamed(requirement) => requirement.extras.as_slice(),
+        }
+    }
+
+    /// Returns the markers for the requirement.
+    pub fn markers(&self) -> Option<&MarkerTree> {
+        match self {
+            Self::Pep508(requirement) => requirement.marker.as_ref(),
+            Self::Unnamed(requirement) => requirement.marker.as_ref(),
+        }
+    }
+
+    /// Return the version specifier or URL for the requirement.
+    pub fn version_or_url(&self) -> Option<VersionOrUrlRef> {
+        match self {
+            Self::Pep508(requirement) => match requirement.version_or_url.as_ref() {
+                Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
+                    Some(VersionOrUrlRef::VersionSpecifier(specifiers))
+                }
+                Some(VersionOrUrl::Url(url)) => Some(VersionOrUrlRef::Url(url)),
+                None => None,
+            },
+            Self::Unnamed(requirement) => Some(VersionOrUrlRef::Url(&requirement.url)),
+        }
+    }
+}
+
+impl From<Requirement> for RequirementsTxtRequirement {
+    fn from(requirement: Requirement) -> Self {
+        Self::Pep508(requirement)
+    }
+}
+
+impl From<UnnamedRequirement> for RequirementsTxtRequirement {
+    fn from(requirement: UnnamedRequirement) -> Self {
+        Self::Unnamed(requirement)
+    }
+}
+
 impl FromStr for Requirement {
     type Err = Pep508Error;
 
@@ -558,13 +621,22 @@ impl Extras {
     }
 }
 
-/// The actual version specifier or url to install
+/// The actual version specifier or URL to install.
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum VersionOrUrl {
     /// A PEP 440 version specifier set
     VersionSpecifier(VersionSpecifiers),
     /// A installable URL
     Url(VerbatimUrl),
+}
+
+/// Unowned version specifier or URL to install.
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub enum VersionOrUrlRef<'a> {
+    /// A PEP 440 version specifier set
+    VersionSpecifier(&'a VersionSpecifiers),
+    /// A installable URL
+    Url(&'a VerbatimUrl),
 }
 
 /// A [`Cursor`] over a string.
