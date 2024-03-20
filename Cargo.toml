@@ -20,7 +20,7 @@ license = "MIT OR Apache-2.0"
 cache-key = { path = "crates/cache-key" }
 distribution-filename = { path = "crates/distribution-filename" }
 distribution-types = { path = "crates/distribution-types" }
-install-wheel-rs = { path = "crates/install-wheel-rs" }
+install-wheel-rs = { path = "crates/install-wheel-rs", default-features = false }
 once-map = { path = "crates/once-map" }
 pep440_rs = { path = "crates/pep440-rs" }
 pep508_rs = { path = "crates/pep508-rs" }
