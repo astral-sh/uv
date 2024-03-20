@@ -19,13 +19,13 @@ static INVALID_TRAILING_DOT_STAR: Lazy<Regex> =
 static MISSING_DOT: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d\.\d)+\*").unwrap());
 /// Ex) `>=3.6,`
 static TRAILING_COMMA: Lazy<Regex> = Lazy::new(|| Regex::new(r",\s*$").unwrap());
-/// Ex) `>= '2.7'`, `>=3.6'`
-static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]([*\d])|([*\d])['"]"#).unwrap());
 /// Ex) `>dev`
 static GREATER_THAN_DEV: Lazy<Regex> = Lazy::new(|| Regex::new(r">dev").unwrap());
 /// Ex) `>=9.0.0a1.0`
 static TRAILING_ZERO: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(\d+(\.\d)*(a|b|rc|post|dev)\d+)\.0").unwrap());
+/// Ex) `>= '2.7'`, `>=3.6'`
+static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]([*\d])|([*\d])['"]"#).unwrap());
 
 /// Regex to match the invalid specifier, replacement to fix it and message about was wrong and
 /// fixed
@@ -48,12 +48,12 @@ static FIXUPS: &[(&Lazy<Regex>, &str, &str)] = &[
     (&MISSING_DOT, r"${1}.*", "inserting missing dot"),
     // Given `>=3.6,`, rewrite to `>=3.6`
     (&TRAILING_COMMA, r"${1}", "removing trailing comma"),
-    // Given `>= '2.7'`, rewrite to `>= 2.7`
-    (&STRAY_QUOTES, r"$1$2", "removing stray quotes"),
     // Given `>dev`, rewrite to `>0.0.0dev`
     (&GREATER_THAN_DEV, r">0.0.0dev", "assuming 0.0.0dev"),
     // Given `>=9.0.0a1.0`, rewrite to `>=9.0.0a1`
     (&TRAILING_ZERO, r"${1}", "removing trailing zero"),
+    // Given `>= 2.7'`, rewrite to `>= 2.7`
+    (&STRAY_QUOTES, r"$1$2", "removing stray quotes"),
 ];
 
 fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -> Result<T, Err> {
@@ -66,16 +66,17 @@ fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -
                 let patched = matcher.replace_all(patched_input.as_ref(), *replacement);
                 if patched != patched_input {
                     messages.push(*message);
+
+                    if let Ok(requirement) = T::from_str(&patched) {
+                        warn!(
+                            "Fixing invalid {type_name} by {} (before: `{input}`; after: `{patched}`)",
+                            messages.join(", ")
+                        );
+                        return Ok(requirement);
+                    }
+
                     patched_input = patched.to_string();
                 }
-            }
-
-            if let Ok(requirement) = T::from_str(&patched_input) {
-                warn!(
-                    "Fixing invalid {type_name} by {} (before: `{input}`; after: `{patched_input}`)",
-                    messages.join(", ")
-                );
-                return Ok(requirement);
             }
 
             Err(err)

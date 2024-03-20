@@ -17,15 +17,15 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info_span, instrument, trace, Instrument};
 use url::Url;
 
-use distribution_filename::WheelFilename;
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
     Name, RemoteSource, SourceDist, VersionOrUrl,
 };
+pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
 use pep508_rs::{MarkerEnvironment, Requirement};
-use platform_tags::{IncompatibleTag, Tags};
-use pypi_types::{Metadata23, Yanked};
+use platform_tags::Tags;
+use pypi_types::Metadata23;
 pub(crate) use urls::Urls;
 use uv_client::{FlatIndex, RegistryClient};
 use uv_distribution::DistributionDatabase;
@@ -40,6 +40,7 @@ use crate::error::ResolveError;
 use crate::manifest::Manifest;
 use crate::overrides::Overrides;
 use crate::pins::FilePins;
+use crate::preferences::Preferences;
 use crate::pubgrub::{
     PubGrubDependencies, PubGrubDistribution, PubGrubPackage, PubGrubPriorities, PubGrubPython,
     PubGrubSpecifier,
@@ -53,11 +54,11 @@ pub use crate::resolver::provider::{
 };
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
-
 use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Options};
 
 mod index;
+mod locals;
 mod provider;
 mod reporter;
 mod urls;
@@ -93,8 +94,10 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     requirements: Vec<Requirement>,
     constraints: Constraints,
     overrides: Overrides,
+    preferences: Preferences,
     editables: Editables,
     urls: Urls,
+    locals: Locals,
     dependency_mode: DependencyMode,
     markers: &'a MarkerEnvironment,
     python_requirement: PythonRequirement,
@@ -163,10 +166,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, markers)?,
+            locals: Locals::from_manifest(&manifest, markers),
             project: manifest.project,
             requirements: manifest.requirements,
             constraints: Constraints::from_requirements(manifest.constraints),
             overrides: Overrides::from_requirements(manifest.overrides),
+            preferences: Preferences::from_requirements(manifest.preferences, markers),
             editables: Editables::from_requirements(manifest.editables),
             markers,
             python_requirement,
@@ -276,6 +281,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     &self.index.distributions,
                     &self.index.redirects,
                     &state,
+                    &self.preferences,
                     self.editables.clone(),
                 );
             };
@@ -344,8 +350,12 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         // them as incompatible dependencies instead of marking the package version
                         // as unavailable directly
                         UnavailableVersion::IncompatibleDist(
-                            IncompatibleDist::Source(IncompatibleSource::RequiresPython(requires_python))
-                            | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(requires_python))
+                            IncompatibleDist::Source(IncompatibleSource::RequiresPython(
+                                requires_python,
+                            ))
+                            | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
+                                requires_python,
+                            )),
                         ) => {
                             let python_version = requires_python
                                 .iter()
@@ -366,51 +376,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                             continue;
                         }
                         UnavailableVersion::IncompatibleDist(incompatibility) => {
-                            match incompatibility {
-                                IncompatibleDist::Wheel(incompatibility) => {
-                                    match incompatibility {
-                                        IncompatibleWheel::NoBinary => "no source distribution is available and using wheels is disabled".to_string(),
-                                        IncompatibleWheel::Tag(tag) => {
-                                            match tag {
-                                                IncompatibleTag::Invalid => "no wheels are available with valid tags".to_string(),
-                                                IncompatibleTag::Python => "no wheels are available with a matching Python implementation".to_string(),
-                                                IncompatibleTag::Abi => "no wheels are available with a matching Python ABI".to_string(),
-                                                IncompatibleTag::Platform => "no wheels are available with a matching platform".to_string(),
-                                            }
-                                        }
-                                        IncompatibleWheel::Yanked(yanked) => match yanked {
-                                            Yanked::Bool(_) => "it was yanked".to_string(),
-                                            Yanked::Reason(reason) => format!(
-                                                "it was yanked (reason: {})",
-                                                reason.trim().trim_end_matches('.')
-                                            ),
-                                        },
-                                        IncompatibleWheel::ExcludeNewer(ts) => match ts {
-                                            Some(_) => "it was published after the exclude newer time".to_string(),
-                                            None => "it has no publish time".to_string()
-                                        }
-                                        IncompatibleWheel::RequiresPython(_) => unreachable!(),
-                                    }
-                                }
-                                IncompatibleDist::Source(incompatibility) => {
-                                    match incompatibility {
-                                        IncompatibleSource::NoBuild => "no wheels are usable and building from source is disabled".to_string(),
-                                        IncompatibleSource::Yanked(yanked) => match yanked {
-                                            Yanked::Bool(_) => "it was yanked".to_string(),
-                                            Yanked::Reason(reason) => format!(
-                                                "it was yanked (reason: {})",
-                                                reason.trim().trim_end_matches('.')
-                                            ),
-                                        },
-                                        IncompatibleSource::ExcludeNewer(ts) => match ts {
-                                            Some(_) => "it was published after the exclude newer time".to_string(),
-                                            None => "it has no publish time".to_string()
-                                        }
-                                        IncompatibleSource::RequiresPython(_) => unreachable!(),
-                                    }
-                                }
-                                IncompatibleDist::Unavailable => "no distributions are available".to_string()
-                            }
+                            incompatibility.to_string()
                         }
                     };
                     state.add_incompatibility(Incompatibility::unavailable(
@@ -583,38 +549,57 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // If the dist is an editable, return the version from the editable metadata.
                 if let Some((_local, metadata)) = self.editables.get(package_name) {
-                    let version = metadata.version.clone();
-                    return if range.contains(&version) {
-                        Ok(Some(ResolverVersion::Available(version)))
-                    } else {
-                        Ok(None)
-                    };
+                    let version = &metadata.version;
+
+                    // The version is incompatible with the requirement.
+                    if !range.contains(version) {
+                        return Ok(None);
+                    }
+
+                    // The version is incompatible due to its Python requirement.
+                    if let Some(requires_python) = metadata.requires_python.as_ref() {
+                        let target = self.python_requirement.target();
+                        if !requires_python.contains(target) {
+                            return Ok(Some(ResolverVersion::Unavailable(
+                                version.clone(),
+                                UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
+                                    IncompatibleSource::RequiresPython(requires_python.clone()),
+                                )),
+                            )));
+                        }
+                    }
+
+                    return Ok(Some(ResolverVersion::Available(version.clone())));
                 }
 
-                if let Ok(wheel_filename) = WheelFilename::try_from(url.raw()) {
-                    // If the URL is that of a wheel, extract the version.
-                    let version = wheel_filename.version;
-                    if range.contains(&version) {
-                        Ok(Some(ResolverVersion::Available(version)))
-                    } else {
-                        Ok(None)
-                    }
-                } else {
-                    // Otherwise, assume this is a source distribution.
-                    let dist = PubGrubDistribution::from_url(package_name, url);
-                    let metadata = self
-                        .index
-                        .distributions
-                        .wait(&dist.package_id())
-                        .await
-                        .ok_or(ResolveError::Unregistered)?;
-                    let version = &metadata.version;
-                    if range.contains(version) {
-                        Ok(Some(ResolverVersion::Available(version.clone())))
-                    } else {
-                        Ok(None)
+                let dist = PubGrubDistribution::from_url(package_name, url);
+                let metadata = self
+                    .index
+                    .distributions
+                    .wait(&dist.package_id())
+                    .await
+                    .ok_or(ResolveError::Unregistered)?;
+                let version = &metadata.version;
+
+                // The version is incompatible with the requirement.
+                if !range.contains(version) {
+                    return Ok(None);
+                }
+
+                // The version is incompatible due to its Python requirement.
+                if let Some(requires_python) = metadata.requires_python.as_ref() {
+                    let target = self.python_requirement.target();
+                    if !requires_python.contains(target) {
+                        return Ok(Some(ResolverVersion::Unavailable(
+                            version.clone(),
+                            UnavailableVersion::IncompatibleDist(IncompatibleDist::Source(
+                                IncompatibleSource::RequiresPython(requires_python.clone()),
+                            )),
+                        )));
                     }
                 }
+
+                Ok(Some(ResolverVersion::Available(version.clone())))
             }
 
             PubGrubPackage::Package(package_name, extra, None) => {
@@ -660,7 +645,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 }
 
                 // Find a version.
-                let Some(candidate) = self.selector.select(package_name, range, version_map) else {
+                let Some(candidate) =
+                    self.selector
+                        .select(package_name, range, version_map, &self.preferences)
+                else {
                     // Short circuit: we couldn't find _any_ versions for a package.
                     return Ok(None);
                 };
@@ -733,6 +721,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     None,
                     None,
                     &self.urls,
+                    &self.locals,
                     self.markers,
                 );
 
@@ -808,6 +797,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                         Some(package_name),
                         extra.as_ref(),
                         &self.urls,
+                        &self.locals,
                         self.markers,
                     )?;
 
@@ -864,6 +854,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                     Some(package_name),
                     extra.as_ref(),
                     &self.urls,
+                    &self.locals,
                     self.markers,
                 )?;
 
@@ -1018,7 +1009,9 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit.
-                let Some(candidate) = self.selector.select(&package_name, &range, version_map)
+                let Some(candidate) =
+                    self.selector
+                        .select(&package_name, &range, version_map, &self.preferences)
                 else {
                     return Ok(None);
                 };

@@ -9,7 +9,7 @@ use thiserror::Error;
 use zip::result::ZipError;
 
 use pep440_rs::Version;
-use platform_host::{Arch, Os};
+use platform_tags::{Arch, Os};
 use pypi_types::Scheme;
 pub use uninstall::{uninstall_wheel, Uninstall};
 use uv_fs::Simplified;
@@ -86,6 +86,16 @@ pub enum Error {
     MissingRecord(PathBuf),
     #[error("Multiple .dist-info directories found: {0}")]
     MultipleDistInfo(String),
+    #[error(
+        "The .dist-info directory {0} does not consist of the normalized package name and version"
+    )]
+    MissingDistInfoSegments(String),
+    #[error("The .dist-info directory {0} does not start with the normalized package name: {0}")]
+    MissingDistInfoPackageName(String, String),
+    #[error("The .dist-info directory {0} does not start with the normalized version: {0}")]
+    MissingDistInfoVersion(String, String),
+    #[error("The .dist-info directory name contains invalid characters")]
+    InvalidDistInfoPrefix,
     #[error("Invalid wheel size")]
     InvalidSize,
     #[error("Invalid package name")]

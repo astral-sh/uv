@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 use distribution_types::InstalledMetadata;
+pub(crate) use pip_check::pip_check;
 pub(crate) use pip_compile::{extra_name_with_clap_error, pip_compile, Upgrade};
 pub(crate) use pip_freeze::pip_freeze;
 pub(crate) use pip_install::pip_install;
@@ -14,6 +15,7 @@ pub(crate) use pip_list::pip_list;
 pub(crate) use pip_show::pip_show;
 pub(crate) use pip_sync::pip_sync;
 pub(crate) use pip_uninstall::pip_uninstall;
+pub(crate) use self_update::self_update;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_installer::compile_tree;
@@ -26,6 +28,7 @@ use crate::printer::Printer;
 
 mod cache_clean;
 mod cache_dir;
+mod pip_check;
 mod pip_compile;
 mod pip_freeze;
 mod pip_install;
@@ -34,6 +37,7 @@ mod pip_show;
 mod pip_sync;
 mod pip_uninstall;
 mod reporters;
+mod self_update;
 mod venv;
 mod version;
 
@@ -65,13 +69,16 @@ impl From<ExitStatus> for ExitCode {
 /// Format a duration as a human-readable string, Cargo-style.
 pub(super) fn elapsed(duration: Duration) -> String {
     let secs = duration.as_secs();
+    let ms = duration.subsec_millis();
 
     if secs >= 60 {
         format!("{}m {:02}s", secs / 60, secs % 60)
     } else if secs > 0 {
         format!("{}.{:02}s", secs, duration.subsec_nanos() / 10_000_000)
+    } else if ms > 0 {
+        format!("{ms}ms")
     } else {
-        format!("{}ms", duration.subsec_millis())
+        format!("0.{:02}ms", duration.subsec_nanos() / 10_000)
     }
 }
 
@@ -124,14 +131,17 @@ pub(super) async fn compile_bytecode(
     printer: Printer,
 ) -> anyhow::Result<()> {
     let start = std::time::Instant::now();
-    let files = compile_tree(venv.site_packages(), venv.python_executable(), cache.root())
-        .await
-        .with_context(|| {
-            format!(
-                "Failed to bytecode compile {}",
-                venv.site_packages().simplified_display()
-            )
-        })?;
+    let mut files = 0;
+    for site_packages in venv.site_packages() {
+        files += compile_tree(site_packages, venv.python_executable(), cache.root())
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to bytecode-compile Python file in: {}",
+                    site_packages.simplified_display()
+                )
+            })?;
+    }
     let s = if files == 1 { "" } else { "s" };
     writeln!(
         printer.stderr(),

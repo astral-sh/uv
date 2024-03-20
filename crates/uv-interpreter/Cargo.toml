@@ -17,7 +17,6 @@ cache-key = { path = "../cache-key" }
 install-wheel-rs = { path = "../install-wheel-rs" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs", features = ["serde"] }
-platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
 pypi-types = { path = "../pypi-types" }
 uv-cache = { path = "../uv-cache" }
@@ -31,10 +30,10 @@ rmp-serde = { workspace = true }
 same-file = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
 tracing = { workspace = true }
-which = { workspace = true}
+which = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { workspace = true }

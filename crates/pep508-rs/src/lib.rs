@@ -1128,7 +1128,7 @@ mod tests {
         parse_markers_impl, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
         MarkerValueString, MarkerValueVersion,
     };
-    use crate::{Cursor, Requirement, VerbatimUrl, VersionOrUrl};
+    use crate::{Cursor, Pep508Error, Requirement, VerbatimUrl, VersionOrUrl};
 
     fn parse_err(input: &str) -> String {
         Requirement::from_str(input).unwrap_err().to_string()
@@ -1198,12 +1198,12 @@ mod tests {
             ],
             version_or_url: Some(VersionOrUrl::VersionSpecifier(
                 [
-                    VersionSpecifier::new(
+                    VersionSpecifier::from_pattern(
                         Operator::GreaterThanEqual,
                         VersionPattern::verbatim(Version::new([2, 8, 1])),
                     )
                     .unwrap(),
-                    VersionSpecifier::new(
+                    VersionSpecifier::from_pattern(
                         Operator::Equal,
                         VersionPattern::wildcard(Version::new([2, 8])),
                     )
@@ -1743,5 +1743,38 @@ mod tests {
     fn no_space_after_operator() {
         let requirement = Requirement::from_str("pytest;'4.0'>=python_version").unwrap();
         assert_eq!(requirement.to_string(), "pytest ; '4.0' >= python_version");
+    }
+
+    #[test]
+    fn path_with_fragment() -> Result<(), Pep508Error> {
+        let requirements = if cfg!(windows) {
+            &[
+                "wheel @ file:///C:/Users/ferris/wheel-0.42.0.whl#hash=somehash",
+                "wheel @ C:/Users/ferris/wheel-0.42.0.whl#hash=somehash",
+            ]
+        } else {
+            &[
+                "wheel @ file:///Users/ferris/wheel-0.42.0.whl#hash=somehash",
+                "wheel @ /Users/ferris/wheel-0.42.0.whl#hash=somehash",
+            ]
+        };
+
+        for requirement in requirements {
+            // Extract the URL.
+            let Some(VersionOrUrl::Url(url)) = Requirement::from_str(requirement)?.version_or_url
+            else {
+                unreachable!("Expected a URL")
+            };
+
+            // Assert that the fragment and path have been separated correctly.
+            assert_eq!(url.fragment(), Some("hash=somehash"));
+            assert!(
+                url.path().ends_with("/Users/ferris/wheel-0.42.0.whl"),
+                "Expected the path to end with '/Users/ferris/wheel-0.42.0.whl', found '{}'",
+                url.path()
+            );
+        }
+
+        Ok(())
     }
 }

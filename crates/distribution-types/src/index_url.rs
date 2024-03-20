@@ -26,6 +26,16 @@ pub enum IndexUrl {
     Url(VerbatimUrl),
 }
 
+impl IndexUrl {
+    /// Return the raw URL for the index.
+    pub(crate) fn url(&self) -> &Url {
+        match self {
+            Self::Pypi(url) => url.raw(),
+            Self::Url(url) => url.raw(),
+        }
+    }
+}
+
 impl Display for IndexUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -267,6 +277,16 @@ impl<'a> IndexLocations {
             extra_index: self.extra_index.clone(),
             no_index: self.no_index,
         }
+    }
+
+    /// Return an iterator over all [`Url`] entries.
+    pub fn urls(&'a self) -> impl Iterator<Item = &'a Url> + 'a {
+        self.indexes()
+            .map(IndexUrl::url)
+            .chain(self.flat_index.iter().filter_map(|index| match index {
+                FlatIndexLocation::Path(_) => None,
+                FlatIndexLocation::Url(url) => Some(url),
+            }))
     }
 }
 

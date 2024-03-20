@@ -166,7 +166,7 @@ jobs:
   build-binary-macos-aarch64:
     runs-on:
       labels: macos-14
-    name: "build binary | macos"
+    name: "build binary | macos aarch64"
     steps:
       - uses: actions/checkout@v4
 
@@ -180,6 +180,26 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: uv-macos-aarch64-${{ github.sha }}
+          path: ./target/debug/uv
+          retention-days: 1
+
+  build-binary-macos-x86_64:
+    runs-on:
+      labels: macos-latest-large
+    name: "build binary | macos x86_64"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@v2
+      - name: "Build"
+        run: cargo build
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: uv-macos-x86_64-${{ github.sha }}
           path: ./target/debug/uv
           retention-days: 1
 
@@ -228,6 +248,31 @@ jobs:
       - name: "Validate global Python install"
         run: python3.9 scripts/check_system_python.py --uv ./uv
 
+  system-test-fedora:
+    needs: build-binary-linux
+    name: "check system | python on fedora"
+    runs-on: ubuntu-latest
+    container: fedora:39
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: dnf install which -y && python3 -m ensurepip
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv
+
   system-test-ubuntu:
     needs: build-binary-linux
     name: "check system | python on ubuntu"
@@ -252,6 +297,35 @@ jobs:
 
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./uv
+
+  system-test-centos:
+    needs: build-binary-linux
+    name: "check system | python on centos"
+    runs-on: ubuntu-latest
+    container: centos:8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: |
+          # Add CentOS stream repositories, you cannot install from the EOL CentOS 8 mirrors
+          dnf -y --disablerepo '*' --enablerepo extras swap centos-linux-repos centos-stream-repos
+          # `python` gives you `python3.6` which we do not support
+          dnf install python39 python39-pip which -y
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv
 
   system-test-pypy:
     needs: build-binary-linux
@@ -325,9 +399,9 @@ jobs:
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
 
-  system-test-macos:
+  system-test-macos-aarch64:
     needs: build-binary-macos-aarch64
-    name: "check system | python on macos"
+    name: "check system | python on macos aarch64"
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -344,15 +418,43 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Print Python path"
-        run: echo $(which python3.11)
+        run: echo $(which python3)
 
       - name: "Validate global Python install"
-        run: python3.11 scripts/check_system_python.py --uv ./uv
+        run: python3 scripts/check_system_python.py --uv ./uv
+
+  system-test-macos-x86_64:
+    needs: build-binary-macos-x86_64
+    name: "check system | python on macos x86_64"
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # We test with GitHub's Python as a regression test for
+      # https://github.com/astral-sh/uv/issues/2450
+      - uses: actions/setup-python@v5
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-macos-x86_64-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv
 
   system-test-windows-python-310:
     needs: build-binary-windows
     name: "check system | python3.10 on windows"
     runs-on: windows-latest
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -375,6 +477,9 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.13 on windows"
     runs-on: windows-latest
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -399,6 +504,9 @@ jobs:
     needs: build-binary-windows
     name: "check system | python3.12 via chocolatey"
     runs-on: windows-latest
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -489,3 +597,31 @@ jobs:
       - name: "Validate global Python install"
         shell: bash -el {0}
         run: python ./scripts/check_system_python.py --uv ./uv
+
+  system-test-amazonlinux:
+    needs: build-binary-linux
+    name: "check system | amazonlinux"
+    runs-on: ubuntu-latest
+    container: amazonlinux:2023
+    steps:
+      - name: "Install base requirements"
+        run: |
+          # Needed for `actions/checkout`
+          yum install tar gzip which -y
+      - uses: actions/checkout@v4
+      - name: "Install Python"
+        run: yum install python3 python3-pip -y
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv

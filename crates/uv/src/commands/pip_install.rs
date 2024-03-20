@@ -17,10 +17,10 @@ use distribution_types::{
 };
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{MarkerEnvironment, Requirement};
-use platform_host::Platform;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
+use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
@@ -31,7 +31,7 @@ use uv_installer::{
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_resolver::{
-    DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
+    DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode, Preference,
     ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
@@ -55,6 +55,7 @@ pub(crate) async fn pip_install(
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
+    keyring_provider: KeyringProvider,
     reinstall: &Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -108,13 +109,12 @@ pub(crate) async fn pip_install(
     }
 
     // Detect the current Python interpreter.
-    let platform = Platform::current()?;
     let venv = if let Some(python) = python.as_ref() {
-        PythonEnvironment::from_requested_python(python, &platform, &cache)?
+        PythonEnvironment::from_requested_python(python, &cache)?
     } else if system {
-        PythonEnvironment::from_default_python(&platform, &cache)?
+        PythonEnvironment::from_default_python(&cache)?
     } else {
-        PythonEnvironment::from_virtualenv(platform, &cache)?
+        PythonEnvironment::from_virtualenv(&cache)?
     };
     debug!(
         "Using Python {} environment at {}",
@@ -145,8 +145,7 @@ pub(crate) async fn pip_install(
     let _lock = venv.lock()?;
 
     // Determine the set of installed packages.
-    let site_packages =
-        SitePackages::from_executable(&venv).context("Failed to list installed packages")?;
+    let site_packages = SitePackages::from_executable(&venv)?;
 
     // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
     // enough to let us remove this check. But right now, for large environments, it's an order of
@@ -182,11 +181,19 @@ pub(crate) async fn pip_install(
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
+    // Add all authenticated sources to the store.
+    for url in index_locations.urls() {
+        GLOBAL_AUTH_STORE.save_from_url(url);
+    }
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .keyring_provider(keyring_provider)
+        .markers(markers)
+        .platform(interpreter.platform())
         .build();
 
     // Resolve the flat indexes from `--find-links`.
@@ -493,7 +500,8 @@ async fn resolve(
         // Prefer current site packages, unless in the upgrade or reinstall lists
         site_packages
             .requirements()
-            .filter(|requirement| !exclusions.contains(&requirement.name))
+            .map(Preference::from_requirement)
+            .filter(|preference| !exclusions.contains(preference.name()))
             .collect()
     };
 
@@ -935,7 +943,7 @@ enum Error {
     Client(#[from] uv_client::Error),
 
     #[error(transparent)]
-    Platform(#[from] platform_host::PlatformError),
+    Platform(#[from] platform_tags::PlatformError),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

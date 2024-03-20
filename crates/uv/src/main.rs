@@ -14,6 +14,7 @@ use tracing::instrument;
 
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use requirements::ExtrasSpecification;
+use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheArgs, Refresh};
 use uv_client::Connectivity;
 use uv_installer::{NoBinary, Reinstall};
@@ -97,7 +98,7 @@ struct Cli {
     /// However, in some cases, you may want to use the platform's native certificate store,
     /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
     /// included in your system's certificate store.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, env = "UV_NATIVE_TLS")]
     native_tls: bool,
 
     #[command(flatten)]
@@ -136,6 +137,9 @@ enum Commands {
     Venv(VenvArgs),
     /// Manage the cache.
     Cache(CacheNamespace),
+    /// Manage the `uv` executable.
+    #[clap(name = "self")]
+    Self_(SelfNamespace),
     /// Remove all items from the cache.
     #[clap(hide = true)]
     Clean(CleanArgs),
@@ -147,6 +151,18 @@ enum Commands {
     /// Generate shell completion
     #[clap(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion { shell: clap_complete_command::Shell },
+}
+
+#[derive(Args)]
+struct SelfNamespace {
+    #[clap(subcommand)]
+    command: SelfCommand,
+}
+
+#[derive(Subcommand)]
+enum SelfCommand {
+    /// Update `uv` to the latest version.
+    Update,
 }
 
 #[derive(Args)]
@@ -166,13 +182,6 @@ enum CacheCommand {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 struct CleanArgs {
-    /// The packages to remove from the cache.
-    package: Vec<PackageName>,
-}
-
-#[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
-struct DirArgs {
     /// The packages to remove from the cache.
     package: Vec<PackageName>,
 }
@@ -199,6 +208,8 @@ enum PipCommand {
     List(PipListArgs),
     /// Show information about one or more installed packages.
     Show(PipShowArgs),
+    /// Verify installed packages have compatible dependencies.
+    Check(PipCheckArgs),
 }
 
 /// Clap parser for the union of date and datetime
@@ -305,6 +316,14 @@ struct PipCompileArgs {
     #[clap(long, short)]
     output_file: Option<PathBuf>,
 
+    /// Include extras in the output file.
+    ///
+    /// By default, `uv` strips extras, as any packages pulled in by the extras are already included
+    /// as dependencies in the output file directly. Further, output files generated with
+    /// `--no-strip-extras` cannot be used as constraints files in `install` and `sync` invocations.
+    #[clap(long)]
+    no_strip_extras: bool,
+
     /// Exclude comment annotations indicating the source of each package.
     #[clap(long)]
     no_annotate: bool,
@@ -357,6 +376,13 @@ struct PipCompileArgs {
     /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// Attempt to use `keyring` for authentication for index urls
+    ///
+    /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
+    /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
+    #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
+    keyring_provider: KeyringProvider,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -485,6 +511,9 @@ struct PipSyncArgs {
     refresh_package: Vec<PackageName>,
 
     /// The method to use when installing packages from the global cache.
+    ///
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Windows.
     #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
     link_mode: install_wheel_rs::linker::LinkMode,
 
@@ -524,6 +553,13 @@ struct PipSyncArgs {
     /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// Attempt to use `keyring` for authentication for index urls
+    ///
+    /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
+    /// `uv` will try to use `keyring` via CLI when this flag is used.
+    #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
+    keyring_provider: KeyringProvider,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -723,6 +759,9 @@ struct PipInstallArgs {
     no_deps: bool,
 
     /// The method to use when installing packages from the global cache.
+    ///
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Windows.
     #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
     link_mode: install_wheel_rs::linker::LinkMode,
 
@@ -775,6 +814,13 @@ struct PipInstallArgs {
     /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// Attempt to use `keyring` for authentication for index urls
+    ///
+    /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
+    /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
+    #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
+    keyring_provider: KeyringProvider,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -1075,6 +1121,47 @@ struct PipListArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
+struct PipCheckArgs {
+    /// The Python interpreter for which packages should be listed.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[clap(
+        long,
+        short,
+        verbatim_doc_comment,
+        conflicts_with = "system",
+        group = "discovery"
+    )]
+    python: Option<String>,
+
+    /// List packages for the system Python.
+    ///
+    /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
+    /// environment (`.venv`) located in the current working directory or any parent directory,
+    /// falling back to the system Python if no virtual environment is found. The `--system` option
+    /// instructs `uv` to use the first Python found in the system `PATH`.
+    ///
+    /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
+    /// should be used with caution.
+    #[clap(
+        long,
+        conflicts_with = "python",
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery"
+    )]
+    system: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 struct PipShowArgs {
     /// The package(s) to display.
     package: Vec<PackageName>,
@@ -1217,6 +1304,13 @@ struct VenvArgs {
     /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// Attempt to use `keyring` for authentication for index urls
+    ///
+    /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
+    /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
+    #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
+    keyring_provider: uv_auth::KeyringProvider,
 
     /// Run offline, i.e., without accessing the network.
     #[arg(global = true, long)]
@@ -1419,11 +1513,13 @@ async fn run() -> Result<ExitStatus> {
                 upgrade,
                 args.generate_hashes,
                 args.no_emit_package,
+                args.no_strip_extras,
                 !args.no_annotate,
                 !args.no_header,
                 args.emit_index_url,
                 args.emit_find_links,
                 index_urls,
+                args.keyring_provider,
                 setup_py,
                 config_settings,
                 if args.offline {
@@ -1479,6 +1575,7 @@ async fn run() -> Result<ExitStatus> {
                 args.link_mode,
                 args.compile,
                 index_urls,
+                args.keyring_provider,
                 setup_py,
                 if args.offline {
                     Connectivity::Offline
@@ -1571,6 +1668,7 @@ async fn run() -> Result<ExitStatus> {
                 dependency_mode,
                 upgrade,
                 index_urls,
+                args.keyring_provider,
                 &reinstall,
                 args.link_mode,
                 args.compile,
@@ -1657,6 +1755,9 @@ async fn run() -> Result<ExitStatus> {
             &cache,
             printer,
         ),
+        Commands::Pip(PipNamespace {
+            command: PipCommand::Check(args),
+        }) => commands::pip_check(args.python.as_deref(), args.system, &cache, printer),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })
@@ -1694,6 +1795,7 @@ async fn run() -> Result<ExitStatus> {
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
+                args.keyring_provider,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 if args.offline {
@@ -1703,11 +1805,15 @@ async fn run() -> Result<ExitStatus> {
                 },
                 args.seed,
                 args.exclude_newer,
+                cli.native_tls,
                 &cache,
                 printer,
             )
             .await
         }
+        Commands::Self_(SelfNamespace {
+            command: SelfCommand::Update,
+        }) => commands::self_update(printer).await,
         Commands::Version { output_format } => {
             commands::version(output_format, &mut stdout())?;
             Ok(ExitStatus::Success)

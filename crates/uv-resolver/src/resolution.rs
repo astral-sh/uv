@@ -3,6 +3,7 @@ use std::hash::BuildHasherDefault;
 
 use anyhow::Result;
 use dashmap::DashMap;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
@@ -20,6 +21,7 @@ use uv_normalize::{ExtraName, PackageName};
 
 use crate::editables::Editables;
 use crate::pins::FilePins;
+use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority};
 use crate::redirect::apply_redirect;
 use crate::resolver::VersionsResponse;
@@ -45,6 +47,8 @@ pub struct ResolutionGraph {
     petgraph: petgraph::graph::Graph<Dist, Range<Version>, petgraph::Directed>,
     /// The metadata for every distribution in this resolution.
     hashes: FxHashMap<PackageName, Vec<Hashes>>,
+    /// The enabled extras for every distribution in this resolution.
+    extras: FxHashMap<PackageName, Vec<ExtraName>>,
     /// The set of editable requirements in this resolution.
     editables: Editables,
     /// Any diagnostics that were encountered while building the graph.
@@ -53,6 +57,7 @@ pub struct ResolutionGraph {
 
 impl ResolutionGraph {
     /// Create a new graph from the resolved `PubGrub` state.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_state(
         selection: &SelectedDependencies<PubGrubPackage, Version>,
         pins: &FilePins,
@@ -60,6 +65,7 @@ impl ResolutionGraph {
         distributions: &OnceMap<PackageId, Metadata23>,
         redirects: &DashMap<Url, Url>,
         state: &State<PubGrubPackage, Range<Version>, PubGrubPriority>,
+        preferences: &Preferences,
         editables: Editables,
     ) -> Result<Self, ResolveError> {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
@@ -67,6 +73,7 @@ impl ResolutionGraph {
         let mut petgraph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
         let mut hashes =
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
+        let mut extras = FxHashMap::default();
         let mut diagnostics = Vec::new();
 
         // Add every package to the graph.
@@ -84,13 +91,16 @@ impl ResolutionGraph {
                             .clone()
                     };
 
-                    // Add its hashes to the index.
-                    if let Some(versions_response) = packages.get(package_name) {
+                    // Add its hashes to the index, preserving those that were already present in
+                    // the lockfile if necessary.
+                    if let Some(hash) = preferences.match_hashes(package_name, version) {
+                        hashes.insert(package_name.clone(), hash.to_vec());
+                    } else if let Some(versions_response) = packages.get(package_name) {
                         if let VersionsResponse::Found(ref version_map) = *versions_response {
                             hashes.insert(package_name.clone(), {
-                                let mut hashes = version_map.hashes(version);
-                                hashes.sort_unstable();
-                                hashes
+                                let mut hash = version_map.hashes(version);
+                                hash.sort_unstable();
+                                hash
                             });
                         }
                     }
@@ -111,13 +121,16 @@ impl ResolutionGraph {
                         Dist::from_url(package_name.clone(), url)?
                     };
 
-                    // Add its hashes to the index.
-                    if let Some(versions_response) = packages.get(package_name) {
+                    // Add its hashes to the index, preserving those that were already present in
+                    // the lockfile if necessary.
+                    if let Some(hash) = preferences.match_hashes(package_name, version) {
+                        hashes.insert(package_name.clone(), hash.to_vec());
+                    } else if let Some(versions_response) = packages.get(package_name) {
                         if let VersionsResponse::Found(ref version_map) = *versions_response {
                             hashes.insert(package_name.clone(), {
-                                let mut hashes = version_map.hashes(version);
-                                hashes.sort_unstable();
-                                hashes
+                                let mut hash = version_map.hashes(version);
+                                hash.sort_unstable();
+                                hash
                             });
                         }
                     }
@@ -131,7 +144,12 @@ impl ResolutionGraph {
                     let dist = PubGrubDistribution::from_registry(package_name, version);
 
                     if let Some((editable, metadata)) = editables.get(package_name) {
-                        if !metadata.provides_extras.contains(extra) {
+                        if metadata.provides_extras.contains(extra) {
+                            extras
+                                .entry(package_name.clone())
+                                .or_insert_with(Vec::new)
+                                .push(extra.clone());
+                        } else {
                             let pinned_package =
                                 Dist::from_editable(package_name.clone(), editable.clone())?;
 
@@ -148,7 +166,12 @@ impl ResolutionGraph {
                             )
                         });
 
-                        if !metadata.provides_extras.contains(extra) {
+                        if metadata.provides_extras.contains(extra) {
+                            extras
+                                .entry(package_name.clone())
+                                .or_insert_with(Vec::new)
+                                .push(extra.clone());
+                        } else {
                             let pinned_package = pins
                                 .get(package_name, version)
                                 .unwrap_or_else(|| {
@@ -168,7 +191,12 @@ impl ResolutionGraph {
                     let dist = PubGrubDistribution::from_url(package_name, url);
 
                     if let Some((editable, metadata)) = editables.get(package_name) {
-                        if !metadata.provides_extras.contains(extra) {
+                        if metadata.provides_extras.contains(extra) {
+                            extras
+                                .entry(package_name.clone())
+                                .or_insert_with(Vec::new)
+                                .push(extra.clone());
+                        } else {
                             let pinned_package =
                                 Dist::from_editable(package_name.clone(), editable.clone())?;
 
@@ -185,7 +213,12 @@ impl ResolutionGraph {
                             )
                         });
 
-                        if !metadata.provides_extras.contains(extra) {
+                        if metadata.provides_extras.contains(extra) {
+                            extras
+                                .entry(package_name.clone())
+                                .or_insert_with(Vec::new)
+                                .push(extra.clone());
+                        } else {
                             let url = redirects.get(url).map_or_else(
                                 || url.clone(),
                                 |precise| apply_redirect(url, precise.value()),
@@ -250,6 +283,7 @@ impl ResolutionGraph {
         Ok(Self {
             petgraph,
             hashes,
+            extras,
             editables,
             diagnostics,
         })
@@ -292,6 +326,8 @@ pub struct DisplayResolutionGraph<'a> {
     no_emit_packages: &'a [PackageName],
     /// Whether to include hashes in the output.
     show_hashes: bool,
+    /// Whether to include extras in the output (e.g., `black[colorama]`).
+    include_extras: bool,
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
     /// requested each package.
     include_annotations: bool,
@@ -302,7 +338,14 @@ pub struct DisplayResolutionGraph<'a> {
 
 impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
     fn from(resolution: &'a ResolutionGraph) -> Self {
-        Self::new(resolution, &[], false, true, AnnotationStyle::default())
+        Self::new(
+            resolution,
+            &[],
+            false,
+            false,
+            true,
+            AnnotationStyle::default(),
+        )
     }
 }
 
@@ -312,6 +355,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         underlying: &'a ResolutionGraph,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
+        include_extras: bool,
         include_annotations: bool,
         annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
@@ -319,8 +363,63 @@ impl<'a> DisplayResolutionGraph<'a> {
             resolution: underlying,
             no_emit_packages,
             show_hashes,
+            include_extras,
             include_annotations,
             annotation_style,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum Node<'a> {
+    /// A node linked to an editable distribution.
+    Editable(&'a PackageName, &'a LocalEditable),
+    /// A node linked to a non-editable distribution.
+    Distribution(&'a PackageName, &'a Dist, &'a [ExtraName]),
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum NodeKey<'a> {
+    /// A node linked to an editable distribution, sorted by verbatim representation.
+    Editable(Cow<'a, str>),
+    /// A node linked to a non-editable distribution, sorted by package name.
+    Distribution(&'a PackageName),
+}
+
+impl<'a> Node<'a> {
+    /// Return the name of the package.
+    fn name(&self) -> &'a PackageName {
+        match self {
+            Node::Editable(name, _) => name,
+            Node::Distribution(name, _, _) => name,
+        }
+    }
+
+    /// Return a comparable key for the node.
+    fn key(&self) -> NodeKey<'a> {
+        match self {
+            Node::Editable(_, editable) => NodeKey::Editable(editable.verbatim()),
+            Node::Distribution(name, _, _) => NodeKey::Distribution(name),
+        }
+    }
+}
+
+impl Verbatim for Node<'_> {
+    fn verbatim(&self) -> Cow<'_, str> {
+        match self {
+            Node::Editable(_, editable) => Cow::Owned(format!("-e {}", editable.verbatim())),
+            Node::Distribution(_, dist, &[]) => dist.verbatim(),
+            Node::Distribution(_, dist, extras) => {
+                let mut extras = extras.to_vec();
+                extras.sort_unstable();
+                extras.dedup();
+                Cow::Owned(format!(
+                    "{}[{}]{}",
+                    dist.name(),
+                    extras.into_iter().join(", "),
+                    dist.version_or_url().verbatim()
+                ))
+            }
         }
     }
 }
@@ -328,40 +427,6 @@ impl<'a> DisplayResolutionGraph<'a> {
 /// Write the graph in the `{name}=={version}` format of requirements.txt that pip uses.
 impl std::fmt::Display for DisplayResolutionGraph<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        #[derive(Debug)]
-        enum Node<'a> {
-            /// A node linked to an editable distribution.
-            Editable(&'a PackageName, &'a LocalEditable),
-            /// A node linked to a non-editable distribution.
-            Distribution(&'a PackageName, &'a Dist),
-        }
-
-        #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-        enum NodeKey<'a> {
-            /// A node linked to an editable distribution, sorted by verbatim representation.
-            Editable(Cow<'a, str>),
-            /// A node linked to a non-editable distribution, sorted by package name.
-            Distribution(&'a PackageName),
-        }
-
-        impl<'a> Node<'a> {
-            /// Return the name of the package.
-            fn name(&self) -> &'a PackageName {
-                match self {
-                    Node::Editable(name, _) => name,
-                    Node::Distribution(name, _) => name,
-                }
-            }
-
-            /// Return a comparable key for the node.
-            fn key(&self) -> NodeKey<'a> {
-                match self {
-                    Node::Editable(_, editable) => NodeKey::Editable(editable.verbatim()),
-                    Node::Distribution(name, _) => NodeKey::Distribution(name),
-                }
-            }
-        }
-
         // Collect all packages.
         let mut nodes = self
             .resolution
@@ -376,8 +441,17 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
 
                 let node = if let Some((editable, _)) = self.resolution.editables.get(name) {
                     Node::Editable(name, editable)
+                } else if self.include_extras {
+                    Node::Distribution(
+                        name,
+                        dist,
+                        self.resolution
+                            .extras
+                            .get(name)
+                            .map_or(&[], |extras| extras.as_slice()),
+                    )
                 } else {
-                    Node::Distribution(name, dist)
+                    Node::Distribution(name, dist, &[])
                 };
                 Some((index, node))
             })
@@ -389,10 +463,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // Print out the dependency graph.
         for (index, node) in nodes {
             // Display the node itself.
-            let mut line = match node {
-                Node::Distribution(_, dist) => format!("{}", dist.verbatim()),
-                Node::Editable(_, editable) => format!("-e {}", editable.verbatim()),
-            };
+            let mut line = node.verbatim().to_string();
 
             // Display the distribution hashes, if any.
             let mut has_hashes = false;

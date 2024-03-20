@@ -3,13 +3,15 @@ use pep508_rs::Requirement;
 use pypi_types::Metadata23;
 use uv_normalize::PackageName;
 
+use crate::preferences::Preference;
+
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Debug)]
 pub struct Manifest {
     pub(crate) requirements: Vec<Requirement>,
     pub(crate) constraints: Vec<Requirement>,
     pub(crate) overrides: Vec<Requirement>,
-    pub(crate) preferences: Vec<Requirement>,
+    pub(crate) preferences: Vec<Preference>,
     pub(crate) project: Option<PackageName>,
     pub(crate) editables: Vec<(LocalEditable, Metadata23)>,
 }
@@ -19,7 +21,7 @@ impl Manifest {
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
-        preferences: Vec<Requirement>,
+        preferences: Vec<Preference>,
         project: Option<PackageName>,
         editables: Vec<(LocalEditable, Metadata23)>,
     ) -> Self {

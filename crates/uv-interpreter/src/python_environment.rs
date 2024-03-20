@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 
 use tracing::debug;
 
-use platform_host::Platform;
 use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
@@ -19,13 +18,13 @@ pub struct PythonEnvironment {
 
 impl PythonEnvironment {
     /// Create a [`PythonEnvironment`] for an existing virtual environment.
-    pub fn from_virtualenv(platform: Platform, cache: &Cache) -> Result<Self, Error> {
+    pub fn from_virtualenv(cache: &Cache) -> Result<Self, Error> {
         let Some(venv) = detect_virtual_env()? else {
             return Err(Error::VenvNotFound);
         };
         let venv = fs_err::canonicalize(venv)?;
         let executable = detect_python_executable(&venv);
-        let interpreter = Interpreter::query(&executable, platform, cache)?;
+        let interpreter = Interpreter::query(&executable, cache)?;
 
         debug_assert!(
             interpreter.base_prefix() == interpreter.base_exec_prefix(),
@@ -41,12 +40,8 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] for a Python interpreter specifier (e.g., a path or a binary name).
-    pub fn from_requested_python(
-        python: &str,
-        platform: &Platform,
-        cache: &Cache,
-    ) -> Result<Self, Error> {
-        let Some(interpreter) = find_requested_python(python, platform, cache)? else {
+    pub fn from_requested_python(python: &str, cache: &Cache) -> Result<Self, Error> {
+        let Some(interpreter) = find_requested_python(python, cache)? else {
             return Err(Error::RequestedPythonNotFound(python.to_string()));
         };
         Ok(Self {
@@ -56,8 +51,8 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] for the default Python interpreter.
-    pub fn from_default_python(platform: &Platform, cache: &Cache) -> Result<Self, Error> {
-        let interpreter = find_default_python(platform, cache)?;
+    pub fn from_default_python(cache: &Cache) -> Result<Self, Error> {
+        let interpreter = find_default_python(cache)?;
         Ok(Self {
             root: interpreter.prefix().to_path_buf(),
             interpreter,
@@ -93,9 +88,18 @@ impl PythonEnvironment {
         self.interpreter.sys_executable()
     }
 
-    /// Returns the path to the `site-packages` directory inside a virtual environment.
-    pub fn site_packages(&self) -> &Path {
-        self.interpreter.purelib()
+    /// Returns an iterator over the `site-packages` directories inside a virtual environment.
+    ///
+    /// In most cases, `purelib` and `platlib` will be the same, and so the iterator will contain
+    /// a single element; however, in some distributions, they may be different.
+    pub fn site_packages(&self) -> impl Iterator<Item = &Path> {
+        std::iter::once(self.interpreter.purelib()).chain(
+            if self.interpreter.purelib() == self.interpreter.platlib() {
+                None
+            } else {
+                Some(self.interpreter.platlib())
+            },
+        )
     }
 
     /// Returns the path to the `bin` directory inside a virtual environment.

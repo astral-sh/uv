@@ -21,13 +21,10 @@ base64 = { workspace = true }
 cargo-util = { workspace = true }
 git2 = { workspace = true }
 glob = { workspace = true }
-hex = { workspace = true }
 hmac = { workspace = true }
 home = { workspace = true }
-once_cell = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"] }
-serde = { workspace = true }
 sha1 = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

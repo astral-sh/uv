@@ -206,7 +206,7 @@ impl Cache {
     }
 
     /// Persist a temporary directory to the artifact store.
-    pub fn persist(
+    pub async fn persist(
         &self,
         temp_dir: impl AsRef<Path>,
         path: impl AsRef<Path>,
@@ -218,7 +218,7 @@ impl Cache {
         // Move the temporary directory into the directory store.
         let archive_entry = self.entry(CacheBucket::Archive, "", id);
         fs_err::create_dir_all(archive_entry.dir())?;
-        fs_err::rename(temp_dir.as_ref(), archive_entry.path())?;
+        uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await?;
 
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
@@ -256,6 +256,19 @@ impl Cache {
             .create(true)
             .write(true)
             .open(root.join(".git"))?;
+
+        // Add an empty .gitignore to the build bucket, to ensure that the cache's own .gitignore
+        // doesn't interfere with source distribution builds. Build backends (like hatchling) will
+        // traverse upwards to look for .gitignore files.
+        fs::create_dir_all(root.join(CacheBucket::BuiltWheels.to_str()))?;
+        match fs::OpenOptions::new().write(true).create_new(true).open(
+            root.join(CacheBucket::BuiltWheels.to_str())
+                .join(".gitignore"),
+        ) {
+            Ok(_) => {}
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+            Err(err) => return Err(err),
+        }
 
         fs::canonicalize(root)
     }
@@ -524,7 +537,7 @@ impl CacheBucket {
             Self::FlatIndex => "flat-index-v0",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v0",
-            Self::Simple => "simple-v3",
+            Self::Simple => "simple-v5",
             Self::Wheels => "wheels-v0",
             Self::Archive => "archive-v0",
         }

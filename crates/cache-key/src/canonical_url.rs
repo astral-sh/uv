@@ -21,6 +21,11 @@ impl CanonicalUrl {
     pub fn new(url: &Url) -> Self {
         let mut url = url.clone();
 
+        // If the URL cannot be a base, then it's not a valid URL anyway.
+        if url.cannot_be_a_base() {
+            return Self(url);
+        }
+
         // Strip a trailing slash.
         if url.path().ends_with('/') {
             url.path_segments_mut().unwrap().pop_if_empty();
@@ -192,6 +197,12 @@ mod tests {
             CanonicalUrl::parse(
                 "git+https://github.com/pypa/sample-namespace-packages.git@v2.0.0"
             )?,
+        );
+
+        // Two URLs that cannot be a base should be considered equal.
+        assert_eq!(
+            CanonicalUrl::parse("git+https:://github.com/pypa/sample-namespace-packages.git")?,
+            CanonicalUrl::parse("git+https:://github.com/pypa/sample-namespace-packages.git")?,
         );
 
         Ok(())

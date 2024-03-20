@@ -21,7 +21,7 @@ required-features = ["cli"]
 workspace = true
 
 [dependencies]
-platform-host = { path = "../platform-host" }
+platform-tags = { path = "../platform-tags" }
 pypi-types = { path = "../pypi-types" }
 uv-cache = { path = "../uv-cache" }
 uv-fs = { path = "../uv-fs" }
@@ -33,13 +33,9 @@ clap = { workspace = true, features = ["derive"], optional = true }
 directories = { workspace = true }
 fs-err = { workspace = true }
 pathdiff = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, optional = true }
-which = { workspace = true }
 
 [features]
 cli = ["clap", "tracing-subscriber"]

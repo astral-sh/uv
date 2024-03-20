@@ -4,6 +4,7 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
+use crate::preferences::Preference;
 use crate::Manifest;
 
 /// A set of package versions that are permitted, even if they're marked as yanked by the
@@ -19,7 +20,7 @@ impl AllowedYanks {
             .iter()
             .chain(manifest.constraints.iter())
             .chain(manifest.overrides.iter())
-            .chain(manifest.preferences.iter())
+            .chain(manifest.preferences.iter().map(Preference::requirement))
             .filter(|requirement| requirement.evaluate_markers(markers, &[]))
             .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
                 metadata

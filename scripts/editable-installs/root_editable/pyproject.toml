@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "root-editable"
+description = 'A simple editable package with a {root:uri} dependency.'
+readme = "README.md"
+requires-python = ">=3.7"
+license = "MIT"
+keywords = []
+authors = [
+  { name = "Astral Software Inc.", email = "hey@astral.sh" },
+]
+classifiers = []
+dependencies = [
+  "black @ {root:uri}/../black_editable"
+]
+version = "0.1.0"
+
+[tool.hatch.metadata]
+allow-direct-references = true

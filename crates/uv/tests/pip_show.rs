@@ -500,7 +500,7 @@ fn show_editable() -> Result<()> {
     Name: poetry-editable
     Version: 0.1.0
     Location: [WORKSPACE_DIR]/site-packages
-    Requires: numpy
+    Requires: anyio
 
     ----- stderr -----
     "###

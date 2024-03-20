@@ -1104,7 +1104,7 @@ fn mismatched_name() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
-        "tomli @ {}",
+        "foo @ {}",
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
@@ -2948,7 +2948,7 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-    error: Failed to bytecode compile [SITE-PACKAGES]
+    error: Failed to bytecode-compile Python file in: [SITE-PACKAGES]
       Caused by: Python process stderr:
     Invalid value for PYC_INVALIDATION_MODE "bogus", valid are "TIMESTAMP", "CHECKED_HASH", "UNCHECKED_HASH":
       Caused by: Bytecode compilation failed, expected "[SITE-PACKAGES]/[FIRST-FILE]", received: ""
@@ -3019,6 +3019,56 @@ fn no_stream() -> Result<()> {
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + hashb-foxglove-protocolbuffers-python==25.3.0.1.20240226043130+465630478360
+    "###
+    );
+
+    Ok(())
+}
+
+/// Raise an error when a direct URL dependency's `Requires-Python` constraint is not met.
+///
+/// TODO(charlie): This currently passes, but should fail. `sync` does not currently validate the
+/// `Requires-Python` constraint for direct URL dependencies. (It _does_ respect `Requires-Python`
+/// for registry-based dependencies.)
+#[test]
+fn requires_python_direct_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with a `Requires-Python` constraint that is not met.
+    let editable_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = "<=3.5"
+"#,
+    )?;
+
+    // Write to a requirements file.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(&format!("example @ {}", editable_dir.path().display()))?;
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let filters: Vec<_> = [(r"\(from file://.*\)", "(from file://[TEMP_DIR])")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    uv_snapshot!(filters, command(&context)
+        .arg("requirements.in"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==0.0.0 (from file://[TEMP_DIR])
     "###
     );
 

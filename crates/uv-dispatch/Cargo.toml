@@ -16,24 +16,16 @@ workspace = true
 [dependencies]
 distribution-types = { path = "../distribution-types" }
 pep508_rs = { path = "../pep508-rs" }
-platform-host = { path = "../platform-host" }
-platform-tags = { path = "../platform-tags" }
-pypi-types = { path = "../pypi-types" }
 uv-build = { path = "../uv-build" }
 uv-cache = { path = "../uv-cache" }
 uv-client = { path = "../uv-client" }
-uv-distribution = { path = "../uv-distribution" }
 uv-installer = { path = "../uv-installer" }
 uv-interpreter = { path = "../uv-interpreter" }
 uv-resolver = { path = "../uv-resolver" }
 uv-traits = { path = "../uv-traits" }
-uv-virtualenv = { path = "../uv-virtualenv" }
 
 anyhow = { workspace = true }
-fs-err = { workspace = true }
 futures = { workspace = true }
 itertools = { workspace = true }
 rustc-hash = { workspace = true }
-tempfile = { workspace = true }
-tokio = { workspace = true }
 tracing = { workspace = true }

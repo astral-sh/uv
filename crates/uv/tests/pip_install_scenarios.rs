@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with ./scripts/scenarios/sync.sh
-//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.7/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.12/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 
@@ -46,9 +46,9 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.7/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.12/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.7/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.12/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -78,9 +78,9 @@ fn command(context: &TestContext) -> Command {
 fn requires_package_does_not_exist() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-package-does-not-exist-", "pkg-"));
+    filters.push((r"requires-package-does-not-exist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-package-does-not-exist-a")
@@ -91,7 +91,7 @@ fn requires_package_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because pkg-a was not found in the package registry and you require pkg-a, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because package-a was not found in the package registry and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -117,10 +117,9 @@ fn requires_package_does_not_exist() {
 fn requires_exact_version_does_not_exist() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-exact-version-does-not-exist-a", "albatross"));
-    filters.push((r"requires-exact-version-does-not-exist-", "pkg-"));
+    filters.push((r"requires-exact-version-does-not-exist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-exact-version-does-not-exist-a==2.0.0")
@@ -131,7 +130,7 @@ fn requires_exact_version_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of albatross==2.0.0 and you require albatross==2.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there is no version of package-a==2.0.0 and you require package-a==2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -159,10 +158,9 @@ fn requires_exact_version_does_not_exist() {
 fn requires_greater_version_does_not_exist() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-greater-version-does-not-exist-a", "albatross"));
-    filters.push((r"requires-greater-version-does-not-exist-", "pkg-"));
+    filters.push((r"requires-greater-version-does-not-exist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-greater-version-does-not-exist-a>1.0.0")
@@ -173,7 +171,7 @@ fn requires_greater_version_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross<=1.0.0 is available and you require albatross>1.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a<=1.0.0 is available and you require package-a>1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -202,10 +200,9 @@ fn requires_greater_version_does_not_exist() {
 fn requires_less_version_does_not_exist() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-less-version-does-not-exist-a", "albatross"));
-    filters.push((r"requires-less-version-does-not-exist-", "pkg-"));
+    filters.push((r"requires-less-version-does-not-exist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-less-version-does-not-exist-a<2.0.0")
@@ -216,7 +213,7 @@ fn requires_less_version_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross>=2.0.0 is available and you require albatross<2.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a>=2.0.0 is available and you require package-a<2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -244,10 +241,9 @@ fn requires_less_version_does_not_exist() {
 fn transitive_requires_package_does_not_exist() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"transitive-requires-package-does-not-exist-a", "albatross"));
-    filters.push((r"transitive-requires-package-does-not-exist-", "pkg-"));
+    filters.push((r"transitive-requires-package-does-not-exist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-requires-package-does-not-exist-a")
@@ -258,8 +254,8 @@ fn transitive_requires_package_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because pkg-b was not found in the package registry and albatross==1.0.0 depends on pkg-b, we can conclude that albatross==1.0.0 cannot be used.
-          And because only albatross==1.0.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because package-b was not found in the package registry and package-a==1.0.0 depends on package-b, we can conclude that package-a==1.0.0 cannot be used.
+          And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -286,10 +282,9 @@ fn transitive_requires_package_does_not_exist() {
 fn excluded_only_version() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"excluded-only-version-a", "albatross"));
-    filters.push((r"excluded-only-version-", "pkg-"));
+    filters.push((r"excluded-only-version-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("excluded-only-version-a!=1.0.0")
@@ -300,9 +295,9 @@ fn excluded_only_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and you require one of:
-              albatross<1.0.0
-              albatross>1.0.0
+      ╰─▶ Because only package-a==1.0.0 is available and you require one of:
+              package-a<1.0.0
+              package-a>1.0.0
           we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -342,11 +337,9 @@ fn excluded_only_version() {
 fn excluded_only_compatible_version() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"excluded-only-compatible-version-a", "albatross"));
-    filters.push((r"excluded-only-compatible-version-b", "bluebird"));
-    filters.push((r"excluded-only-compatible-version-", "pkg-"));
+    filters.push((r"excluded-only-compatible-version-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("excluded-only-compatible-version-a!=2.0.0")
@@ -358,22 +351,22 @@ fn excluded_only_compatible_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of albatross are available:
-              albatross==1.0.0
-              albatross==2.0.0
-              albatross==3.0.0
-          and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0.
-          And because albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that any of:
-              albatross<2.0.0
-              albatross>2.0.0
+      ╰─▶ Because only the following versions of package-a are available:
+              package-a==1.0.0
+              package-a==2.0.0
+              package-a==3.0.0
+          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+          And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that any of:
+              package-a<2.0.0
+              package-a>2.0.0
           depends on one of:
-              bluebird==1.0.0
-              bluebird==3.0.0
+              package-b==1.0.0
+              package-b==3.0.0
 
           And because you require one of:
-              albatross<2.0.0
-              albatross>2.0.0
-          and you require bluebird>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
+              package-a<2.0.0
+              package-a>2.0.0
+          and you require package-b>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require
@@ -446,21 +439,12 @@ fn excluded_only_compatible_version() {
 fn dependency_excludes_range_of_compatible_versions() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"dependency-excludes-range-of-compatible-versions-a",
-        "albatross",
+        r"dependency-excludes-range-of-compatible-versions-",
+        "package-",
     ));
-    filters.push((
-        r"dependency-excludes-range-of-compatible-versions-b",
-        "bluebird",
-    ));
-    filters.push((
-        r"dependency-excludes-range-of-compatible-versions-c",
-        "crow",
-    ));
-    filters.push((r"dependency-excludes-range-of-compatible-versions-", "pkg-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("dependency-excludes-range-of-compatible-versions-a")
@@ -473,25 +457,25 @@ fn dependency_excludes_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of albatross are available:
-              albatross==1.0.0
-              albatross>=2.0.0,<=3.0.0
-          and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0. (1)
+      ╰─▶ Because only the following versions of package-a are available:
+              package-a==1.0.0
+              package-a>=2.0.0,<=3.0.0
+          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
-          Because only the following versions of crow are available:
-              crow==1.0.0
-              crow==2.0.0
-          and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0.
-          And because crow==2.0.0 depends on albatross>=3.0.0, we can conclude that all versions of crow depend on one of:
-              albatross<2.0.0
-              albatross>=3.0.0
+          Because only the following versions of package-c are available:
+              package-c==1.0.0
+              package-c==2.0.0
+          and package-c==1.0.0 depends on package-a<2.0.0, we can conclude that package-c<2.0.0 depends on package-a<2.0.0.
+          And because package-c==2.0.0 depends on package-a>=3.0.0, we can conclude that all versions of package-c depend on one of:
+              package-a<2.0.0
+              package-a>=3.0.0
 
-          And because we know from (1) that albatross<2.0.0 depends on bluebird==1.0.0, we can conclude that albatross!=3.0.0, all versions of crow, bluebird!=1.0.0 are incompatible.
-          And because albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that all versions of crow depend on one of:
-              bluebird<=1.0.0
-              bluebird>=3.0.0
+          And because we know from (1) that package-a<2.0.0 depends on package-b==1.0.0, we can conclude that package-a!=3.0.0, all versions of package-c, package-b!=1.0.0 are incompatible.
+          And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all versions of package-c depend on one of:
+              package-b<=1.0.0
+              package-b>=3.0.0
 
-          And because you require bluebird>=2.0.0,<3.0.0 and you require crow, we can conclude that the requirements are unsatisfiable.
+          And because you require package-b>=2.0.0,<3.0.0 and you require package-c, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
@@ -580,23 +564,11 @@ fn dependency_excludes_range_of_compatible_versions() {
 fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"dependency-excludes-non-contiguous-range-of-compatible-versions-a",
-        "albatross",
-    ));
-    filters.push((
-        r"dependency-excludes-non-contiguous-range-of-compatible-versions-b",
-        "bluebird",
-    ));
-    filters.push((
-        r"dependency-excludes-non-contiguous-range-of-compatible-versions-c",
-        "crow",
-    ));
-    filters.push((
         r"dependency-excludes-non-contiguous-range-of-compatible-versions-",
-        "pkg-",
+        "package-",
     ));
 
     uv_snapshot!(filters, command(&context)
@@ -610,25 +582,25 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of albatross are available:
-              albatross==1.0.0
-              albatross>=2.0.0,<=3.0.0
-          and albatross==1.0.0 depends on bluebird==1.0.0, we can conclude that albatross<2.0.0 depends on bluebird==1.0.0. (1)
+      ╰─▶ Because only the following versions of package-a are available:
+              package-a==1.0.0
+              package-a>=2.0.0,<=3.0.0
+          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
-          Because only the following versions of crow are available:
-              crow==1.0.0
-              crow==2.0.0
-          and crow==1.0.0 depends on albatross<2.0.0, we can conclude that crow<2.0.0 depends on albatross<2.0.0.
-          And because crow==2.0.0 depends on albatross>=3.0.0, we can conclude that all versions of crow depend on one of:
-              albatross<2.0.0
-              albatross>=3.0.0
+          Because only the following versions of package-c are available:
+              package-c==1.0.0
+              package-c==2.0.0
+          and package-c==1.0.0 depends on package-a<2.0.0, we can conclude that package-c<2.0.0 depends on package-a<2.0.0.
+          And because package-c==2.0.0 depends on package-a>=3.0.0, we can conclude that all versions of package-c depend on one of:
+              package-a<2.0.0
+              package-a>=3.0.0
 
-          And because we know from (1) that albatross<2.0.0 depends on bluebird==1.0.0, we can conclude that all versions of crow, albatross!=3.0.0, bluebird!=1.0.0 are incompatible.
-          And because albatross==3.0.0 depends on bluebird==3.0.0, we can conclude that all versions of crow depend on one of:
-              bluebird<=1.0.0
-              bluebird>=3.0.0
+          And because we know from (1) that package-a<2.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-c, package-a!=3.0.0, package-b!=1.0.0 are incompatible.
+          And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all versions of package-c depend on one of:
+              package-b<=1.0.0
+              package-b>=3.0.0
 
-          And because you require bluebird>=2.0.0,<3.0.0 and you require crow, we can conclude that the requirements are unsatisfiable.
+          And because you require package-b>=2.0.0,<3.0.0 and you require package-c, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
@@ -673,11 +645,9 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 fn extra_required() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"extra-required-a", "albatross"));
-    filters.push((r"extra-required-b", "bluebird"));
-    filters.push((r"extra-required-", "pkg-"));
+    filters.push((r"extra-required-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-required-a[extra]")
@@ -690,8 +660,8 @@ fn extra_required() {
     Resolved 2 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==1.0.0
-     + bluebird==1.0.0
+     + package-a==1.0.0
+     + package-b==1.0.0
     "###);
 
     assert_installed(
@@ -725,10 +695,9 @@ fn extra_required() {
 fn missing_extra() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"missing-extra-a", "albatross"));
-    filters.push((r"missing-extra-", "pkg-"));
+    filters.push((r"missing-extra-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("missing-extra-a[extra]")
@@ -741,7 +710,7 @@ fn missing_extra() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0
+     + package-a==1.0.0
     "###);
 
     // Missing extras are ignored during resolution.
@@ -776,12 +745,9 @@ fn missing_extra() {
 fn multiple_extras_required() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"multiple-extras-required-a", "albatross"));
-    filters.push((r"multiple-extras-required-b", "bluebird"));
-    filters.push((r"multiple-extras-required-c", "crow"));
-    filters.push((r"multiple-extras-required-", "pkg-"));
+    filters.push((r"multiple-extras-required-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("multiple-extras-required-a[extra_b,extra_c]")
@@ -794,9 +760,9 @@ fn multiple_extras_required() {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + albatross==1.0.0
-     + bluebird==1.0.0
-     + crow==1.0.0
+     + package-a==1.0.0
+     + package-b==1.0.0
+     + package-c==1.0.0
     "###);
 
     assert_installed(
@@ -859,12 +825,9 @@ fn multiple_extras_required() {
 fn all_extras_required() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"all-extras-required-a", "albatross"));
-    filters.push((r"all-extras-required-b", "bluebird"));
-    filters.push((r"all-extras-required-c", "crow"));
-    filters.push((r"all-extras-required-", "pkg-"));
+    filters.push((r"all-extras-required-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("all-extras-required-a[all]")
@@ -877,9 +840,9 @@ fn all_extras_required() {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + albatross==1.0.0
-     + bluebird==1.0.0
-     + crow==1.0.0
+     + package-a==1.0.0
+     + package-b==1.0.0
+     + package-c==1.0.0
     "###);
 
     assert_installed(
@@ -930,11 +893,9 @@ fn all_extras_required() {
 fn extra_incompatible_with_extra() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"extra-incompatible-with-extra-a", "albatross"));
-    filters.push((r"extra-incompatible-with-extra-b", "bluebird"));
-    filters.push((r"extra-incompatible-with-extra-", "pkg-"));
+    filters.push((r"extra-incompatible-with-extra-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-incompatible-with-extra-a[extra_b,extra_c]")
@@ -945,9 +906,9 @@ fn extra_incompatible_with_extra() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross[extra-c]==1.0.0 is available and albatross[extra-c]==1.0.0 depends on bluebird==2.0.0, we can conclude that all versions of albatross[extra-c] depend on bluebird==2.0.0.
-          And because albatross[extra-b]==1.0.0 depends on bluebird==1.0.0 and only albatross[extra-b]==1.0.0 is available, we can conclude that all versions of albatross[extra-c] and all versions of albatross[extra-b] are incompatible.
-          And because you require albatross[extra-b] and you require albatross[extra-c], we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a[extra-c]==1.0.0 is available and package-a[extra-c]==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a[extra-c] depend on package-b==2.0.0.
+          And because package-a[extra-b]==1.0.0 depends on package-b==1.0.0 and only package-a[extra-b]==1.0.0 is available, we can conclude that all versions of package-a[extra-c] and all versions of package-a[extra-b] are incompatible.
+          And because you require package-a[extra-b] and you require package-a[extra-c], we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Because both `extra_b` and `extra_c` are requested and they require incompatible
@@ -986,14 +947,9 @@ fn extra_incompatible_with_extra() {
 fn extra_incompatible_with_extra_not_requested() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((
-        r"extra-incompatible-with-extra-not-requested-a",
-        "albatross",
-    ));
-    filters.push((r"extra-incompatible-with-extra-not-requested-b", "bluebird"));
-    filters.push((r"extra-incompatible-with-extra-not-requested-", "pkg-"));
+    filters.push((r"extra-incompatible-with-extra-not-requested-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-incompatible-with-extra-not-requested-a[extra_c]")
@@ -1006,8 +962,8 @@ fn extra_incompatible_with_extra_not_requested() {
     Resolved 2 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==1.0.0
-     + bluebird==2.0.0
+     + package-a==1.0.0
+     + package-b==2.0.0
     "###);
 
     // Because the user does not request both extras, it is okay that one is
@@ -1052,11 +1008,9 @@ fn extra_incompatible_with_extra_not_requested() {
 fn extra_incompatible_with_root() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"extra-incompatible-with-root-a", "albatross"));
-    filters.push((r"extra-incompatible-with-root-b", "bluebird"));
-    filters.push((r"extra-incompatible-with-root-", "pkg-"));
+    filters.push((r"extra-incompatible-with-root-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-incompatible-with-root-a[extra]")
@@ -1068,8 +1022,8 @@ fn extra_incompatible_with_root() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross[extra]==1.0.0 is available and albatross[extra]==1.0.0 depends on bluebird==1.0.0, we can conclude that all versions of albatross[extra] depend on bluebird==1.0.0.
-          And because you require albatross[extra] and you require bluebird==2.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a[extra]==1.0.0 is available and package-a[extra]==1.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-a[extra] depend on package-b==1.0.0.
+          And because you require package-a[extra] and you require package-b==2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Because the user requested `b==2.0.0` but the requested extra requires
@@ -1113,11 +1067,9 @@ fn extra_incompatible_with_root() {
 fn extra_does_not_exist_backtrack() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"extra-does-not-exist-backtrack-a", "albatross"));
-    filters.push((r"extra-does-not-exist-backtrack-b", "bluebird"));
-    filters.push((r"extra-does-not-exist-backtrack-", "pkg-"));
+    filters.push((r"extra-does-not-exist-backtrack-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-does-not-exist-backtrack-a[extra]")
@@ -1130,7 +1082,7 @@ fn extra_does_not_exist_backtrack() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==3.0.0
+     + package-a==3.0.0
     "###);
 
     // The resolver should not backtrack to `a==1.0.0` because missing extras are
@@ -1162,10 +1114,9 @@ fn extra_does_not_exist_backtrack() {
 fn direct_incompatible_versions() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"direct-incompatible-versions-a", "albatross"));
-    filters.push((r"direct-incompatible-versions-", "pkg-"));
+    filters.push((r"direct-incompatible-versions-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("direct-incompatible-versions-a==1.0.0")
@@ -1177,7 +1128,7 @@ fn direct_incompatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require albatross==1.0.0 and you require albatross==2.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because you require package-a==1.0.0 and you require package-a==2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -1216,11 +1167,9 @@ fn direct_incompatible_versions() {
 fn transitive_incompatible_with_root_version() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"transitive-incompatible-with-root-version-a", "albatross"));
-    filters.push((r"transitive-incompatible-with-root-version-b", "bluebird"));
-    filters.push((r"transitive-incompatible-with-root-version-", "pkg-"));
+    filters.push((r"transitive-incompatible-with-root-version-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-incompatible-with-root-version-a")
@@ -1232,8 +1181,8 @@ fn transitive_incompatible_with_root_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 depends on bluebird==2.0.0, we can conclude that all versions of albatross depend on bluebird==2.0.0.
-          And because you require albatross and you require bluebird==1.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a depend on package-b==2.0.0.
+          And because you require package-a and you require package-b==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -1276,12 +1225,9 @@ fn transitive_incompatible_with_root_version() {
 fn transitive_incompatible_with_transitive() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"transitive-incompatible-with-transitive-a", "albatross"));
-    filters.push((r"transitive-incompatible-with-transitive-b", "bluebird"));
-    filters.push((r"transitive-incompatible-with-transitive-c", "crow"));
-    filters.push((r"transitive-incompatible-with-transitive-", "pkg-"));
+    filters.push((r"transitive-incompatible-with-transitive-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-incompatible-with-transitive-a")
@@ -1293,9 +1239,9 @@ fn transitive_incompatible_with_transitive() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 depends on crow==1.0.0, we can conclude that all versions of albatross depend on crow==1.0.0.
-          And because bluebird==1.0.0 depends on crow==2.0.0 and only bluebird==1.0.0 is available, we can conclude that all versions of albatross and all versions of bluebird are incompatible.
-          And because you require albatross and you require bluebird, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c==1.0.0, we can conclude that all versions of package-a depend on package-c==1.0.0.
+          And because package-b==1.0.0 depends on package-c==2.0.0 and only package-b==1.0.0 is available, we can conclude that all versions of package-a and all versions of package-b are incompatible.
+          And because you require package-a and you require package-b, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -1327,10 +1273,9 @@ fn transitive_incompatible_with_transitive() {
 fn local_simple() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"local-simple-a", "albatross"));
-    filters.push((r"local-simple-", "pkg-"));
+    filters.push((r"local-simple-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("local-simple-a==1.2.3")
@@ -1341,10 +1286,10 @@ fn local_simple() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of albatross==1.2.3 and you require albatross==1.2.3, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there is no version of package-a==1.2.3 and you require package-a==1.2.3, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // The verison '1.2.3+foo' satisfies the constraint '==1.2.3'.
+    // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
     assert_not_installed(&context.venv, "local_simple_a", &context.temp_dir);
 }
 
@@ -1367,10 +1312,9 @@ fn local_simple() {
 fn local_not_used_with_sdist() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"local-not-used-with-sdist-a", "albatross"));
-    filters.push((r"local-not-used-with-sdist-", "pkg-"));
+    filters.push((r"local-not-used-with-sdist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("local-not-used-with-sdist-a==1.2.3")
@@ -1383,13 +1327,14 @@ fn local_not_used_with_sdist() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.2.3
+     + package-a==1.2.3
     "###);
 
-    // The verison '1.2.3' with an sdist satisfies the constraint '==1.2.3'.
-    assert_not_installed(
+    // The version '1.2.3' with an sdist satisfies the constraint '==1.2.3'.
+    assert_installed(
         &context.venv,
         "local_not_used_with_sdist_a",
+        "1.2.3",
         &context.temp_dir,
     );
 }
@@ -1414,10 +1359,9 @@ fn local_not_used_with_sdist() {
 fn local_used_without_sdist() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"local-used-without-sdist-a", "albatross"));
-    filters.push((r"local-used-without-sdist-", "pkg-"));
+    filters.push((r"local-used-without-sdist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("local-used-without-sdist-a==1.2.3")
@@ -1428,10 +1372,10 @@ fn local_used_without_sdist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because albatross==1.2.3 is unusable because no wheels are available with a matching Python ABI and you require albatross==1.2.3, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because package-a==1.2.3 is unusable because no wheels are available with a matching Python ABI and you require package-a==1.2.3, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // The verison '1.2.3+foo' satisfies the constraint '==1.2.3'.
+    // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
     assert_not_installed(
         &context.venv,
         "local_used_without_sdist_a",
@@ -1460,10 +1404,9 @@ fn local_used_without_sdist() {
 fn local_not_latest() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"local-not-latest-a", "albatross"));
-    filters.push((r"local-not-latest-", "pkg-"));
+    filters.push((r"local-not-latest-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("local-not-latest-a>=1")
@@ -1476,7 +1419,7 @@ fn local_not_latest() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.2.1+foo
+     + package-a==1.2.1+foo
     "###);
 
     assert_installed(
@@ -1510,15 +1453,71 @@ fn local_not_latest() {
 fn local_transitive() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"local-transitive-a", "albatross"));
-    filters.push((r"local-transitive-b", "bluebird"));
-    filters.push((r"local-transitive-", "pkg-"));
+    filters.push((r"local-transitive-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-a")
                 .arg("local-transitive-b==2.0.0+foo")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==2.0.0+foo
+    "###);
+
+    // The version '2.0.0+foo' satisfies both ==2.0.0 and ==2.0.0+foo.
+    assert_installed(
+        &context.venv,
+        "local_transitive_a",
+        "1.0.0",
+        &context.temp_dir,
+    );
+    assert_installed(
+        &context.venv,
+        "local_transitive_b",
+        "2.0.0+foo",
+        &context.temp_dir,
+    );
+}
+
+/// A transitive constraint on a local version should not match an exclusive ordered
+/// operator.
+///
+/// ```text
+/// local-transitive-greater-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b>2.0.0
+/// │           └── unsatisfied: no matching version
+/// └── b
+///     └── b-2.0.0+foo
+/// ```
+#[test]
+fn local_transitive_greater_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-transitive-greater-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-transitive-greater-than-a")
+                .arg("local-transitive-greater-than-b==2.0.0+foo")
         , @r###"
     success: false
     exit_code: 1
@@ -1526,17 +1525,193 @@ fn local_transitive() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 depends on bluebird==2.0.0, we can conclude that all versions of albatross depend on bluebird==2.0.0.
-          And because you require albatross and you require bluebird==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b>2.0.0, we can conclude that all versions of package-a depend on package-b>2.0.0.
+          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // The verison '2.0.0+foo' satisfies both ==2.0.0 and ==2.0.0+foo.
-    assert_not_installed(&context.venv, "local_transitive_a", &context.temp_dir);
-    assert_not_installed(&context.venv, "local_transitive_b", &context.temp_dir);
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_greater_than_a",
+        &context.temp_dir,
+    );
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_greater_than_b",
+        &context.temp_dir,
+    );
+}
+
+/// A transitive constraint on a local version should match an inclusive ordered
+/// operator.
+///
+/// ```text
+/// local-transitive-greater-than-or-equal
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b>=2.0.0
+/// │           └── satisfied by b-2.0.0+foo
+/// └── b
+///     └── b-2.0.0+foo
+/// ```
+#[test]
+fn local_transitive_greater_than_or_equal() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-transitive-greater-than-or-equal-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-transitive-greater-than-or-equal-a")
+                .arg("local-transitive-greater-than-or-equal-b==2.0.0+foo")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==2.0.0+foo
+    "###);
+
+    // The version '2.0.0+foo' satisfies both >=2.0.0 and ==2.0.0+foo.
+    assert_installed(
+        &context.venv,
+        "local_transitive_greater_than_or_equal_a",
+        "1.0.0",
+        &context.temp_dir,
+    );
+    assert_installed(
+        &context.venv,
+        "local_transitive_greater_than_or_equal_b",
+        "2.0.0+foo",
+        &context.temp_dir,
+    );
+}
+
+/// A transitive constraint on a local version should not match an exclusive ordered
+/// operator.
+///
+/// ```text
+/// local-transitive-less-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b<2.0.0
+/// │           └── unsatisfied: no matching version
+/// └── b
+///     └── b-2.0.0+foo
+/// ```
+#[test]
+fn local_transitive_less_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-transitive-less-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-transitive-less-than-a")
+                .arg("local-transitive-less-than-b==2.0.0+foo")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b<2.0.0, we can conclude that all versions of package-a depend on package-b<2.0.0.
+          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_less_than_a",
+        &context.temp_dir,
+    );
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_less_than_b",
+        &context.temp_dir,
+    );
+}
+
+/// A transitive constraint on a local version should match an inclusive ordered
+/// operator.
+///
+/// ```text
+/// local-transitive-less-than-or-equal
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b<=2.0.0
+/// │           └── satisfied by b-2.0.0+foo
+/// └── b
+///     └── b-2.0.0+foo
+/// ```
+#[test]
+fn local_transitive_less_than_or_equal() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-transitive-less-than-or-equal-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-transitive-less-than-or-equal-a")
+                .arg("local-transitive-less-than-or-equal-b==2.0.0+foo")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==2.0.0+foo
+    "###);
+
+    // The version '2.0.0+foo' satisfies both <=2.0.0 and ==2.0.0+foo.
+    assert_installed(
+        &context.venv,
+        "local_transitive_less_than_or_equal_a",
+        "1.0.0",
+        &context.temp_dir,
+    );
+    assert_installed(
+        &context.venv,
+        "local_transitive_less_than_or_equal_b",
+        "2.0.0+foo",
+        &context.temp_dir,
+    );
 }
 
 /// A transitive dependency has both a non-local and local version published, but
-/// the non-local version is unuable.
+/// the non-local version is unusable.
 ///
 /// ```text
 /// local-transitive-confounding
@@ -1558,11 +1733,9 @@ fn local_transitive() {
 fn local_transitive_confounding() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"local-transitive-confounding-a", "albatross"));
-    filters.push((r"local-transitive-confounding-b", "bluebird"));
-    filters.push((r"local-transitive-confounding-", "pkg-"));
+    filters.push((r"local-transitive-confounding-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-confounding-a")
@@ -1573,14 +1746,772 @@ fn local_transitive_confounding() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because bluebird==2.0.0 is unusable because no wheels are available with a matching Python ABI and albatross==1.0.0 depends on bluebird==2.0.0, we can conclude that albatross==1.0.0 cannot be used.
-          And because only albatross==1.0.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because package-b==2.0.0 is unusable because no wheels are available with a matching Python ABI and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
+          And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // The verison '1.2.3+foo' satisfies the constraint '==1.2.3'.
+    // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
     assert_not_installed(
         &context.venv,
         "local_transitive_confounding_a",
+        &context.temp_dir,
+    );
+}
+
+/// A dependency depends on a conflicting local version of a direct dependency.
+///
+/// ```text
+/// local-transitive-conflicting
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b==2.0.0+bar
+/// │           └── satisfied by b-2.0.0+bar
+/// └── b
+///     ├── b-2.0.0+foo
+///     └── b-2.0.0+bar
+/// ```
+#[test]
+fn local_transitive_conflicting() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-transitive-conflicting-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-transitive-conflicting-a")
+                .arg("local-transitive-conflicting-b==2.0.0+foo")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0+bar, we can conclude that all versions of package-a depend on package-b==2.0.0+bar.
+          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_conflicting_a",
+        &context.temp_dir,
+    );
+    assert_not_installed(
+        &context.venv,
+        "local_transitive_conflicting_b",
+        &context.temp_dir,
+    );
+}
+
+/// A dependency depends on a conflicting local version of a direct dependency, but
+/// we can backtrack to a compatible version.
+///
+/// ```text
+/// local-transitive-backtrack
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-2.0.0
+/// │   └── requires b==2.0.0+foo
+/// │       └── satisfied by b-2.0.0+foo
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   │   └── requires b==2.0.0
+/// │   │       ├── satisfied by b-2.0.0+foo
+/// │   │       └── satisfied by b-2.0.0+bar
+/// │   └── a-2.0.0
+/// │       └── requires b==2.0.0+bar
+/// │           └── satisfied by b-2.0.0+bar
+/// └── b
+///     ├── b-2.0.0+foo
+///     └── b-2.0.0+bar
+/// ```
+#[test]
+fn local_transitive_backtrack() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-transitive-backtrack-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-transitive-backtrack-a")
+                .arg("local-transitive-backtrack-b==2.0.0+foo")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==2.0.0+foo
+    "###);
+
+    // Backtracking to '1.0.0' gives us compatible local versions of b.
+    assert_installed(
+        &context.venv,
+        "local_transitive_backtrack_a",
+        "1.0.0",
+        &context.temp_dir,
+    );
+    assert_installed(
+        &context.venv,
+        "local_transitive_backtrack_b",
+        "2.0.0+foo",
+        &context.temp_dir,
+    );
+}
+
+/// A local version should be excluded in exclusive ordered comparisons.
+///
+/// ```text
+/// local-greater-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.2.3+foo
+/// ```
+#[test]
+fn local_greater_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-greater-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-greater-than-a>1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a<=1.2.3 is available and you require package-a>1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(&context.venv, "local_greater_than_a", &context.temp_dir);
+}
+
+/// A local version should be included in inclusive ordered comparisons.
+///
+/// ```text
+/// local-greater-than-or-equal
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>=1.2.3
+/// │       └── satisfied by a-1.2.3+foo
+/// └── a
+///     └── a-1.2.3+foo
+/// ```
+#[test]
+fn local_greater_than_or_equal() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-greater-than-or-equal-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-greater-than-or-equal-a>=1.2.3")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3+foo
+    "###);
+
+    // The version '1.2.3+foo' satisfies the constraint '>=1.2.3'.
+    assert_installed(
+        &context.venv,
+        "local_greater_than_or_equal_a",
+        "1.2.3+foo",
+        &context.temp_dir,
+    );
+}
+
+/// A local version should be excluded in exclusive ordered comparisons.
+///
+/// ```text
+/// local-less-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a<1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.2.3+foo
+/// ```
+#[test]
+fn local_less_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-less-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-less-than-a<1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a>=1.2.3 is available and you require package-a<1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(&context.venv, "local_less_than_a", &context.temp_dir);
+}
+
+/// A local version should be included in inclusive ordered comparisons.
+///
+/// ```text
+/// local-less-than-or-equal
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a<=1.2.3
+/// │       └── satisfied by a-1.2.3+foo
+/// └── a
+///     └── a-1.2.3+foo
+/// ```
+#[test]
+fn local_less_than_or_equal() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"local-less-than-or-equal-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("local-less-than-or-equal-a<=1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a>1.2.3 is available and you require package-a<=1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    // The version '1.2.3+foo' satisfies the constraint '<=1.2.3'.
+    assert_not_installed(
+        &context.venv,
+        "local_less_than_or_equal_a",
+        &context.temp_dir,
+    );
+}
+
+/// A simple version constraint should not match a post-release version.
+///
+/// ```text
+/// post-simple
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a==1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_simple() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-simple-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-simple-a==1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of package-a==1.2.3 and you require package-a==1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(&context.venv, "post_simple_a", &context.temp_dir);
+}
+
+/// A greater-than-or-equal version constraint should match a post-release version.
+///
+/// ```text
+/// post-greater-than-or-equal
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>=1.2.3
+/// │       └── satisfied by a-1.2.3.post1
+/// └── a
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_greater_than_or_equal() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-greater-than-or-equal-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-greater-than-or-equal-a>=1.2.3")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3.post1
+    "###);
+
+    // The version '1.2.3.post1' satisfies the constraint '>=1.2.3'.
+    assert_installed(
+        &context.venv,
+        "post_greater_than_or_equal_a",
+        "1.2.3.post1",
+        &context.temp_dir,
+    );
+}
+
+/// A greater-than version constraint should not match a post-release version.
+///
+/// ```text
+/// post-greater-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_greater_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-greater-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-greater-than-a>1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a<=1.2.3 is available and you require package-a>1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(&context.venv, "post_greater_than_a", &context.temp_dir);
+}
+
+/// A greater-than version constraint should match a post-release version if the
+/// constraint is itself a post-release version.
+///
+/// ```text
+/// post-greater-than-post
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>1.2.3.post0
+/// │       └── satisfied by a-1.2.3.post1
+/// └── a
+///     ├── a-1.2.3.post0
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_greater_than_post() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-greater-than-post-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-greater-than-post-a>1.2.3.post0")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3.post1
+    "###);
+
+    // The version '1.2.3.post1' satisfies the constraint '>1.2.3.post0'.
+    assert_installed(
+        &context.venv,
+        "post_greater_than_post_a",
+        "1.2.3.post1",
+        &context.temp_dir,
+    );
+}
+
+/// A greater-than-or-equal version constraint should match a post-release version
+/// if the constraint is itself a post-release version.
+///
+/// ```text
+/// post-greater-than-or-equal-post
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>=1.2.3.post0
+/// │       ├── satisfied by a-1.2.3.post0
+/// │       └── satisfied by a-1.2.3.post1
+/// └── a
+///     ├── a-1.2.3.post0
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_greater_than_or_equal_post() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-greater-than-or-equal-post-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-greater-than-or-equal-post-a>=1.2.3.post0")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3.post1
+    "###);
+
+    // The version '1.2.3.post1' satisfies the constraint '>=1.2.3.post0'.
+    assert_installed(
+        &context.venv,
+        "post_greater_than_or_equal_post_a",
+        "1.2.3.post1",
+        &context.temp_dir,
+    );
+}
+
+/// A less-than-or-equal version constraint should not match a post-release version.
+///
+/// ```text
+/// post-less-than-or-equal
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a<=1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_less_than_or_equal() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-less-than-or-equal-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-less-than-or-equal-a<=1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a>1.2.3 is available and you require package-a<=1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "post_less_than_or_equal_a",
+        &context.temp_dir,
+    );
+}
+
+/// A less-than version constraint should not match a post-release version.
+///
+/// ```text
+/// post-less-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a<1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_less_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-less-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-less-than-a<1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a>=1.2.3 is available and you require package-a<1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(&context.venv, "post_less_than_a", &context.temp_dir);
+}
+
+/// A greater-than version constraint should not match a post-release version with a
+/// local version identifier.
+///
+/// ```text
+/// post-local-greater-than
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>1.2.3
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     ├── a-1.2.3.post1
+///     └── a-1.2.3.post1+local
+/// ```
+#[test]
+fn post_local_greater_than() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-local-greater-than-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-local-greater-than-a>1.2.3")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a<=1.2.3 is available and you require package-a>1.2.3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "post_local_greater_than_a",
+        &context.temp_dir,
+    );
+}
+
+/// A greater-than version constraint should not match a post-release version with a
+/// local version identifier.
+///
+/// ```text
+/// post-local-greater-than-post
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>1.2.3.post1
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     ├── a-1.2.3.post1
+///     └── a-1.2.3.post1+local
+/// ```
+#[test]
+fn post_local_greater_than_post() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-local-greater-than-post-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-local-greater-than-post-a>1.2.3.post1")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a<1.2.3.post2 is available and you require package-a>=1.2.3.post2, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "post_local_greater_than_post_a",
+        &context.temp_dir,
+    );
+}
+
+/// An equal version constraint should not match a post-release version if the post-
+/// release version is not available.
+///
+/// ```text
+/// post-equal-not-available
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a==1.2.3.post0
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     ├── a-1.2.3
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_equal_not_available() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-equal-not-available-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-equal-not-available-a==1.2.3.post0")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of package-a==1.2.3.post0 and you require package-a==1.2.3.post0, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "post_equal_not_available_a",
+        &context.temp_dir,
+    );
+}
+
+/// An equal version constraint should match a post-release version if the post-
+/// release version is available.
+///
+/// ```text
+/// post-equal-available
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a==1.2.3.post0
+/// │       └── satisfied by a-1.2.3.post0
+/// └── a
+///     ├── a-1.2.3
+///     └── a-1.2.3.post0
+/// ```
+#[test]
+fn post_equal_available() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-equal-available-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-equal-available-a==1.2.3.post0")
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3.post0
+    "###);
+
+    // The version '1.2.3.post0' satisfies the constraint '==1.2.3.post0'.
+    assert_installed(
+        &context.venv,
+        "post_equal_available_a",
+        "1.2.3.post0",
+        &context.temp_dir,
+    );
+}
+
+/// A greater-than version constraint should not match a post-release version if the
+/// post-release version is not available.
+///
+/// ```text
+/// post-greater-than-post-not-available
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a>1.2.3.post2
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     ├── a-1.2.3
+///     ├── a-1.2.3.post0
+///     └── a-1.2.3.post1
+/// ```
+#[test]
+fn post_greater_than_post_not_available() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = INSTA_FILTERS.to_vec();
+    filters.push((r"post-greater-than-post-not-available-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("post-greater-than-post-not-available-a>1.2.3.post2")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only package-a<1.2.3.post3 is available and you require package-a>=1.2.3.post3, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "post_greater_than_post_not_available_a",
         &context.temp_dir,
     );
 }
@@ -1602,10 +2533,9 @@ fn local_transitive_confounding() {
 fn package_only_prereleases() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"package-only-prereleases-a", "albatross"));
-    filters.push((r"package-only-prereleases-", "pkg-"));
+    filters.push((r"package-only-prereleases-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-prereleases-a")
@@ -1618,7 +2548,7 @@ fn package_only_prereleases() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0a1
+     + package-a==1.0.0a1
     "###);
 
     // Since there are only prerelease versions of `a` available, it should be
@@ -1649,10 +2579,9 @@ fn package_only_prereleases() {
 fn package_only_prereleases_in_range() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"package-only-prereleases-in-range-a", "albatross"));
-    filters.push((r"package-only-prereleases-in-range-", "pkg-"));
+    filters.push((r"package-only-prereleases-in-range-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-prereleases-in-range-a>0.1.0")
@@ -1663,9 +2592,9 @@ fn package_only_prereleases_in_range() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross<=0.1.0 is available and you require albatross>0.1.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a<=0.1.0 is available and you require package-a>0.1.0, we can conclude that the requirements are unsatisfiable.
 
-          hint: Pre-releases are available for albatross in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+          hint: Pre-releases are available for package-a in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
 
     // Since there are stable versions of `a` available, prerelease versions should not
@@ -1696,15 +2625,11 @@ fn package_only_prereleases_in_range() {
 fn requires_package_only_prereleases_in_range_global_opt_in() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"requires-package-only-prereleases-in-range-global-opt-in-a",
-        "albatross",
-    ));
-    filters.push((
         r"requires-package-only-prereleases-in-range-global-opt-in-",
-        "pkg-",
+        "package-",
     ));
 
     uv_snapshot!(filters, command(&context)
@@ -1719,7 +2644,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0a1
+     + package-a==1.0.0a1
     "###);
 
     assert_installed(
@@ -1748,10 +2673,9 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
 fn requires_package_prerelease_and_final_any() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-package-prerelease-and-final-any-a", "albatross"));
-    filters.push((r"requires-package-prerelease-and-final-any-", "pkg-"));
+    filters.push((r"requires-package-prerelease-and-final-any-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-package-prerelease-and-final-any-a")
@@ -1764,7 +2688,7 @@ fn requires_package_prerelease_and_final_any() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==0.1.0
+     + package-a==0.1.0
     "###);
 
     // Since the user did not provide a prerelease specifier, the older stable version
@@ -1798,15 +2722,11 @@ fn requires_package_prerelease_and_final_any() {
 fn package_prerelease_specified_only_final_available() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"package-prerelease-specified-only-final-available-a",
-        "albatross",
-    ));
-    filters.push((
         r"package-prerelease-specified-only-final-available-",
-        "pkg-",
+        "package-",
     ));
 
     uv_snapshot!(filters, command(&context)
@@ -1820,7 +2740,7 @@ fn package_prerelease_specified_only_final_available() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==0.3.0
+     + package-a==0.3.0
     "###);
 
     // The latest stable version should be selected.
@@ -1853,15 +2773,11 @@ fn package_prerelease_specified_only_final_available() {
 fn package_prerelease_specified_only_prerelease_available() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"package-prerelease-specified-only-prerelease-available-a",
-        "albatross",
-    ));
-    filters.push((
         r"package-prerelease-specified-only-prerelease-available-",
-        "pkg-",
+        "package-",
     ));
 
     uv_snapshot!(filters, command(&context)
@@ -1875,7 +2791,7 @@ fn package_prerelease_specified_only_prerelease_available() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==0.3.0a1
+     + package-a==0.3.0a1
     "###);
 
     // The latest prerelease version should be selected.
@@ -1910,13 +2826,9 @@ fn package_prerelease_specified_only_prerelease_available() {
 fn package_prerelease_specified_mixed_available() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((
-        r"package-prerelease-specified-mixed-available-a",
-        "albatross",
-    ));
-    filters.push((r"package-prerelease-specified-mixed-available-", "pkg-"));
+    filters.push((r"package-prerelease-specified-mixed-available-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("package-prerelease-specified-mixed-available-a>=0.1.0a1")
@@ -1929,7 +2841,7 @@ fn package_prerelease_specified_mixed_available() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0a1
+     + package-a==1.0.0a1
     "###);
 
     // Since the user provided a prerelease specifier, the latest prerelease version
@@ -1963,10 +2875,9 @@ fn package_prerelease_specified_mixed_available() {
 fn package_multiple_prereleases_kinds() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"package-multiple-prereleases-kinds-a", "albatross"));
-    filters.push((r"package-multiple-prereleases-kinds-", "pkg-"));
+    filters.push((r"package-multiple-prereleases-kinds-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("package-multiple-prereleases-kinds-a>=1.0.0a1")
@@ -1979,7 +2890,7 @@ fn package_multiple_prereleases_kinds() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0rc1
+     + package-a==1.0.0rc1
     "###);
 
     // Release candidates should be the highest precedence prerelease kind.
@@ -2011,10 +2922,9 @@ fn package_multiple_prereleases_kinds() {
 fn package_multiple_prereleases_numbers() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"package-multiple-prereleases-numbers-a", "albatross"));
-    filters.push((r"package-multiple-prereleases-numbers-", "pkg-"));
+    filters.push((r"package-multiple-prereleases-numbers-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("package-multiple-prereleases-numbers-a>=1.0.0a1")
@@ -2027,7 +2937,7 @@ fn package_multiple_prereleases_numbers() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0a3
+     + package-a==1.0.0a3
     "###);
 
     // The latest alpha version should be selected.
@@ -2060,11 +2970,9 @@ fn package_multiple_prereleases_numbers() {
 fn transitive_package_only_prereleases() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"transitive-package-only-prereleases-a", "albatross"));
-    filters.push((r"transitive-package-only-prereleases-b", "bluebird"));
-    filters.push((r"transitive-package-only-prereleases-", "pkg-"));
+    filters.push((r"transitive-package-only-prereleases-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-prereleases-a")
@@ -2077,8 +2985,8 @@ fn transitive_package_only_prereleases() {
     Resolved 2 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==0.1.0
-     + bluebird==1.0.0a1
+     + package-a==0.1.0
+     + package-b==1.0.0a1
     "###);
 
     // Since there are only prerelease versions of `b` available, it should be selected
@@ -2119,17 +3027,9 @@ fn transitive_package_only_prereleases() {
 fn transitive_package_only_prereleases_in_range() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((
-        r"transitive-package-only-prereleases-in-range-a",
-        "albatross",
-    ));
-    filters.push((
-        r"transitive-package-only-prereleases-in-range-b",
-        "bluebird",
-    ));
-    filters.push((r"transitive-package-only-prereleases-in-range-", "pkg-"));
+    filters.push((r"transitive-package-only-prereleases-in-range-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-prereleases-in-range-a")
@@ -2140,10 +3040,10 @@ fn transitive_package_only_prereleases_in_range() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only bluebird<=0.1 is available and albatross==0.1.0 depends on bluebird>0.1, we can conclude that albatross==0.1.0 cannot be used.
-          And because only albatross==0.1.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-b<=0.1 is available and package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
+          And because only package-a==0.1.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
 
-          hint: Pre-releases are available for bluebird in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+          hint: Pre-releases are available for package-b in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
 
     // Since there are stable versions of `b` available, the prerelease version should
@@ -2181,19 +3081,11 @@ fn transitive_package_only_prereleases_in_range() {
 fn transitive_package_only_prereleases_in_range_opt_in() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"transitive-package-only-prereleases-in-range-opt-in-a",
-        "albatross",
-    ));
-    filters.push((
-        r"transitive-package-only-prereleases-in-range-opt-in-b",
-        "bluebird",
-    ));
-    filters.push((
         r"transitive-package-only-prereleases-in-range-opt-in-",
-        "pkg-",
+        "package-",
     ));
 
     uv_snapshot!(filters, command(&context)
@@ -2208,8 +3100,8 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
     Resolved 2 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==0.1.0
-     + bluebird==1.0.0a1
+     + package-a==0.1.0
+     + package-b==1.0.0a1
     "###);
 
     // Since the user included a dependency on `b` with a prerelease specifier, a
@@ -2256,15 +3148,9 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
 fn transitive_prerelease_and_stable_dependency() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((
-        r"transitive-prerelease-and-stable-dependency-a",
-        "albatross",
-    ));
-    filters.push((r"transitive-prerelease-and-stable-dependency-b", "bluebird"));
-    filters.push((r"transitive-prerelease-and-stable-dependency-c", "crow"));
-    filters.push((r"transitive-prerelease-and-stable-dependency-", "pkg-"));
+    filters.push((r"transitive-prerelease-and-stable-dependency-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-prerelease-and-stable-dependency-a")
@@ -2276,10 +3162,10 @@ fn transitive_prerelease_and_stable_dependency() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of crow==2.0.0b1 and albatross==1.0.0 depends on crow==2.0.0b1, we can conclude that albatross==1.0.0 cannot be used.
-          And because only albatross==1.0.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there is no version of package-c==2.0.0b1 and package-a==1.0.0 depends on package-c==2.0.0b1, we can conclude that package-a==1.0.0 cannot be used.
+          And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
 
-          hint: crow was requested with a pre-release marker (e.g., crow==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+          hint: package-c was requested with a pre-release marker (e.g., package-c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
@@ -2327,23 +3213,11 @@ fn transitive_prerelease_and_stable_dependency() {
 fn transitive_prerelease_and_stable_dependency_opt_in() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"transitive-prerelease-and-stable-dependency-opt-in-a",
-        "albatross",
-    ));
-    filters.push((
-        r"transitive-prerelease-and-stable-dependency-opt-in-b",
-        "bluebird",
-    ));
-    filters.push((
-        r"transitive-prerelease-and-stable-dependency-opt-in-c",
-        "crow",
-    ));
-    filters.push((
         r"transitive-prerelease-and-stable-dependency-opt-in-",
-        "pkg-",
+        "package-",
     ));
 
     uv_snapshot!(filters, command(&context)
@@ -2359,9 +3233,9 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + albatross==1.0.0
-     + bluebird==1.0.0
-     + crow==2.0.0b1
+     + package-a==1.0.0
+     + package-b==1.0.0
+     + package-c==2.0.0b1
     "###);
 
     // Since the user explicitly opted-in to a prerelease for `c`, it can be installed.
@@ -2438,23 +3312,11 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
 fn transitive_prerelease_and_stable_dependency_many_versions() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"transitive-prerelease-and-stable-dependency-many-versions-a",
-        "albatross",
-    ));
-    filters.push((
-        r"transitive-prerelease-and-stable-dependency-many-versions-b",
-        "bluebird",
-    ));
-    filters.push((
-        r"transitive-prerelease-and-stable-dependency-many-versions-c",
-        "crow",
-    ));
-    filters.push((
         r"transitive-prerelease-and-stable-dependency-many-versions-",
-        "pkg-",
+        "package-",
     ));
 
     uv_snapshot!(filters, command(&context)
@@ -2467,12 +3329,12 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 depends on crow>=2.0.0b1, we can conclude that all versions of albatross depend on crow>=2.0.0b1.
-          And because only crow<2.0.0b1 is available, we can conclude that all versions of albatross depend on crow>3.0.0.
-          And because bluebird==1.0.0 depends on crow and only bluebird==1.0.0 is available, we can conclude that all versions of bluebird and all versions of albatross are incompatible.
-          And because you require albatross and you require bluebird, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c>=2.0.0b1, we can conclude that all versions of package-a depend on package-c>=2.0.0b1.
+          And because only package-c<2.0.0b1 is available, we can conclude that all versions of package-a depend on package-c>3.0.0.
+          And because package-b==1.0.0 depends on package-c and only package-b==1.0.0 is available, we can conclude that all versions of package-b and all versions of package-a are incompatible.
+          And because you require package-a and you require package-b, we can conclude that the requirements are unsatisfiable.
 
-          hint: crow was requested with a pre-release marker (e.g., crow>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+          hint: package-c was requested with a pre-release marker (e.g., package-c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
@@ -2534,23 +3396,11 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
 fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"transitive-prerelease-and-stable-dependency-many-versions-holes-a",
-        "albatross",
-    ));
-    filters.push((
-        r"transitive-prerelease-and-stable-dependency-many-versions-holes-b",
-        "bluebird",
-    ));
-    filters.push((
-        r"transitive-prerelease-and-stable-dependency-many-versions-holes-c",
-        "crow",
-    ));
-    filters.push((
         r"transitive-prerelease-and-stable-dependency-many-versions-holes-",
-        "pkg-",
+        "package-",
     ));
 
     uv_snapshot!(filters, command(&context)
@@ -2563,22 +3413,22 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of crow are available:
-              crow<=1.0.0
-              crow>=2.0.0a5,<=2.0.0a7
-              crow==2.0.0b1
-              crow>=2.0.0b5
-          and albatross==1.0.0 depends on one of:
-              crow>1.0.0,<2.0.0a5
-              crow>2.0.0a7,<2.0.0b1
-              crow>2.0.0b1,<2.0.0b5
-          we can conclude that albatross==1.0.0 cannot be used.
-          And because only albatross==1.0.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only the following versions of package-c are available:
+              package-c<=1.0.0
+              package-c>=2.0.0a5,<=2.0.0a7
+              package-c==2.0.0b1
+              package-c>=2.0.0b5
+          and package-a==1.0.0 depends on one of:
+              package-c>1.0.0,<2.0.0a5
+              package-c>2.0.0a7,<2.0.0b1
+              package-c>2.0.0b1,<2.0.0b5
+          we can conclude that package-a==1.0.0 cannot be used.
+          And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
 
-          hint: crow was requested with a pre-release marker (e.g., any of:
-              crow>1.0.0,<2.0.0a5
-              crow>2.0.0a7,<2.0.0b1
-              crow>2.0.0b1,<2.0.0b5
+          hint: package-c was requested with a pre-release marker (e.g., any of:
+              package-c>1.0.0,<2.0.0a5
+              package-c>2.0.0a7,<2.0.0b1
+              package-c>2.0.0b1,<2.0.0b5
           ), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
 
@@ -2614,10 +3464,9 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
 fn package_only_prereleases_boundary() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"package-only-prereleases-boundary-a", "albatross"));
-    filters.push((r"package-only-prereleases-boundary-", "pkg-"));
+    filters.push((r"package-only-prereleases-boundary-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-prereleases-boundary-a<0.2.0")
@@ -2630,7 +3479,7 @@ fn package_only_prereleases_boundary() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==0.1.0a1
+     + package-a==0.1.0a1
     "###);
 
     // Since there are only prerelease versions of `a` available, a prerelease is
@@ -2663,10 +3512,9 @@ fn package_only_prereleases_boundary() {
 fn package_prereleases_boundary() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"package-prereleases-boundary-a", "albatross"));
-    filters.push((r"package-prereleases-boundary-", "pkg-"));
+    filters.push((r"package-prereleases-boundary-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("--prerelease=allow")
@@ -2680,7 +3528,7 @@ fn package_prereleases_boundary() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==0.1.0
+     + package-a==0.1.0
     "###);
 
     // Since the user did not use a pre-release specifier, pre-releases at the boundary
@@ -2712,10 +3560,9 @@ fn package_prereleases_boundary() {
 fn package_prereleases_global_boundary() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"package-prereleases-global-boundary-a", "albatross"));
-    filters.push((r"package-prereleases-global-boundary-", "pkg-"));
+    filters.push((r"package-prereleases-global-boundary-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("--prerelease=allow")
@@ -2729,7 +3576,7 @@ fn package_prereleases_global_boundary() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==0.1.0
+     + package-a==0.1.0
     "###);
 
     // Since the user did not use a pre-release specifier, pre-releases at the boundary
@@ -2764,10 +3611,9 @@ fn package_prereleases_global_boundary() {
 fn package_prereleases_specifier_boundary() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"package-prereleases-specifier-boundary-a", "albatross"));
-    filters.push((r"package-prereleases-specifier-boundary-", "pkg-"));
+    filters.push((r"package-prereleases-specifier-boundary-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("package-prereleases-specifier-boundary-a<0.2.0a2")
@@ -2780,7 +3626,7 @@ fn package_prereleases_specifier_boundary() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==0.2.0a1
+     + package-a==0.2.0a1
     "###);
 
     // Since the user used a pre-release specifier, pre-releases at the boundary should
@@ -2810,10 +3656,9 @@ fn package_prereleases_specifier_boundary() {
 fn python_version_does_not_exist() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"python-version-does-not-exist-a", "albatross"));
-    filters.push((r"python-version-does-not-exist-", "pkg-"));
+    filters.push((r"python-version-does-not-exist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("python-version-does-not-exist-a==1.0.0")
@@ -2824,8 +3669,8 @@ fn python_version_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.8.18) does not satisfy Python>=3.30 and albatross==1.0.0 depends on Python>=3.30, we can conclude that albatross==1.0.0 cannot be used.
-          And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because the current Python version (3.8.18) does not satisfy Python>=3.30 and package-a==1.0.0 depends on Python>=3.30, we can conclude that package-a==1.0.0 cannot be used.
+          And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -2853,10 +3698,9 @@ fn python_version_does_not_exist() {
 fn python_less_than_current() {
     let context = TestContext::new("3.9");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"python-less-than-current-a", "albatross"));
-    filters.push((r"python-less-than-current-", "pkg-"));
+    filters.push((r"python-less-than-current-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("python-less-than-current-a==1.0.0")
@@ -2867,8 +3711,8 @@ fn python_less_than_current() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.18) does not satisfy Python<=3.8 and albatross==1.0.0 depends on Python<=3.8, we can conclude that albatross==1.0.0 cannot be used.
-          And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because the current Python version (3.9.18) does not satisfy Python<=3.8 and package-a==1.0.0 depends on Python<=3.8, we can conclude that package-a==1.0.0 cannot be used.
+          And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -2896,10 +3740,9 @@ fn python_less_than_current() {
 fn python_greater_than_current() {
     let context = TestContext::new("3.9");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"python-greater-than-current-a", "albatross"));
-    filters.push((r"python-greater-than-current-", "pkg-"));
+    filters.push((r"python-greater-than-current-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-a==1.0.0")
@@ -2910,8 +3753,8 @@ fn python_greater_than_current() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and albatross==1.0.0 depends on Python>=3.10, we can conclude that albatross==1.0.0 cannot be used.
-          And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+          And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -2939,10 +3782,9 @@ fn python_greater_than_current() {
 fn python_greater_than_current_patch() {
     let context = TestContext::new("3.8.12");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"python-greater-than-current-patch-a", "albatross"));
-    filters.push((r"python-greater-than-current-patch-", "pkg-"));
+    filters.push((r"python-greater-than-current-patch-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-patch-a==1.0.0")
@@ -2953,8 +3795,8 @@ fn python_greater_than_current_patch() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.8.12) does not satisfy Python>=3.8.14 and albatross==1.0.0 depends on Python>=3.8.14, we can conclude that albatross==1.0.0 cannot be used.
-          And because you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because the current Python version (3.8.12) does not satisfy Python>=3.8.14 and package-a==1.0.0 depends on Python>=3.8.14, we can conclude that package-a==1.0.0 cannot be used.
+          And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -3004,10 +3846,9 @@ fn python_greater_than_current_patch() {
 fn python_greater_than_current_many() {
     let context = TestContext::new("3.9");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"python-greater-than-current-many-a", "albatross"));
-    filters.push((r"python-greater-than-current-many-", "pkg-"));
+    filters.push((r"python-greater-than-current-many-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-many-a==1.0.0")
@@ -3018,7 +3859,7 @@ fn python_greater_than_current_many() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of albatross==1.0.0 and you require albatross==1.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there is no version of package-a==1.0.0 and you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -3054,10 +3895,9 @@ fn python_greater_than_current_many() {
 fn python_greater_than_current_backtrack() {
     let context = TestContext::new("3.9");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"python-greater-than-current-backtrack-a", "albatross"));
-    filters.push((r"python-greater-than-current-backtrack-", "pkg-"));
+    filters.push((r"python-greater-than-current-backtrack-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-backtrack-a")
@@ -3070,7 +3910,7 @@ fn python_greater_than_current_backtrack() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0
+     + package-a==1.0.0
     "###);
 
     assert_installed(
@@ -3106,10 +3946,9 @@ fn python_greater_than_current_backtrack() {
 fn python_greater_than_current_excluded() {
     let context = TestContext::new("3.9");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"python-greater-than-current-excluded-a", "albatross"));
-    filters.push((r"python-greater-than-current-excluded-", "pkg-"));
+    filters.push((r"python-greater-than-current-excluded-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-excluded-a>=2.0.0")
@@ -3125,19 +3964,19 @@ fn python_greater_than_current_excluded() {
               Python>=3.12
            are incompatible.
           And because the current Python version (3.9.18) does not satisfy Python>=3.11,<3.12, we can conclude that Python>=3.10 are incompatible.
-          And because albatross==2.0.0 depends on Python>=3.10 and only the following versions of albatross are available:
-              albatross<=2.0.0
-              albatross==3.0.0
-              albatross==4.0.0
-          we can conclude that albatross>=2.0.0,<3.0.0 cannot be used. (1)
+          And because package-a==2.0.0 depends on Python>=3.10 and only the following versions of package-a are available:
+              package-a<=2.0.0
+              package-a==3.0.0
+              package-a==4.0.0
+          we can conclude that package-a>=2.0.0,<3.0.0 cannot be used. (1)
 
           Because the current Python version (3.9.18) does not satisfy Python>=3.11,<3.12 and the current Python version (3.9.18) does not satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.
-          And because albatross==3.0.0 depends on Python>=3.11, we can conclude that albatross==3.0.0 cannot be used.
-          And because we know from (1) that albatross>=2.0.0,<3.0.0 cannot be used, we can conclude that albatross>=2.0.0,<4.0.0 cannot be used. (2)
+          And because package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
+          And because we know from (1) that package-a>=2.0.0,<3.0.0 cannot be used, we can conclude that package-a>=2.0.0,<4.0.0 cannot be used. (2)
 
-          Because the current Python version (3.9.18) does not satisfy Python>=3.12 and albatross==4.0.0 depends on Python>=3.12, we can conclude that albatross==4.0.0 cannot be used.
-          And because we know from (2) that albatross>=2.0.0,<4.0.0 cannot be used, we can conclude that albatross>=2.0.0 cannot be used.
-          And because you require albatross>=2.0.0, we can conclude that the requirements are unsatisfiable.
+          Because the current Python version (3.9.18) does not satisfy Python>=3.12 and package-a==4.0.0 depends on Python>=3.12, we can conclude that package-a==4.0.0 cannot be used.
+          And because we know from (2) that package-a>=2.0.0,<4.0.0 cannot be used, we can conclude that package-a>=2.0.0 cannot be used.
+          And because you require package-a>=2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -3163,10 +4002,9 @@ fn python_greater_than_current_excluded() {
 fn specific_tag_and_default() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"specific-tag-and-default-a", "albatross"));
-    filters.push((r"specific-tag-and-default-", "pkg-"));
+    filters.push((r"specific-tag-and-default-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("specific-tag-and-default-a")
@@ -3179,7 +4017,7 @@ fn specific_tag_and_default() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0
+     + package-a==1.0.0
     "###);
 }
 
@@ -3199,10 +4037,9 @@ fn specific_tag_and_default() {
 fn only_wheels() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"only-wheels-a", "albatross"));
-    filters.push((r"only-wheels-", "pkg-"));
+    filters.push((r"only-wheels-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("only-wheels-a")
@@ -3215,7 +4052,7 @@ fn only_wheels() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0
+     + package-a==1.0.0
     "###);
 }
 
@@ -3235,10 +4072,9 @@ fn only_wheels() {
 fn no_wheels() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"no-wheels-a", "albatross"));
-    filters.push((r"no-wheels-", "pkg-"));
+    filters.push((r"no-wheels-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("no-wheels-a")
@@ -3251,7 +4087,7 @@ fn no_wheels() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0
+     + package-a==1.0.0
     "###);
 }
 
@@ -3271,10 +4107,9 @@ fn no_wheels() {
 fn no_wheels_with_matching_platform() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"no-wheels-with-matching-platform-a", "albatross"));
-    filters.push((r"no-wheels-with-matching-platform-", "pkg-"));
+    filters.push((r"no-wheels-with-matching-platform-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("no-wheels-with-matching-platform-a")
@@ -3287,7 +4122,7 @@ fn no_wheels_with_matching_platform() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0
+     + package-a==1.0.0
     "###);
 }
 
@@ -3308,10 +4143,9 @@ fn no_wheels_with_matching_platform() {
 fn no_sdist_no_wheels_with_matching_platform() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"no-sdist-no-wheels-with-matching-platform-a", "albatross"));
-    filters.push((r"no-sdist-no-wheels-with-matching-platform-", "pkg-"));
+    filters.push((r"no-sdist-no-wheels-with-matching-platform-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("no-sdist-no-wheels-with-matching-platform-a")
@@ -3322,8 +4156,8 @@ fn no_sdist_no_wheels_with_matching_platform() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no wheels are available with a matching platform, we can conclude that all versions of albatross cannot be used.
-          And because you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 is unusable because no wheels are available with a matching platform, we can conclude that all versions of package-a cannot be used.
+          And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -3350,10 +4184,9 @@ fn no_sdist_no_wheels_with_matching_platform() {
 fn no_sdist_no_wheels_with_matching_python() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"no-sdist-no-wheels-with-matching-python-a", "albatross"));
-    filters.push((r"no-sdist-no-wheels-with-matching-python-", "pkg-"));
+    filters.push((r"no-sdist-no-wheels-with-matching-python-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("no-sdist-no-wheels-with-matching-python-a")
@@ -3364,8 +4197,8 @@ fn no_sdist_no_wheels_with_matching_python() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no wheels are available with a matching Python implementation, we can conclude that all versions of albatross cannot be used.
-          And because you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 is unusable because no wheels are available with a matching Python implementation, we can conclude that all versions of package-a cannot be used.
+          And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -3392,10 +4225,9 @@ fn no_sdist_no_wheels_with_matching_python() {
 fn no_sdist_no_wheels_with_matching_abi() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"no-sdist-no-wheels-with-matching-abi-a", "albatross"));
-    filters.push((r"no-sdist-no-wheels-with-matching-abi-", "pkg-"));
+    filters.push((r"no-sdist-no-wheels-with-matching-abi-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("no-sdist-no-wheels-with-matching-abi-a")
@@ -3406,8 +4238,8 @@ fn no_sdist_no_wheels_with_matching_abi() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no wheels are available with a matching Python ABI, we can conclude that all versions of albatross cannot be used.
-          And because you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 is unusable because no wheels are available with a matching Python ABI, we can conclude that all versions of package-a cannot be used.
+          And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -3434,10 +4266,9 @@ fn no_sdist_no_wheels_with_matching_abi() {
 fn no_wheels_no_build() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"no-wheels-no-build-a", "albatross"));
-    filters.push((r"no-wheels-no-build-", "pkg-"));
+    filters.push((r"no-wheels-no-build-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("--only-binary")
@@ -3450,8 +4281,8 @@ fn no_wheels_no_build() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no wheels are usable and building from source is disabled, we can conclude that all versions of albatross cannot be used.
-          And because you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 is unusable because no wheels are usable and building from source is disabled, we can conclude that all versions of package-a cannot be used.
+          And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(&context.venv, "no_wheels_no_build_a", &context.temp_dir);
@@ -3474,10 +4305,9 @@ fn no_wheels_no_build() {
 fn only_wheels_no_binary() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"only-wheels-no-binary-a", "albatross"));
-    filters.push((r"only-wheels-no-binary-", "pkg-"));
+    filters.push((r"only-wheels-no-binary-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("--no-binary")
@@ -3490,8 +4320,8 @@ fn only_wheels_no_binary() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because no source distribution is available and using wheels is disabled, we can conclude that all versions of albatross cannot be used.
-          And because you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 is unusable because no source distribution is available and using wheels is disabled, we can conclude that all versions of package-a cannot be used.
+          And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(&context.venv, "only_wheels_no_binary_a", &context.temp_dir);
@@ -3514,10 +4344,9 @@ fn only_wheels_no_binary() {
 fn no_build() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"no-build-a", "albatross"));
-    filters.push((r"no-build-", "pkg-"));
+    filters.push((r"no-build-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("--only-binary")
@@ -3532,7 +4361,7 @@ fn no_build() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0
+     + package-a==1.0.0
     "###);
 
     // The wheel should be used for install
@@ -3555,10 +4384,9 @@ fn no_build() {
 fn no_binary() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"no-binary-a", "albatross"));
-    filters.push((r"no-binary-", "pkg-"));
+    filters.push((r"no-binary-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("--no-binary")
@@ -3573,7 +4401,7 @@ fn no_binary() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==1.0.0
+     + package-a==1.0.0
     "###);
 
     // The source distribution should be used for install
@@ -3596,10 +4424,9 @@ fn no_binary() {
 fn package_only_yanked() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"package-only-yanked-a", "albatross"));
-    filters.push((r"package-only-yanked-", "pkg-"));
+    filters.push((r"package-only-yanked-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-yanked-a")
@@ -3610,8 +4437,8 @@ fn package_only_yanked() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only albatross==1.0.0 is available and albatross==1.0.0 is unusable because it was yanked (reason: Yanked for testing), we can conclude that all versions of albatross cannot be used.
-          And because you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 is unusable because it was yanked (reason: Yanked for testing), we can conclude that all versions of package-a cannot be used.
+          And because you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Yanked versions should not be installed, even if they are the only one
@@ -3636,10 +4463,9 @@ fn package_only_yanked() {
 fn package_only_yanked_in_range() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"package-only-yanked-in-range-a", "albatross"));
-    filters.push((r"package-only-yanked-in-range-", "pkg-"));
+    filters.push((r"package-only-yanked-in-range-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-yanked-in-range-a>0.1.0")
@@ -3650,11 +4476,11 @@ fn package_only_yanked_in_range() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of albatross are available:
-              albatross<=0.1.0
-              albatross==1.0.0
-          and albatross==1.0.0 is unusable because it was yanked (reason: Yanked for testing), we can conclude that albatross>0.1.0 cannot be used.
-          And because you require albatross>0.1.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only the following versions of package-a are available:
+              package-a<=0.1.0
+              package-a==1.0.0
+          and package-a==1.0.0 is unusable because it was yanked (reason: Yanked for testing), we can conclude that package-a>0.1.0 cannot be used.
+          And because you require package-a>0.1.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Since there are other versions of `a` available, yanked versions should not be
@@ -3684,10 +4510,9 @@ fn package_only_yanked_in_range() {
 fn requires_package_yanked_and_unyanked_any() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"requires-package-yanked-and-unyanked-any-a", "albatross"));
-    filters.push((r"requires-package-yanked-and-unyanked-any-", "pkg-"));
+    filters.push((r"requires-package-yanked-and-unyanked-any-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-package-yanked-and-unyanked-any-a")
@@ -3700,7 +4525,7 @@ fn requires_package_yanked_and_unyanked_any() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==0.1.0
+     + package-a==0.1.0
     "###);
 
     // The unyanked version should be selected.
@@ -3733,10 +4558,9 @@ fn requires_package_yanked_and_unyanked_any() {
 fn package_yanked_specified_mixed_available() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"package-yanked-specified-mixed-available-a", "albatross"));
-    filters.push((r"package-yanked-specified-mixed-available-", "pkg-"));
+    filters.push((r"package-yanked-specified-mixed-available-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("package-yanked-specified-mixed-available-a>=0.1.0")
@@ -3749,7 +4573,7 @@ fn package_yanked_specified_mixed_available() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + albatross==0.3.0
+     + package-a==0.3.0
     "###);
 
     // The latest unyanked version should be selected.
@@ -3782,11 +4606,9 @@ fn package_yanked_specified_mixed_available() {
 fn transitive_package_only_yanked() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"transitive-package-only-yanked-a", "albatross"));
-    filters.push((r"transitive-package-only-yanked-b", "bluebird"));
-    filters.push((r"transitive-package-only-yanked-", "pkg-"));
+    filters.push((r"transitive-package-only-yanked-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-yanked-a")
@@ -3797,9 +4619,9 @@ fn transitive_package_only_yanked() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only bluebird==1.0.0 is available and bluebird==1.0.0 is unusable because it was yanked (reason: Yanked for testing), we can conclude that all versions of bluebird cannot be used.
-          And because albatross==0.1.0 depends on bluebird, we can conclude that albatross==0.1.0 cannot be used.
-          And because only albatross==0.1.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-b==1.0.0 is available and package-b==1.0.0 is unusable because it was yanked (reason: Yanked for testing), we can conclude that all versions of package-b cannot be used.
+          And because package-a==0.1.0 depends on package-b, we can conclude that package-a==0.1.0 cannot be used.
+          And because only package-a==0.1.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Yanked versions should not be installed, even if they are the only one
@@ -3833,11 +4655,9 @@ fn transitive_package_only_yanked() {
 fn transitive_package_only_yanked_in_range() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"transitive-package-only-yanked-in-range-a", "albatross"));
-    filters.push((r"transitive-package-only-yanked-in-range-b", "bluebird"));
-    filters.push((r"transitive-package-only-yanked-in-range-", "pkg-"));
+    filters.push((r"transitive-package-only-yanked-in-range-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-yanked-in-range-a")
@@ -3848,12 +4668,12 @@ fn transitive_package_only_yanked_in_range() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of bluebird are available:
-              bluebird<=0.1
-              bluebird==1.0.0
-          and bluebird==1.0.0 is unusable because it was yanked (reason: Yanked for testing), we can conclude that bluebird>0.1 cannot be used.
-          And because albatross==0.1.0 depends on bluebird>0.1, we can conclude that albatross==0.1.0 cannot be used.
-          And because only albatross==0.1.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only the following versions of package-b are available:
+              package-b<=0.1
+              package-b==1.0.0
+          and package-b==1.0.0 is unusable because it was yanked (reason: Yanked for testing), we can conclude that package-b>0.1 cannot be used.
+          And because package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
+          And because only package-a==0.1.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Yanked versions should not be installed, even if they are the only valid version
@@ -3890,17 +4710,12 @@ fn transitive_package_only_yanked_in_range() {
 fn transitive_package_only_yanked_in_range_opt_in() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"transitive-package-only-yanked-in-range-opt-in-a",
-        "albatross",
+        r"transitive-package-only-yanked-in-range-opt-in-",
+        "package-",
     ));
-    filters.push((
-        r"transitive-package-only-yanked-in-range-opt-in-b",
-        "bluebird",
-    ));
-    filters.push((r"transitive-package-only-yanked-in-range-opt-in-", "pkg-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-yanked-in-range-opt-in-a")
@@ -3914,9 +4729,9 @@ fn transitive_package_only_yanked_in_range_opt_in() {
     Resolved 2 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==0.1.0
-     + bluebird==1.0.0
-    warning: bluebird==1.0.0 is yanked (reason: "Yanked for testing").
+     + package-a==0.1.0
+     + package-b==1.0.0
+    warning: package-b==1.0.0 is yanked (reason: "Yanked for testing").
     "###);
 
     // Since the user included a dependency on `b` with an exact specifier, the yanked
@@ -3963,12 +4778,9 @@ fn transitive_package_only_yanked_in_range_opt_in() {
 fn transitive_yanked_and_unyanked_dependency() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
-    filters.push((r"transitive-yanked-and-unyanked-dependency-a", "albatross"));
-    filters.push((r"transitive-yanked-and-unyanked-dependency-b", "bluebird"));
-    filters.push((r"transitive-yanked-and-unyanked-dependency-c", "crow"));
-    filters.push((r"transitive-yanked-and-unyanked-dependency-", "pkg-"));
+    filters.push((r"transitive-yanked-and-unyanked-dependency-", "package-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-yanked-and-unyanked-dependency-a")
@@ -3980,8 +4792,8 @@ fn transitive_yanked_and_unyanked_dependency() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because crow==2.0.0 is unusable because it was yanked (reason: Yanked for testing) and albatross==1.0.0 depends on crow==2.0.0, we can conclude that albatross==1.0.0 cannot be used.
-          And because only albatross==1.0.0 is available and you require albatross, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because package-c==2.0.0 is unusable because it was yanked (reason: Yanked for testing) and package-a==1.0.0 depends on package-c==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
+          And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Since the user did not explicitly select the yanked version, it cannot be used.
@@ -4028,21 +4840,12 @@ fn transitive_yanked_and_unyanked_dependency() {
 fn transitive_yanked_and_unyanked_dependency_opt_in() {
     let context = TestContext::new("3.8");
 
-    // In addition to the standard filters, swap out package names for more realistic messages
+    // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = INSTA_FILTERS.to_vec();
     filters.push((
-        r"transitive-yanked-and-unyanked-dependency-opt-in-a",
-        "albatross",
+        r"transitive-yanked-and-unyanked-dependency-opt-in-",
+        "package-",
     ));
-    filters.push((
-        r"transitive-yanked-and-unyanked-dependency-opt-in-b",
-        "bluebird",
-    ));
-    filters.push((
-        r"transitive-yanked-and-unyanked-dependency-opt-in-c",
-        "crow",
-    ));
-    filters.push((r"transitive-yanked-and-unyanked-dependency-opt-in-", "pkg-"));
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-yanked-and-unyanked-dependency-opt-in-a")
@@ -4057,10 +4860,10 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + albatross==1.0.0
-     + bluebird==1.0.0
-     + crow==2.0.0
-    warning: crow==2.0.0 is yanked (reason: "Yanked for testing").
+     + package-a==1.0.0
+     + package-b==1.0.0
+     + package-c==2.0.0
+    warning: package-c==2.0.0 is yanked (reason: "Yanked for testing").
     "###);
 
     // Since the user explicitly selected the yanked version of `c`, it can be

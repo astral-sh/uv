@@ -37,8 +37,22 @@ impl VerbatimUrl {
 
     /// Create a [`VerbatimUrl`] from a file path.
     pub fn from_path(path: impl AsRef<Path>) -> Self {
-        let path = normalize_path(path.as_ref());
-        let url = Url::from_file_path(path).expect("path is absolute");
+        let path = path.as_ref();
+
+        // Normalize the path.
+        let path = normalize_path(path);
+
+        // Extract the fragment, if it exists.
+        let (path, fragment) = split_fragment(&path);
+
+        // Convert to a URL.
+        let mut url = Url::from_file_path(path).expect("path is absolute");
+
+        // Set the fragment, if it exists.
+        if let Some(fragment) = fragment {
+            url.set_fragment(Some(fragment));
+        }
+
         Self { url, given: None }
     }
 
@@ -51,9 +65,11 @@ impl VerbatimUrl {
     /// Parse a URL from an absolute or relative path.
     #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
     pub fn parse_path(path: impl AsRef<Path>, working_dir: impl AsRef<Path>) -> Self {
+        let path = path.as_ref();
+
         // Convert the path to an absolute path, if necessary.
-        let path = if path.as_ref().is_absolute() {
-            path.as_ref().to_path_buf()
+        let path = if path.is_absolute() {
+            path.to_path_buf()
         } else {
             working_dir.as_ref().join(path)
         };
@@ -61,26 +77,44 @@ impl VerbatimUrl {
         // Normalize the path.
         let path = normalize_path(path);
 
+        // Extract the fragment, if it exists.
+        let (path, fragment) = split_fragment(&path);
+
         // Convert to a URL.
-        let url = Url::from_file_path(path).expect("path is absolute");
+        let mut url = Url::from_file_path(path).expect("path is absolute");
+
+        // Set the fragment, if it exists.
+        if let Some(fragment) = fragment {
+            url.set_fragment(Some(fragment));
+        }
 
         Self { url, given: None }
     }
 
     /// Parse a URL from an absolute path.
     pub fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, VerbatimUrlError> {
+        let path = path.as_ref();
+
         // Convert the path to an absolute path, if necessary.
-        let path = if path.as_ref().is_absolute() {
-            path.as_ref().to_path_buf()
+        let path = if path.is_absolute() {
+            path.to_path_buf()
         } else {
-            return Err(VerbatimUrlError::RelativePath(path.as_ref().to_path_buf()));
+            return Err(VerbatimUrlError::RelativePath(path.to_path_buf()));
         };
 
         // Normalize the path.
         let path = normalize_path(path);
 
+        // Extract the fragment, if it exists.
+        let (path, fragment) = split_fragment(&path);
+
         // Convert to a URL.
-        let url = Url::from_file_path(path).expect("path is absolute");
+        let mut url = Url::from_file_path(path).expect("path is absolute");
+
+        // Set the fragment, if it exists.
+        if let Some(fragment) = fragment {
+            url.set_fragment(Some(fragment));
+        }
 
         Ok(Self { url, given: None })
     }
@@ -220,6 +254,22 @@ pub fn split_scheme(s: &str) -> Option<(&str, &str)> {
     let scheme = &s[..end];
     let rest = &s[end + 1..];
     Some((scheme, rest))
+}
+
+/// Split the fragment from a URL.
+///
+/// For example, given `file:///home/ferris/project/scripts#hash=somehash`, returns
+/// `("/home/ferris/project/scripts", Some("hash=somehash"))`.
+fn split_fragment(path: &Path) -> (Cow<Path>, Option<&str>) {
+    let Some(s) = path.to_str() else {
+        return (Cow::Borrowed(path), None);
+    };
+
+    let Some((path, fragment)) = s.split_once('#') else {
+        return (Cow::Borrowed(path), None);
+    };
+
+    (Cow::Owned(PathBuf::from(path)), Some(fragment))
 }
 
 /// A supported URL scheme for PEP 508 direct-URL requirements.
@@ -362,5 +412,43 @@ mod tests {
             Some(("https", "//example.com"))
         );
         assert_eq!(split_scheme("https:"), Some(("https", "")));
+    }
+
+    #[test]
+    fn fragment() {
+        assert_eq!(
+            split_fragment(Path::new(
+                "file:///home/ferris/project/scripts#hash=somehash"
+            )),
+            (
+                Cow::Owned(PathBuf::from("file:///home/ferris/project/scripts")),
+                Some("hash=somehash")
+            )
+        );
+        assert_eq!(
+            split_fragment(Path::new("file:home/ferris/project/scripts#hash=somehash")),
+            (
+                Cow::Owned(PathBuf::from("file:home/ferris/project/scripts")),
+                Some("hash=somehash")
+            )
+        );
+        assert_eq!(
+            split_fragment(Path::new("/home/ferris/project/scripts#hash=somehash")),
+            (
+                Cow::Owned(PathBuf::from("/home/ferris/project/scripts")),
+                Some("hash=somehash")
+            )
+        );
+        assert_eq!(
+            split_fragment(Path::new("file:///home/ferris/project/scripts")),
+            (
+                Cow::Borrowed(Path::new("file:///home/ferris/project/scripts")),
+                None
+            )
+        );
+        assert_eq!(
+            split_fragment(Path::new("")),
+            (Cow::Borrowed(Path::new("")), None)
+        );
     }
 }

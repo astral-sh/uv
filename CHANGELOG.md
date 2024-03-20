@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.1.22
+
+### Enhancements
+
+- Add support for PyTorch-style local version semantics ([#2430](https://github.com/astral-sh/uv/pull/2430))
+- Add support for Hatch's `{root:uri}` paths in editable installs ([#2492](https://github.com/astral-sh/uv/pull/2492))
+- Implement `uv pip check` ([#2397](https://github.com/astral-sh/uv/pull/2397))
+- Add pip-like linehaul information to user agent ([#2493](https://github.com/astral-sh/uv/pull/2493))
+- Add additional ARM targets to release ([#2417](https://github.com/astral-sh/uv/pull/2417))
+
+### Bug fixes
+
+- Allow direct file path requirements to include fragments ([#2502](https://github.com/astral-sh/uv/pull/2502))
+- Avoid panicking on cannot-be-a-base URLs ([#2461](https://github.com/astral-sh/uv/pull/2461))
+- Drop `macosx_10_0` from compatible wheel tags on `aarch64` ([#2496](https://github.com/astral-sh/uv/pull/2496))
+- Fix operating system detection on *BSD ([#2505](https://github.com/astral-sh/uv/pull/2505))
+- Fix priority of ABI tags ([#2489](https://github.com/astral-sh/uv/pull/2489))
+- Fix priority of platform tags for manylinux ([#2483](https://github.com/astral-sh/uv/pull/2483))
+- Make > operator exclude post and local releases ([#2471](https://github.com/astral-sh/uv/pull/2471))
+- Re-add support for pyenv shims ([#2503](https://github.com/astral-sh/uv/pull/2503))
+- Validate required package names against wheel package names ([#2516](https://github.com/astral-sh/uv/pull/2516))
+
+## 0.1.21
+
+### Enhancements
+
+- Loosen `.dist-info` validation to accept arbitrary versions ([#2441](https://github.com/astral-sh/uv/pull/2441))
+
+### Bug fixes
+
+- Fix macOS architecture detection on i386 machines ([#2454](https://github.com/astral-sh/uv/pull/2454))
+
+## 0.1.20
+
+### Bug fixes
+
+- Add in-URL credentials to store prior to creating requests ([#2446](https://github.com/astral-sh/uv/pull/2446))
+- Error when direct URL requirements don't match `Requires-Python` ([#2196](https://github.com/astral-sh/uv/pull/2196))
+
+## 0.1.19
+
+### Configuration
+
+- Add `UV_NATIVE_TLS` environment variable ([#2412](https://github.com/astral-sh/uv/pull/2412))
+- Allow `SSL_CERT_FILE` without requiring `--native-tls` ([#2401](https://github.com/astral-sh/uv/pull/2401))
+- Add support for retrieving credentials from `keyring` ([#2254](https://github.com/astral-sh/uv/pull/2254))
+
+### Bug fixes
+
+- Add backoff for transient Windows failures ([#2419](https://github.com/astral-sh/uv/pull/2419))
+- Move architecture and operating system probing to Python ([#2381](https://github.com/astral-sh/uv/pull/2381))
+- Respect `--native-tls` in `venv` ([#2433](https://github.com/astral-sh/uv/pull/2433))
+- Treat non-existent site-packages as empty ([#2413](https://github.com/astral-sh/uv/pull/2413))
+
+### Documentation
+
+- Document HTTP authentication ([#2425](https://github.com/astral-sh/uv/pull/2425))
+
+### Performance
+
+- Improve performance of version range operations ([#2421](https://github.com/astral-sh/uv/pull/2421))
+
 ## 0.1.18
 
 ### Breaking changes

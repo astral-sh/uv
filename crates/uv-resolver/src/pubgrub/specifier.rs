@@ -63,7 +63,13 @@ impl TryFrom<&VersionSpecifier> for PubGrubSpecifier {
                 // Per PEP 440: "The exclusive ordered comparison >V MUST NOT allow a post-release of
                 // the given version unless V itself is a post release."
                 let version = specifier.version().clone();
-                Range::strictly_higher_than(version)
+                if let Some(dev) = version.dev() {
+                    Range::higher_than(version.with_dev(Some(dev + 1)))
+                } else if let Some(post) = version.post() {
+                    Range::higher_than(version.with_post(Some(post + 1)))
+                } else {
+                    Range::strictly_higher_than(version.with_max(Some(0)))
+                }
             }
             Operator::GreaterThanEqual => {
                 let version = specifier.version().clone();

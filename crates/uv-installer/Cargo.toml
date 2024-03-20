@@ -13,10 +13,8 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-filename = { path = "../distribution-filename" }
 distribution-types = { path = "../distribution-types" }
 install-wheel-rs = { path = "../install-wheel-rs", default-features = false }
-once-map = { path = "../once-map" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
 platform-tags = { path = "../platform-tags" }
@@ -27,7 +25,6 @@ uv-client = { path = "../uv-client" }
 uv-distribution = { path = "../uv-distribution" }
 uv-extract = { path = "../uv-extract" }
 uv-fs = { path = "../uv-fs" }
-uv-git = { path = "../uv-git", features = ["vendored-openssl"] }
 uv-interpreter = { path = "../uv-interpreter" }
 uv-normalize = { path = "../uv-normalize" }
 uv-traits = { path = "../uv-traits" }

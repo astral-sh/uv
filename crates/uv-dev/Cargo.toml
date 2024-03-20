@@ -21,9 +21,7 @@ distribution-types = { path = "../distribution-types" }
 install-wheel-rs = { path = "../install-wheel-rs" }
 pep440_rs = { path = "../pep440-rs" }
 pep508_rs = { path = "../pep508-rs" }
-platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
-pypi-types = { path = "../pypi-types" }
 uv-build = { path = "../uv-build" }
 uv-cache = { path = "../uv-cache", features = ["clap"] }
 uv-client = { path = "../uv-client" }
@@ -34,7 +32,6 @@ uv-interpreter = { path = "../uv-interpreter" }
 uv-normalize = { path = "../uv-normalize" }
 uv-resolver = { path = "../uv-resolver" }
 uv-traits = { path = "../uv-traits" }
-uv-virtualenv = { path = "../uv-virtualenv" }
 
 # Any dependencies that are exclusively used in `uv-dev` should be listed as non-workspace
 # dependencies, to ensure that we're forced to think twice before including them in other crates.
@@ -54,15 +51,12 @@ rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tagu = { version = "0.1.6" }
-tempfile = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"] }
 tracing-indicatif = { workspace = true }
 tracing-subscriber = { workspace = true }
-url = { workspace = true }
 walkdir = { workspace = true }
-which = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = { version = "0.1.39" }

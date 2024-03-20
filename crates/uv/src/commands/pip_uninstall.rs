@@ -5,7 +5,6 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{InstalledMetadata, Name};
-use platform_host::Platform;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_fs::Simplified;
@@ -42,13 +41,12 @@ pub(crate) async fn pip_uninstall(
     } = RequirementsSpecification::from_simple_sources(sources, connectivity).await?;
 
     // Detect the current Python interpreter.
-    let platform = Platform::current()?;
     let venv = if let Some(python) = python.as_ref() {
-        PythonEnvironment::from_requested_python(python, &platform, &cache)?
+        PythonEnvironment::from_requested_python(python, &cache)?
     } else if system {
-        PythonEnvironment::from_default_python(&platform, &cache)?
+        PythonEnvironment::from_default_python(&cache)?
     } else {
-        PythonEnvironment::from_virtualenv(platform, &cache)?
+        PythonEnvironment::from_virtualenv(&cache)?
     };
     debug!(
         "Using Python {} environment at {}",

@@ -22,7 +22,7 @@ name = "install_wheel_rs"
 [dependencies]
 distribution-filename = { path = "../distribution-filename" }
 pep440_rs = { path = "../pep440-rs" }
-platform-host = { path = "../platform-host" }
+platform-tags = { path = "../platform-tags" }
 uv-normalize = { path = "../uv-normalize" }
 uv-fs = { path = "../uv-fs" }
 pypi-types = { path = "../pypi-types" }
@@ -36,7 +36,6 @@ mailparse = { workspace = true }
 once_cell = { workspace = true }
 pathdiff = { workspace = true }
 platform-info = { workspace = true }
-plist = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
@@ -46,8 +45,6 @@ sha2 = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, optional = true }
-url = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
 

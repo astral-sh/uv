@@ -451,6 +451,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let archive = self
                     .cache
                     .persist(temp_dir.into_path(), wheel_entry.path())
+                    .await
                     .map_err(Error::CacheRead)?;
                 Ok(archive)
             }
@@ -459,8 +460,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
         let req = self
             .client
-            .cached_client()
-            .uncached()
+            .uncached_client()
             .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.
@@ -532,6 +532,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let archive = self
                     .cache
                     .persist(temp_dir.into_path(), wheel_entry.path())
+                    .await
                     .map_err(Error::CacheRead)?;
                 Ok(archive)
             }
@@ -540,8 +541,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
         let req = self
             .client
-            .cached_client()
-            .uncached()
+            .uncached_client()
             .get(url)
             .header(
                 // `reqwest` defaults to accepting compressed responses.

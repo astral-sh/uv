@@ -13,7 +13,9 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-platform-host = { path = "../platform-host" }
-
 rustc-hash = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+insta = { version = "1.36.1" }

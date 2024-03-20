@@ -15,7 +15,6 @@ use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
 use once_cell::sync::Lazy;
-use pyproject_toml::Project;
 use regex::Regex;
 use rustc_hash::FxHashMap;
 use serde::de::{value, SeqAccess, Visitor};
@@ -27,6 +26,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, info_span, instrument, Instrument};
 
 use distribution_types::Resolution;
+use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::Requirement;
 use uv_fs::Simplified;
 use uv_interpreter::{Interpreter, PythonEnvironment};
@@ -193,7 +193,7 @@ impl Error {
     }
 }
 
-/// A pyproject.toml as specified in PEP 517
+/// A pyproject.toml as specified in PEP 517.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyProjectToml {
@@ -201,6 +201,18 @@ pub struct PyProjectToml {
     pub build_system: Option<BuildSystem>,
     /// Project metadata
     pub project: Option<Project>,
+}
+
+/// The `[project]` section of a pyproject.toml as specified in PEP 621.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct Project {
+    /// The name of the project
+    pub name: String,
+    /// The version of the project as supported by PEP 440
+    pub version: Option<Version>,
+    /// The Python version requirements of the project
+    pub requires_python: Option<VersionSpecifiers>,
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.

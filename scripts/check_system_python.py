@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
-"""Install `pylint` into the system Python."""
+"""Install `pylint` and `numpy` into the system Python.
+
+To run locally, create a venv with seed packages.
+"""
 
 import argparse
 import logging
@@ -8,6 +11,30 @@ import os
 import subprocess
 import sys
 import tempfile
+
+
+def install_package(*, uv: str, package: str):
+    """Install a package into the system Python."""
+
+    logging.info(f"Installing the package `{package}`.")
+    subprocess.run(
+        [uv, "pip", "install", package, "--system"] + allow_externally_managed,
+        cwd=temp_dir,
+        check=True,
+    )
+
+    logging.info(f"Checking that `{package}` can be imported.")
+    code = subprocess.run(
+        [sys.executable, "-c", f"import {package}"],
+        cwd=temp_dir,
+    )
+    if code.returncode != 0:
+        raise Exception(f"Could not import {package}.")
+
+    code = subprocess.run([uv, "pip", "show", package, "--system"])
+    if code.returncode != 0:
+        raise Exception(f"Could not show {package}.")
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -135,3 +162,18 @@ if __name__ == "__main__":
             raise Exception(
                 "The package `pylint` isn't installed in the virtual environment."
             )
+
+        # Attempt to install NumPy.
+        # This ensures that we can successfully install a package with native libraries.
+        #
+        # NumPy doesn't distribute wheels for Python 3.13 (at time of writing).
+        if sys.version_info < (3, 13):
+            install_package(uv=uv, package="numpy")
+
+        # Attempt to install `pydantic_core`.
+        # This ensures that we can successfully install and recognize a package that may
+        # be installed into `platlib`.
+        #
+        # `pydantic_core` doesn't distribute wheels for non-CPython interpreters.
+        if sys.implementation.name == "cpython":
+            install_package(uv=uv, package="pydantic_core")

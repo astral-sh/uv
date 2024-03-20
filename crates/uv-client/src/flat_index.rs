@@ -17,7 +17,6 @@ use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use pypi_types::Hashes;
-use uv_auth::safe_copy_url_auth;
 use uv_cache::{Cache, CacheBucket};
 use uv_normalize::PackageName;
 
@@ -144,10 +143,9 @@ impl<'a> FlatIndexClient<'a> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let cached_client = self.client.cached_client();
-
-        let flat_index_request = cached_client
-            .uncached()
+        let flat_index_request = self
+            .client
+            .uncached_client()
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", "text/html")
@@ -157,17 +155,16 @@ impl<'a> FlatIndexClient<'a> {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = safe_copy_url_auth(url, response.url().clone());
+                let url = response.url().clone();
 
                 let text = response.text().await.map_err(ErrorKind::from)?;
                 let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
-                let base = safe_copy_url_auth(&url, base.into_url());
                 let files: Vec<File> = files
                     .into_iter()
                     .filter_map(|file| {
-                        match File::try_from(file, &base) {
+                        match File::try_from(file, base.as_url()) {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
@@ -182,7 +179,9 @@ impl<'a> FlatIndexClient<'a> {
             .boxed()
             .instrument(info_span!("parse_flat_index_html", url = % url))
         };
-        let response = cached_client
+        let response = self
+            .client
+            .cached_client()
             .get_serde(
                 flat_index_request,
                 &cache_entry,

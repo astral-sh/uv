@@ -23,22 +23,21 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 async_http_range_reader = { workspace = true }
 async_zip = { workspace = true, features = ["tokio"] }
-base64 = { workspace = true }
 chrono = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 html-escape = { workspace = true }
 http = { workspace = true }
+plist = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
 rkyv = { workspace = true, features = ["strict", "validation"] }
 rmp-serde = { workspace = true }
-rust-netrc = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = { workspace = true }
+sys-info = { workspace = true }
 task-local-extensions = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
@@ -58,4 +57,5 @@ webpki-roots = { version = "0.25.4" }
 anyhow = { workspace = true }
 hyper = { version = "0.14.28", features = ["server", "http1"] }
 insta = { version = "1.36.1" }
+os_info = { version = "3.7.0", default-features = false }
 tokio = { workspace = true, features = ["fs", "macros"] }

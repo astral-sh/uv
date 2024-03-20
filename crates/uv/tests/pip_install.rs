@@ -527,11 +527,13 @@ fn install_editable() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 2 packages in [TIME]
-     + numpy==1.26.2
+    Resolved 4 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + sniffio==1.3.0
     "###
     );
 
@@ -577,7 +579,7 @@ fn install_editable() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    Resolved 8 packages in [TIME]
+    Resolved 10 packages in [TIME]
     Downloaded 6 packages in [TIME]
     Installed 7 packages in [TIME]
      + black==23.11.0
@@ -1419,11 +1421,11 @@ fn install_upgrade() {
 #[test]
 fn install_constraints_txt() -> Result<()> {
     let context = TestContext::new("3.12");
-    let requirementstxt = context.temp_dir.child("requirements.txt");
-    requirementstxt.write_str("django==5.0b1")?;
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
 
     let constraints_txt = context.temp_dir.child("constraints.txt");
-    constraints_txt.write_str("sqlparse<0.4.4")?;
+    constraints_txt.write_str("idna<3.4")?;
 
     uv_snapshot!(command(&context)
             .arg("-r")
@@ -1438,9 +1440,9 @@ fn install_constraints_txt() -> Result<()> {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + asgiref==3.7.2
-     + django==5.0b1
-     + sqlparse==0.4.3
+     + anyio==3.7.0
+     + idna==3.3
+     + sniffio==1.3.0
     "###
     );
 
@@ -1452,10 +1454,10 @@ fn install_constraints_txt() -> Result<()> {
 fn install_constraints_inline() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirementstxt = context.temp_dir.child("requirements.txt");
-    requirementstxt.write_str("django==5.0b1\n-c constraints.txt")?;
+    requirementstxt.write_str("anyio==3.7.0\n-c constraints.txt")?;
 
     let constraints_txt = context.temp_dir.child("constraints.txt");
-    constraints_txt.write_str("sqlparse<0.4.4")?;
+    constraints_txt.write_str("idna<3.4")?;
 
     uv_snapshot!(command(&context)
             .arg("-r")
@@ -1468,9 +1470,9 @@ fn install_constraints_inline() -> Result<()> {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + asgiref==3.7.2
-     + django==5.0b1
-     + sqlparse==0.4.3
+     + anyio==3.7.0
+     + idna==3.3
+     + sniffio==1.3.0
     "###
     );
 
@@ -2721,4 +2723,123 @@ fn dry_run_install_then_upgrade() -> std::result::Result<(), Box<dyn std::error:
     );
 
     Ok(())
+}
+
+/// Raise an error when a direct URL's `Requires-Python` constraint is not met.
+#[test]
+fn requires_python_direct_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create an editable package with a `Requires-Python` constraint that is not met.
+    let editable_dir = assert_fs::TempDir::new()?;
+    let pyproject_toml = editable_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+  "anyio==4.0.0"
+]
+requires-python = "<=3.8"
+"#,
+    )?;
+
+    uv_snapshot!(command(&context)
+        .arg(format!("example @ {}", editable_dir.path().display())), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.12.1) does not satisfy Python<=3.8
+          and example==0.0.0 depends on Python<=3.8, we can conclude that
+          example==0.0.0 cannot be used.
+          And because only example==0.0.0 is available and you require example, we
+          can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install a package from an index that requires authentication
+#[test]
+fn install_package_basic_auth_from_url() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
+
+/// Install a package from an index that provides relative links
+#[test]
+fn install_index_with_relative_links() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://pypi-proxy.fly.dev/relative/simple")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
+
+/// Install a package from an index that provides relative links and requires authentication
+#[test]
+fn install_index_with_relative_links_authenticated() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/relative/simple")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    context.assert_command("import anyio").success();
 }

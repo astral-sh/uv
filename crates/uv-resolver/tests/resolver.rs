@@ -12,14 +12,13 @@ use once_cell::sync::Lazy;
 
 use distribution_types::{IndexLocations, Resolution, SourceDist};
 use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
-use platform_host::{Arch, Os, Platform};
-use platform_tags::Tags;
+use platform_tags::{Arch, Os, Platform, Tags};
 use uv_cache::Cache;
 use uv_client::{FlatIndex, RegistryClientBuilder};
-use uv_interpreter::{Interpreter, PythonEnvironment};
+use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
-    ResolutionGraph, ResolutionMode, Resolver,
+    Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_traits::{
     BuildContext, BuildIsolation, BuildKind, NoBinary, NoBuild, SetupPyStrategy, SourceBuildTrait,
@@ -120,7 +119,10 @@ async fn resolve(
     let client = RegistryClientBuilder::new(Cache::temp()?).build();
     let flat_index = FlatIndex::default();
     let index = InMemoryIndex::default();
-    let interpreter = Interpreter::artificial(Platform::current()?, markers.clone());
+    // TODO(konstin): Should we also use the bootstrapped pythons here?
+    let real_interpreter =
+        find_default_python(&Cache::temp().unwrap()).expect("Expected a python to be installed");
+    let interpreter = Interpreter::artificial(real_interpreter.platform().clone(), markers.clone());
     let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
     let resolver = Resolver::new(
         manifest,
@@ -420,10 +422,12 @@ async fn black_lowest_direct() -> Result<()> {
 #[tokio::test]
 async fn black_respect_preference() -> Result<()> {
     let manifest = Manifest::new(
-        vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![Requirement::from_str("black<=23.9.1")?],
         vec![],
         vec![],
-        vec![Requirement::from_str("black==23.9.0").unwrap()],
+        vec![Preference::from_requirement(Requirement::from_str(
+            "black==23.9.0",
+        )?)],
         None,
         vec![],
     );
@@ -453,10 +457,12 @@ async fn black_respect_preference() -> Result<()> {
 #[tokio::test]
 async fn black_ignore_preference() -> Result<()> {
     let manifest = Manifest::new(
-        vec![Requirement::from_str("black<=23.9.1").unwrap()],
+        vec![Requirement::from_str("black<=23.9.1")?],
         vec![],
         vec![],
-        vec![Requirement::from_str("black==23.9.2").unwrap()],
+        vec![Preference::from_requirement(Requirement::from_str(
+            "black==23.9.2",
+        )?)],
         None,
         vec![],
     );

@@ -14,7 +14,6 @@ use distribution_types::{
 };
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
-use platform_host::Platform;
 use platform_tags::Tags;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
@@ -55,8 +54,7 @@ pub(crate) async fn install_many(args: InstallManyArgs) -> Result<()> {
     info!("Got {} requirements", requirements.len());
 
     let cache = Cache::try_from(args.cache_args)?;
-    let platform = Platform::current()?;
-    let venv = PythonEnvironment::from_virtualenv(platform, &cache)?;
+    let venv = PythonEnvironment::from_virtualenv(&cache)?;
     let client = RegistryClientBuilder::new(cache.clone()).build();
     let index_locations = IndexLocations::default();
     let flat_index = FlatIndex::default();

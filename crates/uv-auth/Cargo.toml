@@ -4,5 +4,19 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-url = { workspace = true }
+async-trait = { workspace = true }
+base64 = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"], optional = true }
+reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+rust-netrc = { workspace = true }
+task-local-extensions = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
+url = { workspace = true }
+once_cell = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true }
+wiremock = { workspace = true }

@@ -16,17 +16,15 @@ workspace = true
 cache-key = { path = "../cache-key" }
 distribution-filename = { path = "../distribution-filename", features = ["serde"] }
 distribution-types = { path = "../distribution-types" }
-install-wheel-rs = { path = "../install-wheel-rs" }
 once-map = { path = "../once-map" }
 pep440_rs = { path = "../pep440-rs", features = ["pubgrub"] }
 pep508_rs = { path = "../pep508-rs" }
-platform-host = { path = "../platform-host" }
 platform-tags = { path = "../platform-tags" }
 pypi-types = { path = "../pypi-types" }
+requirements-txt = { path = "../requirements-txt" }
 uv-cache = { path = "../uv-cache" }
 uv-client = { path = "../uv-client" }
 uv-distribution = { path = "../uv-distribution" }
-uv-git = { path = "../uv-git", features = ["vendored-openssl"] }
 uv-interpreter = { path = "../uv-interpreter" }
 uv-normalize = { path = "../uv-normalize" }
 uv-traits = { path = "../uv-traits" }
@@ -39,7 +37,6 @@ clap = { workspace = true, features = ["derive"], optional = true }
 dashmap = { workspace = true }
 derivative = { workspace = true }
 either = { workspace = true }
-fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
@@ -47,22 +44,15 @@ once_cell = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }
-reqwest = { workspace = true }
 rkyv = { workspace = true, features = ["strict", "validation"] }
 rustc-hash = { workspace = true }
-serde_json = { workspace = true }
-sha2 = { workspace = true }
-tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
-tokio-stream  = { workspace = true }
-tokio-util = { workspace = true, features = ["compat"] }
+tokio-stream = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-zip = { workspace = true }
 
 [dev-dependencies]
-uv-virtualenv = { path = "../uv-virtualenv" }
 uv-interpreter = { path = "../uv-interpreter" }
 
 once_cell = { version = "1.19.0" }

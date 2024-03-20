@@ -19,17 +19,19 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 anstream = { version = "0.6.13" }
 anyhow = { version = "1.0.80" }
-async-compression = { version = "0.4.6" }
 async-channel = { version = "2.2.0" }
-async-trait = { version = "0.1.77" }
+async-compression = { version = "0.4.6" }
 async-recursion = { version = "1.0.5" }
+async-trait = { version = "0.1.78" }
 async_http_range_reader = { version = "0.7.0" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "d76801da0943de985254fc6255c0e476b57c5836", features = ["deflate"] }
+axoupdater = { version = "0.3.1", default-features = false }
+backoff = { version = "0.4.0" }
 base64 = { version = "0.21.7" }
 cachedir = { version = "0.3.1" }
 cargo-util = { version = "0.2.8" }
 chrono = { version = "0.4.31" }
-clap = { version = "4.4.13" }
+clap = { version = "4.5.3" }
 clap_complete_command = { version = "0.5.1" }
 configparser = { version = "3.0.4" }
 console = { version = "0.15.8", default-features = false }
@@ -48,7 +50,6 @@ fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
 git2 = { version = "0.18.1" }
 glob = { version = "0.3.1" }
-goblin = { version = "0.8.0" }
 hex = { version = "0.4.3" }
 hmac = { version = "0.12.1" }
 home = { version = "0.5.9" }
@@ -68,7 +69,7 @@ pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 plist = { version = "1.6.0" }
-pubgrub = { git = "https://github.com/zanieb/pubgrub", rev = "b5ead05c954b81690aec40255a1c36ec248e90af" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "addbaf184891d66a2dfd93d241a66d13bfe5de86" }
 pyo3 = { version = "0.20.3" }
 pyo3-log = { version = "0.9.0" }
 pyproject-toml = { version = "0.10.0" }
@@ -89,17 +90,17 @@ serde = { version = "1.0.197" }
 serde_json = { version = "1.0.114" }
 sha1 = { version = "0.10.6" }
 sha2 = { version = "0.10.8" }
-target-lexicon = { version = "0.12.14" }
+sys-info = { version = "0.9.1" }
 task-local-extensions = { version = "0.1.4" }
 tempfile = { version = "3.9.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "1.0.56" }
 tl = { version = "0.7.7" }
-tokio = { version = "1.35.1", features = ["rt-multi-thread"] }
+tokio = { version = "1.35.1", features = ["rt-multi-thread", "macros"] }
 tokio-stream = { version = "0.1.14" }
 tokio-tar = { version = "0.3.1" }
 tokio-util = { version = "0.7.10", features = ["compat"] }
-toml = { version = "0.8.8" }
+toml = { version = "0.8.12" }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.2.0", features = ["plot"] }
 tracing-indicatif = { version = "0.3.6" }
@@ -109,6 +110,7 @@ unicode-width = { version = "0.1.11" }
 unscanny = { version = "0.1.0" }
 url = { version = "2.5.0" }
 urlencoding = { version = "2.1.3" }
+wiremock = { version = "0.6.0" }
 walkdir = { version = "2.5.0" }
 which = { version = "6.0.0" }
 winapi = { version = "0.3.9" }
@@ -171,7 +173,7 @@ windows-archive = ".zip"
 # The archive format to use for non-windows builds (defaults .tar.xz)
 unix-archive = ".tar.gz"
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu", "i686-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl", "i686-unknown-linux-musl", "x86_64-pc-windows-msvc", "i686-pc-windows-msvc", "armv7-unknown-linux-gnueabihf", "powerpc64-unknown-linux-gnu", "powerpc64le-unknown-linux-gnu", "s390x-unknown-linux-gnu"]
+targets = ["aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu", "i686-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl", "i686-unknown-linux-musl", "x86_64-pc-windows-msvc", "i686-pc-windows-msvc", "armv7-unknown-linux-gnueabihf", "powerpc64-unknown-linux-gnu", "powerpc64le-unknown-linux-gnu", "s390x-unknown-linux-gnu", "armv7-unknown-linux-musleabihf", "arm-unknown-linux-musleabihf"]
 # Whether to auto-include files like READMEs and CHANGELOGs (default true)
 auto-includes = false
 # Whether cargo-dist should create a Github Release or use an existing draft
