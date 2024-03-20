@@ -18,22 +18,24 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
-  lint-fast:
-    name: "List: Rustfmt, Prettier, Ruff"
+  cargo-fmt:
+    name: "cargo fmt"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
+
       - name: "rustfmt"
         run: cargo fmt --all --check
 
-      - name: "Check yaml file formatting"
+      - name: "Prettier"
         run: npx prettier --check "**/*.{yaml,yml}"
 
       - name: "Ruff format"
         run: pipx run ruff format --diff .
+
       - name: "Ruff check"
         run: pipx run ruff check .
 
