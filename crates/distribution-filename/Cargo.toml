@@ -16,9 +16,9 @@ workspace = true
 rkyv = ["dep:rkyv", "pep440_rs/rkyv"]
 
 [dependencies]
-pep440_rs = { path = "../pep440-rs" }
-platform-tags = { path = "../platform-tags" }
-uv-normalize = { path = "../uv-normalize" }
+pep440_rs = { workspace = true }
+platform-tags = { workspace = true }
+uv-normalize = { workspace = true }
 
 rkyv = { workspace = true, features = ["strict", "validation"], optional = true }
 serde = { workspace = true, optional = true }

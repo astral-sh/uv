@@ -14,10 +14,10 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-cache-key = { path = "../cache-key" }
-distribution-types = { path = "../distribution-types" }
-uv-fs = { path = "../uv-fs" }
-uv-normalize = { path = "../uv-normalize" }
+cache-key = { workspace = true }
+distribution-types = { workspace = true }
+uv-fs = { workspace = true }
+uv-normalize = { workspace = true }
 
 cachedir = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"], optional = true }

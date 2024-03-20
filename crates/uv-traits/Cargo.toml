@@ -13,12 +13,12 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-types = { path = "../distribution-types" }
-once-map = { path = "../once-map" }
-pep508_rs = { path = "../pep508-rs" }
-uv-cache = { path = "../uv-cache" }
-uv-interpreter = { path = "../uv-interpreter" }
-uv-normalize = { path = "../uv-normalize" }
+distribution-types = { workspace = true }
+once-map = { workspace = true }
+pep508_rs = { workspace = true }
+uv-cache = { workspace = true }
+uv-interpreter = { workspace = true }
+uv-normalize = { workspace = true }
 
 anyhow = { workspace = true }
 serde = { workspace = true, optional = true }

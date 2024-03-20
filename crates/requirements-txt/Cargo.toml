@@ -13,11 +13,11 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-pep508_rs = { path = "../pep508-rs", features = ["rkyv", "serde", "non-pep508-extensions"] }
-uv-client = { path = "../uv-client" }
-uv-fs = { path = "../uv-fs" }
-uv-normalize = { path = "../uv-normalize" }
-uv-warnings = { path = "../uv-warnings" }
+pep508_rs = { workspace = true, features = ["rkyv", "serde", "non-pep508-extensions"] }
+uv-client = { workspace = true }
+uv-fs = { workspace = true }
+uv-normalize = { workspace = true }
+uv-warnings = { workspace = true }
 
 async-recursion = { workspace = true }
 fs-err = { workspace = true }

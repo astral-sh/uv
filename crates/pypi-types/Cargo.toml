@@ -13,9 +13,9 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-pep440_rs = { path = "../pep440-rs", features = ["rkyv", "serde"] }
-pep508_rs = { path = "../pep508-rs", features = ["rkyv", "serde"] }
-uv-normalize = { path = "../uv-normalize" }
+pep440_rs = { workspace = true, features = ["rkyv", "serde"] }
+pep508_rs = { workspace = true, features = ["rkyv", "serde"] }
+uv-normalize = { workspace = true }
 
 chrono = { workspace = true, features = ["serde"] }
 mailparse = { workspace = true }
