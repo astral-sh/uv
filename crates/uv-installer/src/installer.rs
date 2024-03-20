@@ -40,9 +40,9 @@ impl<'a> Installer<'a> {
 
     /// Set the `installer_name` to something other than `"uv"`.
     #[must_use]
-    pub fn with_installer_name(self, installer_name: Option<&str>) -> Self {
+    pub fn with_installer_name(self, installer_name: Option<String>) -> Self {
         Self {
-            installer_name: installer_name.map(str::to_string),
+            installer_name,
             ..self
         }
     }
