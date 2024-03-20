@@ -33,8 +33,6 @@ mod virtualenv;
 pub enum Error {
     #[error("Expected `{0}` to be a virtualenv, but `pyvenv.cfg` is missing")]
     MissingPyVenvCfg(PathBuf),
-    #[error("Both VIRTUAL_ENV and CONDA_PREFIX are set. Please unset one of them.")]
-    Conflict,
     #[error("No versions of Python could be found. Is Python installed?")]
     PythonNotFound,
     #[error("Failed to locate a virtualenv or Conda environment (checked: `VIRTUAL_ENV`, `CONDA_PREFIX`, and `.venv`). Run `uv venv` to create a virtualenv.")]
