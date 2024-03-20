@@ -332,6 +332,10 @@ struct PipCompileArgs {
     #[clap(long)]
     no_header: bool,
 
+    /// Change header comment to reflect custom command wrapping `uv pip compile`.
+    #[clap(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
+    custom_compile_command: Option<String>,
+
     /// Run offline, i.e., without accessing the network.
     #[arg(
         global = true,
@@ -1516,6 +1520,7 @@ async fn run() -> Result<ExitStatus> {
                 args.no_strip_extras,
                 !args.no_annotate,
                 !args.no_header,
+                args.custom_compile_command,
                 args.emit_index_url,
                 args.emit_find_links,
                 index_urls,
