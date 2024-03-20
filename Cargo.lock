@@ -4357,6 +4357,7 @@ dependencies = [
  "clap_complete_command",
  "console",
  "ctrlc",
+ "distribution-filename",
  "distribution-types",
  "filetime",
  "flate2",

@@ -3,14 +3,17 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use console::Term;
+use distribution_filename::{SourceDistFilename, WheelFilename};
 use indexmap::IndexMap;
 use rustc_hash::FxHashSet;
 use tracing::{instrument, Level};
 
-use distribution_types::{FlatIndexLocation, IndexUrl};
-use pep508_rs::{Requirement, RequirementsTxtRequirement};
+use distribution_types::{FlatIndexLocation, IndexUrl, RemoteSource};
+use pep508_rs::{
+    Requirement, RequirementsTxtRequirement, Scheme, UnnamedRequirement, VersionOrUrl,
+};
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 use uv_client::Connectivity;
 use uv_fs::Simplified;
@@ -104,7 +107,7 @@ pub(crate) struct RequirementsSpecification {
     /// The name of the project specifying requirements.
     pub(crate) project: Option<PackageName>,
     /// The requirements for the project.
-    pub(crate) requirements: Vec<Requirement>,
+    pub(crate) requirements: Vec<RequirementsTxtRequirement>,
     /// The constraints for the project.
     pub(crate) constraints: Vec<Requirement>,
     /// The overrides for the project.
@@ -133,7 +136,7 @@ impl RequirementsSpecification {
     ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Package(name) => {
-                let requirement = Requirement::parse(name, std::env::current_dir()?)
+                let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
                     project: None,
@@ -172,13 +175,7 @@ impl RequirementsSpecification {
                     requirements: requirements_txt
                         .requirements
                         .into_iter()
-                        .map(|entry| match entry.requirement {
-                            RequirementsTxtRequirement::Pep508(requirement) => Ok(requirement),
-                            RequirementsTxtRequirement::Unnamed(requirement) => Err(anyhow!(
-                                "Unnamed URL requirements are not yet supported: {requirement}"
-                            )),
-                        })
-                        .collect::<Result<Vec<_>>>()?,
+                        .map(|entry| entry.requirement).collect(),
                     constraints: requirements_txt.constraints,
                     editables: requirements_txt.editables,
                     overrides: vec![],
@@ -253,7 +250,10 @@ impl RequirementsSpecification {
 
                 Self {
                     project: project_name,
-                    requirements,
+                    requirements: requirements
+                        .into_iter()
+                        .map(RequirementsTxtRequirement::Pep508)
+                        .collect(),
                     constraints: vec![],
                     overrides: vec![],
                     editables: vec![],
@@ -469,4 +469,117 @@ pub(crate) async fn read_lockfile(
             .filter(|preference| !packages.contains(preference.name()))
             .collect(),
     })
+}
+
+/// Like [`RequirementsSpecification`], but with concrete names for all requirements.
+#[derive(Debug, Default)]
+pub(crate) struct NamedRequirements {
+    /// The name of the project specifying requirements.
+    pub(crate) project: Option<PackageName>,
+    /// The requirements for the project.
+    pub(crate) requirements: Vec<Requirement>,
+    /// The constraints for the project.
+    pub(crate) constraints: Vec<Requirement>,
+    /// The overrides for the project.
+    pub(crate) overrides: Vec<Requirement>,
+    /// Package to install as editable installs
+    pub(crate) editables: Vec<EditableRequirement>,
+    /// The extras used to collect requirements.
+    pub(crate) extras: FxHashSet<ExtraName>,
+    /// The index URL to use for fetching packages.
+    pub(crate) index_url: Option<IndexUrl>,
+    /// The extra index URLs to use for fetching packages.
+    pub(crate) extra_index_urls: Vec<IndexUrl>,
+    /// Whether to disallow index usage.
+    pub(crate) no_index: bool,
+    /// The `--find-links` locations to use for fetching packages.
+    pub(crate) find_links: Vec<FlatIndexLocation>,
+}
+
+impl NamedRequirements {
+    /// Convert a [`RequirementsSpecification`] into a [`NamedRequirements`].
+    pub(crate) fn from_spec(
+        spec: RequirementsSpecification,
+    ) -> Result<Self> {
+        Ok(Self {
+            project: spec.project,
+            requirements: spec.requirements.into_iter().map(|requirement| match requirement {
+                RequirementsTxtRequirement::Pep508(requirement) => requirement,
+                RequirementsTxtRequirement::Unnamed(requirement) => name_requirement(requirement)?,
+            }).collect::<Result<_>>()?,
+            constraints: spec.constraints,
+            overrides: spec.overrides,
+            editables: spec.editables,
+            extras: spec.extras,
+            index_url: spec.index_url,
+            extra_index_urls: spec.extra_index_urls,
+            no_index: spec.no_index,
+            find_links: spec.find_links,
+        })
+    }
+}
+
+/// Infer the package name for a given "unnamed" requirement.
+pub(crate) fn name_requirement(requirement: UnnamedRequirement) -> Result<Requirement> {
+    // If the requirement is a wheel, extract the package name from the wheel filename.
+    //
+    // Ex) `anyio-4.3.0-py3-none-any.whl`
+    if Path::new(requirement.url.path())
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+    {
+        let filename = WheelFilename::from_str(&requirement.url.filename()?)?;
+        return Ok(Requirement {
+            name: filename.name,
+            extras: requirement.extras,
+            version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+            marker: requirement.marker,
+        })
+    }
+
+    // If the requirement is a source archive, try to extract the package name from the archive
+    // filename. This isn't guaranteed to work.
+    //
+    // Ex) `anyio-4.3.0.tar.gz`
+    if let Some(filename) = requirement
+        .url
+        .filename()
+        .ok()
+        .and_then(|filename| SourceDistFilename::parsed_normalized_filename(&filename).ok())
+    {
+        return Ok(Requirement {
+            name: filename.name,
+            extras: requirement.extras,
+            version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+            marker: requirement.marker,
+        });
+    }
+
+        // Otherwise, download and/or extract the source archive.
+        // TODO(charlie): This should respect caching.
+        // TODO(charlie): If the URL is already installed, extract the package name from the metadata.
+        let path = match Scheme::parse(requirement.url.scheme()) {
+            Some(Scheme::File) => requirement.url.to_file_path()?,
+            Some(Scheme::Http | Scheme::Https) => Err(anyhow::anyhow!(
+                "HTTP/HTTPS URLs are not supported for unnamed requirements"
+            ))?,
+            Some(Scheme::GitSsh | Scheme::GitHttps) => Err(anyhow::anyhow!(
+                "VCS URLs are not supported for unnamed requirements"
+            ))?,
+            _ => Err(anyhow::anyhow!(
+                "Unsupported scheme for unnamed requirement: {}",
+                requirement.url
+            ))?,
+        };
+
+        // If the requirement is a source archive, extract the package name from the archive filename.
+
+        // If the requirement is a directory, extract the package name from the metadata.
+
+        // If the requirement is a VCS URL, clone it and extract the package name from the metadata.
+
+        // If the requirement is an HTTPS URL, download it and extract the package name from the metadata.
+
+        todo!()
+    }
 }
