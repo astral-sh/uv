@@ -2,6 +2,11 @@ use std::borrow::Cow;
 use std::path::{Component, Path, PathBuf};
 
 pub trait Simplified {
+    /// Relativize a [`Path`] against the current working directory.
+    ///
+    /// If the current working directory is not a parent of the path, the path is returned as-is.
+    fn relativize(&self) -> &Path;
+
     /// Simplify a [`Path`].
     ///
     /// On Windows, this will strip the `\\?\` prefix from paths. On other platforms, it's a no-op.
@@ -15,6 +20,12 @@ pub trait Simplified {
 }
 
 impl<T: AsRef<Path>> Simplified for T {
+    fn relativize(&self) -> &Path {
+        let path = self.as_ref();
+        let cwd = std::env::current_dir().expect("failed to get current working directory");
+        path.strip_prefix(cwd).unwrap_or(path)
+    }
+
     fn simplified(&self) -> &Path {
         dunce::simplified(self.as_ref())
     }

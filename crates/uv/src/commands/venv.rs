@@ -116,7 +116,11 @@ async fn venv_impl(
         printer.stderr(),
         "Using Python {} interpreter at: {}",
         interpreter.python_version(),
-        interpreter.sys_executable().simplified_display().cyan()
+        interpreter
+            .sys_executable()
+            .relativize()
+            .simplified_display()
+            .cyan()
     )
     .into_diagnostic()?;
 
