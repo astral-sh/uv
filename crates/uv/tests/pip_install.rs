@@ -1,13 +1,12 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
-use std::process::Command;
-
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::indoc;
 use itertools::Itertools;
+use std::process::Command;
 use url::Url;
 
 use common::{uv_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
@@ -2842,4 +2841,49 @@ fn install_index_with_relative_links_authenticated() {
     );
 
     context.assert_command("import anyio").success();
+}
+
+/// The modified time of `site-packages` should change on package installation.
+#[cfg(unix)]
+#[test]
+fn install_site_packages_mtime_updated() -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
+    let context = TestContext::new("3.12");
+
+    let site_packages = context.site_packages();
+
+    // `mtime` is only second-resolution so we include the nanoseconds as well
+    let metadata = site_packages.metadata()?;
+    let pre_mtime = metadata.mtime();
+    let pre_mtime_ns = metadata.mtime_nsec();
+
+    // Install a package.
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    let metadata = site_packages.metadata()?;
+    let post_mtime = metadata.mtime();
+    let post_mtime_ns = metadata.mtime_nsec();
+
+    assert!(
+        (post_mtime, post_mtime_ns) > (pre_mtime, pre_mtime_ns),
+        "Expected newer mtime than {pre_mtime}.{pre_mtime_ns} but got {post_mtime}.{post_mtime_ns}"
+    );
+
+    Ok(())
 }

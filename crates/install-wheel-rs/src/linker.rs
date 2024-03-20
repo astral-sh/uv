@@ -3,6 +3,7 @@
 
 use std::path::Path;
 use std::str::FromStr;
+use std::time::SystemTime;
 
 use fs_err as fs;
 use fs_err::{DirEntry, File};
@@ -261,6 +262,31 @@ fn clone_wheel_files(
             &mut attempt,
         )?;
         count += 1;
+    }
+
+    // The directory mtime is not updated when cloning and the mtime is used by CPython's
+    // import mechanisms to determine if it should look for new packages in a directory.
+    // Here, we force the mtime to be updated to ensure that packages are importable without
+    // manual cache invalidation.
+    //
+    // <https://github.com/python/cpython/blob/8336cb2b6f428246803b02a4e97fce49d0bb1e09/Lib/importlib/_bootstrap_external.py#L1601>
+    let now = SystemTime::now();
+
+    // `File.set_modified` is not available in `fs_err` yet
+    #[allow(clippy::disallowed_types)]
+    match std::fs::File::open(site_packages.as_ref()) {
+        Ok(dir) => {
+            if let Err(err) = dir.set_modified(now) {
+                debug!(
+                    "Failed to update mtime for {}: {err}",
+                    site_packages.as_ref().display()
+                );
+            }
+        }
+        Err(err) => debug!(
+            "Failed to open {} to update mtime: {err}",
+            site_packages.as_ref().display()
+        ),
     }
 
     Ok(count)
