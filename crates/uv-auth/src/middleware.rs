@@ -262,6 +262,7 @@ mod tests {
     #[tokio::test]
     async fn test_with_keyring_no_username() -> Result<(), Box<dyn std::error::Error>> {
         let server = MockServer::start().await;
+        // this shouldn't save anything because there's no username in the URL
         GLOBAL_AUTH_STORE.save_from_url(&Url::parse(&server.uri()).expect("valid URL"));
 
         Mock::given(method("GET"))
