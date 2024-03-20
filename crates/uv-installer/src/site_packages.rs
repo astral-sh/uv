@@ -30,7 +30,7 @@ pub struct SitePackages<'a> {
     /// The installed distributions, keyed by name. Although the Python runtime does not support it,
     /// it is possible to have multiple distributions with the same name to be present in the
     /// virtual environment, which we handle gracefully.
-    by_name: FxHashMap<PackageName, Vec<usize>>,
+    pub by_name: FxHashMap<PackageName, Vec<usize>>,
     /// The installed editable distributions, keyed by URL.
     by_url: FxHashMap<Url, Vec<usize>>,
 }

@@ -336,7 +336,7 @@ pub(crate) async fn pip_install(
 }
 
 /// Consolidate the requirements for an installation.
-async fn read_requirements(
+pub(crate) async fn read_requirements(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
@@ -385,7 +385,7 @@ async fn read_requirements(
 
 /// Build a set of editable distributions.
 #[allow(clippy::too_many_arguments)]
-async fn build_editables(
+pub(crate) async fn build_editables(
     editables: &[EditableRequirement],
     editable_wheel_dir: &Path,
     cache: &Cache,
@@ -451,7 +451,7 @@ async fn build_editables(
 
 /// Resolve a set of requirements, similar to running `pip compile`.
 #[allow(clippy::too_many_arguments)]
-async fn resolve(
+pub(crate) async fn resolve(
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
@@ -910,7 +910,7 @@ async fn install(
 }
 
 /// Validate the installed packages in the virtual environment.
-fn validate(
+pub(crate) fn validate(
     resolution: &Resolution,
     venv: &PythonEnvironment,
     printer: Printer,
@@ -936,7 +936,7 @@ fn validate(
 }
 
 #[derive(thiserror::Error, Debug)]
-enum Error {
+pub(crate) enum Error {
     #[error(transparent)]
     Resolve(#[from] uv_resolver::ResolveError),
 
