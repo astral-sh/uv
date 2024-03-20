@@ -9,6 +9,7 @@ pub struct Installer<'a> {
     venv: &'a PythonEnvironment,
     link_mode: install_wheel_rs::linker::LinkMode,
     reporter: Option<Box<dyn Reporter>>,
+    installer_name: Option<String>,
 }
 
 impl<'a> Installer<'a> {
@@ -18,6 +19,7 @@ impl<'a> Installer<'a> {
             venv,
             link_mode: install_wheel_rs::linker::LinkMode::default(),
             reporter: None,
+            installer_name: Some("uv".to_string()),
         }
     }
 
@@ -32,6 +34,15 @@ impl<'a> Installer<'a> {
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         Self {
             reporter: Some(Box::new(reporter)),
+            ..self
+        }
+    }
+
+    /// Set the `installer_name` to something other than `"uv"`.
+    #[must_use]
+    pub fn with_installer_name(self, installer_name: Option<&str>) -> Self {
+        Self {
+            installer_name: installer_name.map(str::to_string),
             ..self
         }
     }
@@ -52,7 +63,7 @@ impl<'a> Installer<'a> {
                         .map(pypi_types::DirectUrl::try_from)
                         .transpose()?
                         .as_ref(),
-                    Some("uv"),
+                    self.installer_name.as_deref(),
                     self.link_mode,
                 )
                 .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;
