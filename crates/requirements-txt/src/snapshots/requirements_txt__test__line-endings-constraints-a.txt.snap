@@ -31,48 +31,44 @@ RequirementsTxt {
         },
     ],
     constraints: [
-        Pep508(
-            Requirement {
-                name: PackageName(
-                    "django",
-                ),
-                extras: [],
-                version_or_url: Some(
-                    VersionSpecifier(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "2.1.15",
-                                },
-                            ],
-                        ),
+        Requirement {
+            name: PackageName(
+                "django",
+            ),
+            extras: [],
+            version_or_url: Some(
+                VersionSpecifier(
+                    VersionSpecifiers(
+                        [
+                            VersionSpecifier {
+                                operator: Equal,
+                                version: "2.1.15",
+                            },
+                        ],
                     ),
                 ),
-                marker: None,
-            },
-        ),
-        Pep508(
-            Requirement {
-                name: PackageName(
-                    "pytz",
-                ),
-                extras: [],
-                version_or_url: Some(
-                    VersionSpecifier(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "2023.3",
-                                },
-                            ],
-                        ),
+            ),
+            marker: None,
+        },
+        Requirement {
+            name: PackageName(
+                "pytz",
+            ),
+            extras: [],
+            version_or_url: Some(
+                VersionSpecifier(
+                    VersionSpecifiers(
+                        [
+                            VersionSpecifier {
+                                operator: Equal,
+                                version: "2023.3",
+                            },
+                        ],
                     ),
                 ),
-                marker: None,
-            },
-        ),
+            ),
+            marker: None,
+        },
     ],
     editables: [],
     index_url: None,

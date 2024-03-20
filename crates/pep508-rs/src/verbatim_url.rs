@@ -47,7 +47,7 @@ impl VerbatimUrl {
 
         // Convert to a URL.
         let mut url = Url::from_file_path(path.clone())
-            .expect(&format!("path is absolute: {}", path.display()));
+            .unwrap_or_else(|_| panic!("path is absolute: {}", path.display()));
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {
@@ -82,11 +82,13 @@ impl VerbatimUrl {
         let (path, fragment) = split_fragment(&path);
 
         // Convert to a URL.
-        let mut url = Url::from_file_path(path.clone()).expect(&format!(
-            "path is absolute: {}, {}",
-            path.display(),
-            working_dir.as_ref().display()
-        ));
+        let mut url = Url::from_file_path(path.clone()).unwrap_or_else(|_| {
+            panic!(
+                "path is absolute: {}, {}",
+                path.display(),
+                working_dir.as_ref().display()
+            )
+        });
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {
@@ -115,7 +117,7 @@ impl VerbatimUrl {
 
         // Convert to a URL.
         let mut url = Url::from_file_path(path.clone())
-            .expect(&format!("path is absolute: {}", path.display()));
+            .unwrap_or_else(|_| panic!("path is absolute: {}", path.display()));
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {

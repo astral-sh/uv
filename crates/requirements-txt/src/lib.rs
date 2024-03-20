@@ -46,7 +46,7 @@ use unscanny::{Pattern, Scanner};
 use url::Url;
 
 use pep508_rs::{
-    expand_env_vars, split_scheme, Extras, Pep508Error, Pep508ErrorSource,
+    expand_env_vars, split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement,
     RequirementsTxtRequirement, Scheme, VerbatimUrl,
 };
 use uv_client::Connectivity;
@@ -313,7 +313,7 @@ pub struct RequirementsTxt {
     /// The actual requirements with the hashes.
     pub requirements: Vec<RequirementEntry>,
     /// Constraints included with `-c`.
-    pub constraints: Vec<RequirementsTxtRequirement>,
+    pub constraints: Vec<Requirement>,
     /// Editables with `-e`.
     pub editables: Vec<EditableRequirement>,
     /// The index URL, specified with `--index-url`.
@@ -470,12 +470,19 @@ impl RequirementsTxt {
                     // Treat any nested requirements or constraints as constraints. This differs
                     // from `pip`, which seems to treat `-r` requirements in constraints files as
                     // _requirements_, but we don't want to support that.
-                    data.constraints.extend(
-                        sub_constraints
-                            .requirements
-                            .into_iter()
-                            .map(|requirement_entry| requirement_entry.requirement),
-                    );
+                    for entry in sub_constraints.requirements {
+                        match entry.requirement {
+                            RequirementsTxtRequirement::Pep508(requirement) => {
+                                data.constraints.push(requirement);
+                            }
+                            RequirementsTxtRequirement::Unnamed(_) => {
+                                return Err(RequirementsTxtParserError::UnnamedConstraint {
+                                    start,
+                                    end,
+                                });
+                            }
+                        }
+                    }
                     data.constraints.extend(sub_constraints.constraints);
                 }
                 RequirementsTxtStatement::RequirementEntry(requirement_entry) => {
@@ -610,7 +617,7 @@ fn parse_entry(
             }
         })?;
         RequirementsTxtStatement::FindLinks(path_or_url)
-    } else if s.at(char::is_ascii_alphanumeric) || s.at(|char| matches!(char, '.' | '/')) {
+    } else if s.at(char::is_ascii_alphanumeric) || s.at(|char| matches!(char, '.' | '/' | '$')) {
         let (requirement, hashes) = parse_requirement_and_hashes(s, content, working_dir)?;
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
             requirement,
@@ -848,6 +855,10 @@ pub enum RequirementsTxtParserError {
     InvalidEditablePath(String),
     UnsupportedUrl(String),
     MissingRequirementPrefix(String),
+    UnnamedConstraint {
+        start: usize,
+        end: usize,
+    },
     Parser {
         message: String,
         line: usize,
@@ -895,6 +906,10 @@ impl RequirementsTxtParserError {
             },
             Self::UnsupportedUrl(url) => Self::UnsupportedUrl(url),
             Self::MissingRequirementPrefix(given) => Self::MissingRequirementPrefix(given),
+            Self::UnnamedConstraint { start, end } => Self::UnnamedConstraint {
+                start: start + offset,
+                end: end + offset,
+            },
             Self::Parser {
                 message,
                 line,
@@ -942,6 +957,9 @@ impl Display for RequirementsTxtParserError {
             Self::MissingRequirementPrefix(given) => {
                 write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
             }
+            Self::UnnamedConstraint { .. } => {
+                write!(f, "Unnamed requirements are not allowed as constraints")
+            }
             Self::Parser {
                 message,
                 line,
@@ -981,6 +999,7 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::InvalidEditablePath(_) => None,
             Self::UnsupportedUrl(_) => None,
             Self::MissingRequirementPrefix(_) => None,
+            Self::UnnamedConstraint { .. } => None,
             Self::UnsupportedRequirement { source, .. } => Some(source),
             Self::Pep508 { source, .. } => Some(source),
             Self::Subfile { source, .. } => Some(source.as_ref()),
@@ -1021,6 +1040,13 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Requirement `{given}` in `{}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?",
+                    self.file.user_display(),
+                )
+            }
+            RequirementsTxtParserError::UnnamedConstraint { .. } => {
+                write!(
+                    f,
+                    "Unnamed requirements are not allowed as constraints in `{}`",
                     self.file.user_display(),
                 )
             }
@@ -1160,7 +1186,6 @@ mod test {
     #[test_case(Path::new("constraints-a.txt"))]
     #[test_case(Path::new("constraints-b.txt"))]
     #[test_case(Path::new("empty.txt"))]
-    #[test_case(Path::new("bare-url.txt"))]
     #[test_case(Path::new("for-poetry.txt"))]
     #[test_case(Path::new("include-a.txt"))]
     #[test_case(Path::new("include-b.txt"))]
@@ -1184,7 +1209,6 @@ mod test {
     #[test_case(Path::new("constraints-a.txt"))]
     #[test_case(Path::new("constraints-b.txt"))]
     #[test_case(Path::new("empty.txt"))]
-    #[test_case(Path::new("bare-url.txt"))]
     #[test_case(Path::new("for-poetry.txt"))]
     #[test_case(Path::new("include-a.txt"))]
     #[test_case(Path::new("include-b.txt"))]
@@ -1223,6 +1247,53 @@ mod test {
 
         let snapshot = format!("line-endings-{}", path.to_string_lossy());
         insta::assert_debug_snapshot!(snapshot, actual);
+    }
+
+    #[cfg(unix)]
+    #[test_case(Path::new("bare-url.txt"))]
+    #[tokio::test]
+    async fn parse_unnamed_unix(path: &Path) {
+        let working_dir = workspace_test_data_dir().join("requirements-txt");
+        let requirements_txt = working_dir.join(path);
+
+        let actual = RequirementsTxt::parse(requirements_txt, &working_dir, Connectivity::Offline)
+            .await
+            .unwrap();
+
+        let snapshot = format!("parse-unix-{}", path.to_string_lossy());
+        let pattern = regex::escape(&working_dir.simplified_display().to_string());
+        let filters = vec![(pattern.as_str(), "[WORKSPACE_DIR]")];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_debug_snapshot!(snapshot, actual);
+        });
+    }
+
+    #[cfg(windows)]
+    #[test_case(Path::new("bare-url.txt"))]
+    #[tokio::test]
+    async fn parse_unnamed_windows(path: &Path) {
+        let working_dir = workspace_test_data_dir().join("requirements-txt");
+        let requirements_txt = working_dir.join(path);
+
+        let actual = RequirementsTxt::parse(requirements_txt, &working_dir, Connectivity::Offline)
+            .await
+            .unwrap();
+
+        let snapshot = format!("parse-windows-{}", path.to_string_lossy());
+        let pattern = regex::escape(
+            &working_dir
+                .simplified_display()
+                .to_string()
+                .replace('\\', "/"),
+        );
+        let filters = vec![(pattern.as_str(), "[WORKSPACE_DIR]")];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_debug_snapshot!(snapshot, actual);
+        });
     }
 
     #[tokio::test]

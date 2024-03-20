@@ -5,9 +5,8 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Bare(
-                BareRequirement {
-                    extras: [],
+            requirement: Unnamed(
+                UnnamedRequirement {
                     url: VerbatimUrl {
                         url: Url {
                             scheme: "file",
@@ -16,7 +15,7 @@ RequirementsTxt {
                             password: None,
                             host: None,
                             port: None,
-                            path: "/Users/crmarsh/workspace/uv/crates/requirements-txt/test-data/requirements-txt/scripts/editable-installs/black_editable",
+                            path: "[WORKSPACE_DIR]/scripts/editable-installs/black_editable",
                             query: None,
                             fragment: None,
                         },
@@ -24,6 +23,7 @@ RequirementsTxt {
                             "./scripts/editable-installs/black_editable",
                         ),
                     },
+                    extras: [],
                     marker: None,
                 },
             ),
@@ -31,29 +31,29 @@ RequirementsTxt {
             editable: false,
         },
         RequirementEntry {
-            requirement: Bare(
-                BareRequirement {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimUrl {
+                        url: Url {
+                            scheme: "file",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: None,
+                            port: None,
+                            path: "[WORKSPACE_DIR]/scripts/editable-installs/black_editable",
+                            query: None,
+                            fragment: None,
+                        },
+                        given: Some(
+                            "./scripts/editable-installs/black_editable",
+                        ),
+                    },
                     extras: [
                         ExtraName(
                             "dev",
                         ),
                     ],
-                    url: VerbatimUrl {
-                        url: Url {
-                            scheme: "file",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: None,
-                            port: None,
-                            path: "/Users/crmarsh/workspace/uv/crates/requirements-txt/test-data/requirements-txt/scripts/editable-installs/black_editable",
-                            query: None,
-                            fragment: None,
-                        },
-                        given: Some(
-                            "./scripts/editable-installs/black_editable",
-                        ),
-                    },
                     marker: None,
                 },
             ),
@@ -61,9 +61,8 @@ RequirementsTxt {
             editable: false,
         },
         RequirementEntry {
-            requirement: Bare(
-                BareRequirement {
-                    extras: [],
+            requirement: Unnamed(
+                UnnamedRequirement {
                     url: VerbatimUrl {
                         url: Url {
                             scheme: "file",
@@ -80,6 +79,7 @@ RequirementsTxt {
                             "file:///scripts/editable-installs/black_editable",
                         ),
                     },
+                    extras: [],
                     marker: None,
                 },
             ),

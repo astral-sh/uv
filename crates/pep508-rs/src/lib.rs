@@ -125,19 +125,18 @@ create_exception!(
 /// A requirement specifier in a `requirements.txt` file.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
 pub enum RequirementsTxtRequirement {
     /// A PEP 508-compliant dependency specifier.
     Pep508(Requirement),
     /// A PEP 508-like, direct URL dependency specifier.
-    Bare(BareRequirement),
+    Unnamed(UnnamedRequirement),
 }
 
 impl Display for RequirementsTxtRequirement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Pep508(pep508_requirement) => write!(f, "{}", pep508_requirement),
-            Self::Bare(bare_requirement) => write!(f, "{}", bare_requirement),
+            Self::Pep508(requirement) => write!(f, "{requirement}"),
+            Self::Unnamed(requirement) => write!(f, "{requirement}"),
         }
     }
 }
@@ -149,20 +148,21 @@ impl Display for RequirementsTxtRequirement {
 /// is implementation-defined.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
-pub struct BareRequirement {
+pub struct UnnamedRequirement {
+    /// The direct URL that defines the version specifier.
+    pub url: VerbatimUrl,
     /// The list of extras such as `security`, `tests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     pub extras: Vec<ExtraName>,
-    /// The direct URL that defines the version specifier.
-    pub url: VerbatimUrl,
     /// The markers such as `python_version > "3.8"` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
 }
 
-impl Display for BareRequirement {
+impl Display for UnnamedRequirement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.url)?;
         if !self.extras.is_empty() {
             write!(
                 f,
@@ -174,7 +174,6 @@ impl Display for BareRequirement {
                     .join(",")
             )?;
         }
-        write!(f, " @ {}", self.url)?;
         if let Some(marker) = &self.marker {
             write!(f, " ; {}", marker)?;
         }
@@ -184,7 +183,7 @@ impl Display for BareRequirement {
 
 /// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
 #[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for BareRequirement {
+impl<'de> Deserialize<'de> for UnnamedRequirement {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -196,7 +195,7 @@ impl<'de> Deserialize<'de> for BareRequirement {
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 #[cfg(feature = "serde")]
-impl Serialize for BareRequirement {
+impl Serialize for UnnamedRequirement {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -490,19 +489,19 @@ impl Requirement {
     }
 }
 
-impl FromStr for BareRequirement {
+impl FromStr for UnnamedRequirement {
     type Err = Pep508Error;
 
     /// Parse a PEP 508-like direct URL requirement without a package name.
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        parse_bare_requirement(&mut Cursor::new(input), None)
+        parse_unnamed_requirement(&mut Cursor::new(input), None)
     }
 }
 
-impl BareRequirement {
+impl UnnamedRequirement {
     /// Parse a PEP 508-like direct URL requirement without a package name.
     pub fn parse(input: &str, working_dir: impl AsRef<Path>) -> Result<Self, Pep508Error> {
-        parse_bare_requirement(&mut Cursor::new(input), Some(working_dir.as_ref()))
+        parse_unnamed_requirement(&mut Cursor::new(input), Some(working_dir.as_ref()))
     }
 }
 
@@ -515,8 +514,7 @@ impl FromStr for RequirementsTxtRequirement {
             Ok(requirement) => Ok(Self::Pep508(requirement)),
             Err(err) => match err.message {
                 Pep508ErrorSource::UnsupportedRequirement(_) => {
-                    let bare_requirement = BareRequirement::from_str(input)?;
-                    Ok(Self::Bare(bare_requirement))
+                    Ok(Self::Unnamed(UnnamedRequirement::from_str(input)?))
                 }
                 _ => Err(err),
             },
@@ -533,8 +531,10 @@ impl RequirementsTxtRequirement {
             Err(err) => match err.message {
                 Pep508ErrorSource::UnsupportedRequirement(_) => {
                     // If that fails, attempt to parse as a direct URL requirement.
-                    let bare_requirement = BareRequirement::parse(input, &working_dir)?;
-                    Ok(Self::Bare(bare_requirement))
+                    Ok(Self::Unnamed(UnnamedRequirement::parse(
+                        input,
+                        &working_dir,
+                    )?))
                 }
                 _ => Err(err),
             },
@@ -710,7 +710,7 @@ fn parse_name(cursor: &mut Cursor) -> Result<PackageName, Pep508Error> {
             // Check if the user added a filesystem path without a package name. pip supports this
             // in `requirements.txt`, but it doesn't adhere to the PEP 508 grammar.
             let mut clone = cursor.clone().at(start);
-            return if looks_like_file_path(&mut clone) {
+            return if looks_like_unnamed_requirement(&mut clone) {
                 Err(Pep508Error {
                     message: Pep508ErrorSource::UnsupportedRequirement("URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ /path/to/file`).".to_string()),
                     start,
@@ -762,30 +762,32 @@ fn parse_name(cursor: &mut Cursor) -> Result<PackageName, Pep508Error> {
     }
 }
 
-/// Parse a filesystem path from the [`Cursor`], advancing the [`Cursor`] to the end of the path.
+/// Parse a potential URL from the [`Cursor`], advancing the [`Cursor`] to the end of the URL.
 ///
-/// Returns `false` if the path is not a clear and unambiguous filesystem path.
-fn looks_like_file_path(cursor: &mut Cursor) -> bool {
-    let Some((_, first_char)) = cursor.next() else {
+/// Returns `true` if the URL appears to be a viable unnamed requirement, and `false` otherwise.
+fn looks_like_unnamed_requirement(cursor: &mut Cursor) -> bool {
+    // Read the entire path.
+    let (start, len) = cursor.take_while(|char| !char.is_whitespace());
+    let url = cursor.slice(start, len);
+
+    // Expand any environment variables in the path.
+    let expanded = expand_env_vars(url);
+
+    // Analyze the path.
+    let mut chars = expanded.chars();
+
+    let Some(first_char) = chars.next() else {
         return false;
     };
 
     // Ex) `/bin/ls`
     if first_char == '\\' || first_char == '/' || first_char == '.' {
-        // Read until the end of the path.
-        cursor.take_while(|char| !char.is_whitespace());
         return true;
     }
 
-    // Ex) `C:`
-    if first_char.is_alphabetic() {
-        if let Some((_, second_char)) = cursor.next() {
-            if second_char == ':' {
-                // Read until the end of the path.
-                cursor.take_while(|char| !char.is_whitespace());
-                return true;
-            }
-        }
+    // Ex) `https://` or `C:`
+    if split_scheme(&expanded).is_some() {
+        return true;
     }
 
     false
@@ -1017,12 +1019,13 @@ fn preprocess_url(
     }
 }
 
-/// Like [`parse_url`], but allows for extras to be present at the end of relative paths, to comply
+/// Like [`parse_url`], but allows for extras to be present at the end of the URL, to comply
 /// with the non-PEP 508 extensions.
 ///
 /// For example:
+/// - `https://download.pytorch.org/whl/torch_stable.html[dev]`
 /// - `../editable[dev]`
-fn parse_bare_url(
+fn parse_unnamed_url(
     cursor: &mut Cursor,
     working_dir: Option<&Path>,
 ) -> Result<(VerbatimUrl, Vec<ExtraName>), Pep508Error> {
@@ -1040,14 +1043,14 @@ fn parse_bare_url(
         });
     }
 
-    let url = preprocess_bare_url(url, working_dir, cursor, start, len)?;
+    let url = preprocess_unnamed_url(url, working_dir, cursor, start, len)?;
 
     Ok(url)
 }
 
 /// Create a `VerbatimUrl` to represent the requirement, and extracts any extras at the end of the
 /// URL, to comply with the non-PEP 508 extensions.
-fn preprocess_bare_url(
+fn preprocess_unnamed_url(
     url: &str,
     #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused))] working_dir: Option<&Path>,
     cursor: &Cursor,
@@ -1055,7 +1058,9 @@ fn preprocess_bare_url(
     len: usize,
 ) -> Result<(VerbatimUrl, Vec<ExtraName>), Pep508Error> {
     // Split extras _before_ expanding the URL. We assume that the extras are not environment
-    // variables.
+    // variables. If we parsed the extras after expanding the URL, then the verbatim representation
+    // of the URL itself would be ambiguous, since it would consist of the environment variable,
+    // which would expand to _more_ than the URL.
     let (url, extras) = if let Some((url, extras)) = split_extras(url) {
         (url, Some(extras))
     } else {
@@ -1389,17 +1394,17 @@ fn parse_pep508_requirement(
     })
 }
 
-/// Parse a PEP 508-like direct URL specifier.
+/// Parse a PEP 508-like direct URL specifier without a package name.
 ///
-/// Extras are allowed on relative paths, but otherwise disallowed.
-fn parse_bare_requirement(
+/// Unlike pip, we allow extras on URLs and paths.
+fn parse_unnamed_requirement(
     cursor: &mut Cursor,
     working_dir: Option<&Path>,
-) -> Result<BareRequirement, Pep508Error> {
+) -> Result<UnnamedRequirement, Pep508Error> {
     cursor.eat_whitespace();
 
     // Parse the URL itself, along with any extras.
-    let (url, extras) = parse_bare_url(cursor, working_dir)?;
+    let (url, extras) = parse_unnamed_url(cursor, working_dir)?;
     let requirement_end = cursor.pos;
 
     // wsp*
@@ -1440,7 +1445,7 @@ fn parse_bare_requirement(
         });
     }
 
-    Ok(BareRequirement {
+    Ok(UnnamedRequirement {
         url,
         extras,
         marker,
@@ -1487,14 +1492,14 @@ mod tests {
         parse_markers_impl, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
         MarkerValueString, MarkerValueVersion,
     };
-    use crate::{BareRequirement, Cursor, Pep508Error, Requirement, VerbatimUrl, VersionOrUrl};
+    use crate::{Cursor, Pep508Error, Requirement, UnnamedRequirement, VerbatimUrl, VersionOrUrl};
 
     fn parse_pepe508_err(input: &str) -> String {
         Requirement::from_str(input).unwrap_err().to_string()
     }
 
-    fn parse_bare_err(input: &str) -> String {
-        BareRequirement::from_str(input).unwrap_err().to_string()
+    fn parse_unnamed_err(input: &str) -> String {
+        UnnamedRequirement::from_str(input).unwrap_err().to_string()
     }
 
     #[cfg(windows)]
@@ -1610,18 +1615,33 @@ mod tests {
 
     #[test]
     fn direct_url_no_extras() {
-        let numpy = BareRequirement::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
+        let numpy = UnnamedRequirement::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
         assert_eq!(numpy.url.to_string(), "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl");
         assert_eq!(numpy.extras, vec![]);
     }
 
     #[test]
+    #[cfg(unix)]
     fn direct_url_extras() {
         let numpy =
-            BareRequirement::from_str("/path/to/numpy-1.26.4-cp312-cp312-win32.whl[dev]").unwrap();
+            UnnamedRequirement::from_str("/path/to/numpy-1.26.4-cp312-cp312-win32.whl[dev]")
+                .unwrap();
         assert_eq!(
             numpy.url.to_string(),
             "file:///path/to/numpy-1.26.4-cp312-cp312-win32.whl"
+        );
+        assert_eq!(numpy.extras, vec![ExtraName::from_str("dev").unwrap()]);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn direct_url_extras() {
+        let numpy =
+            UnnamedRequirement::from_str("C:\\path\\to\\numpy-1.26.4-cp312-cp312-win32.whl[dev]")
+                .unwrap();
+        assert_eq!(
+            numpy.url.to_string(),
+            "file:///C:/path/to/numpy-1.26.4-cp312-cp312-win32.whl"
         );
         assert_eq!(numpy.extras, vec![ExtraName::from_str("dev").unwrap()]);
     }
@@ -1911,7 +1931,7 @@ mod tests {
     }
 
     #[test]
-    fn error_bare_url() {
+    fn error_unnamedunnamed_url() {
         assert_snapshot!(
             parse_pepe508_err(r"git+https://github.com/pallets/flask.git"),
             @"
@@ -1922,7 +1942,7 @@ mod tests {
     }
 
     #[test]
-    fn error_bare_file_path() {
+    fn error_unnamed_file_path() {
         assert_snapshot!(
             parse_pepe508_err(r"/path/to/flask.tar.gz"),
             @r###"
@@ -2099,9 +2119,9 @@ mod tests {
     }
 
     #[test]
-    fn error_invalid_extra_bare_url() {
+    fn error_invalid_extra_unnamed_url() {
         assert_snapshot!(
-            parse_bare_err("/foo-3.0.0-py3-none-any.whl[d,]"),
+            parse_unnamed_err("/foo-3.0.0-py3-none-any.whl[d,]"),
             @r###"
         Expected an alphanumeric character starting the extra name, found ']'
         /foo-3.0.0-py3-none-any.whl[d,]

@@ -3,7 +3,7 @@ pub use error::ResolveError;
 pub use finder::{DistFinder, Reporter as FinderReporter};
 pub use manifest::Manifest;
 pub use options::{Options, OptionsBuilder};
-pub use preferences::Preference;
+pub use preferences::{Preference, PreferenceError};
 pub use prerelease_mode::PreReleaseMode;
 pub use python_requirement::PythonRequirement;
 pub use resolution::{AnnotationStyle, Diagnostic, DisplayResolutionGraph, ResolutionGraph};
