@@ -21,6 +21,7 @@ use uv_installer::{
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::InMemoryIndex;
 use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -286,15 +287,27 @@ pub(crate) async fn pip_sync(
         let start = std::time::Instant::now();
 
         for dist_info in extraneous.iter().chain(reinstalls.iter()) {
-            let summary = uv_installer::uninstall(dist_info).await?;
-            debug!(
-                "Uninstalled {} ({} file{}, {} director{})",
-                dist_info.name(),
-                summary.file_count,
-                if summary.file_count == 1 { "" } else { "s" },
-                summary.dir_count,
-                if summary.dir_count == 1 { "y" } else { "ies" },
-            );
+            match uv_installer::uninstall(dist_info).await {
+                Ok(summary) => {
+                    debug!(
+                        "Uninstalled {} ({} file{}, {} director{})",
+                        dist_info.name(),
+                        summary.file_count,
+                        if summary.file_count == 1 { "" } else { "s" },
+                        summary.dir_count,
+                        if summary.dir_count == 1 { "y" } else { "ies" },
+                    );
+                }
+                Err(uv_installer::UninstallError::Uninstall(
+                    install_wheel_rs::Error::MissingRecord(_),
+                )) => {
+                    warn_user!(
+                        "Failed to uninstall package at {} due to missing RECORD file. Installation may result in an incomplete environment.",
+                        dist_info.path().simplified_display().cyan(),
+                    );
+                }
+                Err(err) => return Err(err.into()),
+            }
         }
 
         let s = if extraneous.len() + reinstalls.len() == 1 {
