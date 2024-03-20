@@ -5,48 +5,52 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "tqdm",
-                ),
-                extras: [],
-                version_or_url: Some(
-                    VersionSpecifier(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "4.65.0",
-                                },
-                            ],
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "tqdm",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "4.65.0",
+                                    },
+                                ],
+                            ),
                         ),
                     ),
-                ),
-                marker: None,
-            },
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "tomli-w",
-                ),
-                extras: [],
-                version_or_url: Some(
-                    VersionSpecifier(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "1.0.0",
-                                },
-                            ],
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "tomli-w",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "1.0.0",
+                                    },
+                                ],
+                            ),
                         ),
                     ),
-                ),
-                marker: None,
-            },
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },

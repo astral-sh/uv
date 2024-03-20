@@ -5,37 +5,41 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "tomli",
-                ),
-                extras: [],
-                version_or_url: None,
-                marker: None,
-            },
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "tomli",
+                    ),
+                    extras: [],
+                    version_or_url: None,
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "numpy",
-                ),
-                extras: [],
-                version_or_url: Some(
-                    VersionSpecifier(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "1.24.2",
-                                },
-                            ],
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "numpy",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "1.24.2",
+                                    },
+                                ],
+                            ),
                         ),
                     ),
-                ),
-                marker: None,
-            },
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },

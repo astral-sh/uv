@@ -1,0 +1,3 @@
+./scripts/editable-installs/black_editable
+./scripts/editable-installs/black_editable[dev]
+file:///scripts/editable-installs/black_editable

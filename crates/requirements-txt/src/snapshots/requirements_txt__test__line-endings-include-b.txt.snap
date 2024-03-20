@@ -5,14 +5,16 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "tomli",
-                ),
-                extras: [],
-                version_or_url: None,
-                marker: None,
-            },
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "tomli",
+                    ),
+                    extras: [],
+                    version_or_url: None,
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },

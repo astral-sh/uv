@@ -46,8 +46,8 @@ use unscanny::{Pattern, Scanner};
 use url::Url;
 
 use pep508_rs::{
-    expand_env_vars, split_scheme, Extras, Pep508Error, Pep508ErrorSource, Requirement, Scheme,
-    VerbatimUrl,
+    expand_env_vars, split_scheme, Extras, Pep508Error, Pep508ErrorSource,
+    RequirementsTxtRequirement, Scheme, VerbatimUrl,
 };
 use uv_client::Connectivity;
 use uv_fs::{normalize_url_path, Simplified};
@@ -287,7 +287,7 @@ impl Display for EditableRequirement {
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq, Serialize)]
 pub struct RequirementEntry {
     /// The actual PEP 508 requirement
-    pub requirement: Requirement,
+    pub requirement: RequirementsTxtRequirement,
     /// Hashes of the downloadable packages
     pub hashes: Vec<String>,
     /// Editable installation, see e.g. <https://stackoverflow.com/q/35064426/3549270>
@@ -313,7 +313,7 @@ pub struct RequirementsTxt {
     /// The actual requirements with the hashes.
     pub requirements: Vec<RequirementEntry>,
     /// Constraints included with `-c`.
-    pub constraints: Vec<Requirement>,
+    pub constraints: Vec<RequirementsTxtRequirement>,
     /// Editables with `-e`.
     pub editables: Vec<EditableRequirement>,
     /// The index URL, specified with `--index-url`.
@@ -610,7 +610,7 @@ fn parse_entry(
             }
         })?;
         RequirementsTxtStatement::FindLinks(path_or_url)
-    } else if s.at(char::is_ascii_alphanumeric) {
+    } else if s.at(char::is_ascii_alphanumeric) || s.at(|char| matches!(char, '.' | '/')) {
         let (requirement, hashes) = parse_requirement_and_hashes(s, content, working_dir)?;
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
             requirement,
@@ -675,7 +675,7 @@ fn parse_requirement_and_hashes(
     s: &mut Scanner,
     content: &str,
     working_dir: &Path,
-) -> Result<(Requirement, Vec<String>), RequirementsTxtParserError> {
+) -> Result<(RequirementsTxtRequirement, Vec<String>), RequirementsTxtParserError> {
     // PEP 508 requirement
     let start = s.cursor();
     // Termination: s.eat() eventually becomes None
@@ -731,41 +731,26 @@ fn parse_requirement_and_hashes(
         }
     }
 
-    // If the requirement looks like an editable requirement (with a missing `-e`), raise an
-    // error.
-    //
-    // Slashes are not allowed in package names, so these would be rejected in the next step anyway.
-    if requirement.contains('/') || requirement.contains('\\') {
-        let path = Path::new(requirement);
-        let path = if path.is_absolute() {
-            Cow::Borrowed(path)
-        } else {
-            Cow::Owned(working_dir.join(path))
-        };
-        if path.is_dir() {
-            return Err(RequirementsTxtParserError::MissingEditablePrefix(
-                requirement.to_string(),
-            ));
-        }
-    }
-
     let requirement =
-        Requirement::parse(requirement, working_dir).map_err(|err| match err.message {
-            Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
-                RequirementsTxtParserError::Pep508 {
-                    source: err,
-                    start,
-                    end,
+        RequirementsTxtRequirement::parse(requirement, working_dir).map_err(|err| {
+            match err.message {
+                Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
+                    RequirementsTxtParserError::Pep508 {
+                        source: err,
+                        start,
+                        end,
+                    }
                 }
-            }
-            Pep508ErrorSource::UnsupportedRequirement(_) => {
-                RequirementsTxtParserError::UnsupportedRequirement {
-                    source: err,
-                    start,
-                    end,
+                Pep508ErrorSource::UnsupportedRequirement(_) => {
+                    RequirementsTxtParserError::UnsupportedRequirement {
+                        source: err,
+                        start,
+                        end,
+                    }
                 }
             }
         })?;
+
     let hashes = if has_hashes {
         let hashes = parse_hashes(content, s)?;
         eat_trailing_line(content, s)?;
@@ -863,7 +848,6 @@ pub enum RequirementsTxtParserError {
     InvalidEditablePath(String),
     UnsupportedUrl(String),
     MissingRequirementPrefix(String),
-    MissingEditablePrefix(String),
     Parser {
         message: String,
         line: usize,
@@ -911,7 +895,6 @@ impl RequirementsTxtParserError {
             },
             Self::UnsupportedUrl(url) => Self::UnsupportedUrl(url),
             Self::MissingRequirementPrefix(given) => Self::MissingRequirementPrefix(given),
-            Self::MissingEditablePrefix(given) => Self::MissingEditablePrefix(given),
             Self::Parser {
                 message,
                 line,
@@ -959,12 +942,6 @@ impl Display for RequirementsTxtParserError {
             Self::MissingRequirementPrefix(given) => {
                 write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
             }
-            Self::MissingEditablePrefix(given) => {
-                write!(
-                    f,
-                    "Requirement `{given}` looks like a directory but was passed as a package name. Did you mean `-e {given}`?"
-                )
-            }
             Self::Parser {
                 message,
                 line,
@@ -1004,7 +981,6 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::InvalidEditablePath(_) => None,
             Self::UnsupportedUrl(_) => None,
             Self::MissingRequirementPrefix(_) => None,
-            Self::MissingEditablePrefix(_) => None,
             Self::UnsupportedRequirement { source, .. } => Some(source),
             Self::Pep508 { source, .. } => Some(source),
             Self::Subfile { source, .. } => Some(source.as_ref()),
@@ -1045,13 +1021,6 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Requirement `{given}` in `{}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?",
-                    self.file.user_display(),
-                )
-            }
-            RequirementsTxtParserError::MissingEditablePrefix(given) => {
-                write!(
-                    f,
-                    "Requirement `{given}` in `{}` looks like a directory but was passed as a package name. Did you mean `-e {given}`?",
                     self.file.user_display(),
                 )
             }
@@ -1177,20 +1146,21 @@ mod test {
     use tempfile::tempdir;
     use test_case::test_case;
     use unscanny::Scanner;
-    use uv_client::Connectivity;
 
+    use uv_client::Connectivity;
     use uv_fs::Simplified;
 
     use crate::{calculate_row_column, EditableRequirement, RequirementsTxt};
 
     fn workspace_test_data_dir() -> PathBuf {
-        PathBuf::from("./test-data")
+        PathBuf::from("./test-data").canonicalize().unwrap()
     }
 
     #[test_case(Path::new("basic.txt"))]
     #[test_case(Path::new("constraints-a.txt"))]
     #[test_case(Path::new("constraints-b.txt"))]
     #[test_case(Path::new("empty.txt"))]
+    #[test_case(Path::new("bare-url.txt"))]
     #[test_case(Path::new("for-poetry.txt"))]
     #[test_case(Path::new("include-a.txt"))]
     #[test_case(Path::new("include-b.txt"))]
@@ -1214,6 +1184,7 @@ mod test {
     #[test_case(Path::new("constraints-a.txt"))]
     #[test_case(Path::new("constraints-b.txt"))]
     #[test_case(Path::new("empty.txt"))]
+    #[test_case(Path::new("bare-url.txt"))]
     #[test_case(Path::new("for-poetry.txt"))]
     #[test_case(Path::new("include-a.txt"))]
     #[test_case(Path::new("include-b.txt"))]
@@ -1566,14 +1537,16 @@ mod test {
         RequirementsTxt {
             requirements: [
                 RequirementEntry {
-                    requirement: Requirement {
-                        name: PackageName(
-                            "flask",
-                        ),
-                        extras: [],
-                        version_or_url: None,
-                        marker: None,
-                    },
+                    requirement: Pep508(
+                        Requirement {
+                            name: PackageName(
+                                "flask",
+                            ),
+                            extras: [],
+                            version_or_url: None,
+                            marker: None,
+                        },
+                    ),
                     hashes: [],
                     editable: false,
                 },

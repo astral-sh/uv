@@ -15,6 +15,7 @@ pub use resolver::{
 };
 pub use version_map::VersionMap;
 
+mod bare;
 mod candidate_selector;
 mod constraints;
 mod dependency_mode;

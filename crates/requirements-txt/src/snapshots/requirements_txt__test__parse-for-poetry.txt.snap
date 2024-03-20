@@ -5,91 +5,99 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "inflection",
-                ),
-                extras: [],
-                version_or_url: Some(
-                    VersionSpecifier(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "0.5.1",
-                                },
-                            ],
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "inflection",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "0.5.1",
+                                    },
+                                ],
+                            ),
                         ),
                     ),
-                ),
-                marker: None,
-            },
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "upsidedown",
-                ),
-                extras: [],
-                version_or_url: Some(
-                    VersionSpecifier(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "0.4",
-                                },
-                            ],
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "upsidedown",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "0.4",
+                                    },
+                                ],
+                            ),
                         ),
                     ),
-                ),
-                marker: None,
-            },
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "numpy",
-                ),
-                extras: [],
-                version_or_url: None,
-                marker: None,
-            },
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "numpy",
+                    ),
+                    extras: [],
+                    version_or_url: None,
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "pandas",
-                ),
-                extras: [
-                    ExtraName(
-                        "tabulate",
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "pandas",
                     ),
-                ],
-                version_or_url: Some(
-                    VersionSpecifier(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: GreaterThanEqual,
-                                    version: "1",
-                                },
-                                VersionSpecifier {
-                                    operator: LessThan,
-                                    version: "2",
-                                },
-                            ],
+                    extras: [
+                        ExtraName(
+                            "tabulate",
+                        ),
+                    ],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: GreaterThanEqual,
+                                        version: "1",
+                                    },
+                                    VersionSpecifier {
+                                        operator: LessThan,
+                                        version: "2",
+                                    },
+                                ],
+                            ),
                         ),
                     ),
-                ),
-                marker: None,
-            },
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },

@@ -5,9 +5,36 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Requirement {
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "django-debug-toolbar",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: LessThan,
+                                        version: "2.2",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    marker: None,
+                },
+            ),
+            hashes: [],
+            editable: false,
+        },
+    ],
+    constraints: [
+        Pep508(
+            Requirement {
                 name: PackageName(
-                    "django-debug-toolbar",
+                    "django",
                 ),
                 extras: [],
                 version_or_url: Some(
@@ -15,8 +42,8 @@ RequirementsTxt {
                         VersionSpecifiers(
                             [
                                 VersionSpecifier {
-                                    operator: LessThan,
-                                    version: "2.2",
+                                    operator: Equal,
+                                    version: "2.1.15",
                                 },
                             ],
                         ),
@@ -24,49 +51,28 @@ RequirementsTxt {
                 ),
                 marker: None,
             },
-            hashes: [],
-            editable: false,
-        },
-    ],
-    constraints: [
-        Requirement {
-            name: PackageName(
-                "django",
-            ),
-            extras: [],
-            version_or_url: Some(
-                VersionSpecifier(
-                    VersionSpecifiers(
-                        [
-                            VersionSpecifier {
-                                operator: Equal,
-                                version: "2.1.15",
-                            },
-                        ],
+        ),
+        Pep508(
+            Requirement {
+                name: PackageName(
+                    "pytz",
+                ),
+                extras: [],
+                version_or_url: Some(
+                    VersionSpecifier(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "2023.3",
+                                },
+                            ],
+                        ),
                     ),
                 ),
-            ),
-            marker: None,
-        },
-        Requirement {
-            name: PackageName(
-                "pytz",
-            ),
-            extras: [],
-            version_or_url: Some(
-                VersionSpecifier(
-                    VersionSpecifiers(
-                        [
-                            VersionSpecifier {
-                                operator: Equal,
-                                version: "2023.3",
-                            },
-                        ],
-                    ),
-                ),
-            ),
-            marker: None,
-        },
+                marker: None,
+            },
+        ),
     ],
     editables: [],
     index_url: None,
