@@ -210,6 +210,30 @@ impl Metadata23 {
     }
 }
 
+/// Python Package Metadata 1.0 and later as specified in
+/// <https://peps.python.org/pep-0241/>.
+///
+/// This is a subset of the full metadata specification, and only includes the
+/// fields that have been consistent across all versions of the specification.
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct Metadata10 {
+    pub name: PackageName,
+}
+
+impl Metadata10 {
+    /// Parse the [`Metadata10`] from a `PKG-INFO` file, as included in a source distribution.
+    pub fn parse_pkg_info(content: &[u8]) -> Result<Self, Error> {
+        let headers = Headers::parse(content)?;
+        let name = PackageName::new(
+            headers
+                .get_first_value("Name")
+                .ok_or(Error::FieldNotFound("Name"))?,
+        )?;
+        Ok(Self { name })
+    }
+}
+
 /// Parse a `Metadata-Version` field into a (major, minor) tuple.
 fn parse_version(metadata_version: &str) -> Result<(u8, u8), Error> {
     let (major, minor) = metadata_version

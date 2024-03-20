@@ -14,6 +14,7 @@ default-run = "uv"
 workspace = true
 
 [dependencies]
+distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true, features = ["clap"], default-features = false }
 pep508_rs = { workspace = true }
@@ -40,6 +41,7 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "string"] }
 clap_complete_command = { workspace = true }
+configparser = { workspace = true }
 console = { workspace = true }
 ctrlc = { workspace = true }
 flate2 = { workspace = true, default-features = false }
@@ -48,8 +50,10 @@ indexmap = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
+once_cell = { workspace = true }
 owo-colors = { workspace = true }
 pyproject-toml = { workspace = true }
+regex = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -64,7 +68,6 @@ tracing-subscriber = { workspace = true, features = ["json"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
-distribution-filename = { version = "0.0.1", path = "../distribution-filename" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = { version = "0.1.39" }

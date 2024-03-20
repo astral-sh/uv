@@ -4,14 +4,21 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
+use configparser::ini::Ini;
 use console::Term;
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use indexmap::IndexMap;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use rustc_hash::FxHashSet;
-use tracing::{instrument, Level};
+use serde::Deserialize;
+use tracing::{debug, instrument, Level};
 
 use distribution_types::{FlatIndexLocation, IndexUrl, RemoteSource};
-use pep508_rs::{Requirement, RequirementsTxtRequirement, UnnamedRequirement, VersionOrUrl};
+use pep508_rs::{
+    Requirement, RequirementsTxtRequirement, Scheme, UnnamedRequirement, VersionOrUrl,
+};
+use pypi_types::Metadata10;
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 use uv_client::Connectivity;
 use uv_fs::Simplified;
@@ -576,8 +583,160 @@ impl NamedRequirements {
             });
         }
 
+        // Otherwise, download and/or extract the source archive.
+        if Scheme::parse(requirement.url.scheme()) == Some(Scheme::File) {
+            let path = requirement.url.to_file_path().map_err(|()| {
+                anyhow::anyhow!("Unable to convert file URL to path: {requirement}")
+            })?;
+
+            if !path.exists() {
+                return Err(anyhow::anyhow!(
+                    "Unnamed requirement at {path} not found",
+                    path = path.simplified_display()
+                ));
+            }
+
+            // Attempt to read a `PKG-INFO` from the directory.
+            if let Some(metadata) = fs_err::read(path.join("PKG-INFO"))
+                .ok()
+                .and_then(|contents| Metadata10::parse_pkg_info(&contents).ok())
+            {
+                debug!(
+                    "Found PKG-INFO metadata for {path} ({name})",
+                    path = path.display(),
+                    name = metadata.name
+                );
+                return Ok(Requirement {
+                    name: metadata.name,
+                    extras: requirement.extras,
+                    version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                    marker: requirement.marker,
+                });
+            }
+
+            // Attempt to read a `pyproject.toml` file.
+            if let Some(pyproject) = fs_err::read_to_string(path.join("pyproject.toml"))
+                .ok()
+                .and_then(|contents| toml::from_str::<PyProjectToml>(&contents).ok())
+            {
+                // Read PEP 621 metadata from the `pyproject.toml`.
+                if let Some(project) = pyproject.project {
+                    debug!(
+                        "Found PEP 621 metadata for {path} in `pyproject.toml` ({name})",
+                        path = path.display(),
+                        name = project.name
+                    );
+                    return Ok(Requirement {
+                        name: project.name,
+                        extras: requirement.extras,
+                        version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                        marker: requirement.marker,
+                    });
+                }
+
+                // Read Poetry-specific metadata from the `pyproject.toml`.
+                if let Some(tool) = pyproject.tool {
+                    if let Some(poetry) = tool.poetry {
+                        if let Some(name) = poetry.name {
+                            debug!(
+                                "Found Poetry metadata for {path} in `pyproject.toml` ({name})",
+                                path = path.display(),
+                                name = name
+                            );
+                            return Ok(Requirement {
+                                name,
+                                extras: requirement.extras,
+                                version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                                marker: requirement.marker,
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Attempt to read a `setup.cfg` from the directory.
+            if let Some(setup_cfg) = fs_err::read_to_string(path.join("setup.cfg"))
+                .ok()
+                .and_then(|contents| {
+                    let mut ini = Ini::new_cs();
+                    ini.set_multiline(true);
+                    ini.read(contents).ok()
+                })
+            {
+                if let Some(section) = setup_cfg.get("metadata") {
+                    if let Some(Some(name)) = section.get("name") {
+                        if let Ok(name) = PackageName::from_str(name) {
+                            debug!(
+                                "Found setuptools metadata for {path} in `setup.cfg` ({name})",
+                                path = path.display(),
+                                name = name
+                            );
+                            return Ok(Requirement {
+                                name,
+                                extras: requirement.extras,
+                                version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                                marker: requirement.marker,
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Attempt to read a `setup.py` from the directory.
+            if let Ok(setup_py) = fs_err::read_to_string(path.join("setup.py")) {
+                static SETUP_PY_NAME: Lazy<Regex> =
+                    Lazy::new(|| Regex::new(r#"name\s*[=:]\s*['"](?P<name>[^'"]+)['"]"#).unwrap());
+
+                if let Some(name) = SETUP_PY_NAME
+                    .captures(&setup_py)
+                    .and_then(|captures| captures.name("name"))
+                    .map(|name| name.as_str())
+                {
+                    if let Ok(name) = PackageName::from_str(name) {
+                        debug!(
+                            "Found setuptools metadata for {path} in `setup.py` ({name})",
+                            path = path.display(),
+                            name = name
+                        );
+                        return Ok(Requirement {
+                            name,
+                            extras: requirement.extras,
+                            version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                            marker: requirement.marker,
+                        });
+                    }
+                }
+            }
+        }
+
         Err(anyhow::anyhow!(
             "Unable to infer package name for the unnamed requirement: {requirement}"
         ))
     }
+}
+
+/// A pyproject.toml as specified in PEP 517.
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct PyProjectToml {
+    project: Option<Project>,
+    tool: Option<Tool>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct Project {
+    name: PackageName,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct Tool {
+    poetry: Option<ToolPoetry>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct ToolPoetry {
+    name: Option<PackageName>,
 }
