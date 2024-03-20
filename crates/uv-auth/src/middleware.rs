@@ -46,17 +46,29 @@ impl Middleware for AuthMiddleware {
     ) -> reqwest_middleware::Result<Response> {
         let url = req.url().clone();
 
-        // If the request already has an authorization header, we don't need to do anything.
+        // If the request already has an authorization header with a URL-encoded password,
+        // we don't need to do anything.
         // This gives in-URL credentials precedence over the netrc file.
-        if req.headers().contains_key(reqwest::header::AUTHORIZATION) {
-            debug!("Request already has an authorization header: {url}");
-            return next.run(req, _extensions).await;
-        }
+        let original_header = if req.headers().contains_key(reqwest::header::AUTHORIZATION) {
+            match GLOBAL_AUTH_STORE.get(&url) {
+                Some(Some(Credential::UrlEncoded(auth))) if auth.password.is_none() => {
+                    req.headers_mut().remove(reqwest::header::AUTHORIZATION)
+                }
+                _ => {
+                    debug!("Request already has an authorization header with URL-encoded password: {url}");
+                    return next.run(req, _extensions).await;
+                }
+            }
+        } else {
+            None
+        };
+
+        let stored_auth = GLOBAL_AUTH_STORE.get(&url);
 
         // Try auth strategies in order of precedence:
-        if let Some(stored_auth) = GLOBAL_AUTH_STORE.get(&url) {
+        if original_header.is_none() && stored_auth.is_some() {
             // If we've already seen this URL, we can use the stored credentials
-            if let Some(auth) = stored_auth {
+            if let Some(auth) = stored_auth.flatten() {
                 debug!("Adding authentication to already-seen URL: {url}");
                 req.headers_mut().insert(
                     reqwest::header::AUTHORIZATION,
@@ -78,7 +90,7 @@ impl Middleware for AuthMiddleware {
             GLOBAL_AUTH_STORE.set(&url, Some(auth));
         } else if matches!(self.keyring_provider, KeyringProvider::Subprocess) {
             // If we have keyring support enabled, we check there as well
-            match get_keyring_subprocess_auth(&url) {
+            match get_keyring_subprocess_auth(&url, stored_auth.flatten().as_ref()) {
                 Ok(Some(auth)) => {
                     req.headers_mut().insert(
                         reqwest::header::AUTHORIZATION,
@@ -95,10 +107,17 @@ impl Middleware for AuthMiddleware {
             }
         }
 
-        // If we still don't have any credentials, we save the URL so we don't have to check netrc or keyring again
+        // If we still don't have any credentials, we either restore original header or
+        // save the URL so we don't have to check netrc or keyring again
         if !req.headers().contains_key(reqwest::header::AUTHORIZATION) {
-            debug!("No credentials found for: {url}");
-            GLOBAL_AUTH_STORE.set(&url, None);
+            if let Some(original_header) = original_header {
+                debug!("Restoring original authorization header: {url}");
+                req.headers_mut()
+                    .insert(reqwest::header::AUTHORIZATION, original_header);
+            } else {
+                debug!("No credentials found for: {url}");
+                GLOBAL_AUTH_STORE.set(&url, None);
+            }
         }
 
         next.run(req, _extensions).await
@@ -137,6 +156,7 @@ mod tests {
     use reqwest::Client;
     use reqwest_middleware::ClientBuilder;
     use tempfile::NamedTempFile;
+    use url::Url;
     use wiremock::matchers::{basic_auth, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -174,6 +194,87 @@ mod tests {
             ))
             .build()
             .get(format!("{}/hello", &server.uri()))
+            .send()
+            .await?
+            .status();
+
+        assert_eq!(status, 200);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_no_netrc_no_keyring() -> Result<(), Box<dyn std::error::Error>> {
+        let server = MockServer::start().await;
+        let url = server.uri();
+        let url = url
+            .splitn(2, "://")
+            .collect::<Vec<_>>()
+            .join("://myuser:mypassword@");
+        assert!(url.starts_with("http://myuser:mypassword@"));
+        GLOBAL_AUTH_STORE.save_from_url(&Url::parse(&url).expect("valid URL"));
+
+        Mock::given(method("GET"))
+            .and(path("/hello"))
+            .and(basic_auth("myuser", "mypassword"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let status = ClientBuilder::new(Client::builder().build()?)
+            .with(AuthMiddleware::new(KeyringProvider::Disabled))
+            .build()
+            .get(format!("{}/hello", url))
+            .send()
+            .await?
+            .status();
+
+        assert_eq!(status, 200);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_with_keyring_and_username() -> Result<(), Box<dyn std::error::Error>> {
+        let server = MockServer::start().await;
+        let url = server.uri();
+        let url = url.splitn(2, "://").collect::<Vec<_>>().join("://myuser@");
+        assert!(url.starts_with("http://myuser@"));
+        GLOBAL_AUTH_STORE.save_from_url(&Url::parse(&url).expect("valid URL"));
+
+        Mock::given(method("GET"))
+            .and(path("/hello"))
+            .and(basic_auth("myuser", "mypassword"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let status = ClientBuilder::new(Client::builder().build()?)
+            .with(AuthMiddleware::new(KeyringProvider::Subprocess))
+            .build()
+            .get(format!("{}/hello", url))
+            .send()
+            .await?
+            .status();
+
+        assert_eq!(status, 200);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_with_keyring_no_username() -> Result<(), Box<dyn std::error::Error>> {
+        let server = MockServer::start().await;
+        GLOBAL_AUTH_STORE.save_from_url(&Url::parse(&server.uri()).expect("valid URL"));
+
+        Mock::given(method("GET"))
+            .and(path("/hello"))
+            .and(basic_auth("oauth2accesstoken", "mypassword"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let status = ClientBuilder::new(Client::builder().build()?)
+            .with(AuthMiddleware::new(KeyringProvider::Subprocess))
+            .build()
+            .get(format!("{}/hello", server.uri()))
             .send()
             .await?
             .status();
