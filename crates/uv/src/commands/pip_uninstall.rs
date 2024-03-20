@@ -1,10 +1,12 @@
 use std::fmt::Write;
 
 use anyhow::Result;
+use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{InstalledMetadata, Name};
+use pep508_rs::{Requirement, RequirementsTxtRequirement, UnnamedRequirement};
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_fs::Simplified;
@@ -12,7 +14,7 @@ use uv_interpreter::PythonEnvironment;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::{NamedRequirements, RequirementsSource, RequirementsSpecification};
+use crate::requirements::{RequirementsSource, RequirementsSpecification};
 
 /// Uninstall packages from the current environment.
 pub(crate) async fn pip_uninstall(
@@ -63,28 +65,24 @@ pub(crate) async fn pip_uninstall(
         }
     }
 
-    // Convert from unnamed to named requirements.
-    let NamedRequirements {
-        project: _,
-        requirements,
-        constraints: _,
-        overrides: _,
-        editables,
-        index_url: _,
-        extra_index_urls: _,
-        no_index: _,
-        find_links: _,
-    } = NamedRequirements::from_spec(spec)?;
-
     let _lock = venv.lock()?;
 
     // Index the current `site-packages` directory.
     let site_packages = uv_installer::SitePackages::from_executable(&venv)?;
 
+    // Partition the requirements into named and unnamed requirements.
+    let (named, unnamed): (Vec<Requirement>, Vec<UnnamedRequirement>) = spec
+        .requirements
+        .into_iter()
+        .partition_map(|requirement| match requirement {
+            RequirementsTxtRequirement::Pep508(requirement) => Either::Left(requirement),
+            RequirementsTxtRequirement::Unnamed(requirement) => Either::Right(requirement),
+        });
+
     // Sort and deduplicate the packages, which are keyed by name. Like `pip`, we ignore the
     // dependency specifier (even if it's a URL).
-    let packages = {
-        let mut packages = requirements
+    let names = {
+        let mut packages = named
             .into_iter()
             .map(|requirement| requirement.name)
             .collect::<Vec<_>>();
@@ -93,23 +91,23 @@ pub(crate) async fn pip_uninstall(
         packages
     };
 
-    // Sort and deduplicate the editable packages, which are keyed by URL rather than package name.
-    let editables = {
-        let mut editables = editables
-            .iter()
-            .map(requirements_txt::EditableRequirement::raw)
+    // Sort and deduplicate the unnamed requirements, which are keyed by URL rather than package name.
+    let urls = {
+        let mut urls = unnamed
+            .into_iter()
+            .map(|requirement| requirement.url.to_url())
             .collect::<Vec<_>>();
-        editables.sort_unstable();
-        editables.dedup();
-        editables
+        urls.sort_unstable();
+        urls.dedup();
+        urls
     };
 
     // Map to the local distributions.
     let distributions = {
-        let mut distributions = Vec::with_capacity(packages.len() + editables.len());
+        let mut distributions = Vec::with_capacity(names.len() + urls.len());
 
         // Identify all packages that are installed.
-        for package in &packages {
+        for package in &names {
             let installed = site_packages.get_packages(package);
             if installed.is_empty() {
                 writeln!(
@@ -124,16 +122,16 @@ pub(crate) async fn pip_uninstall(
             }
         }
 
-        // Identify all editables that are installed.
-        for editable in &editables {
-            let installed = site_packages.get_editables(editable);
+        // Identify all unnamed distributions that are installed.
+        for url in &urls {
+            let installed = site_packages.get_urls(url);
             if installed.is_empty() {
                 writeln!(
                     printer.stderr(),
                     "{}{} Skipping {} as it is not installed.",
                     "warning".yellow().bold(),
                     ":".bold(),
-                    editable.as_ref().bold()
+                    url.as_ref().bold()
                 )?;
             } else {
                 distributions.extend(installed);

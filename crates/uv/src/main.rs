@@ -960,10 +960,6 @@ struct PipUninstallArgs {
     #[clap(long, short, group = "sources")]
     requirement: Vec<PathBuf>,
 
-    /// Uninstall the editable package based on the provided local file path.
-    #[clap(long, short, group = "sources")]
-    editable: Vec<String>,
-
     /// The Python interpreter from which packages should be uninstalled.
     ///
     /// By default, `uv` uninstalls from the virtual environment in the current working directory or
@@ -1706,7 +1702,6 @@ async fn run() -> Result<ExitStatus> {
                 .package
                 .into_iter()
                 .map(RequirementsSource::from_package)
-                .chain(args.editable.into_iter().map(RequirementsSource::Editable))
                 .chain(
                     args.requirement
                         .into_iter()
