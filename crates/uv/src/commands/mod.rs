@@ -138,7 +138,7 @@ pub(super) async fn compile_bytecode(
             .with_context(|| {
                 format!(
                     "Failed to bytecode-compile Python file in: {}",
-                    site_packages.simplified_display()
+                    site_packages.user_display()
                 )
             })?;
     }

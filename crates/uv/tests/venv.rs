@@ -29,11 +29,8 @@ fn create_venv() -> Result<()> {
             r"Using Python 3\.\d+\.\d+ interpreter at: .+",
             "Using Python [VERSION] interpreter at: [PATH]",
         ),
-        (&filter_venv, "/home/ferris/project/.venv"),
-        (
-            filter_prompt,
-            "Activate with: source /home/ferris/project/.venv/bin/activate",
-        ),
+        (filter_prompt, "Activate with: source .venv/bin/activate"),
+        (&filter_venv, ".venv"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -52,8 +49,8 @@ fn create_venv() -> Result<()> {
 
     ----- stderr -----
     Using Python [VERSION] interpreter at: [PATH]
-    Creating virtualenv at: /home/ferris/project/.venv
-    Activate with: source /home/ferris/project/.venv/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -67,11 +64,8 @@ fn create_venv() -> Result<()> {
             r"Using Python 3\.\d+\.\d+ interpreter at: .+",
             "Using Python [VERSION] interpreter at: [PATH]",
         ),
-        (&filter_venv, "/home/ferris/project/.venv"),
-        (
-            filter_prompt,
-            "Activate with: source /home/ferris/project/.venv/bin/activate",
-        ),
+        (filter_prompt, "Activate with: source .venv/bin/activate"),
+        (&filter_venv, ".venv"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -91,8 +85,8 @@ fn create_venv() -> Result<()> {
 
     ----- stderr -----
     Using Python [VERSION] interpreter at: [PATH]
-    Creating virtualenv at: /home/ferris/project/.venv
-    Activate with: source /home/ferris/project/.venv/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -115,7 +109,7 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
             r"Using Python 3\.\d+\.\d+ interpreter at: .+",
             "Using Python [VERSION] interpreter at: [PATH]",
         ),
-        (&filter_venv, "/home/ferris/project/.venv"),
+        (&filter_venv, ".venv"),
         (filter_prompt, "Activate with: source .venv/bin/activate"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
@@ -159,11 +153,8 @@ fn seed() -> Result<()> {
             r"Using Python 3\.\d+\.\d+ interpreter at: .+",
             "Using Python [VERSION] interpreter at: [PATH]",
         ),
-        (&filter_venv, "/home/ferris/project/.venv"),
-        (
-            filter_prompt,
-            "Activate with: source /home/ferris/project/.venv/bin/activate",
-        ),
+        (filter_prompt, "Activate with: source .venv/bin/activate"),
+        (&filter_venv, ".venv"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -184,9 +175,9 @@ fn seed() -> Result<()> {
 
     ----- stderr -----
     Using Python [VERSION] interpreter at: [PATH]
-    Creating virtualenv at: /home/ferris/project/.venv
+    Creating virtualenv at: .venv
      + pip==23.3.1
-    Activate with: source /home/ferris/project/.venv/bin/activate
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -209,11 +200,8 @@ fn seed_older_python_version() -> Result<()> {
             r"Using Python 3\.\d+\.\d+ interpreter at: .+",
             "Using Python [VERSION] interpreter at: [PATH]",
         ),
-        (&filter_venv, "/home/ferris/project/.venv"),
-        (
-            filter_prompt,
-            "Activate with: source /home/ferris/project/.venv/bin/activate",
-        ),
+        (filter_prompt, "Activate with: source .venv/bin/activate"),
+        (&filter_venv, ".venv"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -234,11 +222,11 @@ fn seed_older_python_version() -> Result<()> {
 
     ----- stderr -----
     Using Python [VERSION] interpreter at: [PATH]
-    Creating virtualenv at: /home/ferris/project/.venv
+    Creating virtualenv at: .venv
      + pip==23.3.1
      + setuptools==68.2.2
      + wheel==0.41.3
-    Activate with: source /home/ferris/project/.venv/bin/activate
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -311,7 +299,7 @@ fn create_venv_unknown_python_patch() -> Result<()> {
             r"No Python 3\.8\.0 found through `py --list-paths` or in `PATH`\. Is Python 3\.8\.0 installed\?",
             "No Python 3.8.0 in `PATH`. Is Python 3.8.0 installed?",
         ),
-        (&filter_venv, "/home/ferris/project/.venv"),
+        (&filter_venv, ".venv"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -351,11 +339,8 @@ fn create_venv_python_patch() -> Result<()> {
     let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (r"interpreter at: .+", "interpreter at: [PATH]"),
-        (&filter_venv, "/home/ferris/project/.venv"),
-        (
-            filter_prompt,
-            "Activate with: source /home/ferris/project/.venv/bin/activate",
-        ),
+        (filter_prompt, "Activate with: source .venv/bin/activate"),
+        (&filter_venv, ".venv"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -375,8 +360,8 @@ fn create_venv_python_patch() -> Result<()> {
 
     ----- stderr -----
     Using Python 3.12.1 interpreter at: [PATH]
-    Creating virtualenv at: /home/ferris/project/.venv
-    Activate with: source /home/ferris/project/.venv/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -401,7 +386,7 @@ fn file_exists() -> Result<()> {
             r"Using Python 3\.\d+\.\d+ interpreter at: .+",
             "Using Python [VERSION] interpreter at: [PATH]",
         ),
-        (&filter_venv, "/home/ferris/project/.venv"),
+        (&filter_venv, ".venv"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -421,11 +406,11 @@ fn file_exists() -> Result<()> {
 
     ----- stderr -----
     Using Python [VERSION] interpreter at: [PATH]
-    Creating virtualenv at: /home/ferris/project/.venv
+    Creating virtualenv at: .venv
     uv::venv::creation
 
       × Failed to create virtualenv
-      ╰─▶ File exists at `/home/ferris/project/.venv`
+      ╰─▶ File exists at `.venv`
     "###
     );
 
@@ -449,11 +434,8 @@ fn empty_dir_exists() -> Result<()> {
             r"Using Python 3\.\d+\.\d+ interpreter at: .+",
             "Using Python [VERSION] interpreter at: [PATH]",
         ),
-        (&filter_venv, "/home/ferris/project/.venv"),
-        (
-            filter_prompt,
-            "Activate with: source /home/ferris/project/.venv/bin/activate",
-        ),
+        (filter_prompt, "Activate with: source .venv/bin/activate"),
+        (&filter_venv, ".venv"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -473,8 +455,8 @@ fn empty_dir_exists() -> Result<()> {
 
     ----- stderr -----
     Using Python [VERSION] interpreter at: [PATH]
-    Creating virtualenv at: /home/ferris/project/.venv
-    Activate with: source /home/ferris/project/.venv/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -500,7 +482,7 @@ fn non_empty_dir_exists() -> Result<()> {
             r"Using Python 3\.\d+\.\d+ interpreter at: .+",
             "Using Python [VERSION] interpreter at: [PATH]",
         ),
-        (&filter_venv, "/home/ferris/project/.venv"),
+        (&filter_venv, ".venv"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -520,11 +502,11 @@ fn non_empty_dir_exists() -> Result<()> {
 
     ----- stderr -----
     Using Python [VERSION] interpreter at: [PATH]
-    Creating virtualenv at: /home/ferris/project/.venv
+    Creating virtualenv at: .venv
     uv::venv::creation
 
       × Failed to create virtualenv
-      ╰─▶ The directory `/home/ferris/project/.venv` exists, but it's not a virtualenv
+      ╰─▶ The directory `.venv` exists, but it's not a virtualenv
     "###
     );
 
@@ -565,11 +547,8 @@ fn windows_shims() -> Result<()> {
             r"Using Python 3\.8.\d+ interpreter at: .+",
             "Using Python 3.8.x interpreter at: [PATH]",
         ),
-        (&filter_venv, "/home/ferris/project/.venv"),
-        (
-            &filter_prompt,
-            "Activate with: source /home/ferris/project/.venv/bin/activate",
-        ),
+        (&filter_prompt, "Activate with: source .venv/bin/activate"),
+        (&filter_venv, ".venv"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -588,8 +567,8 @@ fn windows_shims() -> Result<()> {
     ----- stderr -----
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
     Using Python 3.8.x interpreter at: [PATH]
-    Creating virtualenv at: /home/ferris/project/.venv
-    Activate with: source /home/ferris/project/.venv/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 
@@ -613,11 +592,8 @@ fn virtualenv_compatibility() -> Result<()> {
             r"Using Python 3\.\d+\.\d+ interpreter at: .+",
             "Using Python [VERSION] interpreter at: [PATH]",
         ),
-        (&filter_venv, "/home/ferris/project/.venv"),
-        (
-            filter_prompt,
-            "Activate with: source /home/ferris/project/.venv/bin/activate",
-        ),
+        (filter_prompt, "Activate with: source .venv/bin/activate"),
+        (&filter_venv, ".venv"),
     ];
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("venv")
@@ -638,8 +614,8 @@ fn virtualenv_compatibility() -> Result<()> {
     ----- stderr -----
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
     Using Python [VERSION] interpreter at: [PATH]
-    Creating virtualenv at: /home/ferris/project/.venv
-    Activate with: source /home/ferris/project/.venv/bin/activate
+    Creating virtualenv at: .venv
+    Activate with: source .venv/bin/activate
     "###
     );
 

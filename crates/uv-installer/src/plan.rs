@@ -305,7 +305,7 @@ impl<'a> Planner<'a> {
                             if !wheel.filename.is_compatible(tags) {
                                 bail!(
                                     "A path dependency is incompatible with the current platform: {}",
-                                    wheel.path.simplified_display()
+                                    wheel.path.user_display()
                                 );
                             }
 

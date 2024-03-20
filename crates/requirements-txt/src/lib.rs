@@ -385,7 +385,7 @@ impl RequirementsTxt {
         if data == Self::default() {
             warn_user!(
                 "Requirements file {} does not contain any dependencies",
-                requirements_txt.simplified_display()
+                requirements_txt.user_display()
             );
         }
 
@@ -1024,35 +1024,35 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Invalid URL in `{}` at position {start}: `{url}`",
-                    self.file.simplified_display(),
+                    self.file.user_display(),
                 )
             }
             RequirementsTxtParserError::InvalidEditablePath(given) => {
                 write!(
                     f,
                     "Invalid editable path in `{}`: {given}",
-                    self.file.simplified_display()
+                    self.file.user_display()
                 )
             }
             RequirementsTxtParserError::UnsupportedUrl(url) => {
                 write!(
                     f,
                     "Unsupported URL (expected a `file://` scheme) in `{}`: `{url}`",
-                    self.file.simplified_display(),
+                    self.file.user_display(),
                 )
             }
             RequirementsTxtParserError::MissingRequirementPrefix(given) => {
                 write!(
                     f,
                     "Requirement `{given}` in `{}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?",
-                    self.file.simplified_display(),
+                    self.file.user_display(),
                 )
             }
             RequirementsTxtParserError::MissingEditablePrefix(given) => {
                 write!(
                     f,
                     "Requirement `{given}` in `{}` looks like a directory but was passed as a package name. Did you mean `-e {given}`?",
-                    self.file.simplified_display(),
+                    self.file.user_display(),
                 )
             }
             RequirementsTxtParserError::Parser {
@@ -1063,28 +1063,28 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "{message} at {}:{line}:{column}",
-                    self.file.simplified_display(),
+                    self.file.user_display(),
                 )
             }
             RequirementsTxtParserError::UnsupportedRequirement { start, .. } => {
                 write!(
                     f,
                     "Unsupported requirement in {} at position {start}",
-                    self.file.simplified_display(),
+                    self.file.user_display(),
                 )
             }
             RequirementsTxtParserError::Pep508 { start, .. } => {
                 write!(
                     f,
                     "Couldn't parse requirement in `{}` at position {start}",
-                    self.file.simplified_display(),
+                    self.file.user_display(),
                 )
             }
             RequirementsTxtParserError::Subfile { start, .. } => {
                 write!(
                     f,
                     "Error parsing included file in `{}` at position {start}",
-                    self.file.simplified_display(),
+                    self.file.user_display(),
                 )
             }
             RequirementsTxtParserError::NonUnicodeUrl { url } => {
@@ -1099,7 +1099,7 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Error while accessing remote requirements file {}: {err}",
-                    self.file.simplified_display(),
+                    self.file.user_display(),
                 )
             }
         }
@@ -1276,9 +1276,8 @@ mod test {
             .take(2)
             .join("\n");
 
-        let requirement_txt =
-            regex::escape(&requirements_txt.path().simplified_display().to_string());
-        let missing_txt = regex::escape(&missing_txt.path().simplified_display().to_string());
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
+        let missing_txt = regex::escape(&missing_txt.path().user_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (missing_txt.as_str(), "<MISSING_TXT>"),
@@ -1313,8 +1312,7 @@ mod test {
         .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
-        let requirement_txt =
-            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1350,8 +1348,7 @@ mod test {
         .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
-        let requirement_txt =
-            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1387,8 +1384,7 @@ mod test {
         .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
-        let requirement_txt =
-            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1419,8 +1415,7 @@ mod test {
         .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
-        let requirement_txt =
-            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
         let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
         insta::with_settings!({
             filters => filters
@@ -1453,8 +1448,7 @@ mod test {
         .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
-        let requirement_txt =
-            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1488,8 +1482,7 @@ mod test {
         .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
-        let requirement_txt =
-            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1528,8 +1521,7 @@ mod test {
         .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
-        let requirement_txt =
-            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1692,8 +1684,7 @@ mod test {
         .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
-        let requirement_txt =
-            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),
@@ -1746,8 +1737,7 @@ mod test {
         .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
-        let requirement_txt =
-            regex::escape(&requirements_txt.path().simplified_display().to_string());
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (r"\\", "/"),

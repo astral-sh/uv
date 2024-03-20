@@ -41,7 +41,7 @@ pub(crate) fn pip_check(
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
-        venv.python_executable().simplified_display().cyan()
+        venv.python_executable().user_display().cyan()
     );
 
     // Build the installed index.

@@ -2019,7 +2019,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     requirements_in.write_str(&format!("flask @ {}", flask_wheel.path().display()))?;
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filter_path = regex::escape(&flask_wheel.simplified_display().to_string());
+    let filter_path = regex::escape(&flask_wheel.user_display().to_string());
     let filters: Vec<_> = [(filter_path.as_str(), "/[TEMP_DIR]/")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
@@ -2532,7 +2532,7 @@ fn compile_editable() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_in.simplified_display().to_string());
+    let filter_path = regex::escape(&requirements_in.user_display().to_string());
     let filters: Vec<_> = [(filter_path.as_str(), "requirements.in")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
@@ -2591,7 +2591,7 @@ fn recursive_extras_direct_url() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black[dev] @ ../../scripts/editable-installs/black_editable")?;
 
-    let filter_path = regex::escape(&requirements_in.simplified_display().to_string());
+    let filter_path = regex::escape(&requirements_in.user_display().to_string());
     let filters: Vec<_> = [(filter_path.as_str(), "requirements.in")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
@@ -2654,7 +2654,7 @@ fn compile_editable_url_requirement() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-e ../../scripts/editable-installs/hatchling_editable")?;
 
-    let filter_path = regex::escape(&requirements_in.simplified_display().to_string());
+    let filter_path = regex::escape(&requirements_in.user_display().to_string());
     let filters: Vec<_> = [(filter_path.as_str(), "requirements.in")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
@@ -2739,7 +2739,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
         for file in &cache_files {
             let file = context.cache_dir.join(file);
             if !file.is_file() {
-                bail!("Missing cache file {}", file.simplified_display());
+                bail!("Missing cache file {}", file.user_display());
             }
             fs_err::write(file, "I borken you cache")?;
         }
@@ -2754,7 +2754,7 @@ fn cache_errors_are_non_fatal() -> Result<()> {
             for file in cache_files {
                 let file = context.cache_dir.join(file);
                 if !file.is_file() {
-                    bail!("Missing cache file {}", file.simplified_display());
+                    bail!("Missing cache file {}", file.user_display());
                 }
 
                 fs_err::OpenOptions::new()
@@ -3055,7 +3055,7 @@ fn find_links_directory() -> Result<()> {
     "})?;
 
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("..").join(".."))?;
-    let project_root_string = regex::escape(&project_root.simplified_display().to_string());
+    let project_root_string = regex::escape(&project_root.user_display().to_string());
     let filters: Vec<_> = [
         (project_root_string.as_str(), "[PROJECT_ROOT]"),
         // Unify trailing (back)slash between Windows and Unix.
@@ -4209,7 +4209,7 @@ fn editable_invalid_extra() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-e ../../scripts/editable-installs/black_editable[empty]")?;
 
-    let requirements_path = regex::escape(&requirements_in.simplified_display().to_string());
+    let requirements_path = regex::escape(&requirements_in.user_display().to_string());
     let filters: Vec<_> = [
         (r" file://.*/", " file://[TEMP_DIR]/"),
         (requirements_path.as_str(), "requirements.in"),
@@ -4526,8 +4526,8 @@ fn override_editable() -> Result<()> {
     let overrides_txt = context.temp_dir.child("overrides.txt");
     overrides_txt.write_str("black==23.10.1")?;
 
-    let requirements_path = regex::escape(&requirements_in.simplified_display().to_string());
-    let overrides_path = regex::escape(&overrides_txt.simplified_display().to_string());
+    let requirements_path = regex::escape(&requirements_in.user_display().to_string());
+    let overrides_path = regex::escape(&overrides_txt.user_display().to_string());
     let filters: Vec<_> = [
         (requirements_path.as_str(), "requirements.in"),
         (overrides_path.as_str(), "overrides.txt"),
@@ -4874,7 +4874,7 @@ fn editable_direct_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-e ../../scripts/editable-installs/setuptools_editable")?;
 
-    let requirements_path = regex::escape(&requirements_in.simplified_display().to_string());
+    let requirements_path = regex::escape(&requirements_in.user_display().to_string());
     let filters: Vec<_> = [
         (r" file://.*/", " file://[TEMP_DIR]/"),
         (requirements_path.as_str(), "requirements.in"),

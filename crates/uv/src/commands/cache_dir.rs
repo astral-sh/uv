@@ -4,5 +4,5 @@ use uv_fs::Simplified;
 
 /// Show the cache directory.
 pub(crate) fn cache_dir(cache: &Cache) {
-    anstream::println!("{}", cache.root().simplified_display().cyan());
+    anstream::println!("{}", cache.root().user_display().cyan());
 }

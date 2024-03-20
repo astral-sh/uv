@@ -2205,7 +2205,7 @@ fn sync_editable() -> Result<()> {
         current_dir = current_dir.simplified_display(),
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.user_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2328,7 +2328,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.user_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2367,7 +2367,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.user_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2401,7 +2401,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.user_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2430,7 +2430,7 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.simplified_display().to_string());
+    let filter_path = regex::escape(&requirements_txt.user_display().to_string());
     let filters = INSTA_FILTERS
         .iter()
         .chain(&[
@@ -2480,13 +2480,7 @@ fn incompatible_wheel() -> Result<()> {
         Url::from_file_path(wheel.path()).unwrap()
     ))?;
 
-    let wheel_dir = regex::escape(
-        &wheel_dir
-            .path()
-            .canonicalize()?
-            .simplified_display()
-            .to_string(),
-    );
+    let wheel_dir = regex::escape(&wheel_dir.path().canonicalize()?.user_display().to_string());
     let filters: Vec<_> = [(wheel_dir.as_str(), "[TEMP_DIR]")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
@@ -2573,7 +2567,7 @@ fn find_links() -> Result<()> {
     "})?;
 
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
-    let project_root_string = regex::escape(&project_root.simplified_display().to_string());
+    let project_root_string = regex::escape(&project_root.user_display().to_string());
     let filters: Vec<_> = [(project_root_string.as_str(), "[PROJECT_ROOT]")]
         .into_iter()
         .chain(INSTA_FILTERS.to_vec())
@@ -2921,11 +2915,13 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
             .site_packages()
             .canonicalize()
             .unwrap()
-            .simplified_display()
+            .user_display()
             .to_string(),
     );
     let filters: Vec<_> = [
         (site_packages.as_str(), "[SITE-PACKAGES]"),
+        (r"\.venv/lib/python3.12/site-packages", "[SITE-PACKAGES]"),
+        (r"\.venv/Lib/site-packages", "[SITE-PACKAGES]"),
         (
             r#"\[SITE-PACKAGES\].*.py", received: "#,
             r#"[SITE-PACKAGES]/[FIRST-FILE]", received: "#,

@@ -1,17 +1,26 @@
 use std::borrow::Cow;
 use std::path::{Component, Path, PathBuf};
 
+use once_cell::sync::Lazy;
+
+pub static CWD: Lazy<PathBuf> = Lazy::new(|| std::env::current_dir().unwrap());
+
 pub trait Simplified {
     /// Simplify a [`Path`].
     ///
     /// On Windows, this will strip the `\\?\` prefix from paths. On other platforms, it's a no-op.
     fn simplified(&self) -> &Path;
 
-    /// Render a [`Path`] for user-facing display.
+    /// Render a [`Path`] for display.
     ///
     /// On Windows, this will strip the `\\?\` prefix from paths. On other platforms, it's
     /// equivalent to [`std::path::Display`].
     fn simplified_display(&self) -> std::path::Display;
+
+    /// Render a [`Path`] for user-facing display.
+    ///
+    /// Like [`simplified_display`], but relativizes the path against the current working directory.
+    fn user_display(&self) -> std::path::Display;
 }
 
 impl<T: AsRef<Path>> Simplified for T {
@@ -21,6 +30,11 @@ impl<T: AsRef<Path>> Simplified for T {
 
     fn simplified_display(&self) -> std::path::Display {
         dunce::simplified(self.as_ref()).display()
+    }
+
+    fn user_display(&self) -> std::path::Display {
+        let path = dunce::simplified(self.as_ref());
+        path.strip_prefix(&*CWD).unwrap_or(path).display()
     }
 }
 

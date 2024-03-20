@@ -20,7 +20,7 @@ pub(crate) fn cache_clean(
         writeln!(
             printer.stderr(),
             "No cache found at: {}",
-            cache.root().simplified_display().cyan()
+            cache.root().user_display().cyan()
         )?;
         return Ok(ExitStatus::Success);
     }
@@ -29,14 +29,11 @@ pub(crate) fn cache_clean(
         writeln!(
             printer.stderr(),
             "Clearing cache at: {}",
-            cache.root().simplified_display().cyan()
+            cache.root().user_display().cyan()
         )?;
 
         let summary = cache.clear().with_context(|| {
-            format!(
-                "Failed to clear cache at: {}",
-                cache.root().simplified_display()
-            )
+            format!("Failed to clear cache at: {}", cache.root().user_display())
         })?;
 
         // Write a summary of the number of files and directories removed.

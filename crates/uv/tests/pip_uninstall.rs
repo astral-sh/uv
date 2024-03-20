@@ -6,7 +6,6 @@ use assert_fs::prelude::*;
 use url::Url;
 
 use common::{uv_snapshot, INSTA_FILTERS};
-use uv_fs::Simplified;
 
 use crate::common::{get_bin, venv_to_interpreter, TestContext};
 
@@ -352,13 +351,9 @@ fn missing_record() -> Result<()> {
     .unwrap();
     fs_err::remove_file(dist_info.join("RECORD"))?;
 
-    let dist_info_str = regex::escape(&format!(
-        "RECORD file not found at: {}",
-        dist_info.simplified_display()
-    ));
     let filters: Vec<_> = [(
-        dist_info_str.as_str(),
-        "RECORD file not found at: [DIST_INFO]",
+        r"RECORD file not found at: .*",
+        "RECORD file not found at: [RECORD]",
     )]
     .into_iter()
     .chain(INSTA_FILTERS.to_vec())
@@ -371,7 +366,7 @@ fn missing_record() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot uninstall package; RECORD file not found at: [DIST_INFO]/RECORD
+    error: Cannot uninstall package; RECORD file not found at: [RECORD]
     "###
     );
 
