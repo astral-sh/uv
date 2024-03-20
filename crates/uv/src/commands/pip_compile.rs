@@ -37,7 +37,8 @@ use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 use crate::requirements::{
-    read_lockfile, ExtrasSpecification, RequirementsSource, RequirementsSpecification,
+    read_lockfile, ExtrasSpecification, NamedRequirements, RequirementsSource,
+    RequirementsSpecification,
 };
 
 /// Resolve a set of requirements into a set of pinned versions.
@@ -89,18 +90,7 @@ pub(crate) async fn pip_compile(
     }
 
     // Read all requirements from the provided sources.
-    let RequirementsSpecification {
-        project,
-        requirements,
-        constraints,
-        overrides,
-        editables,
-        index_url,
-        extra_index_urls,
-        no_index,
-        find_links,
-        extras: used_extras,
-    } = RequirementsSpecification::from_sources(
+    let spec = RequirementsSpecification::from_sources(
         requirements,
         constraints,
         overrides,
@@ -113,7 +103,7 @@ pub(crate) async fn pip_compile(
     if let ExtrasSpecification::Some(extras) = extras {
         let mut unused_extras = extras
             .iter()
-            .filter(|extra| !used_extras.contains(extra))
+            .filter(|extra| !spec.extras.contains(extra))
             .collect::<Vec<_>>();
         if !unused_extras.is_empty() {
             unused_extras.sort_unstable();
@@ -125,6 +115,19 @@ pub(crate) async fn pip_compile(
             ));
         }
     }
+
+    // Convert from unnamed to named requirements.
+    let NamedRequirements {
+        project,
+        requirements,
+        constraints,
+        overrides,
+        editables,
+        index_url,
+        extra_index_urls,
+        no_index,
+        find_links,
+    } = NamedRequirements::from_spec(spec)?;
 
     // Read the lockfile, if present.
     let preferences = read_lockfile(output_file, upgrade).await?;

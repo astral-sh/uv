@@ -40,7 +40,9 @@ use uv_warnings::warn_user;
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::{ExtrasSpecification, RequirementsSource, RequirementsSpecification};
+use crate::requirements::{
+    ExtrasSpecification, NamedRequirements, RequirementsSource, RequirementsSpecification,
+};
 
 use super::{DryRunEvent, Upgrade};
 
@@ -76,10 +78,10 @@ pub(crate) async fn pip_install(
     dry_run: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let start = std::time::Instant::now();
+    let start = Instant::now();
 
     // Read all requirements from the provided sources.
-    let RequirementsSpecification {
+    let NamedRequirements {
         project,
         requirements,
         constraints,
@@ -89,25 +91,7 @@ pub(crate) async fn pip_install(
         extra_index_urls,
         no_index,
         find_links,
-        extras: used_extras,
-    } = specification(requirements, constraints, overrides, extras, connectivity).await?;
-
-    // Check that all provided extras are used
-    if let ExtrasSpecification::Some(extras) = extras {
-        let mut unused_extras = extras
-            .iter()
-            .filter(|extra| !used_extras.contains(extra))
-            .collect::<Vec<_>>();
-        if !unused_extras.is_empty() {
-            unused_extras.sort_unstable();
-            unused_extras.dedup();
-            let s = if unused_extras.len() == 1 { "" } else { "s" };
-            return Err(anyhow!(
-                "Requested extra{s} not found: {}",
-                unused_extras.iter().join(", ")
-            ));
-        }
-    }
+    } = read_requirements(requirements, constraints, overrides, extras, connectivity).await?;
 
     // Detect the current Python interpreter.
     let venv = if let Some(python) = python.as_ref() {
@@ -348,13 +332,13 @@ pub(crate) async fn pip_install(
 }
 
 /// Consolidate the requirements for an installation.
-async fn specification(
+async fn read_requirements(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification<'_>,
     connectivity: Connectivity,
-) -> Result<RequirementsSpecification, Error> {
+) -> Result<NamedRequirements, Error> {
     // If the user requests `extras` but does not provide a pyproject toml source
     if !matches!(extras, ExtrasSpecification::None)
         && !requirements
@@ -391,6 +375,9 @@ async fn specification(
             .into());
         }
     }
+
+    // Convert from unnamed to named requirements.
+    let spec = NamedRequirements::from_spec(spec)?;
 
     Ok(spec)
 }

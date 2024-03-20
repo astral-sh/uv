@@ -26,7 +26,7 @@ use uv_warnings::warn_user;
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::{RequirementsSource, RequirementsSpecification};
+use crate::requirements::{NamedRequirements, RequirementsSource, RequirementsSpecification};
 
 /// Install a set of locked requirements into the current Python environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
@@ -54,20 +54,10 @@ pub(crate) async fn pip_sync(
     let start = std::time::Instant::now();
 
     // Read all requirements from the provided sources.
-    let RequirementsSpecification {
-        project: _project,
-        requirements,
-        constraints: _constraints,
-        overrides: _overrides,
-        editables,
-        index_url,
-        extra_index_urls,
-        no_index,
-        find_links,
-        extras: _extras,
-    } = RequirementsSpecification::from_simple_sources(sources, connectivity).await?;
+    let spec = RequirementsSpecification::from_simple_sources(sources, connectivity).await?;
 
-    let num_requirements = requirements.len() + editables.len();
+    // Validate that the requirements are non-empty.
+    let num_requirements = spec.requirements.len() + spec.editables.len();
     if num_requirements == 0 {
         writeln!(printer.stderr(), "No requirements found")?;
         return Ok(ExitStatus::Success);
@@ -106,6 +96,19 @@ pub(crate) async fn pip_sync(
             };
         }
     }
+
+    // Convert from unnamed to named requirements.
+    let NamedRequirements {
+        project: _project,
+        requirements,
+        constraints: _constraints,
+        overrides: _overrides,
+        editables,
+        index_url,
+        extra_index_urls,
+        no_index,
+        find_links,
+    } = NamedRequirements::from_spec(spec)?;
 
     let _lock = venv.lock()?;
 

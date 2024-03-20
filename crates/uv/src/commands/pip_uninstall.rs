@@ -12,7 +12,7 @@ use uv_interpreter::PythonEnvironment;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::{RequirementsSource, RequirementsSpecification};
+use crate::requirements::{NamedRequirements, RequirementsSource, RequirementsSpecification};
 
 /// Uninstall packages from the current environment.
 pub(crate) async fn pip_uninstall(
@@ -27,18 +27,7 @@ pub(crate) async fn pip_uninstall(
     let start = std::time::Instant::now();
 
     // Read all requirements from the provided sources.
-    let RequirementsSpecification {
-        project: _project,
-        requirements,
-        constraints: _constraints,
-        overrides: _overrides,
-        editables,
-        index_url: _index_url,
-        extra_index_urls: _extra_index_urls,
-        no_index: _no_index,
-        find_links: _find_links,
-        extras: _extras,
-    } = RequirementsSpecification::from_simple_sources(sources, connectivity).await?;
+    let spec = RequirementsSpecification::from_simple_sources(sources, connectivity).await?;
 
     // Detect the current Python interpreter.
     let venv = if let Some(python) = python.as_ref() {
@@ -73,6 +62,19 @@ pub(crate) async fn pip_uninstall(
             };
         }
     }
+
+    // Convert from unnamed to named requirements.
+    let NamedRequirements {
+        project: _,
+        requirements,
+        constraints: _,
+        overrides: _,
+        editables,
+        index_url: _,
+        extra_index_urls: _,
+        no_index: _,
+        find_links: _,
+    } = NamedRequirements::from_spec(spec)?;
 
     let _lock = venv.lock()?;
 
