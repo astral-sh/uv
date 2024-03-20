@@ -3518,7 +3518,7 @@ fn custom_compile_command() -> Result<()> {
     // with env var
     uv_snapshot!(context.compile()
             .arg("requirements.in")
-            .env("CUSTOM_COMPILE_COMMAND", "./custom-uv-compile.sh"), @r###"
+            .env("UV_CUSTOM_COMPILE_COMMAND", "./custom-uv-compile.sh"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
