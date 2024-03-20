@@ -17,6 +17,7 @@ Acknowledgements:
     Derived from https://github.com/mitsuhiko/rye/tree/f9822267a7f00332d15be8551f89a212e7bc9017
     Originally authored by Armin Ronacher under the MIT license
 """
+
 import argparse
 import hashlib
 import json

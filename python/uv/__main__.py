@@ -22,6 +22,7 @@ def _detect_virtualenv() -> str:
 
     return ""
 
+
 def _run() -> None:
     uv = os.fsdecode(find_uv_bin())
 
@@ -37,7 +38,6 @@ def _run() -> None:
         sys.exit(completed_process.returncode)
     else:
         os.execvpe(uv, [uv, *sys.argv[1:]], env=env)
-
 
 
 if __name__ == "__main__":

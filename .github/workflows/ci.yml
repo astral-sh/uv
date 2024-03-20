@@ -23,10 +23,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: "Install Rust toolchain"
+
+      - name: "Install Rustfmt"
         run: rustup component add rustfmt
+
       - name: "rustfmt"
         run: cargo fmt --all --check
+
+      - name: "Prettier"
+        run: npx prettier --check "**/*.{yaml,yml}"
+
+      - name: "Ruff format"
+        run: pipx run ruff format --diff .
+
+      - name: "Ruff check"
+        run: pipx run ruff check .
 
   cargo-clippy:
     name: "cargo clippy"
