@@ -14,13 +14,13 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-types = { path = "../distribution-types" }
-pep440_rs = { path = "../pep440-rs" }
-pep508_rs = { path = "../pep508-rs" }
-uv-fs = { path = "../uv-fs" }
-uv-interpreter = { path = "../uv-interpreter" }
-uv-traits = { path = "../uv-traits", features = ["serde"] }
-uv-virtualenv = { path = "../uv-virtualenv" }
+distribution-types = { workspace = true }
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true }
+uv-fs = { workspace = true }
+uv-interpreter = { workspace = true }
+uv-traits = { workspace = true, features = ["serde"] }
+uv-virtualenv = { workspace = true }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }

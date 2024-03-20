@@ -13,8 +13,8 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-cache-key = { path = "../cache-key" }
-uv-fs = { path = "../uv-fs" }
+cache-key = { workspace = true }
+uv-fs = { workspace = true }
 
 anyhow = { workspace = true }
 base64 = { workspace = true }

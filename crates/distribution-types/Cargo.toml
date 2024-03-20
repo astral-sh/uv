@@ -13,15 +13,15 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-cache-key = { path = "../cache-key" }
-distribution-filename = { path = "../distribution-filename", features = ["serde"] }
-pep440_rs = { path = "../pep440-rs" }
-pep508_rs = { path = "../pep508-rs" }
-platform-tags = { path = "../platform-tags" }
-uv-fs = { path = "../uv-fs" }
-uv-git = { path = "../uv-git", features = ["vendored-openssl"] }
-uv-normalize = { path = "../uv-normalize" }
-pypi-types = { path = "../pypi-types" }
+cache-key = { workspace = true }
+distribution-filename = { workspace = true, features = ["serde"] }
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true }
+platform-tags = { workspace = true }
+uv-fs = { workspace = true }
+uv-git = { workspace = true, features = ["vendored-openssl"] }
+uv-normalize = { workspace = true }
+pypi-types = { workspace = true }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }

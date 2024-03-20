@@ -16,22 +16,22 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-filename = { path = "../distribution-filename" }
-distribution-types = { path = "../distribution-types" }
-install-wheel-rs = { path = "../install-wheel-rs" }
-pep440_rs = { path = "../pep440-rs" }
-pep508_rs = { path = "../pep508-rs" }
-platform-tags = { path = "../platform-tags" }
-uv-build = { path = "../uv-build" }
-uv-cache = { path = "../uv-cache", features = ["clap"] }
-uv-client = { path = "../uv-client" }
-uv-dispatch = { path = "../uv-dispatch" }
-uv-distribution = { path = "../uv-distribution" }
-uv-installer = { path = "../uv-installer" }
-uv-interpreter = { path = "../uv-interpreter" }
-uv-normalize = { path = "../uv-normalize" }
-uv-resolver = { path = "../uv-resolver" }
-uv-traits = { path = "../uv-traits" }
+distribution-filename = { workspace = true }
+distribution-types = { workspace = true }
+install-wheel-rs = { workspace = true }
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true }
+platform-tags = { workspace = true }
+uv-build = { workspace = true }
+uv-cache = { workspace = true, features = ["clap"] }
+uv-client = { workspace = true }
+uv-dispatch = { workspace = true }
+uv-distribution = { workspace = true }
+uv-installer = { workspace = true }
+uv-interpreter = { workspace = true }
+uv-normalize = { workspace = true }
+uv-resolver = { workspace = true }
+uv-traits = { workspace = true }
 
 # Any dependencies that are exclusively used in `uv-dev` should be listed as non-workspace
 # dependencies, to ensure that we're forced to think twice before including them in other crates.

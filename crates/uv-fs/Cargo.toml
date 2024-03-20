@@ -13,7 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-uv-warnings = { path = "../uv-warnings" }
+uv-warnings = { workspace = true }
 
 backoff = { workspace = true }
 dunce = { workspace = true }

@@ -14,15 +14,15 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-types = { path = "../distribution-types" }
-pep508_rs = { path = "../pep508-rs" }
-uv-build = { path = "../uv-build" }
-uv-cache = { path = "../uv-cache" }
-uv-client = { path = "../uv-client" }
-uv-installer = { path = "../uv-installer" }
-uv-interpreter = { path = "../uv-interpreter" }
-uv-resolver = { path = "../uv-resolver" }
-uv-traits = { path = "../uv-traits" }
+distribution-types = { workspace = true }
+pep508_rs = { workspace = true }
+uv-build = { workspace = true }
+uv-cache = { workspace = true }
+uv-client = { workspace = true }
+uv-installer = { workspace = true }
+uv-interpreter = { workspace = true }
+uv-resolver = { workspace = true }
+uv-traits = { workspace = true }
 
 anyhow = { workspace = true }
 futures = { workspace = true }

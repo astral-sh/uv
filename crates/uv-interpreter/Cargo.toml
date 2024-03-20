@@ -13,14 +13,14 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-cache-key = { path = "../cache-key" }
-install-wheel-rs = { path = "../install-wheel-rs" }
-pep440_rs = { path = "../pep440-rs" }
-pep508_rs = { path = "../pep508-rs", features = ["serde"] }
-platform-tags = { path = "../platform-tags" }
-pypi-types = { path = "../pypi-types" }
-uv-cache = { path = "../uv-cache" }
-uv-fs = { path = "../uv-fs" }
+cache-key = { workspace = true }
+install-wheel-rs = { workspace = true }
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true, features = ["serde"] }
+platform-tags = { workspace = true }
+pypi-types = { workspace = true }
+uv-cache = { workspace = true }
+uv-fs = { workspace = true }
 
 configparser = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }

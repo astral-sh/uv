@@ -17,6 +17,37 @@ authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+cache-key = { path = "crates/cache-key" }
+distribution-filename = { path = "crates/distribution-filename" }
+distribution-types = { path = "crates/distribution-types" }
+install-wheel-rs = { path = "crates/install-wheel-rs" }
+once-map = { path = "crates/once-map" }
+pep440_rs = { path = "crates/pep440-rs" }
+pep508_rs = { path = "crates/pep508-rs" }
+platform-tags = { path = "crates/platform-tags" }
+pypi-types = { path = "crates/pypi-types" }
+requirements-txt = { path = "crates/requirements-txt" }
+uv = { path = "crates/uv" }
+uv-auth = { path = "crates/uv-auth" }
+uv-build = { path = "crates/uv-build" }
+uv-cache = { path = "crates/uv-cache" }
+uv-client = { path = "crates/uv-client" }
+uv-dev = { path = "crates/uv-dev" }
+uv-dispatch = { path = "crates/uv-dispatch" }
+uv-distribution = { path = "crates/uv-distribution" }
+uv-extract = { path = "crates/uv-extract" }
+uv-fs = { path = "crates/uv-fs" }
+uv-git = { path = "crates/uv-git" }
+uv-installer = { path = "crates/uv-installer" }
+uv-interpreter = { path = "crates/uv-interpreter" }
+uv-normalize = { path = "crates/uv-normalize" }
+uv-resolver = { path = "crates/uv-resolver" }
+uv-traits = { path = "crates/uv-traits" }
+uv-trampoline = { path = "crates/uv-trampoline" }
+uv-version = { path = "crates/uv-version" }
+uv-virtualenv = { path = "crates/uv-virtualenv" }
+uv-warnings = { path = "crates/uv-warnings" }
+
 anstream = { version = "0.6.13" }
 anyhow = { version = "1.0.80" }
 async-channel = { version = "2.2.0" }

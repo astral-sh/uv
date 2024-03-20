@@ -21,11 +21,11 @@ required-features = ["cli"]
 workspace = true
 
 [dependencies]
-platform-tags = { path = "../platform-tags" }
-pypi-types = { path = "../pypi-types" }
-uv-cache = { path = "../uv-cache" }
-uv-fs = { path = "../uv-fs" }
-uv-interpreter = { path = "../uv-interpreter" }
+platform-tags = { workspace = true }
+pypi-types = { workspace = true }
+uv-cache = { workspace = true }
+uv-fs = { workspace = true }
+uv-interpreter = { workspace = true }
 
 anstream = { workspace = true }
 cachedir = { workspace = true }
