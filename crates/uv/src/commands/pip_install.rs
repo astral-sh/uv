@@ -35,6 +35,7 @@ use uv_resolver::{
     ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
@@ -671,15 +672,27 @@ async fn install(
     // Remove any existing installations.
     if !reinstalls.is_empty() {
         for dist_info in &reinstalls {
-            let summary = uv_installer::uninstall(dist_info).await?;
-            debug!(
-                "Uninstalled {} ({} file{}, {} director{})",
-                dist_info.name(),
-                summary.file_count,
-                if summary.file_count == 1 { "" } else { "s" },
-                summary.dir_count,
-                if summary.dir_count == 1 { "y" } else { "ies" },
-            );
+            match uv_installer::uninstall(dist_info).await {
+                Ok(summary) => {
+                    debug!(
+                        "Uninstalled {} ({} file{}, {} director{})",
+                        dist_info.name(),
+                        summary.file_count,
+                        if summary.file_count == 1 { "" } else { "s" },
+                        summary.dir_count,
+                        if summary.dir_count == 1 { "y" } else { "ies" },
+                    );
+                }
+                Err(uv_installer::UninstallError::Uninstall(
+                    install_wheel_rs::Error::MissingRecord(_),
+                )) => {
+                    warn_user!(
+                        "Failed to uninstall package at {} due to missing RECORD file. Installation may result in an incomplete environment.",
+                        dist_info.path().simplified_display().cyan(),
+                    );
+                }
+                Err(err) => return Err(err.into()),
+            }
         }
     }
 
@@ -938,6 +951,9 @@ fn validate(
 enum Error {
     #[error(transparent)]
     Resolve(#[from] uv_resolver::ResolveError),
+
+    #[error(transparent)]
+    Uninstall(#[from] uv_installer::UninstallError),
 
     #[error(transparent)]
     Client(#[from] uv_client::Error),

@@ -435,6 +435,71 @@ fn reinstall_extras() -> Result<()> {
     Ok(())
 }
 
+/// Warn, but don't fail, when uninstalling incomplete packages.
+#[test]
+#[cfg(unix)]
+fn reinstall_incomplete() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install anyio.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.4
+     + sniffio==1.3.0
+    "###
+    );
+
+    // Manually remove the `RECORD` file.
+    fs_err::remove_file(
+        context
+            .venv
+            .join("lib/python3.12/site-packages/anyio-3.7.0.dist-info/RECORD"),
+    )?;
+
+    // Re-install anyio.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("anyio==4.0.0")?;
+
+    let filters = [(r"Failed to uninstall package at .* due to missing RECORD", "Failed to uninstall package at .venv/lib/python3.12/site-packages/anyio-3.7.0.dist-info due to missing RECORD")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, command(&context)
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    warning: Failed to uninstall package at .venv/lib/python3.12/site-packages/anyio-3.7.0.dist-info due to missing RECORD file. Installation may result in an incomplete environment.
+    Installed 1 package in [TIME]
+     - anyio==3.7.0
+     + anyio==4.0.0
+    "###
+    );
+
+    Ok(())
+}
+
 /// Like `pip`, we (unfortunately) allow incompatible environments.
 #[test]
 fn allow_incompatibilities() -> Result<()> {
