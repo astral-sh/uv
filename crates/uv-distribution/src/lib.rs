@@ -3,7 +3,7 @@ pub use download::{BuiltWheel, DiskWheel, LocalWheel};
 pub use error::Error;
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
 pub use reporter::Reporter;
-pub use source::SourceDistCachedBuilder;
+pub use source::{download_and_extract_archive, SourceDistCachedBuilder};
 pub use unzip::Unzip;
 
 mod distribution_database;

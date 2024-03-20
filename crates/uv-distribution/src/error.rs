@@ -63,6 +63,13 @@ pub enum Error {
     MissingPkgInfo,
     #[error("The source distribution does not support static metadata")]
     DynamicPkgInfo(#[source] pypi_types::Error),
+    #[error("Unsupported scheme in URL: {0}")]
+    UnsupportedScheme(String),
+
+    /// A generic request middleware error happened while making a request.
+    /// Refer to the error message for more details.
+    #[error(transparent)]
+    ReqwestMiddlewareError(#[from] anyhow::Error),
 
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
@@ -72,5 +79,16 @@ pub enum Error {
 impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
         Self::Reqwest(BetterReqwestError::from(error))
+    }
+}
+
+impl From<reqwest_middleware::Error> for Error {
+    fn from(error: reqwest_middleware::Error) -> Self {
+        match error {
+            reqwest_middleware::Error::Middleware(error) => Self::ReqwestMiddlewareError(error),
+            reqwest_middleware::Error::Reqwest(error) => {
+                Self::Reqwest(BetterReqwestError::from(error))
+            }
+        }
     }
 }

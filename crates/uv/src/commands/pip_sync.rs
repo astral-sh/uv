@@ -54,10 +54,21 @@ pub(crate) async fn pip_sync(
     let start = std::time::Instant::now();
 
     // Read all requirements from the provided sources.
-    let spec = RequirementsSpecification::from_simple_sources(sources, connectivity).await?;
+    let RequirementsSpecification {
+        project: _,
+        requirements,
+        constraints,
+        overrides,
+        editables,
+        extras: _,
+        index_url,
+        extra_index_urls,
+        no_index,
+        find_links,
+    } = RequirementsSpecification::from_simple_sources(sources, connectivity).await?;
 
     // Validate that the requirements are non-empty.
-    let num_requirements = spec.requirements.len() + spec.editables.len();
+    let num_requirements = requirements.len() + editables.len();
     if num_requirements == 0 {
         writeln!(printer.stderr(), "No requirements found")?;
         return Ok(ExitStatus::Success);
@@ -97,19 +108,6 @@ pub(crate) async fn pip_sync(
         }
     }
 
-    // Convert from unnamed to named requirements.
-    let NamedRequirements {
-        project: _project,
-        requirements,
-        constraints: _constraints,
-        overrides: _overrides,
-        editables,
-        index_url,
-        extra_index_urls,
-        no_index,
-        find_links,
-    } = NamedRequirements::from_spec(spec)?;
-
     let _lock = venv.lock()?;
 
     // Determine the current environment markers.
@@ -133,6 +131,22 @@ pub(crate) async fn pip_sync(
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
         .build();
+
+    // Convert from unnamed to named requirements.
+    let NamedRequirements {
+        requirements,
+        constraints: _constraints,
+        overrides: _overrides,
+        editables,
+    } = NamedRequirements::from_spec(
+        requirements,
+        constraints,
+        overrides,
+        editables,
+        &cache,
+        &client,
+    )
+    .await?;
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

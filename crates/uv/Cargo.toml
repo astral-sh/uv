@@ -25,6 +25,7 @@ uv-auth = { workspace = true, features = ["clap"] }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-dispatch = { workspace = true }
+uv-distribution = { workspace = true }
 uv-fs = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
@@ -46,6 +47,7 @@ console = { workspace = true }
 ctrlc = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
+futures = { workspace = true }
 indexmap = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }

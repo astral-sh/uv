@@ -20,11 +20,12 @@ use distribution_types::{
     PathSourceDist, RemoteSource, SourceDist,
 };
 use install_wheel_rs::metadata::read_archive_metadata;
-use pep508_rs::VerbatimUrl;
+use pep508_rs::{Scheme, VerbatimUrl};
 use platform_tags::Tags;
 use pypi_types::Metadata23;
 use uv_cache::{
-    ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness, WheelCache,
+    ArchiveTimestamp, Cache, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness,
+    WheelCache,
 };
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -125,7 +126,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                         };
 
                         // If necessary, extract the archive.
-                        let extracted = self.extract_archive(&path_source_dist).await?;
+                        let extracted =
+                            extract_archive(&path_source_dist.path, self.build_context.cache())
+                                .await?;
 
                         return self
                             .path(source_dist, &path_source_dist, extracted.path())
@@ -157,7 +160,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
             SourceDist::Path(path_source_dist) => {
                 // If necessary, extract the archive.
-                let extracted = self.extract_archive(path_source_dist).await?;
+                let extracted =
+                    extract_archive(&path_source_dist.path, self.build_context.cache()).await?;
 
                 self.path(source_dist, path_source_dist, extracted.path())
                     .boxed()
@@ -219,7 +223,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                         };
 
                         // If necessary, extract the archive.
-                        let extracted = self.extract_archive(&path_source_dist).await?;
+                        let extracted =
+                            extract_archive(&path_source_dist.path, self.build_context.cache())
+                                .await?;
 
                         return self
                             .path_metadata(source_dist, &path_source_dist, extracted.path())
@@ -253,7 +259,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             }
             SourceDist::Path(path_source_dist) => {
                 // If necessary, extract the archive.
-                let extracted = self.extract_archive(path_source_dist).await?;
+                let extracted =
+                    extract_archive(&path_source_dist.path, self.build_context.cache()).await?;
 
                 self.path_metadata(source_dist, path_source_dist, extracted.path())
                     .boxed()
@@ -669,7 +676,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &SourceDist,
         git_source_dist: &GitSourceDist,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let (fetch, subdirectory) = self.download_source_dist_git(&git_source_dist.url).await?;
+        let (fetch, subdirectory) = fetch_git_archive(
+            &git_source_dist.url,
+            self.build_context.cache(),
+            self.reporter.as_ref(),
+        )
+        .await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
@@ -725,7 +737,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source_dist: &SourceDist,
         git_source_dist: &GitSourceDist,
     ) -> Result<Metadata23, Error> {
-        let (fetch, subdirectory) = self.download_source_dist_git(&git_source_dist.url).await?;
+        let (fetch, subdirectory) = fetch_git_archive(
+            &git_source_dist.url,
+            self.build_context.cache(),
+            self.reporter.as_ref(),
+        )
+        .await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
@@ -839,82 +856,6 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(cache_path)
-    }
-
-    /// Download a source distribution from a Git repository.
-    async fn download_source_dist_git(&self, url: &Url) -> Result<(Fetch, Option<PathBuf>), Error> {
-        debug!("Fetching source distribution from Git: {url}");
-        let git_dir = self.build_context.cache().bucket(CacheBucket::Git);
-
-        // Avoid races between different processes, too.
-        let lock_dir = git_dir.join("locks");
-        fs::create_dir_all(&lock_dir)
-            .await
-            .map_err(Error::CacheWrite)?;
-        let canonical_url = cache_key::CanonicalUrl::new(url);
-        let _lock = LockedFile::acquire(
-            lock_dir.join(cache_key::digest(&canonical_url)),
-            &canonical_url,
-        )
-        .map_err(Error::CacheWrite)?;
-
-        let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Error::Git)?;
-
-        let source = if let Some(reporter) = &self.reporter {
-            GitSource::new(url, git_dir).with_reporter(Facade::from(reporter.clone()))
-        } else {
-            GitSource::new(url, git_dir)
-        };
-        let fetch = tokio::task::spawn_blocking(move || source.fetch())
-            .await?
-            .map_err(Error::Git)?;
-        Ok((fetch, subdirectory))
-    }
-
-    /// Extract a local source distribution, if it's stored as a `.tar.gz` or `.zip` archive.
-    ///
-    /// TODO(charlie): Consider storing the extracted source in the cache, to avoid re-extracting
-    /// on every invocation.
-    async fn extract_archive(
-        &self,
-        source_dist: &'a PathSourceDist,
-    ) -> Result<ExtractedSource<'a>, Error> {
-        // If necessary, unzip the source distribution.
-        let path = source_dist.path.as_path();
-
-        let metadata = match fs::metadata(&path).await {
-            Ok(metadata) => metadata,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Err(Error::NotFound(path.to_path_buf()));
-            }
-            Err(err) => return Err(Error::CacheRead(err)),
-        };
-
-        if metadata.is_dir() {
-            Ok(ExtractedSource::Directory(path))
-        } else {
-            debug!("Unpacking for build: {source_dist}");
-
-            let temp_dir =
-                tempfile::tempdir_in(self.build_context.cache().bucket(CacheBucket::BuiltWheels))
-                    .map_err(Error::CacheWrite)?;
-
-            // Unzip the archive into the temporary directory.
-            let reader = fs_err::tokio::File::open(&path)
-                .await
-                .map_err(Error::CacheRead)?;
-            uv_extract::seek::archive(tokio::io::BufReader::new(reader), path, &temp_dir.path())
-                .await?;
-
-            // Extract the top-level directory from the archive.
-            let extracted = match uv_extract::strip_component(temp_dir.path()) {
-                Ok(top_level) => top_level,
-                Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
-                Err(err) => return Err(err.into()),
-            };
-
-            Ok(ExtractedSource::Archive(extracted, temp_dir))
-        }
     }
 
     /// Build a source distribution, storing the built wheel in the cache.
@@ -1090,18 +1031,21 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 }
 
 #[derive(Debug)]
-enum ExtractedSource<'a> {
+pub enum ExtractedSource {
     /// The source distribution was passed in as a directory, and so doesn't need to be extracted.
-    Directory(&'a Path),
+    Directory(PathBuf),
     /// The source distribution was passed in as an archive, and was extracted into a temporary
     /// directory.
+    ///
+    /// The extracted archive and temporary directory will be deleted when the `ExtractedSource` is
+    /// dropped.
     #[allow(dead_code)]
     Archive(PathBuf, TempDir),
 }
 
-impl ExtractedSource<'_> {
+impl ExtractedSource {
     /// Return the [`Path`] to the extracted source root.
-    fn path(&self) -> &Path {
+    pub fn path(&self) -> &Path {
         match self {
             ExtractedSource::Directory(path) => path,
             ExtractedSource::Archive(path, _) => path,
@@ -1214,4 +1158,163 @@ fn read_wheel_metadata(
     let mut archive = ZipArchive::new(reader)?;
     let dist_info = read_archive_metadata(filename, &mut archive)?;
     Ok(Metadata23::parse_metadata(&dist_info)?)
+}
+
+/// Extract a local source distribution, if it's stored as a `.tar.gz` or `.zip` archive.
+///
+/// TODO(charlie): Consider storing the extracted source in the cache, to avoid re-extracting
+/// on every invocation.
+async fn extract_archive(path: &Path, cache: &Cache) -> Result<ExtractedSource, Error> {
+    let metadata = match fs::metadata(&path).await {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::NotFound(path.to_path_buf()));
+        }
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    if metadata.is_dir() {
+        Ok(ExtractedSource::Directory(path.to_path_buf()))
+    } else {
+        debug!("Unpacking for build: {}", path.display());
+
+        let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::BuiltWheels))
+            .map_err(Error::CacheWrite)?;
+
+        // Unzip the archive into the temporary directory.
+        let reader = fs_err::tokio::File::open(&path)
+            .await
+            .map_err(Error::CacheRead)?;
+        uv_extract::seek::archive(tokio::io::BufReader::new(reader), path, &temp_dir.path())
+            .await?;
+
+        // Extract the top-level directory from the archive.
+        let extracted = match uv_extract::strip_component(temp_dir.path()) {
+            Ok(top_level) => top_level,
+            Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
+            Err(err) => return Err(err.into()),
+        };
+
+        Ok(ExtractedSource::Archive(extracted, temp_dir))
+    }
+}
+
+/// Download a source distribution from a Git repository.
+async fn fetch_git_archive(
+    url: &Url,
+    cache: &Cache,
+    reporter: Option<&Arc<dyn Reporter>>,
+) -> Result<(Fetch, Option<PathBuf>), Error> {
+    debug!("Fetching source distribution from Git: {url}");
+    let git_dir = cache.bucket(CacheBucket::Git);
+
+    // Avoid races between different processes, too.
+    let lock_dir = git_dir.join("locks");
+    fs::create_dir_all(&lock_dir)
+        .await
+        .map_err(Error::CacheWrite)?;
+    let canonical_url = cache_key::CanonicalUrl::new(url);
+    let _lock = LockedFile::acquire(
+        lock_dir.join(cache_key::digest(&canonical_url)),
+        &canonical_url,
+    )
+    .map_err(Error::CacheWrite)?;
+
+    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Error::Git)?;
+
+    let source = if let Some(reporter) = reporter {
+        GitSource::new(url, git_dir).with_reporter(Facade::from(reporter.clone()))
+    } else {
+        GitSource::new(url, git_dir)
+    };
+    let fetch = tokio::task::spawn_blocking(move || source.fetch())
+        .await?
+        .map_err(Error::Git)?;
+    Ok((fetch, subdirectory))
+}
+
+/// Download and extract a source distribution from a URL.
+///
+/// This function will download the source distribution from the given URL, and extract it into a
+/// directory.
+///
+/// For VCS distributions, this method will checkout the URL into the shared Git cache.
+///
+/// For local archives, this method will extract the archive into a temporary directory.
+///
+/// For HTTP distributions, this method will download the archive and extract it into a temporary
+/// directory.
+pub async fn download_and_extract_archive(
+    url: &Url,
+    cache: &Cache,
+    client: &RegistryClient,
+) -> Result<ExtractedSource, Error> {
+    match Scheme::parse(url.scheme()) {
+        // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`.
+        Some(Scheme::File) => {
+            let path = url.to_file_path().expect("URL to be a file path");
+            extract_archive(&path, cache).await
+        }
+        // Ex) `git+https://github.com/pallets/flask`
+        Some(Scheme::GitSsh | Scheme::GitHttps) => {
+            // Download the source distribution from the Git repository.
+            let (fetch, subdirectory) = fetch_git_archive(url, cache, None).await?;
+            let path = if let Some(subdirectory) = subdirectory {
+                fetch.path().join(subdirectory)
+            } else {
+                fetch.path().to_path_buf()
+            };
+            Ok(ExtractedSource::Directory(path))
+        }
+        // Ex) `https://download.pytorch.org/whl/torch_stable.html`
+        Some(Scheme::Http | Scheme::Https) => {
+            let filename = url.filename().expect("Distribution must have a filename");
+
+            // Build a request to download the source distribution.
+            let req = client
+                .uncached_client()
+                .get(url.clone())
+                .header(
+                    // `reqwest` defaults to accepting compressed responses.
+                    // Specify identity encoding to get consistent .whl downloading
+                    // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
+                    "accept-encoding",
+                    reqwest::header::HeaderValue::from_static("identity"),
+                )
+                .build()?;
+
+            // Execute the request over the network.
+            let response = client
+                .uncached_client()
+                .execute(req)
+                .await?
+                .error_for_status()?;
+
+            // Download and unzip the source distribution into a temporary directory.
+            let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::BuiltWheels))
+                .map_err(Error::CacheWrite)?;
+            let reader = response
+                .bytes_stream()
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+                .into_async_read();
+            uv_extract::stream::archive(reader.compat(), filename.as_ref(), temp_dir.path())
+                .await?;
+
+            // Extract the top-level directory.
+            let extracted = match uv_extract::strip_component(temp_dir.path()) {
+                Ok(top_level) => top_level,
+                Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
+                Err(err) => return Err(err.into()),
+            };
+
+            Ok(ExtractedSource::Archive(extracted, temp_dir))
+        }
+        // Ex) `../editable/`
+        None => {
+            let path = url.to_file_path().expect("URL to be a file path");
+            extract_archive(&path, cache).await
+        }
+        // Ex) `bzr+https://launchpad.net/bzr/+download/...`
+        Some(scheme) => Err(Error::UnsupportedScheme(scheme.to_string())),
+    }
 }

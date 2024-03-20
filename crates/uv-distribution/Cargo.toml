@@ -34,6 +34,7 @@ fs-err = { workspace = true }
 futures = { workspace = true }
 nanoid = { workspace = true }
 reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
