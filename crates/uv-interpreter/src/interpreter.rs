@@ -485,20 +485,20 @@ impl InterpreterInfo {
                             debug!(
                                 "Cached interpreter info for Python {}, skipping probing: {}",
                                 cached.data.markers.python_full_version,
-                                executable.simplified_display()
+                                executable.user_display()
                             );
                             return Ok(cached.data);
                         }
 
                         debug!(
                             "Ignoring stale cached markers for: {}",
-                            executable.simplified_display()
+                            executable.user_display()
                         );
                     }
                     Err(err) => {
                         warn!(
                             "Broken cache entry at {}, removing: {err}",
-                            cache_entry.path().simplified_display()
+                            cache_entry.path().user_display()
                         );
                         let _ = fs_err::remove_file(cache_entry.path());
                     }

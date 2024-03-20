@@ -84,7 +84,7 @@ pub(crate) async fn pip_sync(
     debug!(
         "Using Python {} environment at {}",
         venv.interpreter().python_version(),
-        venv.python_executable().simplified_display().cyan()
+        venv.python_executable().user_display().cyan()
     );
 
     // If the environment is externally managed, abort.
@@ -95,13 +95,13 @@ pub(crate) async fn pip_sync(
             return if let Some(error) = externally_managed.into_error() {
                 Err(anyhow::anyhow!(
                     "The interpreter at {} is externally managed, and indicates the following:\n\n{}\n\nConsider creating a virtual environment with `uv venv`.",
-                    venv.root().simplified_display().cyan(),
+                    venv.root().user_display().cyan(),
                     textwrap::indent(&error, "  ").green(),
                 ))
             } else {
                 Err(anyhow::anyhow!(
                     "The interpreter at {} is externally managed. Instead, create a virtual environment with `uv venv`.",
-                    venv.root().simplified_display().cyan()
+                    venv.root().user_display().cyan()
                 ))
             };
         }
@@ -303,7 +303,7 @@ pub(crate) async fn pip_sync(
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing RECORD file. Installation may result in an incomplete environment.",
-                        dist_info.path().simplified_display().cyan(),
+                        dist_info.path().user_display().cyan(),
                     );
                 }
                 Err(err) => return Err(err.into()),

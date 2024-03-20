@@ -201,7 +201,7 @@ pub(crate) fn windows_script_launcher(
     }
 
     let python = python_executable.as_ref();
-    let python_path = python.simplified().to_string_lossy();
+    let python_path = python.simplified_display().to_string();
 
     let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len() + payload.len());
     launcher.extend_from_slice(launcher_bin);

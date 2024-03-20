@@ -201,7 +201,7 @@ async fn worker(
             Ok(()) => {
                 debug!(
                     "Bytecode compilation `python` at {} stderr:\n{}\n---",
-                    interpreter.simplified_display(),
+                    interpreter.user_display(),
                     stderr
                 );
                 Ok(())

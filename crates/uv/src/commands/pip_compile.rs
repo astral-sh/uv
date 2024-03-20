@@ -133,7 +133,7 @@ pub(crate) async fn pip_compile(
     debug!(
         "Using Python {} interpreter at {} for builds",
         interpreter.python_version(),
-        interpreter.sys_executable().simplified_display().cyan()
+        interpreter.sys_executable().user_display().cyan()
     );
 
     if let Some(python_version) = python_version.as_ref() {
@@ -440,7 +440,7 @@ pub(crate) async fn pip_compile(
 fn cmd(include_index_url: bool, include_find_links: bool) -> String {
     let args = env::args_os()
         .skip(1)
-        .map(|arg| arg.simplified_display().to_string())
+        .map(|arg| arg.user_display().to_string())
         .scan(None, move |skip_next, arg| {
             if matches!(skip_next, Some(true)) {
                 // Reset state; skip this iteration.

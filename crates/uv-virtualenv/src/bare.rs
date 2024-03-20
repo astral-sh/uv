@@ -86,7 +86,7 @@ pub fn create_bare_venv(
             if metadata.is_file() {
                 return Err(Error::IO(io::Error::new(
                     io::ErrorKind::AlreadyExists,
-                    format!("File exists at `{}`", location.simplified_display()),
+                    format!("File exists at `{}`", location.user_display()),
                 )));
             } else if metadata.is_dir() {
                 if location.join("pyvenv.cfg").is_file() {
@@ -103,7 +103,7 @@ pub fn create_bare_venv(
                         io::ErrorKind::AlreadyExists,
                         format!(
                             "The directory `{}` exists, but it's not a virtualenv",
-                            location.simplified_display()
+                            location.user_display()
                         ),
                     )));
                 }

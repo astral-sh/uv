@@ -114,12 +114,8 @@ impl InstalledDist {
     pub fn metadata(&self) -> Result<pypi_types::Metadata23> {
         let path = self.path().join("METADATA");
         let contents = fs::read(&path)?;
-        pypi_types::Metadata23::parse_metadata(&contents).with_context(|| {
-            format!(
-                "Failed to parse METADATA file at: {}",
-                path.simplified_display()
-            )
-        })
+        pypi_types::Metadata23::parse_metadata(&contents)
+            .with_context(|| format!("Failed to parse METADATA file at: {}", path.user_display()))
     }
 
     /// Return the `INSTALLER` of the distribution.

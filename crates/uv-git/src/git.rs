@@ -170,7 +170,7 @@ impl GitRemote {
         let reference = locked_ref.as_ref().unwrap_or(reference);
         if let Some(mut db) = db {
             fetch(&mut db.repo, self.url.as_str(), reference, strategy, client)
-                .with_context(|| format!("failed to fetch into: {}", into.simplified_display()))?;
+                .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
             let resolved_commit_hash = match locked_rev {
                 Some(rev) => db.contains(rev).then_some(rev),
@@ -190,7 +190,7 @@ impl GitRemote {
         paths::create_dir_all(into)?;
         let mut repo = init(into, true)?;
         fetch(&mut repo, self.url.as_str(), reference, strategy, client)
-            .with_context(|| format!("failed to clone into: {}", into.simplified_display()))?;
+            .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,

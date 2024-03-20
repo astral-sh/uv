@@ -21,6 +21,7 @@ encoding_rs_io = { workspace = true }
 fs-err = { workspace = true }
 fs2 = { workspace = true }
 junction = { workspace = true }
+once_cell = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, optional = true }
 tracing = { workspace = true }

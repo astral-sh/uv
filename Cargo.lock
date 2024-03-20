@@ -4748,6 +4748,7 @@ dependencies = [
  "fs-err",
  "fs2",
  "junction",
+ "once_cell",
  "tempfile",
  "tokio",
  "tracing",

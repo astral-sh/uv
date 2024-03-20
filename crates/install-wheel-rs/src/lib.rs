@@ -41,7 +41,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     /// Custom error type to add a path to error reading a file from a zip
-    #[error("Failed to reflink {} to {}", from.simplified_display(), to.simplified_display())]
+    #[error("Failed to reflink {} to {}", from.user_display(), to.user_display())]
     Reflink {
         from: PathBuf,
         to: PathBuf,
@@ -82,7 +82,7 @@ pub enum Error {
     DirectUrlJson(#[from] serde_json::Error),
     #[error("No .dist-info directory found")]
     MissingDistInfo,
-    #[error("Cannot uninstall package; RECORD file not found at: {}", _0.simplified_display())]
+    #[error("Cannot uninstall package; RECORD file not found at: {}", _0.user_display())]
     MissingRecord(PathBuf),
     #[error("Multiple .dist-info directories found: {0}")]
     MultipleDistInfo(String),
