@@ -13,21 +13,20 @@ use owo_colors::OwoColorize;
 use tracing::instrument;
 
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
-use requirements::ExtrasSpecification;
 use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheArgs, Refresh};
 use uv_client::Connectivity;
 use uv_installer::{NoBinary, Reinstall};
 use uv_interpreter::PythonVersion;
 use uv_normalize::{ExtraName, PackageName};
+use uv_requirements::{upgrade::Upgrade, ExtrasSpecification, RequirementsSource};
 use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
 use uv_traits::{
     ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, SetupPyStrategy,
 };
 
-use crate::commands::{extra_name_with_clap_error, ExitStatus, ListFormat, Upgrade, VersionFormat};
+use crate::commands::{extra_name_with_clap_error, ExitStatus, ListFormat, VersionFormat};
 use crate::compat::CompatArgs;
-use crate::requirements::RequirementsSource;
 
 #[cfg(target_os = "windows")]
 #[global_allocator]
@@ -47,10 +46,8 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod commands;
 mod compat;
-mod confirm;
 mod logging;
 mod printer;
-mod requirements;
 mod shell;
 mod version;
 

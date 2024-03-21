@@ -14,7 +14,6 @@ default-run = "uv"
 workspace = true
 
 [dependencies]
-distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
 install-wheel-rs = { workspace = true, features = ["clap"], default-features = false }
 pep508_rs = { workspace = true }
@@ -25,12 +24,12 @@ uv-auth = { workspace = true, features = ["clap"] }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-dispatch = { workspace = true }
-uv-distribution = { workspace = true }
 uv-fs = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-resolver = { workspace = true, features = ["clap"] }
+uv-requirements = { workspace = true }
 uv-traits = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
@@ -38,16 +37,11 @@ uv-warnings = { workspace = true }
 anstream = { workspace = true }
 anyhow = { workspace = true }
 axoupdater = { workspace = true, features = ["github_releases", "tokio"] }
-base64 = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "string"] }
 clap_complete_command = { workspace = true }
-configparser = { workspace = true }
-console = { workspace = true }
-ctrlc = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
-futures = { workspace = true }
 indexmap = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
@@ -80,6 +74,7 @@ tikv-jemallocator = { version = "0.5.4" }
 [dev-dependencies]
 assert_cmd = { version = "2.0.14" }
 assert_fs = { version = "1.1.0" }
+base64 = { version = "0.21.7" }
 byteorder = { version = "1.5.0" }
 filetime = { version = "0.2.23" }
 indoc = { version = "2.0.4" }

@@ -41,6 +41,7 @@ uv-git = { path = "crates/uv-git" }
 uv-installer = { path = "crates/uv-installer" }
 uv-interpreter = { path = "crates/uv-interpreter" }
 uv-normalize = { path = "crates/uv-normalize" }
+uv-requirements = { path = "crates/uv-requirements" }
 uv-resolver = { path = "crates/uv-resolver" }
 uv-traits = { path = "crates/uv-traits" }
 uv-trampoline = { path = "crates/uv-trampoline" }
