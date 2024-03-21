@@ -910,7 +910,7 @@ async fn install(
 }
 
 /// Validate the installed packages in the virtual environment.
-pub(crate) fn validate(
+fn validate(
     resolution: &Resolution,
     venv: &PythonEnvironment,
     printer: Printer,
