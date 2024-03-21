@@ -1275,7 +1275,7 @@ mod test {
         let requirements_txt = working_dir.join(path);
 
         let actual =
-            RequirementsTxt::parse(requirements_txt, &working_dir, BaseClientBuilder::new())
+            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
                 .await
                 .unwrap();
 
@@ -1297,7 +1297,7 @@ mod test {
         let requirements_txt = working_dir.join(path);
 
         let actual =
-            RequirementsTxt::parse(requirements_txt, &working_dir, BaseClientBuilder::new())
+            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
                 .await
                 .unwrap();
 
