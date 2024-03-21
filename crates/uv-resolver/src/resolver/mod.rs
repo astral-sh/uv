@@ -664,10 +664,13 @@ impl<
                 }
 
                 // Find a version.
-                let Some(candidate) =
-                    self.selector
-                        .select(package_name, range, version_map, &self.preferences)
-                else {
+                let Some(candidate) = self.selector.select(
+                    package_name,
+                    range,
+                    version_map,
+                    &self.preferences,
+                    self.installed_packages,
+                ) else {
                     // Short circuit: we couldn't find _any_ versions for a package.
                     return Ok(None);
                 };
@@ -1028,10 +1031,13 @@ impl<
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit.
-                let Some(candidate) =
-                    self.selector
-                        .select(&package_name, &range, version_map, &self.preferences)
-                else {
+                let Some(candidate) = self.selector.select(
+                    &package_name,
+                    &range,
+                    version_map,
+                    &self.preferences,
+                    self.installed_packages,
+                ) else {
                     return Ok(None);
                 };
 

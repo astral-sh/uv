@@ -5,6 +5,7 @@ use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, Prioriti
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
+use uv_traits::InstalledPackagesProvider;
 
 use crate::preferences::Preferences;
 use crate::prerelease_mode::PreReleaseStrategy;
@@ -61,12 +62,13 @@ enum AllowPreRelease {
 
 impl CandidateSelector {
     /// Select a [`Candidate`] from a set of candidate versions and files.
-    pub(crate) fn select<'a>(
+    pub(crate) fn select<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
         package_name: &'a PackageName,
         range: &'a Range<Version>,
         version_map: &'a VersionMap,
         preferences: &'a Preferences,
+        installed_packages: &'a InstalledPackages,
     ) -> Option<Candidate<'a>> {
         // If the package has a preference (e.g., an existing version from an existing lockfile),
         // and the preference satisfies the current range, use that.
