@@ -6,7 +6,8 @@ use owo_colors::OwoColorize;
 use url::Url;
 
 use distribution_types::{
-    CachedDist, Dist, DistributionMetadata, LocalEditable, Name, SourceDist, VersionOrUrl,
+    BuildableSource, CachedDist, Dist, DistributionMetadata, LocalEditable, Name, SourceDist,
+    VersionOrUrl,
 };
 use uv_normalize::PackageName;
 
@@ -114,12 +115,12 @@ impl uv_installer::DownloadReporter for DownloadReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, dist: &SourceDist) -> usize {
-        self.on_any_build_start(&dist.to_color_string())
+    fn on_build_start(&self, source: BuildableSource) -> usize {
+        self.on_any_build_start(&source.to_color_string())
     }
 
-    fn on_build_complete(&self, dist: &SourceDist, index: usize) {
-        self.on_any_build_complete(&dist.to_color_string(), index);
+    fn on_build_complete(&self, source: BuildableSource, index: usize) {
+        self.on_any_build_complete(&source.to_color_string(), index);
     }
 
     fn on_editable_build_start(&self, dist: &LocalEditable) -> usize {
@@ -243,7 +244,7 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, dist: &SourceDist) -> usize {
+    fn on_build_start(&self, source: BuildableSource) -> usize {
         let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -253,7 +254,7 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
         progress.set_message(format!(
             "{} {}",
             "Building".bold().cyan(),
-            dist.to_color_string(),
+            source.to_color_string(),
         ));
 
         let mut bars = self.bars.lock().unwrap();
@@ -261,13 +262,13 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
         bars.len() - 1
     }
 
-    fn on_build_complete(&self, dist: &SourceDist, index: usize) {
+    fn on_build_complete(&self, source: BuildableSource, index: usize) {
         let bars = self.bars.lock().unwrap();
         let progress = &bars[index];
         progress.finish_with_message(format!(
             "   {} {}",
             "Built".bold().green(),
-            dist.to_color_string(),
+            source.to_color_string(),
         ));
     }
 
@@ -313,6 +314,15 @@ impl ColorDisplay for SourceDist {
         let name = self.name();
         let version_or_url = self.version_or_url();
         format!("{}{}", name, version_or_url.to_string().dimmed())
+    }
+}
+
+impl ColorDisplay for BuildableSource<'_> {
+    fn to_color_string(&self) -> String {
+        match self {
+            BuildableSource::Dist(dist) => dist.to_color_string(),
+            BuildableSource::Url(url) => url.to_string(),
+        }
     }
 }
 

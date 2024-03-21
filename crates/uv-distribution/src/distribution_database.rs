@@ -11,7 +11,8 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuiltDist, DirectGitUrl, Dist, FileLocation, IndexLocations, LocalEditable, Name, SourceDist,
+    BuildableSource, BuiltDist, DirectGitUrl, Dist, FileLocation, IndexLocations, LocalEditable,
+    Name, SourceDist,
 };
 use platform_tags::Tags;
 use pypi_types::Metadata23;
@@ -284,7 +285,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let lock = self.locks.acquire(&dist).await;
                 let _guard = lock.lock().await;
 
-                let built_wheel = self.builder.download_and_build(source_dist).boxed().await?;
+                let built_wheel = self
+                    .builder
+                    .download_and_build(BuildableSource::Dist(source_dist))
+                    .boxed()
+                    .await?;
 
                 // If the wheel was unzipped previously, respect it. Source distributions are
                 // cached under a unique build ID, so unzipped directories are never stale.
@@ -358,7 +363,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 let metadata = self
                     .builder
-                    .download_and_build_metadata(&source_dist)
+                    .download_and_build_metadata(BuildableSource::Dist(&source_dist))
                     .boxed()
                     .await?;
                 Ok((metadata, precise))

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use url::Url;
 
-use distribution_types::{SourceDist, VersionOrUrl};
+use distribution_types::{BuildableSource, VersionOrUrl};
 use uv_normalize::PackageName;
 
 pub type BuildId = usize;
@@ -15,10 +15,10 @@ pub trait Reporter: Send + Sync {
     fn on_complete(&self);
 
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, dist: &SourceDist) -> usize;
+    fn on_build_start(&self, source: BuildableSource) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, dist: &SourceDist, id: usize);
+    fn on_build_complete(&self, source: BuildableSource, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
@@ -33,12 +33,12 @@ pub(crate) struct Facade {
 }
 
 impl uv_distribution::Reporter for Facade {
-    fn on_build_start(&self, dist: &SourceDist) -> usize {
-        self.reporter.on_build_start(dist)
+    fn on_build_start(&self, source: BuildableSource) -> usize {
+        self.reporter.on_build_start(source)
     }
 
-    fn on_build_complete(&self, dist: &SourceDist, id: usize) {
-        self.reporter.on_build_complete(dist, id);
+    fn on_build_complete(&self, source: BuildableSource, id: usize) {
+        self.reporter.on_build_complete(source, id);
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {

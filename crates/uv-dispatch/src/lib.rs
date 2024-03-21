@@ -285,20 +285,15 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             ),
             NoBuild::None => {}
             NoBuild::Packages(packages) => {
+                // We can only prevent builds by name for packages with names. For editable
+                // packages and unnamed requirements, we can't prevent the build.
                 if let Some(dist) = dist {
-                    // We can only prevent builds by name for packages with names
-                    // which is unknown before build of editable source distributions
                     if packages.contains(dist.name()) {
                         bail!(
                             "Building source distributions for {} is disabled",
                             dist.name()
                         );
                     }
-                } else {
-                    debug_assert!(
-                        matches!(build_kind, BuildKind::Editable),
-                        "Only editable builds are exempt from 'no build' checks"
-                    );
                 }
             }
         }
