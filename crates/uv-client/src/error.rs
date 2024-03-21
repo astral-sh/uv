@@ -225,6 +225,7 @@ impl From<reqwest::Error> for ErrorKind {
         Self::ReqwestError(BetterReqwestError::from(error))
     }
 }
+
 impl From<reqwest_middleware::Error> for ErrorKind {
     fn from(error: reqwest_middleware::Error) -> Self {
         if let reqwest_middleware::Error::Middleware(ref underlying) = error {

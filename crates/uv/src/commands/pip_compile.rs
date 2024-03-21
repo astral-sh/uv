@@ -90,7 +90,18 @@ pub(crate) async fn pip_compile(
     }
 
     // Read all requirements from the provided sources.
-    let spec = RequirementsSpecification::from_sources(
+    let RequirementsSpecification {
+        project,
+        requirements,
+        constraints,
+        overrides,
+        editables,
+        extras: used_extras,
+        index_url,
+        extra_index_urls,
+        no_index,
+        find_links,
+    } = RequirementsSpecification::from_sources(
         requirements,
         constraints,
         overrides,
@@ -103,7 +114,7 @@ pub(crate) async fn pip_compile(
     if let ExtrasSpecification::Some(extras) = extras {
         let mut unused_extras = extras
             .iter()
-            .filter(|extra| !spec.extras.contains(extra))
+            .filter(|extra| !used_extras.contains(extra))
             .collect::<Vec<_>>();
         if !unused_extras.is_empty() {
             unused_extras.sort_unstable();
@@ -115,22 +126,6 @@ pub(crate) async fn pip_compile(
             ));
         }
     }
-
-    // Convert from unnamed to named requirements.
-    let NamedRequirements {
-        project,
-        requirements,
-        constraints,
-        overrides,
-        editables,
-        index_url,
-        extra_index_urls,
-        no_index,
-        find_links,
-    } = NamedRequirements::from_spec(spec)?;
-
-    // Read the lockfile, if present.
-    let preferences = read_lockfile(output_file, upgrade).await?;
 
     // Find an interpreter to use for building distributions
     let interpreter = find_best_python(python_version.as_ref(), &cache)?;
@@ -206,6 +201,25 @@ pub(crate) async fn pip_compile(
         .markers(&markers)
         .platform(interpreter.platform())
         .build();
+
+    // Read the lockfile, if present.
+    let preferences = read_lockfile(output_file, upgrade).await?;
+
+    // Convert from unnamed to named requirements.
+    let NamedRequirements {
+        requirements,
+        constraints,
+        overrides,
+        editables,
+    } = NamedRequirements::from_spec(
+        requirements,
+        constraints,
+        overrides,
+        editables,
+        &cache,
+        &client,
+    )
+    .await?;
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
