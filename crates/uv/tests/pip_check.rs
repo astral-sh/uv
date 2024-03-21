@@ -136,7 +136,7 @@ fn check_incompatible_packages() -> Result<()> {
     Installed 1 package in [TIME]
      - idna==3.4
      + idna==2.4
-    warning: The package `requests` requires `idna <4, >=2.5`, but `2.4` is installed.
+    warning: The package `requests` requires `idna<4,>=2.5`, but `2.4` is installed.
     "###
     );
 
@@ -148,7 +148,7 @@ fn check_incompatible_packages() -> Result<()> {
     ----- stderr -----
     Checked 5 packages in [TIME]
     Found 1 incompatibility
-    The package `requests` requires `idna <4, >=2.5`, but `2.4` is installed.
+    The package `requests` requires `idna<4,>=2.5`, but `2.4` is installed.
     "###
     );
 
@@ -206,8 +206,8 @@ fn check_multiple_incompatible_packages() -> Result<()> {
      + idna==2.4
      - urllib3==2.1.0
      + urllib3==1.20
-    warning: The package `requests` requires `idna <4, >=2.5`, but `2.4` is installed.
-    warning: The package `requests` requires `urllib3 <3, >=1.21.1`, but `1.20` is installed.
+    warning: The package `requests` requires `idna<4,>=2.5`, but `2.4` is installed.
+    warning: The package `requests` requires `urllib3<3,>=1.21.1`, but `1.20` is installed.
     "###
     );
 
@@ -219,8 +219,8 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     ----- stderr -----
     Checked 5 packages in [TIME]
     Found 2 incompatibilities
-    The package `requests` requires `idna <4, >=2.5`, but `2.4` is installed.
-    The package `requests` requires `urllib3 <3, >=1.21.1`, but `1.20` is installed.
+    The package `requests` requires `idna<4,>=2.5`, but `2.4` is installed.
+    The package `requests` requires `urllib3<3,>=1.21.1`, but `1.20` is installed.
     "###
     );
 

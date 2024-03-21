@@ -243,7 +243,7 @@ impl Display for Requirement {
                 VersionOrUrl::VersionSpecifier(version_specifier) => {
                     let version_specifier: Vec<String> =
                         version_specifier.iter().map(ToString::to_string).collect();
-                    write!(f, " {}", version_specifier.join(", "))?;
+                    write!(f, "{}", version_specifier.join(","))?;
                 }
                 VersionOrUrl::Url(url) => {
                     // We add the space for markers later if necessary
