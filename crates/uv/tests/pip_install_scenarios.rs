@@ -501,7 +501,7 @@ fn dependency_excludes_range_of_compatible_versions() {
 /// There is a non-contiguous range of compatible versions for the requested package
 /// `a`, but another dependency `c` excludes the range. This is the same as
 /// `dependency-excludes-range-of-compatible-versions` but some of the versions of
-/// `a` are incompatible for another reason e.g. dependency on non-existant package
+/// `a` are incompatible for another reason e.g. dependency on non-existent package
 /// `d`.
 ///
 /// ```text
@@ -3483,7 +3483,7 @@ fn package_only_prereleases_boundary() {
     "###);
 
     // Since there are only prerelease versions of `a` available, a prerelease is
-    // allowed. Since the user did not explictly request a pre-release, pre-releases at
+    // allowed. Since the user did not explicitly request a pre-release, pre-releases at
     // the boundary should not be selected.
     assert_installed(
         &context.venv,

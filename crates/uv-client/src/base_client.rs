@@ -188,7 +188,7 @@ pub struct BaseClient {
 }
 
 impl BaseClient {
-    /// The underyling [`ClientWithMiddleware`].
+    /// The underlying [`ClientWithMiddleware`].
     pub fn client(&self) -> ClientWithMiddleware {
         self.client.clone()
     }
