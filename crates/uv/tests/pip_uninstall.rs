@@ -65,9 +65,9 @@ fn no_arguments() -> Result<()> {
 
     ----- stderr -----
     error: the following required arguments were not provided:
-      <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITABLE>>
+      <PACKAGE|--requirement <REQUIREMENT>>
 
-    Usage: uv pip uninstall <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITABLE>>
+    Usage: uv pip uninstall <PACKAGE|--requirement <REQUIREMENT>>
 
     For more information, try '--help'.
     "###
@@ -428,7 +428,7 @@ fn uninstall_editable_by_name() -> Result<()> {
 }
 
 #[test]
-fn uninstall_editable_by_path() -> Result<()> {
+fn uninstall_by_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
@@ -445,7 +445,7 @@ fn uninstall_editable_by_path() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
-    requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
+    requirements_txt.write_str("../../scripts/editable-installs/poetry_editable")?;
 
     sync_command(&context)
         .arg(requirements_txt.path())
@@ -461,7 +461,6 @@ fn uninstall_editable_by_path() -> Result<()> {
 
     // Uninstall the editable by path.
     uv_snapshot!(filters, uninstall_command(&context)
-        .arg("-e")
         .arg("../../scripts/editable-installs/poetry_editable")
         .current_dir(&current_dir), @r###"
     success: true
@@ -484,7 +483,7 @@ fn uninstall_editable_by_path() -> Result<()> {
 }
 
 #[test]
-fn uninstall_duplicate_editable() -> Result<()> {
+fn uninstall_duplicate_by_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let current_dir = std::env::current_dir()?;
@@ -501,7 +500,7 @@ fn uninstall_duplicate_editable() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
-    requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
+    requirements_txt.write_str("../../scripts/editable-installs/poetry_editable")?;
 
     sync_command(&context)
         .arg(requirements_txt.path())
@@ -518,7 +517,6 @@ fn uninstall_duplicate_editable() -> Result<()> {
     // Uninstall the editable by both path and name.
     uv_snapshot!(filters, uninstall_command(&context)
         .arg("poetry-editable")
-        .arg("-e")
         .arg("../../scripts/editable-installs/poetry_editable")
         .current_dir(&current_dir), @r###"
     success: true
