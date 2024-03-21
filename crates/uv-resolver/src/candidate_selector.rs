@@ -1,8 +1,6 @@
 use pubgrub::range::Range;
 
-use distribution_types::{
-    CompatibleDist, Dist, IncompatibleDist, IncompatibleSource,
-};
+use distribution_types::{CompatibleDist, Dist, IncompatibleDist, IncompatibleSource};
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
@@ -80,21 +78,23 @@ impl CandidateSelector {
                 if let Some(file) = version_map.get(version) {
                     return Some(Candidate::new(package_name, version, file));
                 }
+            }
+        }
 
-                // If it's not in the version map, check if it's satisfied by the current
-                // environment
-                for dist in installed_packages.get_packages(package_name) {
-                    let version = dist.version();
-                    if range.contains(version) {
-                        debug!("Found installed version of {dist} that satisfies request");
-                        return Some(Candidate {
-                            name: package_name,
-                            version,
-                            dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
-                                Dist::Installed(dist.clone()),
-                            )),
-                        });
-                    }
+        if preferences.version(package_name).is_some() || version_map.len() == 0 {
+            // If it's not in the version map, check if it's satisfied by the current
+            // environment
+            for dist in installed_packages.get_packages(package_name) {
+                let version = dist.version();
+                if range.contains(version) {
+                    debug!("Found installed version of {dist} that satisfies request");
+                    return Some(Candidate {
+                        name: package_name,
+                        version,
+                        dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
+                            Dist::Installed(dist.clone()),
+                        )),
+                    });
                 }
             }
         }
