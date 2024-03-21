@@ -39,7 +39,7 @@ impl CachedDist {
     /// Initialize a [`CachedDist`] from a [`Dist`].
     pub fn from_remote(remote: Dist, filename: WheelFilename, path: PathBuf) -> Self {
         match remote {
-            Dist::Installed(InstalledDist::Registry(dist)) => {
+            Dist::Installed(InstalledDist::Registry(_dist)) => {
                 Self::Registry(CachedRegistryDist { filename, path })
             }
             Dist::Installed(InstalledDist::Url(dist)) => Self::Url(CachedDirectUrlDist {

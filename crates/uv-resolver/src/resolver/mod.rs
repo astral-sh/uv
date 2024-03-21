@@ -18,8 +18,8 @@ use tracing::{debug, info_span, instrument, trace, Instrument};
 use url::Url;
 
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, Identifier, IncompatibleDist, IncompatibleSource,
-    IncompatibleWheel, Name, RemoteSource, SourceDist, VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
+    Name, RemoteSource, SourceDist, VersionOrUrl,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -55,7 +55,7 @@ pub use crate::resolver::provider::{
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
-use crate::{DependencyMode, Options};
+use crate::{DependencyMode, Options, VersionMap};
 
 mod index;
 mod locals;
@@ -632,6 +632,7 @@ impl<
                     .ok_or(ResolveError::Unregistered)?;
                 self.visited.insert(package_name.clone());
 
+                let empty_version_map = VersionMap::default();
                 let version_map = match *versions_response {
                     VersionsResponse::Found(ref version_map) => version_map,
                     // Short-circuit if we do not find any versions for the package
@@ -639,19 +640,19 @@ impl<
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::NoIndex);
 
-                        return Ok(None);
+                        &empty_version_map
                     }
                     VersionsResponse::Offline => {
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::Offline);
 
-                        return Ok(None);
+                        &empty_version_map
                     }
                     VersionsResponse::NotFound => {
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::NotFound);
 
-                        return Ok(None);
+                        &empty_version_map
                     }
                 };
 

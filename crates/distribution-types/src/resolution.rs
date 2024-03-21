@@ -3,7 +3,7 @@ use rustc_hash::FxHashMap;
 use pep508_rs::Requirement;
 use uv_normalize::PackageName;
 
-use crate::{BuiltDist, Dist, InstalledDist, Name, PathSourceDist, SourceDist};
+use crate::{BuiltDist, Dist, Name, PathSourceDist, SourceDist};
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]

@@ -1,7 +1,7 @@
 use pubgrub::range::Range;
 
 use distribution_types::{
-    CompatibleDist, Dist, IncompatibleDist, IncompatibleSource, InstalledDist,
+    CompatibleDist, Dist, IncompatibleDist, IncompatibleSource,
 };
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;

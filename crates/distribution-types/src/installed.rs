@@ -10,7 +10,7 @@ use pep440_rs::Version;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
-use crate::{File, InstalledMetadata, InstalledVersion, Name};
+use crate::{InstalledMetadata, InstalledVersion, Name};
 
 /// A built distribution (wheel) that is installed in a virtual environment.
 #[derive(Debug, Clone)]

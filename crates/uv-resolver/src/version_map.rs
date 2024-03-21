@@ -197,6 +197,13 @@ impl VersionMap {
             VersionMapInner::Lazy(VersionMapLazy { ref map, .. }) => map.len(),
         }
     }
+
+    /// Creates an empty version map.
+    pub(crate) fn default() -> Self {
+        Self {
+            inner: VersionMapInner::Eager(BTreeMap::default()),
+        }
+    }
 }
 
 impl From<FlatDistributions> for VersionMap {
