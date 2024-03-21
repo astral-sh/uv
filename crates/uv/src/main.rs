@@ -1738,18 +1738,21 @@ async fn run() -> Result<ExitStatus> {
         ),
         Commands::Pip(PipNamespace {
             command: PipCommand::List(args),
-        }) => commands::pip_list(
-            args.strict,
-            args.outdated,
-            args.editable,
-            args.exclude_editable,
-            &args.exclude,
-            &args.format,
-            args.python.as_deref(),
-            args.system,
-            &cache,
-            printer,
-        ).await,
+        }) => {
+            commands::pip_list(
+                args.strict,
+                args.outdated,
+                args.editable,
+                args.exclude_editable,
+                &args.exclude,
+                &args.format,
+                args.python.as_deref(),
+                args.system,
+                &cache,
+                printer,
+            )
+            .await
+        }
         Commands::Pip(PipNamespace {
             command: PipCommand::Show(args),
         }) => commands::pip_show(
