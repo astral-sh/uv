@@ -53,8 +53,8 @@ impl<'a> WheelCache<'a> {
     }
 
     /// Metadata of a built source distribution. See [`CacheBucket::BuiltWheels`]
-    pub fn built_wheel_dir(&self, filename: impl AsRef<Path>) -> PathBuf {
-        self.bucket().join(filename)
+    pub fn built_wheel_dir(&self, package_name: impl AsRef<Path>) -> PathBuf {
+        self.bucket().join(package_name)
     }
 }
 

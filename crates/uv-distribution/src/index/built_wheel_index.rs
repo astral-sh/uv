@@ -1,11 +1,11 @@
-use distribution_types::{git_reference, DirectUrlSourceDist, GitSourceDist, Name, PathSourceDist};
+use distribution_types::{DirectUrlSourceDist, git_reference, GitSourceDist, PathSourceDist};
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, WheelCache};
 use uv_fs::symlinks;
 
-use crate::index::cached_wheel::CachedWheel;
-use crate::source::{read_http_manifest, read_timestamp_manifest, MANIFEST};
 use crate::Error;
+use crate::index::cached_wheel::CachedWheel;
+use crate::source::{MANIFEST, read_http_manifest, read_timestamp_manifest};
 
 /// A local index of built distributions for a specific source distribution.
 pub struct BuiltWheelIndex;
@@ -23,7 +23,7 @@ impl BuiltWheelIndex {
         // For direct URLs, cache directly under the hash of the URL itself.
         let cache_shard = cache.shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Url(source_dist.url.raw()).remote_wheel_dir(source_dist.name().as_ref()),
+            WheelCache::Url(source_dist.url.raw()).bucket(),
         );
 
         // Read the manifest from the cache. There's no need to enforce freshness, since we
@@ -44,7 +44,7 @@ impl BuiltWheelIndex {
     ) -> Result<Option<CachedWheel>, Error> {
         let cache_shard = cache.shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Path(&source_dist.url).remote_wheel_dir(source_dist.name().as_ref()),
+            WheelCache::Path(&source_dist.url).bucket(),
         );
 
         // Determine the last-modified time of the source distribution.
@@ -73,7 +73,7 @@ impl BuiltWheelIndex {
         let cache_shard = cache.shard(
             CacheBucket::BuiltWheels,
             WheelCache::Git(&source_dist.url, &git_sha.to_short_string())
-                .remote_wheel_dir(source_dist.name().as_ref()),
+                .bucket(),
         );
 
         Self::find(&cache_shard, tags)

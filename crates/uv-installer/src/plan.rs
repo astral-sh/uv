@@ -279,7 +279,7 @@ impl<'a> Planner<'a> {
                                 .shard(
                                     CacheBucket::Wheels,
                                     WheelCache::Url(&wheel.url)
-                                        .remote_wheel_dir(wheel.name().as_ref()),
+                                        .bucket()
                                 )
                                 .entry(wheel.filename.stem());
 
@@ -322,7 +322,7 @@ impl<'a> Planner<'a> {
                                 .shard(
                                     CacheBucket::Wheels,
                                     WheelCache::Url(&wheel.url)
-                                        .remote_wheel_dir(wheel.name().as_ref()),
+                                        .bucket()
                                 )
                                 .entry(wheel.filename.stem());
 

@@ -117,7 +117,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         let url = Url::from_file_path(path).expect("path is absolute");
                         let cache_entry = self.cache.entry(
                             CacheBucket::Wheels,
-                            WheelCache::Url(&url).remote_wheel_dir(wheel.name().as_ref()),
+                            WheelCache::Url(&url).bucket(),
                             wheel.filename.stem(),
                         );
 
@@ -197,7 +197,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 // Create a cache entry for the wheel.
                 let wheel_entry = self.cache.entry(
                     CacheBucket::Wheels,
-                    WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
+                    WheelCache::Url(&wheel.url).bucket(),
                     wheel.filename.stem(),
                 );
 
@@ -248,7 +248,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 let cache_entry = self.cache.entry(
                     CacheBucket::Wheels,
-                    WheelCache::Url(&wheel.url).remote_wheel_dir(wheel.name().as_ref()),
+                    WheelCache::Url(&wheel.url).bucket(),
                     wheel.filename.stem(),
                 );
 
