@@ -101,7 +101,7 @@ impl InstalledDist {
     }
 
     /// Read the `direct_url.json` file from a `.dist-info` directory.
-    fn direct_url(path: &Path) -> Result<Option<pypi_types::DirectUrl>> {
+    pub fn direct_url(path: &Path) -> Result<Option<pypi_types::DirectUrl>> {
         let path = path.join("direct_url.json");
         let Ok(file) = fs_err::File::open(path) else {
             return Ok(None);
