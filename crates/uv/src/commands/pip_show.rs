@@ -1,9 +1,9 @@
-use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashMap;
 use tracing::debug;
 
 use distribution_types::Name;
@@ -96,6 +96,47 @@ pub(crate) fn pip_show(
         return Ok(ExitStatus::Failure);
     }
 
+    // Since Requires and Required-by fields need data parsed from metadata, especially the
+    // Required-by field which needs to iterate over other installed packages' metadata.
+    // To prevent the need to parse metadata repeatedly when multiple packages need to be shown,
+    // we parse the metadata once and collect the needed data beforehand.
+    let mut requires_map = FxHashMap::default();
+    // For Requires field
+    for dist in &distributions {
+        if let Ok(metadata) = dist.metadata() {
+            requires_map.insert(
+                dist.name(),
+                metadata
+                    .requires_dist
+                    .into_iter()
+                    .filter(|req| req.evaluate_markers(markers, &[]))
+                    .map(|req| req.name)
+                    .sorted_unstable()
+                    .dedup()
+                    .collect_vec(),
+            );
+        }
+    }
+    // For Required-by field
+    if !requires_map.is_empty() {
+        for installed in site_packages.iter() {
+            if requires_map.contains_key(installed.name()) {
+                continue;
+            }
+            if let Ok(metadata) = installed.metadata() {
+                let requires = metadata
+                    .requires_dist
+                    .into_iter()
+                    .filter(|req| req.evaluate_markers(markers, &[]))
+                    .map(|req| req.name)
+                    .collect_vec();
+                if !requires.is_empty() {
+                    requires_map.insert(installed.name(), requires);
+                }
+            }
+        }
+    }
+
     // Print the information for each package.
     for (i, distribution) in distributions.iter().enumerate() {
         if i > 0 {
@@ -116,50 +157,42 @@ pub(crate) fn pip_show(
                 .simplified_display()
         )?;
 
-        if let Some(url) = distribution.as_editable() {
-            let path = url.to_file_path().unwrap().simplified_display().to_string();
-            writeln!(printer.stdout(), "Editable project location: {path}")?;
+        if let Some(path) = distribution
+            .as_editable()
+            .and_then(|url| url.to_file_path().ok())
+        {
+            writeln!(
+                printer.stdout(),
+                "Editable project location: {}",
+                path.simplified_display()
+            )?;
         }
 
         // If available, print the requirements.
-        if let Ok(metadata) = distribution.metadata() {
-            let requires_dist = metadata
-                .requires_dist
-                .into_iter()
-                .filter(|req| req.evaluate_markers(markers, &[]))
-                .map(|req| req.name)
-                .collect::<BTreeSet<_>>();
-            if requires_dist.is_empty() {
+        if let Some(requires) = requires_map.get(distribution.name()) {
+            if requires.is_empty() {
                 writeln!(printer.stdout(), "Requires:")?;
             } else {
-                writeln!(
-                    printer.stdout(),
-                    "Requires: {}",
-                    requires_dist.into_iter().join(", ")
-                )?;
+                writeln!(printer.stdout(), "Requires: {}", requires.iter().join(", "))?;
             }
 
-            let required_by = site_packages
+            let required_by = requires_map
                 .iter()
-                .filter(|dist| {
-                    dist.name() != distribution.name()
-                        && dist.metadata().is_ok_and(|metadata| {
-                            metadata
-                                .requires_dist
-                                .into_iter()
-                                .filter(|req| req.evaluate_markers(markers, &[]))
-                                .any(|req| &req.name == distribution.name())
-                        })
+                .filter(|(name, pkgs)| {
+                    **name != distribution.name()
+                        && pkgs.iter().any(|pkg| pkg == distribution.name())
                 })
-                .map(distribution_types::Name::name)
-                .collect::<BTreeSet<_>>();
+                .map(|(name, _)| name)
+                .sorted_unstable()
+                .dedup()
+                .collect_vec();
             if required_by.is_empty() {
                 writeln!(printer.stdout(), "Required-by:")?;
             } else {
                 writeln!(
                     printer.stdout(),
                     "Required-by: {}",
-                    required_by.into_iter().join(", ")
+                    required_by.into_iter().join(", "),
                 )?;
             }
         }
