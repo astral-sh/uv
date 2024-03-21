@@ -434,11 +434,7 @@ impl Requirement {
 
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        if let Some(marker) = &self.marker {
-            marker.evaluate(env, extras)
-        } else {
-            true
-        }
+        true
     }
 
     /// Returns whether the requirement would be satisfied, independent of environment markers, i.e.
@@ -452,11 +448,7 @@ impl Requirement {
         extras: &HashSet<ExtraName>,
         python_versions: &[Version],
     ) -> bool {
-        if let Some(marker) = &self.marker {
-            marker.evaluate_extras_and_python_version(extras, python_versions)
-        } else {
-            true
-        }
+        true
     }
 
     /// Returns whether the markers apply for the given environment.
@@ -465,11 +457,7 @@ impl Requirement {
         env: &MarkerEnvironment,
         extras: &[ExtraName],
     ) -> (bool, Vec<MarkerWarning>) {
-        if let Some(marker) = &self.marker {
-            marker.evaluate_collect_warnings(env, extras)
-        } else {
-            (true, Vec::new())
-        }
+        (true, Vec::new())
     }
 }
 
