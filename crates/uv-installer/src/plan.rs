@@ -252,6 +252,9 @@ impl<'a> Planner<'a> {
                 }
                 Some(VersionOrUrl::Url(url)) => {
                     match Dist::from_url(requirement.name.clone(), url.clone())? {
+                        Dist::Installed(_) => {
+                            // Nothing to do.
+                        }
                         Dist::Built(BuiltDist::Registry(_)) => {
                             // Nothing to do.
                         }

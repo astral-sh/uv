@@ -3,7 +3,7 @@ use rustc_hash::FxHashMap;
 use pep508_rs::Requirement;
 use uv_normalize::PackageName;
 
-use crate::{BuiltDist, Dist, PathSourceDist, SourceDist};
+use crate::{BuiltDist, Dist, InstalledDist, Name, PathSourceDist, SourceDist};
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]
@@ -64,6 +64,16 @@ impl Resolution {
 impl From<Dist> for Requirement {
     fn from(dist: Dist) -> Self {
         match dist {
+            Dist::Installed(dist) => Self {
+                name: dist.name().clone(),
+                extras: vec![],
+                version_or_url: Some(pep508_rs::VersionOrUrl::VersionSpecifier(
+                    pep440_rs::VersionSpecifiers::from(
+                        pep440_rs::VersionSpecifier::equals_version(dist.version().clone()),
+                    ),
+                )),
+                marker: None,
+            },
             Dist::Built(BuiltDist::Registry(wheel)) => Self {
                 name: wheel.filename.name,
                 extras: vec![],
@@ -74,6 +84,7 @@ impl From<Dist> for Requirement {
                 )),
                 marker: None,
             },
+
             Dist::Built(BuiltDist::DirectUrl(wheel)) => Self {
                 name: wheel.filename.name,
                 extras: vec![],

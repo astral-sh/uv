@@ -101,6 +101,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             NoBinary::Packages(packages) => packages.contains(dist.name()),
         };
         match &dist {
+            // TODO(zanieb): Add a real error type
+            Dist::Installed(_) => Err(Error::NoBinary),
             Dist::Built(BuiltDist::Registry(wheel)) => {
                 if no_binary {
                     return Err(Error::NoBinary);
@@ -325,6 +327,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         dist: &Dist,
     ) -> Result<(Metadata23, Option<Url>), Error> {
         match dist {
+            // TODO(zanieb): `metadata()` should return us the right error kind so we can use it here
+            Dist::Installed(dist) => dist
+                .metadata()
+                .map(|metadata| (metadata, None))
+                .map_err(|_| Error::NoBinary),
             Dist::Built(built_dist) => {
                 match self.client.wheel_metadata(built_dist).boxed().await {
                     Ok(metadata) => Ok((metadata, None)),

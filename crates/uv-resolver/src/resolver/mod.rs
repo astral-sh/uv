@@ -948,6 +948,10 @@ impl<
                         }
                     }
                 }
+                Some(Response::Dist {
+                    dist: Dist::Installed(_),
+                    ..
+                }) => unreachable!(),
                 None => {}
             }
         }
@@ -988,6 +992,7 @@ impl<
                         Dist::Source(source_dist) => {
                             ResolveError::FetchAndBuild(Box::new(source_dist), err)
                         }
+                        Dist::Installed(_) => unreachable!(),
                     })?;
                 Ok(Some(Response::Dist {
                     dist,
@@ -1068,6 +1073,7 @@ impl<
                             Dist::Source(source_dist) => {
                                 ResolveError::FetchAndBuild(Box::new(source_dist), err)
                             }
+                            Dist::Installed(_) => unreachable!(),
                         })?;
 
                     Ok(Some(Response::Dist {

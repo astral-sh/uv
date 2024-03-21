@@ -8,8 +8,8 @@ use uv_normalize::PackageName;
 
 use crate::direct_url::{DirectUrl, LocalFileUrl};
 use crate::{
-    BuiltDist, Dist, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, SourceDist,
-    VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, InstalledDist, InstalledMetadata, InstalledVersion,
+    Name, SourceDist, VersionOrUrl,
 };
 
 /// A built distribution (wheel) that exists in the local cache.
@@ -39,6 +39,15 @@ impl CachedDist {
     /// Initialize a [`CachedDist`] from a [`Dist`].
     pub fn from_remote(remote: Dist, filename: WheelFilename, path: PathBuf) -> Self {
         match remote {
+            Dist::Installed(InstalledDist::Registry(dist)) => {
+                Self::Registry(CachedRegistryDist { filename, path })
+            }
+            Dist::Installed(InstalledDist::Url(dist)) => Self::Url(CachedDirectUrlDist {
+                filename,
+                url: VerbatimUrl::from_url(dist.url),
+                path,
+                editable: dist.editable,
+            }),
             Dist::Built(BuiltDist::Registry(_dist)) => {
                 Self::Registry(CachedRegistryDist { filename, path })
             }

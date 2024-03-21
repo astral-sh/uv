@@ -140,6 +140,7 @@ async fn install_chunk(
         let only_wheels: FxHashMap<_, _> = resolution
             .into_iter()
             .filter(|(_, dist)| match dist {
+                Dist::Installed(_) => true,
                 Dist::Built(_) => true,
                 Dist::Source(_) => false,
             })

@@ -121,6 +121,7 @@ impl std::fmt::Display for InstalledVersion<'_> {
 /// The location can be index, url or path (wheel) or index, url, path or git (source distribution)
 #[derive(Debug, Clone)]
 pub enum Dist {
+    Installed(InstalledDist),
     Built(BuiltDist),
     Source(SourceDist),
 }
@@ -364,6 +365,7 @@ impl Dist {
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
     pub fn file(&self) -> Option<&File> {
         match self {
+            Self::Installed(_) => None,
             Self::Built(built) => built.file(),
             Self::Source(source) => source.file(),
         }
@@ -371,6 +373,7 @@ impl Dist {
 
     pub fn version(&self) -> Option<&Version> {
         match self {
+            Self::Installed(installed) => Some(installed.version()),
             Self::Built(wheel) => Some(wheel.version()),
             Self::Source(source_dist) => source_dist.version(),
         }
@@ -493,6 +496,7 @@ impl Name for BuiltDist {
 impl Name for Dist {
     fn name(&self) -> &PackageName {
         match self {
+            Self::Installed(dist) => dist.name(),
             Self::Built(dist) => dist.name(),
             Self::Source(dist) => dist.name(),
         }
@@ -565,6 +569,7 @@ impl DistributionMetadata for BuiltDist {
 impl DistributionMetadata for Dist {
     fn version_or_url(&self) -> VersionOrUrl {
         match self {
+            Self::Installed(installed) => VersionOrUrl::Version(installed.version()),
             Self::Built(dist) => dist.version_or_url(),
             Self::Source(dist) => dist.version_or_url(),
         }
@@ -727,6 +732,7 @@ impl RemoteSource for BuiltDist {
 impl RemoteSource for Dist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         match self {
+            Self::Installed(_) => Ok(Cow::from("foo")),
             Self::Built(dist) => dist.filename(),
             Self::Source(dist) => dist.filename(),
         }
@@ -734,6 +740,7 @@ impl RemoteSource for Dist {
 
     fn size(&self) -> Option<u64> {
         match self {
+            Self::Installed(_) => None,
             Self::Built(dist) => dist.size(),
             Self::Source(dist) => dist.size(),
         }
@@ -944,9 +951,20 @@ impl Identifier for BuiltDist {
     }
 }
 
+impl Identifier for InstalledDist {
+    fn distribution_id(&self) -> DistributionId {
+        self.path().distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.path().resource_id()
+    }
+}
+
 impl Identifier for Dist {
     fn distribution_id(&self) -> DistributionId {
         match self {
+            Self::Installed(dist) => dist.distribution_id(),
             Self::Built(dist) => dist.distribution_id(),
             Self::Source(dist) => dist.distribution_id(),
         }
@@ -954,6 +972,7 @@ impl Identifier for Dist {
 
     fn resource_id(&self) -> ResourceId {
         match self {
+            Self::Installed(dist) => dist.resource_id(),
             Self::Built(dist) => dist.resource_id(),
             Self::Source(dist) => dist.resource_id(),
         }
