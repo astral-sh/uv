@@ -23,10 +23,14 @@ async-recursion = { workspace = true }
 fs-err = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, optional = true }
+reqwest-middleware = { workspace = true, optional = true }
 serde = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }
 url = { workspace = true }
+
+[features]
+http = ["reqwest", "reqwest-middleware"]
 
 [dev-dependencies]
 anyhow = { version = "1.0.80" }

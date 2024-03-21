@@ -4,7 +4,7 @@ use anyhow::Result;
 use rustc_hash::FxHashSet;
 
 use requirements_txt::RequirementsTxt;
-use uv_client::Connectivity;
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_normalize::PackageName;
 use uv_resolver::{Preference, PreferenceError};
 
@@ -58,9 +58,12 @@ pub async fn read_lockfile(
     };
 
     // Parse the requirements from the lockfile.
-    let requirements_txt =
-        RequirementsTxt::parse(output_file, std::env::current_dir()?, Connectivity::Offline)
-            .await?;
+    let requirements_txt = RequirementsTxt::parse(
+        output_file,
+        std::env::current_dir()?,
+        &BaseClientBuilder::new().connectivity(Connectivity::Offline),
+    )
+    .await?;
     let preferences = requirements_txt
         .requirements
         .into_iter()

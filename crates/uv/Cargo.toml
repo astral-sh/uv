@@ -19,7 +19,7 @@ install-wheel-rs = { workspace = true, features = ["clap"], default-features = f
 pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
-requirements-txt = { workspace = true, features = ["reqwest"] }
+requirements-txt = { workspace = true, features = ["http"] }
 uv-auth = { workspace = true, features = ["clap"] }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }

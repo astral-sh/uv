@@ -19,7 +19,9 @@ use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
-use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{
+    BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{Downloader, NoBinary};
@@ -88,6 +90,11 @@ pub(crate) async fn pip_compile(
         ));
     }
 
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls)
+        .keyring_provider(keyring_provider);
+
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project,
@@ -105,7 +112,7 @@ pub(crate) async fn pip_compile(
         constraints,
         overrides,
         &extras,
-        connectivity,
+        &client_builder,
     )
     .await?;
 

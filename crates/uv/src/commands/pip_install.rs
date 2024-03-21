@@ -22,7 +22,10 @@ use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
-use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
+use uv_client::{
+    BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClient,
+    RegistryClientBuilder,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{
@@ -80,6 +83,10 @@ pub(crate) async fn pip_install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = Instant::now();
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls)
+        .keyring_provider(keyring_provider);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -93,7 +100,14 @@ pub(crate) async fn pip_install(
         no_index,
         find_links,
         extras: _,
-    } = read_requirements(requirements, constraints, overrides, extras, connectivity).await?;
+    } = read_requirements(
+        requirements,
+        constraints,
+        overrides,
+        extras,
+        &client_builder,
+    )
+    .await?;
 
     // Detect the current Python interpreter.
     let venv = if let Some(python) = python.as_ref() {
@@ -355,7 +369,7 @@ async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification<'_>,
-    connectivity: Connectivity,
+    client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a pyproject toml source
     if !matches!(extras, ExtrasSpecification::None)
@@ -372,7 +386,7 @@ async fn read_requirements(
         constraints,
         overrides,
         extras,
-        connectivity,
+        client_builder,
     )
     .await?;
 

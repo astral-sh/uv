@@ -12,7 +12,10 @@ use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
-use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClient, RegistryClientBuilder};
+use uv_client::{
+    BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClient,
+    RegistryClientBuilder,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{
@@ -52,6 +55,10 @@ pub(crate) async fn pip_sync(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(connectivity)
+        .native_tls(native_tls)
+        .keyring_provider(keyring_provider);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -65,7 +72,7 @@ pub(crate) async fn pip_sync(
         extra_index_urls,
         no_index,
         find_links,
-    } = RequirementsSpecification::from_simple_sources(sources, connectivity).await?;
+    } = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
 
     // Validate that the requirements are non-empty.
     let num_requirements = requirements.len() + editables.len();
