@@ -481,10 +481,16 @@ fn show_editable() -> Result<()> {
         .success();
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters = [(
-        r"Location:.*site-packages",
-        "Location: [WORKSPACE_DIR]/site-packages",
-    )]
+    let filters = [
+        (
+            r"Location:.*site-packages",
+            "Location: [WORKSPACE_DIR]/site-packages",
+        ),
+        (
+            r"Editable project location:.*poetry_editable",
+            "Editable project location: [EDITABLE_INSTALLS_PREFIX]poetry_editable",
+        ),
+    ]
     .to_vec();
 
     uv_snapshot!(filters, Command::new(get_bin())
@@ -501,6 +507,7 @@ fn show_editable() -> Result<()> {
     Name: poetry-editable
     Version: 0.1.0
     Location: [WORKSPACE_DIR]/site-packages
+    Editable project location: [EDITABLE_INSTALLS_PREFIX]poetry_editable
     Requires: anyio
 
     ----- stderr -----

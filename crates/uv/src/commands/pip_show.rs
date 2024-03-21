@@ -119,6 +119,11 @@ pub(crate) fn pip_show(
                 .simplified_display()
         )?;
 
+        if let Some(url) = distribution.as_editable() {
+            let path = url.to_file_path().unwrap().simplified_display().to_string();
+            writeln!(printer.stdout(), "Editable project location: {path}")?;
+        }
+
         // If available, print the requirements.
         if let Ok(metadata) = distribution.metadata() {
             let requires_dist = metadata
