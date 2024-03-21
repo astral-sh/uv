@@ -141,6 +141,30 @@ pub(crate) fn pip_show(
                     requires_dist.into_iter().join(", ")
                 )?;
             }
+
+            let required_by = site_packages
+                .iter()
+                .filter(|dist| {
+                    dist.name() != distribution.name()
+                        && dist.metadata().is_ok_and(|metadata| {
+                            metadata
+                                .requires_dist
+                                .into_iter()
+                                .filter(|req| req.evaluate_markers(markers, &[]))
+                                .any(|req| &req.name == distribution.name())
+                        })
+                })
+                .map(distribution_types::Name::name)
+                .collect::<BTreeSet<_>>();
+            if required_by.is_empty() {
+                writeln!(printer.stdout(), "Required-by:")?;
+            } else {
+                writeln!(
+                    printer.stdout(),
+                    "Required-by: {}",
+                    required_by.into_iter().join(", ")
+                )?;
+            }
         }
     }
 
