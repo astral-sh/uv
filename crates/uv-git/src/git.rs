@@ -47,7 +47,7 @@ pub(crate) enum GitReference {
 enum RefspecStrategy {
     // All refspecs should be fetched, if any fail then the fetch will fail
     All,
-    // Stop after the first successful fetch, if none suceed then the fetch will fail
+    // Stop after the first successful fetch, if none succeed then the fetch will fail
     First,
 }
 

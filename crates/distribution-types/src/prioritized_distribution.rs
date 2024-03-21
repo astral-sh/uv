@@ -341,7 +341,7 @@ impl SourceDistCompatibility {
     pub fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Compatible, Self::Incompatible(_)) => true,
-            (Self::Compatible, Self::Compatible) => false, // Arbitary
+            (Self::Compatible, Self::Compatible) => false, // Arbitrary
             (Self::Incompatible(_), Self::Compatible) => false,
             (Self::Incompatible(incompatibility), Self::Incompatible(other_incompatibility)) => {
                 incompatibility.is_more_compatible(other_incompatibility)
