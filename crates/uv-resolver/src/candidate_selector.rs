@@ -80,21 +80,22 @@ impl CandidateSelector {
                 if let Some(file) = version_map.get(version) {
                     return Some(Candidate::new(package_name, version, file));
                 }
-            }
-        }
 
-        for dist in installed_packages.get_packages(package_name) {
-            let version = dist.version();
-            if range.contains(version) {
-                // TODO(zanieb): Convert an `InstalledDist` to a `PrioritizedDist`
-                debug!("Found installed version of {dist} that satisfies request");
-                return Some(Candidate {
-                    name: package_name,
-                    version,
-                    dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
-                        Dist::Installed(dist.clone()),
-                    )),
-                });
+                // If it's not in the version map, check if it's satisfied by the current
+                // environment
+                for dist in installed_packages.get_packages(package_name) {
+                    let version = dist.version();
+                    if range.contains(version) {
+                        debug!("Found installed version of {dist} that satisfies request");
+                        return Some(Candidate {
+                            name: package_name,
+                            version,
+                            dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
+                                Dist::Installed(dist.clone()),
+                            )),
+                        });
+                    }
+                }
             }
         }
 
