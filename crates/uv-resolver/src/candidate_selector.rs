@@ -81,7 +81,7 @@ impl CandidateSelector {
             }
         }
 
-        for package in installed_packages.get_packages(package_name).iter() {
+        for package in &installed_packages.get_packages(package_name) {
             let version = package.version();
             if range.contains(version) {
                 // TODO(zanieb): Convert an `InstalledDist` to a `PrioritizedDist`
