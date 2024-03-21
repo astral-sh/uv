@@ -851,7 +851,12 @@ impl<
                 let package_id = dist.package_id();
 
                 // If the package does not exist in the registry, we cannot fetch its dependencies
-                if self.unavailable_packages.get(package_name).is_some() {
+                if self.unavailable_packages.get(package_name).is_some()
+                    && self
+                        .installed_packages
+                        .get_packages(package_name)
+                        .is_empty()
+                {
                     debug_assert!(
                         false,
                         "Dependencies were requested for a package that is not available"
