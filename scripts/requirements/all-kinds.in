@@ -11,4 +11,3 @@ werkzeug @ https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834
 # git source dist
 pydantic-extra-types @ git+https://github.com/pydantic/pydantic-extra-types.git
 
-anyio @ /Users/crmarsh/Downloads/anyio-4.3.0.tar.gz

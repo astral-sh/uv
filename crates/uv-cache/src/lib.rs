@@ -4,17 +4,16 @@ use std::io;
 use std::io::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::Arc;
 
-use distribution_filename::WheelFilename;
 use fs_err as fs;
 use rustc_hash::FxHashSet;
 use tempfile::{tempdir, TempDir};
 use tracing::debug;
 
 use distribution_types::InstalledDist;
-use uv_fs::{directories, files};
+use pypi_types::Metadata23;
+use uv_fs::directories;
 use uv_normalize::PackageName;
 
 pub use crate::by_timestamp::CachedByTimestamp;
@@ -607,14 +606,14 @@ impl CacheBucket {
     /// Returns the number of entries removed from the cache.
     fn remove(self, cache: &Cache, name: &PackageName) -> Result<Removal, io::Error> {
         /// Returns `true` if the [`Path`] represents a built wheel for the given package.
-        fn is_built_wheel(path: &Path, name: &PackageName) -> bool {
-            let Some(filename) = path.file_name().and_then(|filename| filename.to_str()) else {
+        fn is_match(path: &Path, name: &PackageName) -> bool {
+            let Ok(metadata) = fs_err::read(path.join("metadata.msgpack")) else {
                 return false;
             };
-            let Some(filename) = WheelFilename::from_str(filename).ok() else {
+            let Ok(metadata) = rmp_serde::from_slice::<Metadata23>(&metadata) else {
                 return false;
             };
-            filename.name == *name
+            metadata.name == *name
         }
 
         let mut summary = Removal::default();
@@ -655,9 +654,7 @@ impl CacheBucket {
                 // search for a wheel matching the package name.
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
                 for url in directories(root) {
-                    if directories(&url)
-                        .any(|version| files(version).any(|file| is_built_wheel(&file, name)))
-                    {
+                    if directories(&url).any(|version| is_match(&version, name)) {
                         summary += rm_rf(url)?;
                     }
                 }
@@ -667,9 +664,7 @@ impl CacheBucket {
                 // search for a wheel matching the package name.
                 let root = cache.bucket(self).join(WheelCacheKind::Path);
                 for path in directories(root) {
-                    if directories(&path)
-                        .any(|version| files(version).any(|file| is_built_wheel(&file, name)))
-                    {
+                    if directories(&path).any(|version| is_match(&version, name)) {
                         summary += rm_rf(path)?;
                     }
                 }
@@ -680,7 +675,7 @@ impl CacheBucket {
                 let root = cache.bucket(self).join(WheelCacheKind::Git);
                 for repository in directories(root) {
                     for sha in directories(repository) {
-                        if files(&sha).any(|file| is_built_wheel(&file, name)) {
+                        if is_match(&sha, name) {
                             summary += rm_rf(sha)?;
                         }
                     }

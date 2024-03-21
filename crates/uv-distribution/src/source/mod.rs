@@ -584,8 +584,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         }
 
         // Store the metadata.
-        let cache_entry = cache_shard.entry(METADATA);
-        write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?)
+        let metadata_entry = cache_shard.entry(METADATA);
+        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
             .await
             .map_err(Error::CacheWrite)?;
 
@@ -683,8 +683,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         }
 
         // Store the metadata.
-        let cache_entry = cache_shard.entry(METADATA);
-        write_atomic(cache_entry.path(), rmp_serde::to_vec(&metadata)?)
+        let metadata_entry = cache_shard.entry(METADATA);
+        write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
             .await
             .map_err(Error::CacheWrite)?;
 
