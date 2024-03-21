@@ -9,11 +9,3 @@ impl<T: Sized> SizeOf for T {
         size_of::<T>() as u32
     }
 }
-
-// CStr literal: c!("...")
-#[macro_export]
-macro_rules! c {
-    ($s:literal) => {
-        core::ffi::CStr::from_bytes_with_nul_unchecked(concat!($s, "\0").as_bytes())
-    };
-}

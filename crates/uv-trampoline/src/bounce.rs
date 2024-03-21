@@ -24,7 +24,7 @@ use windows_sys::Win32::{
 };
 
 use crate::helpers::SizeOf;
-use crate::{c, eprintln, format};
+use crate::{eprintln, format};
 
 const MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 const PATH_LEN_SIZE: usize = mem::size_of::<u32>();
@@ -438,8 +438,8 @@ fn clear_app_starting_state(child_handle: HANDLE) {
         WaitForInputIdle(child_handle, INFINITE);
         let hwnd = CreateWindowExA(
             0,
-            c!("STATIC").as_ptr() as *const _,
-            c!("uv Python Trampoline").as_ptr() as *const _,
+            c"STATIC".as_ptr() as *const _,
+            c"uv Python Trampoline".as_ptr() as *const _,
             0,
             0,
             0,
@@ -474,10 +474,10 @@ pub fn bounce(is_gui: bool) -> ! {
 
         // (best effort) Switch to some innocuous directory so we don't hold the original
         // cwd open.
-        if let Some(tmp) = getenv(c!("TEMP")) {
+        if let Some(tmp) = getenv(c"TEMP") {
             SetCurrentDirectoryA(tmp.as_ptr() as *const _);
         } else {
-            SetCurrentDirectoryA(c!("c:\\").as_ptr() as *const _);
+            SetCurrentDirectoryA(c"c:\\".as_ptr() as *const _);
         }
 
         // We want to ignore control-C/control-Break/logout/etc.; the same event will

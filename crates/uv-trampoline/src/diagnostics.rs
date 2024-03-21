@@ -60,7 +60,7 @@ pub(crate) fn write_diagnostic(message: &str) {
                 MessageBoxA(0, nul_terminated.as_ptr() as *const _, null(), 0);
                 return;
             }
-            remaining = &remaining.get_unchecked(written as usize..);
+            remaining = remaining.get_unchecked(written as usize..);
         }
     }
 }
