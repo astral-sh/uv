@@ -3,20 +3,19 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use console::Term;
 use indexmap::IndexMap;
 use rustc_hash::FxHashSet;
 use tracing::{instrument, Level};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
-use pep508_rs::Requirement;
-use pypi_types::HashError;
+use pep508_rs::{Requirement, RequirementsTxtRequirement};
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 use uv_client::Connectivity;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
-use uv_resolver::Preference;
+use uv_resolver::{Preference, PreferenceError};
 use uv_warnings::warn_user;
 
 use crate::commands::Upgrade;
@@ -58,20 +57,6 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a requirements file but was passed as a package name. Did you mean `-r {name}`?"
                 );
-                let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
-                if confirmation {
-                    return Self::RequirementsTxt(name.into());
-                }
-            }
-        }
-
-        // If the user provided a path to a local directory without `-e` (as in
-        // `uv pip install ../flask`), prompt them to correct it.
-        if (name.contains('/') || name.contains('\\')) && Path::new(&name).is_dir() {
-            let term = Term::stderr();
-            if term.is_term() {
-                let prompt =
-                    format!("`{name}` looks like a local directory but was passed as a package name. Did you mean `-e {name}`?");
                 let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
                 if confirmation {
                     return Self::RequirementsTxt(name.into());
@@ -187,8 +172,13 @@ impl RequirementsSpecification {
                     requirements: requirements_txt
                         .requirements
                         .into_iter()
-                        .map(|entry| entry.requirement)
-                        .collect(),
+                        .map(|entry| match entry.requirement {
+                            RequirementsTxtRequirement::Pep508(requirement) => Ok(requirement),
+                            RequirementsTxtRequirement::Unnamed(requirement) => Err(anyhow!(
+                                "Unnamed URL requirements are not yet supported: {requirement}"
+                            )),
+                        })
+                        .collect::<Result<Vec<_>>>()?,
                     constraints: requirements_txt.constraints,
                     editables: requirements_txt.editables,
                     overrides: vec![],
@@ -465,7 +455,7 @@ pub(crate) async fn read_lockfile(
         .into_iter()
         .filter(|entry| !entry.editable)
         .map(Preference::from_entry)
-        .collect::<Result<Vec<_>, HashError>>()?;
+        .collect::<Result<Vec<_>, PreferenceError>>()?;
 
     // Apply the upgrade strategy to the requirements.
     Ok(match upgrade {

@@ -5,53 +5,57 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "numpy",
-                ),
-                extras: [],
-                version_or_url: None,
-                marker: None,
-            },
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "numpy",
+                    ),
+                    extras: [],
+                    version_or_url: None,
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "pandas",
-                ),
-                extras: [
-                    ExtraName(
-                        "tabulate",
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "pandas",
                     ),
-                ],
-                version_or_url: Some(
-                    Url(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "github.com",
+                    extras: [
+                        ExtraName(
+                            "tabulate",
+                        ),
+                    ],
+                    version_or_url: Some(
+                        Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "github.com",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/pandas-dev/pandas",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://github.com/pandas-dev/pandas",
                                 ),
-                                port: None,
-                                path: "/pandas-dev/pandas",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://github.com/pandas-dev/pandas",
-                            ),
-                        },
+                        ),
                     ),
-                ),
-                marker: None,
-            },
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },

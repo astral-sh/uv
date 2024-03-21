@@ -5,25 +5,27 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "django-debug-toolbar",
-                ),
-                extras: [],
-                version_or_url: Some(
-                    VersionSpecifier(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: LessThan,
-                                    version: "2.2",
-                                },
-                            ],
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "django-debug-toolbar",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: LessThan,
+                                        version: "2.2",
+                                    },
+                                ],
+                            ),
                         ),
                     ),
-                ),
-                marker: None,
-            },
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },

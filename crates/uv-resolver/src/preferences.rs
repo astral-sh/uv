@@ -3,10 +3,20 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 
 use pep440_rs::{Operator, Version};
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use pep508_rs::{
+    MarkerEnvironment, Requirement, RequirementsTxtRequirement, UnnamedRequirement, VersionOrUrl,
+};
 use pypi_types::{HashError, Hashes};
 use requirements_txt::RequirementEntry;
 use uv_normalize::PackageName;
+
+#[derive(thiserror::Error, Debug)]
+pub enum PreferenceError {
+    #[error("direct URL requirements without package names are not supported: {0}")]
+    Bare(UnnamedRequirement),
+    #[error(transparent)]
+    Hash(#[from] HashError),
+}
 
 /// A pinned requirement, as extracted from a `requirements.txt` file.
 #[derive(Debug)]
@@ -17,9 +27,14 @@ pub struct Preference {
 
 impl Preference {
     /// Create a [`Preference`] from a [`RequirementEntry`].
-    pub fn from_entry(entry: RequirementEntry) -> Result<Self, HashError> {
+    pub fn from_entry(entry: RequirementEntry) -> Result<Self, PreferenceError> {
         Ok(Self {
-            requirement: entry.requirement,
+            requirement: match entry.requirement {
+                RequirementsTxtRequirement::Pep508(requirement) => requirement,
+                RequirementsTxtRequirement::Unnamed(requirement) => {
+                    return Err(PreferenceError::Bare(requirement))
+                }
+            },
             hashes: entry
                 .hashes
                 .iter()

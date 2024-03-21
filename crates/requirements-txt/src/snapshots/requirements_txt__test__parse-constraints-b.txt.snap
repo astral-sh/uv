@@ -5,48 +5,52 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "django",
-                ),
-                extras: [],
-                version_or_url: Some(
-                    VersionSpecifier(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "2.1.15",
-                                },
-                            ],
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "django",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "2.1.15",
+                                    },
+                                ],
+                            ),
                         ),
                     ),
-                ),
-                marker: None,
-            },
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },
         RequirementEntry {
-            requirement: Requirement {
-                name: PackageName(
-                    "pytz",
-                ),
-                extras: [],
-                version_or_url: Some(
-                    VersionSpecifier(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: Equal,
-                                    version: "2023.3",
-                                },
-                            ],
+            requirement: Pep508(
+                Requirement {
+                    name: PackageName(
+                        "pytz",
+                    ),
+                    extras: [],
+                    version_or_url: Some(
+                        VersionSpecifier(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: Equal,
+                                        version: "2023.3",
+                                    },
+                                ],
+                            ),
                         ),
                     ),
-                ),
-                marker: None,
-            },
+                    marker: None,
+                },
+            ),
             hashes: [],
             editable: false,
         },

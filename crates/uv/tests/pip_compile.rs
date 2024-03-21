@@ -2474,6 +2474,55 @@ fn respect_http_env_var() -> Result<()> {
     Ok(())
 }
 
+/// A requirement defined as a single unnamed environment variable should be parsed as such.
+#[test]
+fn respect_unnamed_env_var() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("${URL}")?;
+
+    uv_snapshot!(context.compile()
+            .arg("requirements.in")
+            .env("URL", "https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unnamed URL requirements are not yet supported: https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl
+    "###
+    );
+
+    Ok(())
+}
+
+/// A requirement defined as a single unnamed environment variable should error if the environment
+/// variable is not set.
+#[test]
+fn error_missing_unnamed_env_var() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("${URL}")?;
+
+    uv_snapshot!(context.compile()
+            .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Couldn't parse requirement in `requirements.in` at position 0
+      Caused by: Expected package name starting with an alphanumeric character, found '$'
+    ${URL}
+    ^
+    "###
+    );
+
+    Ok(())
+}
+
 /// Resolve a dependency from a file path, passing in the entire path as an environment variable.
 #[test]
 fn respect_file_env_var() -> Result<()> {
@@ -3409,10 +3458,7 @@ fn missing_package_name() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unsupported requirement in requirements.in at position 0
-      Caused by: URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).
-    https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    error: Unnamed URL requirements are not yet supported: https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl
     "###
     );
 
