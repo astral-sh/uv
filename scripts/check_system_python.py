@@ -174,6 +174,7 @@ if __name__ == "__main__":
         # This ensures that we can successfully install and recognize a package that may
         # be installed into `platlib`.
         #
-        # `pydantic_core` doesn't distribute wheels for non-CPython interpreters.
-        if sys.implementation.name == "cpython":
+        # `pydantic_core` doesn't distribute wheels for non-CPython interpreters, nor
+        # for Python 3.13 (at time of writing).
+        if sys.version_info < (3, 13) and sys.implementation.name == "cpython":
             install_package(uv=uv, package="pydantic_core")
