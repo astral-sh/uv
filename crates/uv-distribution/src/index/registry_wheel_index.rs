@@ -94,7 +94,7 @@ impl<'a> RegistryWheelIndex<'a> {
             // Index all the wheels that were downloaded directly from the registry.
             let wheel_dir = cache.shard(
                 CacheBucket::Wheels,
-                WheelCache::Index(index_url).remote_wheel_dir(package.to_string()),
+                WheelCache::Index(index_url).wheel_dir(package.to_string()),
             );
 
             Self::add_directory(&wheel_dir, tags, &mut versions);
@@ -103,7 +103,7 @@ impl<'a> RegistryWheelIndex<'a> {
             // from the registry.
             let cache_shard = cache.shard(
                 CacheBucket::BuiltWheels,
-                WheelCache::Index(index_url).built_wheel_dir(package.to_string()),
+                WheelCache::Index(index_url).wheel_dir(package.to_string()),
             );
 
             // For registry wheels, the cache structure is: `<index>/<package-name>/<version>/`.

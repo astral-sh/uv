@@ -412,7 +412,7 @@ impl RegistryClient {
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
-                WheelCache::Index(index).remote_wheel_dir(filename.name.as_ref()),
+                WheelCache::Index(index).wheel_dir(filename.name.as_ref()),
                 format!("{}.msgpack", filename.stem()),
             );
             let cache_control = match self.connectivity {
@@ -464,7 +464,7 @@ impl RegistryClient {
     ) -> Result<Metadata23, Error> {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
-            cache_shard.remote_wheel_dir(filename.name.as_ref()),
+            cache_shard.wheel_dir(filename.name.as_ref()),
             format!("{}.msgpack", filename.stem()),
         );
         let cache_control = match self.connectivity {

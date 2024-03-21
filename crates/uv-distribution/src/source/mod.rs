@@ -98,14 +98,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                         let extracted = extract_archive(path, self.build_context.cache()).await?;
 
                         return self
-                            .path(
-                                source,
-                                PathSourceUrl {
-                                    url: &url,
-                                    path,
-                                },
-                                extracted.path(),
-                            )
+                            .path(source, PathSourceUrl { url: &url, path }, extracted.path())
                             .boxed()
                             .await;
                     }
@@ -116,7 +109,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
                     WheelCache::Index(&dist.index)
-                        .remote_wheel_dir(dist.filename.name.as_ref())
+                        .wheel_dir(dist.filename.name.as_ref())
                         .join(dist.filename.version.to_string()),
                 );
 
@@ -132,7 +125,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 let cache_shard = self
                     .build_context
                     .cache()
-                    .shard(CacheBucket::BuiltWheels, WheelCache::Url(&url).bucket());
+                    .shard(CacheBucket::BuiltWheels, WheelCache::Url(&url).root());
 
                 self.url(
                     source,
@@ -166,7 +159,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 let cache_shard = self
                     .build_context
                     .cache()
-                    .shard(CacheBucket::BuiltWheels, WheelCache::Url(&url).bucket());
+                    .shard(CacheBucket::BuiltWheels, WheelCache::Url(&url).root());
 
                 self.url(
                     source,
@@ -202,8 +195,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         source: BuildableSource<'_>,
     ) -> Result<Metadata23, Error> {
         let metadata = match &source {
-            BuildableSource::Dist(SourceDist::Registry(registry_source_dist)) => {
-                let url = match &registry_source_dist.file.url {
+            BuildableSource::Dist(SourceDist::Registry(dist)) => {
+                let url = match &dist.file.url {
                     FileLocation::RelativeUrl(base, url) => {
                         pypi_types::base_url_join_relative(base, url)?
                     }
@@ -230,20 +223,14 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 // For registry source distributions, shard by package, then version.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::BuiltWheels,
-                    WheelCache::Index(&registry_source_dist.index)
-                        .remote_wheel_dir(registry_source_dist.filename.name.as_ref())
-                        .join(registry_source_dist.filename.version.to_string()),
+                    WheelCache::Index(&dist.index)
+                        .wheel_dir(dist.filename.name.as_ref())
+                        .join(dist.filename.version.to_string()),
                 );
 
-                self.url_metadata(
-                    source,
-                    &registry_source_dist.file.filename,
-                    &url,
-                    &cache_shard,
-                    None,
-                )
-                .boxed()
-                .await?
+                self.url_metadata(source, &dist.file.filename, &url, &cache_shard, None)
+                    .boxed()
+                    .await?
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
                 let filename = dist.filename().expect("Distribution must have a filename");
@@ -253,7 +240,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 let cache_shard = self
                     .build_context
                     .cache()
-                    .shard(CacheBucket::BuiltWheels, WheelCache::Url(&url).bucket());
+                    .shard(CacheBucket::BuiltWheels, WheelCache::Url(&url).root());
 
                 self.url_metadata(
                     source,
@@ -289,7 +276,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 let cache_shard = self
                     .build_context
                     .cache()
-                    .shard(CacheBucket::BuiltWheels, WheelCache::Url(&url).bucket());
+                    .shard(CacheBucket::BuiltWheels, WheelCache::Url(&url).root());
 
                 self.url_metadata(
                     source,
@@ -549,7 +536,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     ) -> Result<BuiltWheelMetadata, Error> {
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Path(resource.url).bucket(),
+            WheelCache::Path(resource.url).root(),
         );
 
         // Determine the last-modified time of the source distribution.
@@ -621,7 +608,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     ) -> Result<Metadata23, Error> {
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Path(resource.url).bucket(),
+            WheelCache::Path(resource.url).root(),
         );
 
         // Determine the last-modified time of the source distribution.
@@ -720,7 +707,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Git(resource.url, &git_sha.to_short_string()).bucket(),
+            WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
         );
 
         // If the cache contains a compatible wheel, return it.
@@ -775,7 +762,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Git(resource.url, &git_sha.to_short_string()).bucket(),
+            WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
         );
 
         // If the cache contains compatible metadata, return it.
