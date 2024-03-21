@@ -386,9 +386,7 @@ impl InterpreterInfo {
                 err,
             })?;
 
-        // stderr isn't technically a criterion for success, but i don't know of any cases where there
-        // should be stderr output and if there is, we want to know
-        if !output.status.success() || !output.stderr.is_empty() {
+        if !output.status.success() {
             return Err(Error::PythonSubcommandOutput {
                 message: format!(
                     "Querying Python at `{}` failed with status {}",
