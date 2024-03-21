@@ -104,8 +104,10 @@ might not realize that, and still emit references to the unwinding helper
 `__CxxFrameHandler3`. And then the linker blows up because that symbol doesn't
 exist.
 
-`cargo build --release --target x86_64-pc-windows-msvc`
-or `cargo build --release --target aarch64-pc-windows-msvc`
+```
+cargo build --release --target x86_64-pc-windows-msvc
+cargo build --release --target aarch64-pc-windows-msvc
+```
 
 Hopefully in the future as `#![no_std]` develops, this will get smoother.
 
@@ -123,6 +125,6 @@ rustup target add aarch64-pc-windows-msvc
 ```
 
 ```shell
-cargo +nightly xwin build --release --target x86_64-pc-windows-msvc
-cargo +nightly xwin build --release --target aarch64-pc-windows-msvc
+cargo +nightly-2024-03-19 xwin build --release --target x86_64-pc-windows-msvc
+cargo +nightly-2024-03-19 xwin build --release --target aarch64-pc-windows-msvc
 ```
