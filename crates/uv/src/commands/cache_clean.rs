@@ -7,10 +7,10 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
-use crate::commands::ExitStatus;
+use crate::commands::{human_readable_bytes, ExitStatus};
 use crate::printer::Printer;
 
-/// Clear the cache.
+/// Clear the cache, removing all entries or those linked to specific packages.
 pub(crate) fn cache_clean(
     packages: &[PackageName],
     cache: &Cache,
@@ -122,20 +122,4 @@ pub(crate) fn cache_clean(
     }
 
     Ok(ExitStatus::Success)
-}
-
-/// Formats a number of bytes into a human readable SI-prefixed size.
-///
-/// Returns a tuple of `(quantity, units)`.
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss
-)]
-fn human_readable_bytes(bytes: u64) -> (f32, &'static str) {
-    static UNITS: [&str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
-    let bytes = bytes as f32;
-    let i = ((bytes.log2() / 10.0) as usize).min(UNITS.len() - 1);
-    (bytes / 1024_f32.powi(i as i32), UNITS[i])
 }
