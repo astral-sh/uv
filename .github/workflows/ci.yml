@@ -18,7 +18,33 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
+  build-binary-linux:
+    runs-on:
+      labels: ubuntu-latest-large
+    name: "build binary | linux"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rui314/setup-mold@v1
+
+      - name: "Setup musl"
+        run: |
+          sudo apt-get install musl-tools
+          rustup target add x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+      - name: "Build"
+        run: cargo build --target x86_64-unknown-linux-musl
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+          path: ./target/x86_64-unknown-linux-musl/debug/uv
+          retention-days: 1
+
   install-pytorch:
+    needs: build-binary-linux
     name: "Install PyTorch"
     runs-on: ubuntu-latest
     steps:
@@ -26,9 +52,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: "Install uv"
-        run: pip install uv
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+      - name: "Prepare binary"
+        run: chmod +x ./uv
       - name: "Create virtual environment"
-        run: uv venv
+        run: ./uv venv
       - name: "Install PyTorch"
         run: python install_pytorch.py

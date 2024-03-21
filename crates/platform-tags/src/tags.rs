@@ -256,7 +256,7 @@ impl Tags {
 ///
 /// A wrapper around [`NonZeroU32`]. Higher values indicate higher priority.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TagPriority(NonZeroU32);
+pub struct TagPriority(pub NonZeroU32);
 
 impl TryFrom<usize> for TagPriority {
     type Error = TagsError;

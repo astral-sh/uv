@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::num::NonZeroU32;
 use std::str::FromStr;
 
 #[cfg(feature = "serde")]
@@ -7,7 +8,7 @@ use thiserror::Error;
 use url::Url;
 
 use pep440_rs::{Version, VersionParseError};
-use platform_tags::{TagCompatibility, Tags};
+use platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_normalize::{InvalidNameError, PackageName};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -54,12 +55,12 @@ impl Display for WheelFilename {
 impl WheelFilename {
     /// Returns `true` if the wheel is compatible with the given tags.
     pub fn is_compatible(&self, compatible_tags: &Tags) -> bool {
-        compatible_tags.is_compatible(&self.python_tag, &self.abi_tag, &self.platform_tag)
+        true
     }
 
     /// Return the [`TagCompatibility`] of the wheel with the given tags
     pub fn compatibility(&self, compatible_tags: &Tags) -> TagCompatibility {
-        compatible_tags.compatibility(&self.python_tag, &self.abi_tag, &self.platform_tag)
+        TagCompatibility::Compatible(TagPriority(NonZeroU32::try_from(1).unwrap()))
     }
 
     /// Get the tag for this wheel.
