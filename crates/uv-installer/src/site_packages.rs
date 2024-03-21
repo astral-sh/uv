@@ -9,7 +9,7 @@ use url::Url;
 
 use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
 use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::{Requirement, VerbatimUrl};
+use pep508_rs::{Requirement, RequirementsTxtRequirement, VerbatimUrl};
 use requirements_txt::EditableRequirement;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
@@ -80,8 +80,11 @@ impl<'a> SitePackages<'a> {
                         .push(idx);
 
                     // Index the distribution by URL.
-                    if let Some(url) = dist_info.as_editable() {
-                        by_url.entry(url.clone()).or_insert_with(Vec::new).push(idx);
+                    if let InstalledDist::Url(dist) = &dist_info {
+                        by_url
+                            .entry(dist.url.clone())
+                            .or_insert_with(Vec::new)
+                            .push(idx);
                     }
 
                     // Add the distribution to the database.
@@ -144,6 +147,17 @@ impl<'a> SitePackages<'a> {
             .collect()
     }
 
+    /// Returns the distributions installed from the given URL, if any.
+    pub fn get_urls(&self, url: &Url) -> Vec<&InstalledDist> {
+        let Some(indexes) = self.by_url.get(url) else {
+            return Vec::new();
+        };
+        indexes
+            .iter()
+            .flat_map(|&index| &self.distributions[index])
+            .collect()
+    }
+
     /// Returns the editable distribution installed from the given URL, if any.
     pub fn get_editables(&self, url: &Url) -> Vec<&InstalledDist> {
         let Some(indexes) = self.by_url.get(url) else {
@@ -152,6 +166,7 @@ impl<'a> SitePackages<'a> {
         indexes
             .iter()
             .flat_map(|&index| &self.distributions[index])
+            .filter(|dist| dist.is_editable())
             .collect()
     }
 
@@ -162,7 +177,14 @@ impl<'a> SitePackages<'a> {
         };
         indexes
             .iter()
-            .filter_map(|index| std::mem::take(&mut self.distributions[*index]))
+            .filter_map(|index| {
+                let dist = &mut self.distributions[*index];
+                if dist.as_ref().is_some_and(InstalledDist::is_editable) {
+                    std::mem::take(dist)
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
@@ -268,20 +290,20 @@ impl<'a> SitePackages<'a> {
     /// Returns `true` if the installed packages satisfy the given requirements.
     pub fn satisfies(
         &self,
-        requirements: &[Requirement],
+        requirements: &[RequirementsTxtRequirement],
         editables: &[EditableRequirement],
         constraints: &[Requirement],
     ) -> Result<bool> {
-        let mut stack = Vec::<Requirement>::with_capacity(requirements.len());
+        let mut stack = Vec::<RequirementsTxtRequirement>::with_capacity(requirements.len());
         let mut seen =
             FxHashSet::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
         // Add the direct requirements to the queue.
         for dependency in requirements {
-            if dependency.evaluate_markers(self.venv.interpreter().markers(), &[])
-                && seen.insert(dependency.clone())
-            {
-                stack.push(dependency.clone());
+            if dependency.evaluate_markers(self.venv.interpreter().markers(), &[]) {
+                if seen.insert(dependency.clone()) {
+                    stack.push(dependency.clone());
+                }
             }
         }
 
@@ -317,9 +339,11 @@ impl<'a> SitePackages<'a> {
                         if dependency.evaluate_markers(
                             self.venv.interpreter().markers(),
                             &requirement.extras,
-                        ) && seen.insert(dependency.clone())
-                        {
-                            stack.push(dependency);
+                        ) {
+                            let dependency = RequirementsTxtRequirement::from(dependency);
+                            if seen.insert(dependency.clone()) {
+                                stack.push(dependency);
+                            }
                         }
                     }
                 }
@@ -332,7 +356,14 @@ impl<'a> SitePackages<'a> {
 
         // Verify that all non-editable requirements are met.
         while let Some(requirement) = stack.pop() {
-            let installed = self.get_packages(&requirement.name);
+            let installed = match &requirement {
+                RequirementsTxtRequirement::Pep508(requirement) => {
+                    self.get_packages(&requirement.name)
+                }
+                RequirementsTxtRequirement::Unnamed(requirement) => {
+                    self.get_urls(requirement.url.raw())
+                }
+            };
             match installed.as_slice() {
                 [] => {
                     // The package isn't installed.
@@ -340,12 +371,12 @@ impl<'a> SitePackages<'a> {
                 }
                 [distribution] => {
                     // Validate that the installed version matches the requirement.
-                    match &requirement.version_or_url {
+                    match requirement.version_or_url() {
                         // Accept any installed version.
                         None => {}
 
                         // If the requirement comes from a URL, verify by URL.
-                        Some(pep508_rs::VersionOrUrl::Url(url)) => {
+                        Some(pep508_rs::VersionOrUrlRef::Url(url)) => {
                             let InstalledDist::Url(installed) = &distribution else {
                                 return Ok(false);
                             };
@@ -365,7 +396,7 @@ impl<'a> SitePackages<'a> {
                             }
                         }
 
-                        Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
+                        Some(pep508_rs::VersionOrUrlRef::VersionSpecifier(version_specifier)) => {
                             // The installed version doesn't satisfy the requirement.
                             if !version_specifier.contains(distribution.version()) {
                                 return Ok(false);
@@ -375,7 +406,7 @@ impl<'a> SitePackages<'a> {
 
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints {
-                        if constraint.name != requirement.name {
+                        if constraint.name != *distribution.name() {
                             continue;
                         }
 
@@ -426,10 +457,12 @@ impl<'a> SitePackages<'a> {
                     for dependency in metadata.requires_dist {
                         if dependency.evaluate_markers(
                             self.venv.interpreter().markers(),
-                            &requirement.extras,
-                        ) && seen.insert(dependency.clone())
-                        {
-                            stack.push(dependency);
+                            requirement.extras(),
+                        ) {
+                            let dependency = RequirementsTxtRequirement::from(dependency);
+                            if seen.insert(dependency.clone()) {
+                                stack.push(dependency);
+                            }
                         }
                     }
                 }
