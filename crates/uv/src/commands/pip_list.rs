@@ -275,7 +275,7 @@ pub(crate) async fn pip_list(
                     _ => false,
                 }
             })
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
     }
 
     match format {
