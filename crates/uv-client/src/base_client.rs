@@ -31,6 +31,12 @@ pub struct BaseClientBuilder<'a> {
     platform: Option<&'a Platform>,
 }
 
+impl Default for BaseClientBuilder<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BaseClientBuilder<'_> {
     pub fn new() -> Self {
         Self {
@@ -86,6 +92,10 @@ impl<'a> BaseClientBuilder<'a> {
     pub fn platform(mut self, platform: &'a Platform) -> Self {
         self.platform = Some(platform);
         self
+    }
+
+    pub fn is_offline(&self) -> bool {
+        matches!(self.connectivity, Connectivity::Offline)
     }
 
     pub fn build(self) -> BaseClient {

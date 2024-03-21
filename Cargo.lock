@@ -3008,6 +3008,7 @@ dependencies = [
  "pep508_rs",
  "regex",
  "reqwest",
+ "reqwest-middleware",
  "serde",
  "tempfile",
  "test-case",
