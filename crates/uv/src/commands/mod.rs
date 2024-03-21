@@ -6,6 +6,7 @@ use owo_colors::OwoColorize;
 
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
+pub(crate) use cache_prune::cache_prune;
 use distribution_types::InstalledMetadata;
 pub(crate) use pip_check::pip_check;
 pub(crate) use pip_compile::{extra_name_with_clap_error, pip_compile};
@@ -28,6 +29,7 @@ use crate::printer::Printer;
 
 mod cache_clean;
 mod cache_dir;
+mod cache_prune;
 mod pip_check;
 mod pip_compile;
 mod pip_freeze;
@@ -154,4 +156,20 @@ pub(super) async fn compile_bytecode(
         .dimmed()
     )?;
     Ok(())
+}
+
+/// Formats a number of bytes into a human readable SI-prefixed size.
+///
+/// Returns a tuple of `(quantity, units)`.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss
+)]
+pub(super) fn human_readable_bytes(bytes: u64) -> (f32, &'static str) {
+    static UNITS: [&str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
+    let bytes = bytes as f32;
+    let i = ((bytes.log2() / 10.0) as usize).min(UNITS.len() - 1);
+    (bytes / 1024_f32.powi(i as i32), UNITS[i])
 }

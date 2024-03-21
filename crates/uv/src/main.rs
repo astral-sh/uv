@@ -137,7 +137,7 @@ enum Commands {
     /// Manage the `uv` executable.
     #[clap(name = "self")]
     Self_(SelfNamespace),
-    /// Remove all items from the cache.
+    /// Clear the cache, removing all entries or those linked to specific packages.
     #[clap(hide = true)]
     Clean(CleanArgs),
     /// Display uv's version
@@ -170,8 +170,10 @@ struct CacheNamespace {
 
 #[derive(Subcommand)]
 enum CacheCommand {
-    /// Remove all items from the cache.
+    /// Clear the cache, removing all entries or those linked to specific packages.
     Clean(CleanArgs),
+    /// Prune all unreachable objects from the cache.
+    Prune,
     /// Show the cache directory.
     Dir,
 }
@@ -1759,6 +1761,9 @@ async fn run() -> Result<ExitStatus> {
             command: CacheCommand::Clean(args),
         })
         | Commands::Clean(args) => commands::cache_clean(&args.package, &cache, printer),
+        Commands::Cache(CacheNamespace {
+            command: CacheCommand::Prune,
+        }) => commands::cache_prune(&cache, printer),
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
         }) => {
