@@ -100,7 +100,14 @@ pub(crate) async fn pip_install(
         no_index,
         find_links,
         extras: _,
-    } = read_requirements(requirements, constraints, overrides, extras, client_builder).await?;
+    } = read_requirements(
+        requirements,
+        constraints,
+        overrides,
+        extras,
+        &client_builder,
+    )
+    .await?;
 
     // Detect the current Python interpreter.
     let venv = if let Some(python) = python.as_ref() {
@@ -362,7 +369,7 @@ async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification<'_>,
-    client_builder: BaseClientBuilder<'_>,
+    client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a pyproject toml source
     if !matches!(extras, ExtrasSpecification::None)

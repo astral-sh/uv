@@ -334,7 +334,7 @@ impl RequirementsTxt {
     pub async fn parse(
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
-        client_builder: BaseClientBuilder<'_>,
+        client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self, RequirementsTxtFileError> {
         let requirements_txt = requirements_txt.as_ref();
         let working_dir = working_dir.as_ref();
@@ -365,7 +365,7 @@ impl RequirementsTxt {
                         });
                     }
 
-                    let client = client_builder.clone().build();
+                    let client = client_builder.build();
                     read_url_to_string(&requirements_txt, client).await
                 }
             } else {
@@ -406,7 +406,7 @@ impl RequirementsTxt {
         content: &str,
         working_dir: &Path,
         requirements_dir: &Path,
-        client_builder: BaseClientBuilder<'async_recursion>,
+        client_builder: &BaseClientBuilder<'async_recursion>,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
@@ -425,14 +425,13 @@ impl RequirementsTxt {
                         } else {
                             requirements_dir.join(filename.as_ref())
                         };
-                    let sub_requirements =
-                        Self::parse(&sub_file, working_dir, client_builder.clone())
-                            .await
-                            .map_err(|err| RequirementsTxtParserError::Subfile {
-                                source: Box::new(err),
-                                start,
-                                end,
-                            })?;
+                    let sub_requirements = Self::parse(&sub_file, working_dir, client_builder)
+                        .await
+                        .map_err(|err| RequirementsTxtParserError::Subfile {
+                            source: Box::new(err),
+                            start,
+                            end,
+                        })?;
 
                     // Disallow conflicting `--index-url` in nested `requirements` files.
                     if sub_requirements.index_url.is_some()
@@ -464,14 +463,13 @@ impl RequirementsTxt {
                         } else {
                             requirements_dir.join(filename.as_ref())
                         };
-                    let sub_constraints =
-                        Self::parse(&sub_file, working_dir, client_builder.clone())
-                            .await
-                            .map_err(|err| RequirementsTxtParserError::Subfile {
-                                source: Box::new(err),
-                                start,
-                                end,
-                            })?;
+                    let sub_constraints = Self::parse(&sub_file, working_dir, client_builder)
+                        .await
+                        .map_err(|err| RequirementsTxtParserError::Subfile {
+                            source: Box::new(err),
+                            start,
+                            end,
+                        })?;
                     // Treat any nested requirements or constraints as constraints. This differs
                     // from `pip`, which seems to treat `-r` requirements in constraints files as
                     // _requirements_, but we don't want to support that.
@@ -1216,7 +1214,7 @@ mod test {
         let requirements_txt = working_dir.join(path);
 
         let actual =
-            RequirementsTxt::parse(requirements_txt, &working_dir, BaseClientBuilder::new())
+            RequirementsTxt::parse(requirements_txt, &working_dir, &BaseClientBuilder::new())
                 .await
                 .unwrap();
 
@@ -1261,7 +1259,7 @@ mod test {
         fs::write(&requirements_txt, contents).unwrap();
 
         let actual =
-            RequirementsTxt::parse(&requirements_txt, &working_dir, BaseClientBuilder::new())
+            RequirementsTxt::parse(&requirements_txt, &working_dir, &BaseClientBuilder::new())
                 .await
                 .unwrap();
 
@@ -1330,7 +1328,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            BaseClientBuilder::new(),
+            &BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1370,7 +1368,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            BaseClientBuilder::new(),
+            &BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1406,7 +1404,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            BaseClientBuilder::new(),
+            &BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1442,7 +1440,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            BaseClientBuilder::new(),
+            &BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1473,7 +1471,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            BaseClientBuilder::new(),
+            &BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1506,7 +1504,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            BaseClientBuilder::new(),
+            &BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1540,7 +1538,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            BaseClientBuilder::new(),
+            &BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1579,7 +1577,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            BaseClientBuilder::new(),
+            &BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1622,10 +1620,13 @@ mod test {
             -r subdir/child.txt
         "})?;
 
-        let requirements =
-            RequirementsTxt::parse(parent_txt.path(), temp_dir.path(), BaseClientBuilder::new())
-                .await
-                .unwrap();
+        let requirements = RequirementsTxt::parse(
+            parent_txt.path(),
+            temp_dir.path(),
+            &BaseClientBuilder::new(),
+        )
+        .await
+        .unwrap();
         insta::assert_debug_snapshot!(requirements, @r###"
         RequirementsTxt {
             requirements: [
@@ -1680,7 +1681,7 @@ mod test {
         let requirements = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            BaseClientBuilder::new(),
+            &BaseClientBuilder::new(),
         )
         .await
         .unwrap();
@@ -1744,7 +1745,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            BaseClientBuilder::new(),
+            &BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();
@@ -1797,7 +1798,7 @@ mod test {
         let error = RequirementsTxt::parse(
             requirements_txt.path(),
             temp_dir.path(),
-            BaseClientBuilder::new(),
+            &BaseClientBuilder::new(),
         )
         .await
         .unwrap_err();

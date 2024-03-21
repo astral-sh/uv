@@ -98,7 +98,7 @@ impl<'a> BaseClientBuilder<'a> {
         matches!(self.connectivity, Connectivity::Offline)
     }
 
-    pub fn build(self) -> BaseClient {
+    pub fn build(&self) -> BaseClient {
         // Create user agent.
         let mut user_agent_string = format!("uv/{}", version());
 
@@ -128,7 +128,7 @@ impl<'a> BaseClientBuilder<'a> {
         debug!("Using registry request timeout of {}s", timeout);
 
         // Initialize the base client.
-        let client = self.client.unwrap_or_else(|| {
+        let client = self.client.clone().unwrap_or_else(|| {
             // Check for the presence of an `SSL_CERT_FILE`.
             let ssl_cert_file_exists = env::var_os("SSL_CERT_FILE").is_some_and(|path| {
                 let path_exists = Path::new(&path).exists();

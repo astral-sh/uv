@@ -72,7 +72,7 @@ pub(crate) async fn pip_sync(
         extra_index_urls,
         no_index,
         find_links,
-    } = RequirementsSpecification::from_simple_sources(sources, client_builder).await?;
+    } = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
 
     // Validate that the requirements are non-empty.
     let num_requirements = requirements.len() + editables.len();
