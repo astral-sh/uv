@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.1.23
+
+### Enhancements
+
+- Implement `--no-strip-extras` to preserve extras in compilation ([#2555](https://github.com/astral-sh/uv/pull/2555))
+- Preserve hashes for pinned packages when compiling without `--upgrade` ([#2532](https://github.com/astral-sh/uv/pull/2532))
+- Add a `uv self update` command ([#2228](https://github.com/astral-sh/uv/pull/2228))
+- Use relative paths for user-facing messages ([#2559](https://github.com/astral-sh/uv/pull/2559))
+- Add `CUSTOM_COMPILE_COMMAND` support to `uv pip compile` ([#2554](https://github.com/astral-sh/uv/pull/2554))
+- Add SHA384 and SHA512 hash algorithms ([#2534](https://github.com/astral-sh/uv/pull/2534))
+- Treat uninstallable packages as warnings, rather than errors ([#2557](https://github.com/astral-sh/uv/pull/2557))
+
+### Bug fixes
+
+- Allow `VIRTUAL_ENV` to take precedence over `CONDA_PREFIX` ([#2574](https://github.com/astral-sh/uv/pull/2574))
+- Ensure mtime of site packages is updated during wheel installation ([#2545](https://github.com/astral-sh/uv/pull/2545))
+- Re-test validity after every lenient parsing change ([#2550](https://github.com/astral-sh/uv/pull/2550))
+- Run interpreter discovery under `-I` mode ([#2552](https://github.com/astral-sh/uv/pull/2552))
+- Search in both `purelib` and `platlib` for site-packages population ([#2537](https://github.com/astral-sh/uv/pull/2537))
+- Fix wheel builds and uploads for musl ARM ([#2518](https://github.com/astral-sh/uv/pull/2518))
+
+### Documentation
+
+- Add `--link-mode` defaults to CLI ([#2549](https://github.com/astral-sh/uv/pull/2549))
+- Add an example workflow for compiling the current environment's packages ([#1968](https://github.com/astral-sh/uv/pull/1968))
+- Add `uv pip check diagnostics` to `PIP_COMPATIBILITY.md` ([#2544](https://github.com/astral-sh/uv/pull/2544))
+
 ## 0.1.22
 
 ### Enhancements
