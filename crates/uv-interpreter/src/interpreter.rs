@@ -386,8 +386,6 @@ impl InterpreterInfo {
                 err,
             })?;
 
-        // stderr isn't technically a criterion for success, but i don't know of any cases where there
-        // should be stderr output and if there is, we want to know
         if !output.status.success() {
             return Err(Error::PythonSubcommandOutput {
                 message: format!(
