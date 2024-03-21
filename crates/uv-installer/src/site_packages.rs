@@ -588,13 +588,3 @@ impl InstalledPackagesProvider for SitePackages<'_> {
         self.get_packages(name)
     }
 }
-
-impl InstalledPackagesProvider for &SitePackages<'_> {
-    fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
-        (*self).iter()
-    }
-
-    fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
-        (*self).get_packages(name)
-    }
-}
