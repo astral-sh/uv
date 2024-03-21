@@ -64,6 +64,7 @@ tracing-subscriber = { workspace = true, features = ["json"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
+distribution-filename = { version = "0.0.1", path = "../distribution-filename" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 mimalloc = { version = "0.1.39" }
