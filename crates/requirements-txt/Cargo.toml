@@ -20,7 +20,6 @@ uv-normalize = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 
-async-recursion = { workspace = true }
 fs-err = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, optional = true }

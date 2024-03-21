@@ -9,7 +9,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.76"
+rust-version = "1.77"
 homepage = "https://pypi.org/project/uv/"
 documentation = "https://pypi.org/project/uv/"
 repository = "https://github.com/astral-sh/uv"
@@ -53,7 +53,6 @@ anstream = { version = "0.6.13" }
 anyhow = { version = "1.0.80" }
 async-channel = { version = "2.2.0" }
 async-compression = { version = "0.4.6" }
-async-recursion = { version = "1.0.5" }
 async-trait = { version = "0.1.78" }
 async_http_range_reader = { version = "0.7.0" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "d76801da0943de985254fc6255c0e476b57c5836", features = ["deflate"] }

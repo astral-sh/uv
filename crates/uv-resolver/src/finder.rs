@@ -163,9 +163,7 @@ impl<'a> DistFinder<'a> {
                     resolvable_dist
                         .compatible_wheel()
                         .map(|(dist, tag_priority)| (dist.clone(), tag_priority)),
-                    resolvable_dist
-                        .compatible_source()
-                        .map(std::clone::Clone::clone),
+                    resolvable_dist.compatible_source().cloned(),
                 )
             } else {
                 (None, None, None)
