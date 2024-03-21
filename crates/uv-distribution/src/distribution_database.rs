@@ -328,11 +328,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         dist: &Dist,
     ) -> Result<(Metadata23, Option<Url>), Error> {
         match dist {
-            // TODO(zanieb): `metadata()` should return us the right error kind so we can use it here
-            Dist::Installed(dist) => dist
-                .metadata()
-                .map(|metadata| (metadata, None))
-                .map_err(|_| Error::NoBinary),
+            // TODO(zanieb): `dist.metadata()` should return us the right error kind so we can use `Error::Metadata` here
+            Dist::Installed(dist) => Ok(dist.metadata().map(|metadata| (metadata, None)).unwrap()),
             Dist::Built(built_dist) => {
                 match self.client.wheel_metadata(built_dist).boxed().await {
                     Ok(metadata) => Ok((metadata, None)),
