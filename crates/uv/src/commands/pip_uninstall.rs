@@ -14,7 +14,7 @@ use uv_interpreter::PythonEnvironment;
 
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::{RequirementsSource, RequirementsSpecification};
+use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 /// Uninstall packages from the current environment.
 pub(crate) async fn pip_uninstall(

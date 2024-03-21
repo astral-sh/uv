@@ -101,6 +101,10 @@ Normalize package and extra names as per Python specifications.
 
 Types and functionality for working with Python packages, e.g., parsing wheel files.
 
+## [uv-requirements](./uv-requirements)
+
+Utilities for reading package requirements from `pyproject.toml` and `requirements.txt` files.
+
 ## [uv-resolver](./uv-resolver)
 
 Functionality for resolving Python packages and their dependencies.

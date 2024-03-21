@@ -8,7 +8,7 @@ pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
 use distribution_types::InstalledMetadata;
 pub(crate) use pip_check::pip_check;
-pub(crate) use pip_compile::{extra_name_with_clap_error, pip_compile, Upgrade};
+pub(crate) use pip_compile::{extra_name_with_clap_error, pip_compile};
 pub(crate) use pip_freeze::pip_freeze;
 pub(crate) use pip_install::pip_install;
 pub(crate) use pip_list::pip_list;

@@ -11,7 +11,6 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use rustc_hash::FxHashSet;
 use tempfile::tempdir_in;
 use tracing::debug;
 
@@ -26,6 +25,10 @@ use uv_fs::Simplified;
 use uv_installer::{Downloader, NoBinary};
 use uv_interpreter::{find_best_python, PythonEnvironment, PythonVersion};
 use uv_normalize::{ExtraName, PackageName};
+use uv_requirements::{
+    upgrade::{read_lockfile, Upgrade},
+    ExtrasSpecification, NamedRequirements, RequirementsSource, RequirementsSpecification,
+};
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
     OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
@@ -36,10 +39,6 @@ use uv_warnings::warn_user;
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::{
-    read_lockfile, ExtrasSpecification, NamedRequirements, RequirementsSource,
-    RequirementsSpecification,
-};
 
 /// Resolve a set of requirements into a set of pinned versions.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
@@ -574,42 +573,6 @@ impl OutputWriter {
         }
 
         Ok(())
-    }
-}
-
-/// Whether to allow package upgrades.
-#[derive(Debug)]
-pub(crate) enum Upgrade {
-    /// Prefer pinned versions from the existing lockfile, if possible.
-    None,
-
-    /// Allow package upgrades for all packages, ignoring the existing lockfile.
-    All,
-
-    /// Allow package upgrades, but only for the specified packages.
-    Packages(FxHashSet<PackageName>),
-}
-
-impl Upgrade {
-    /// Determine the upgrade strategy from the command-line arguments.
-    pub(crate) fn from_args(upgrade: bool, upgrade_package: Vec<PackageName>) -> Self {
-        if upgrade {
-            Self::All
-        } else if !upgrade_package.is_empty() {
-            Self::Packages(upgrade_package.into_iter().collect())
-        } else {
-            Self::None
-        }
-    }
-
-    /// Returns `true` if no packages should be upgraded.
-    pub(crate) fn is_none(&self) -> bool {
-        matches!(self, Self::None)
-    }
-
-    /// Returns `true` if all packages should be upgraded.
-    pub(crate) fn is_all(&self) -> bool {
-        matches!(self, Self::All)
     }
 }
 

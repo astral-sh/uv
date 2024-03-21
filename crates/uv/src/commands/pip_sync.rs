@@ -26,7 +26,7 @@ use uv_warnings::warn_user;
 use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::{NamedRequirements, RequirementsSource, RequirementsSpecification};
+use uv_requirements::{NamedRequirements, RequirementsSource, RequirementsSpecification};
 
 /// Install a set of locked requirements into the current Python environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]

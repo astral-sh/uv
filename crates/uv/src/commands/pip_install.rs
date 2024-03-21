@@ -30,6 +30,10 @@ use uv_installer::{
 };
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
+use uv_requirements::{
+    upgrade::Upgrade, ExtrasSpecification, NamedRequirements, RequirementsSource,
+    RequirementsSpecification,
+};
 use uv_resolver::{
     DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode, Preference,
     ResolutionGraph, ResolutionMode, Resolver,
@@ -40,11 +44,8 @@ use uv_warnings::warn_user;
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
-use crate::requirements::{
-    ExtrasSpecification, NamedRequirements, RequirementsSource, RequirementsSpecification,
-};
 
-use super::{DryRunEvent, Upgrade};
+use super::DryRunEvent;
 
 /// Install packages into the current environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
