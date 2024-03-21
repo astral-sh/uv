@@ -296,7 +296,7 @@ fn show_found_multiple_packages() -> Result<()> {
 }
 
 #[test]
-fn show_found_one_out_of_two() -> Result<()> {
+fn show_found_one_out_of_three() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -338,6 +338,7 @@ fn show_found_one_out_of_two() -> Result<()> {
         .arg("show")
         .arg("markupsafe")
         .arg("flask")
+        .arg("django")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -351,7 +352,7 @@ fn show_found_one_out_of_two() -> Result<()> {
     Requires:
 
     ----- stderr -----
-    warning: Package(s) not found for: flask
+    warning: Package(s) not found for: django, flask
     "###
     );
 

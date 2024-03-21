@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::Result;
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
@@ -69,28 +69,27 @@ pub(crate) fn pip_show(
     packages.sort_unstable();
     packages.dedup();
 
-    // Map to the local distributions.
-    let distributions = {
-        let mut distributions = Vec::with_capacity(packages.len());
-
-        // Identify all packages that are installed.
-        for package in &packages {
-            let installed = site_packages.get_packages(package);
-            if installed.is_empty() {
-                writeln!(
-                    printer.stderr(),
-                    "{}{} Package(s) not found for: {}",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                    package.as_ref().bold()
-                )?;
-            } else {
-                distributions.extend(installed);
-            }
+    // Map to the local distributions and collect missing packages.
+    let (missing, distributions): (Vec<_>, Vec<_>) = packages.iter().partition_map(|name| {
+        let installed = site_packages.get_packages(name);
+        if installed.is_empty() {
+            Either::Left(name)
+        } else {
+            Either::Right(installed)
         }
+    });
 
-        distributions
-    };
+    if !missing.is_empty() {
+        writeln!(
+            printer.stderr(),
+            "{}{} Package(s) not found for: {}",
+            "warning".yellow().bold(),
+            ":".bold(),
+            missing.iter().join(", ").bold()
+        )?;
+    }
+
+    let distributions = distributions.iter().flatten().collect_vec();
 
     // Like `pip`, if no packages were found, return a failure.
     if distributions.is_empty() {
