@@ -100,7 +100,13 @@ impl AuthenticationStore {
             return;
         }
         let auth = UrlAuthData {
-            username: url.username().to_string(),
+            // Using the encoded username can break authentication when `@` is converted to `%40`
+            // so we decode it for storage; RFC7617 does not explicitly say that authentication should
+            // not be percent-encoded, but the omission of percent-encoding from all encoding discussion
+            // indicates that it probably should not be done.
+            username: urlencoding::decode(url.username())
+                .expect("An encoded username should always decode")
+                .into_owned(),
             password: url.password().map(str::to_string),
         };
         credentials.insert(netloc, Some(Credential::UrlEncoded(auth)));
