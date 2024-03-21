@@ -97,11 +97,8 @@ pub(crate) fn pip_show(
     }
 
     // Print the information for each package.
-    let mut first = true;
-    for distribution in &distributions {
-        if first {
-            first = false;
-        } else {
+    for (i, distribution) in distributions.iter().enumerate() {
+        if i > 0 {
             // Print a separator between packages.
             writeln!(printer.stdout(), "---")?;
         }
