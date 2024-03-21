@@ -4465,6 +4465,7 @@ dependencies = [
  "cachedir",
  "clap",
  "directories",
+ "distribution-filename",
  "distribution-types",
  "fs-err",
  "nanoid",

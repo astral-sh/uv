@@ -4,15 +4,17 @@ use std::io;
 use std::io::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 
+use distribution_filename::WheelFilename;
 use fs_err as fs;
 use rustc_hash::FxHashSet;
 use tempfile::{tempdir, TempDir};
 use tracing::debug;
 
 use distribution_types::InstalledDist;
-use uv_fs::directories;
+use uv_fs::{directories, files};
 use uv_normalize::PackageName;
 
 pub use crate::by_timestamp::CachedByTimestamp;
@@ -590,7 +592,7 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            Self::BuiltWheels => "built-wheels-v0",
+            Self::BuiltWheels => "built-wheels-v1",
             Self::FlatIndex => "flat-index-v0",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v0",
@@ -604,6 +606,17 @@ impl CacheBucket {
     ///
     /// Returns the number of entries removed from the cache.
     fn remove(self, cache: &Cache, name: &PackageName) -> Result<Removal, io::Error> {
+        /// Returns `true` if the [`Path`] represents a built wheel for the given package.
+        fn is_built_wheel(path: &Path, name: &PackageName) -> bool {
+            let Some(filename) = path.file_name().and_then(|filename| filename.to_str()) else {
+                return false;
+            };
+            let Some(filename) = WheelFilename::from_str(filename).ok() else {
+                return false;
+            };
+            filename.name == *name
+        }
+
         let mut summary = Removal::default();
         match self {
             Self::Wheels => {
@@ -637,26 +650,39 @@ impl CacheBucket {
                     summary += rm_rf(directory.join(name.to_string()))?;
                 }
 
-                // For direct URLs, we expect a directory for every index, followed by a
-                // directory per package (indexed by name).
+                // For direct URLs, we expect a directory for every URL, followed by a
+                // directory per version. To determine whether the URL is relevant, we need to
+                // search for a wheel matching the package name.
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
-                for directory in directories(root) {
-                    summary += rm_rf(directory.join(name.to_string()))?;
+                for url in directories(root) {
+                    if directories(&url)
+                        .any(|version| files(version).any(|file| is_built_wheel(&file, name)))
+                    {
+                        summary += rm_rf(url)?;
+                    }
                 }
 
                 // For local dependencies, we expect a directory for every path, followed by a
-                // directory per package (indexed by name).
+                // directory per version. To determine whether the path is relevant, we need to
+                // search for a wheel matching the package name.
                 let root = cache.bucket(self).join(WheelCacheKind::Path);
-                for directory in directories(root) {
-                    summary += rm_rf(directory.join(name.to_string()))?;
+                for path in directories(root) {
+                    if directories(&path)
+                        .any(|version| files(version).any(|file| is_built_wheel(&file, name)))
+                    {
+                        summary += rm_rf(path)?;
+                    }
                 }
 
                 // For Git dependencies, we expect a directory for every repository, followed by a
-                // directory for every SHA, followed by a directory per package (indexed by name).
+                // directory for every SHA. To determine whether the SHA is relevant, we need to
+                // search for a wheel matching the package name.
                 let root = cache.bucket(self).join(WheelCacheKind::Git);
-                for directory in directories(root) {
-                    for directory in directories(directory) {
-                        summary += rm_rf(directory.join(name.to_string()))?;
+                for repository in directories(root) {
+                    for sha in directories(repository) {
+                        if files(&sha).any(|file| is_built_wheel(&file, name)) {
+                            summary += rm_rf(sha)?;
+                        }
                     }
                 }
             }

@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 cache-key = { workspace = true }
+distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
