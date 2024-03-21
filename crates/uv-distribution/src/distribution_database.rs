@@ -101,8 +101,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             NoBinary::Packages(packages) => packages.contains(dist.name()),
         };
         match &dist {
-            // TODO(zanieb): Add a real error type
-            Dist::Installed(_) => Err(Error::NoBinary),
+            Dist::Installed(_) => {
+                unreachable!("Wheels should not be retrieved for already installed distributions")
+            }
             Dist::Built(BuiltDist::Registry(wheel)) => {
                 if no_binary {
                     return Err(Error::NoBinary);

@@ -18,8 +18,8 @@ use tracing::{debug, info_span, instrument, trace, Instrument};
 use url::Url;
 
 use distribution_types::{
-    BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    Name, RemoteSource, SourceDist, VersionOrUrl,
+    BuiltDist, Dist, DistributionMetadata, Identifier, IncompatibleDist, IncompatibleSource,
+    IncompatibleWheel, Name, RemoteSource, SourceDist, VersionOrUrl,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -949,9 +949,10 @@ impl<
                     }
                 }
                 Some(Response::Dist {
-                    dist: Dist::Installed(_),
+                    dist: dist @ Dist::Installed(_),
+                    metadata,
                     ..
-                }) => unreachable!(),
+                }) => self.index.distributions.done(dist.package_id(), metadata),
                 None => {}
             }
         }

@@ -24,6 +24,8 @@ struct PrioritizedDistInner {
 /// A distribution that can be used for both resolution and installation.
 #[derive(Debug, Clone)]
 pub enum CompatibleDist<'a> {
+    /// The distribution is already installed and can be used.
+    InstalledDist(Dist),
     /// The distribution should be resolved and installed using a source distribution.
     SourceDist(&'a Dist),
     /// The distribution should be resolved and installed using a wheel distribution.
@@ -287,6 +289,7 @@ impl<'a> CompatibleDist<'a> {
     /// Return the [`Dist`] to use during resolution.
     pub fn for_resolution(&self) -> &Dist {
         match *self {
+            CompatibleDist::InstalledDist(ref dist) => dist,
             CompatibleDist::SourceDist(sdist) => sdist,
             CompatibleDist::CompatibleWheel(wheel, _) => wheel,
             CompatibleDist::IncompatibleWheel {
@@ -299,6 +302,7 @@ impl<'a> CompatibleDist<'a> {
     /// Return the [`Dist`] to use during installation.
     pub fn for_installation(&self) -> &Dist {
         match *self {
+            CompatibleDist::InstalledDist(ref dist) => dist,
             CompatibleDist::SourceDist(sdist) => sdist,
             CompatibleDist::CompatibleWheel(wheel, _) => wheel,
             CompatibleDist::IncompatibleWheel {

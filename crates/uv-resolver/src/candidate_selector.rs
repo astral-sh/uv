@@ -1,6 +1,8 @@
 use pubgrub::range::Range;
 
-use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
+use distribution_types::{
+    CompatibleDist, Dist, IncompatibleDist, IncompatibleSource, InstalledDist,
+};
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
@@ -81,12 +83,18 @@ impl CandidateSelector {
             }
         }
 
-        for package in &installed_packages.get_packages(package_name) {
-            let version = package.version();
+        for dist in installed_packages.get_packages(package_name) {
+            let version = dist.version();
             if range.contains(version) {
                 // TODO(zanieb): Convert an `InstalledDist` to a `PrioritizedDist`
-                debug!("Found installed version of {package} that satisfies request");
-                // return Some(Candidate::new(package_name, version, package));
+                debug!("Found installed version of {dist} that satisfies request");
+                return Some(Candidate {
+                    name: package_name,
+                    version,
+                    dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
+                        Dist::Installed(dist.clone()),
+                    )),
+                });
             }
         }
 

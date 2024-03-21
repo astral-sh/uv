@@ -52,7 +52,10 @@ impl Resolution {
             .0
             .values()
             .filter_map(|dist| match dist {
+                // Remove editable requirements
                 Dist::Source(SourceDist::Path(PathSourceDist { editable: true, .. })) => None,
+                // Remove already-installed distributions
+                Dist::Installed(_) => None,
                 dist => Some(Requirement::from(dist.clone())),
             })
             .collect::<Vec<_>>();
