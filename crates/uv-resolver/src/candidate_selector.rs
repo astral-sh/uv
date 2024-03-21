@@ -4,6 +4,7 @@ use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
+use tracing::debug;
 use uv_normalize::PackageName;
 use uv_traits::InstalledPackagesProvider;
 
@@ -77,6 +78,15 @@ impl CandidateSelector {
                 if let Some(file) = version_map.get(version) {
                     return Some(Candidate::new(package_name, version, file));
                 }
+            }
+        }
+
+        for package in installed_packages.get_packages(package_name).iter() {
+            let version = package.version();
+            if range.contains(version) {
+                // TODO(zanieb): Convert an `InstalledDist` to a `PrioritizedDist`
+                debug!("Found installed version of {package} that satisfies request");
+                // return Some(Candidate::new(package_name, version, package));
             }
         }
 
