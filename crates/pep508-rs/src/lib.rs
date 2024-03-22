@@ -1627,7 +1627,7 @@ mod tests {
 
     #[test]
     fn basic_examples() {
-        let input = r"requests[security,tests] >=2.8.1, ==2.8.* ; python_version < '2.7'";
+        let input = r"requests[security,tests]>=2.8.1,==2.8.* ; python_version < '2.7'";
         let requests = Requirement::from_str(input).unwrap();
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
