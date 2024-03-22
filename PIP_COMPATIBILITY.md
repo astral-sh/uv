@@ -38,30 +38,6 @@ Instead, uv supports its own environment variables, like `UV_INDEX_URL`. In the 
 also support persistent configuration in its own configuration file format (e.g., `pyproject.toml`
 or `uv.toml` or similar). For more, see [#651](https://github.com/astral-sh/uv/issues/651).
 
-## Direct URL dependencies without package names
-
-`pip` allows for direct URL dependencies to be provided on the command line or in `requirements.txt`
-files without a package name, as in `pip install https://github.com/pallets/flask`, or:
-
-```txt
-# requirements.txt
-git+https://github.com/pallets/flask
-```
-
-This is a common pattern in `pip` workflows, and is used to install a package from a direct URL
-without incorporating the package name upfront.
-
-uv supports direct URL dependencies from HTTP and VCS sources, but requires that the package name
-be provided upfront, as in `uv install "flask @ git+https://github.com/pallets/flask"`, or:
-
-```txt
-# requirements.txt
-flask @ git+https://github.com/pallets/flask
-```
-
-In the future, uv will support direct URL dependencies without package names. For more, see
-[#313](https://github.com/astral-sh/uv/issues/313).
-
 ## Transitive direct URL dependencies
 
 While uv does support direct URL dependencies (e.g., `black @ https://...`), it does not support
