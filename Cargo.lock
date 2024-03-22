@@ -4468,6 +4468,8 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "nanoid",
+ "pypi-types",
+ "rmp-serde",
  "rustc-hash",
  "serde",
  "tempfile",

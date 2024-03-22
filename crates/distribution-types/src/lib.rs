@@ -45,6 +45,7 @@ use pep508_rs::{Scheme, VerbatimUrl};
 use uv_normalize::PackageName;
 
 pub use crate::any::*;
+pub use crate::buildable::*;
 pub use crate::cached::*;
 pub use crate::direct_url::*;
 pub use crate::editable::*;
@@ -58,6 +59,7 @@ pub use crate::resolution::*;
 pub use crate::traits::*;
 
 mod any;
+mod buildable;
 mod cached;
 mod direct_url;
 mod editable;

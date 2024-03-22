@@ -8,7 +8,9 @@ use tokio::task::JoinError;
 use tracing::instrument;
 use url::Url;
 
-use distribution_types::{CachedDist, Dist, Identifier, LocalEditable, RemoteSource, SourceDist};
+use distribution_types::{
+    BuildableSource, CachedDist, Dist, Identifier, LocalEditable, RemoteSource,
+};
 use platform_tags::Tags;
 use uv_cache::Cache;
 use uv_client::RegistryClient;
@@ -233,10 +235,10 @@ pub trait Reporter: Send + Sync {
     fn on_complete(&self);
 
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, dist: &SourceDist) -> usize;
+    fn on_build_start(&self, source: BuildableSource) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, dist: &SourceDist, id: usize);
+    fn on_build_complete(&self, source: BuildableSource, id: usize);
 
     /// Callback to invoke when a editable build is kicked off.
     fn on_editable_build_start(&self, dist: &LocalEditable) -> usize;
@@ -263,12 +265,12 @@ impl From<Arc<dyn Reporter>> for Facade {
 }
 
 impl uv_distribution::Reporter for Facade {
-    fn on_build_start(&self, dist: &SourceDist) -> usize {
-        self.reporter.on_build_start(dist)
+    fn on_build_start(&self, source: BuildableSource) -> usize {
+        self.reporter.on_build_start(source)
     }
 
-    fn on_build_complete(&self, dist: &SourceDist, id: usize) {
-        self.reporter.on_build_complete(dist, id);
+    fn on_build_complete(&self, source: BuildableSource, id: usize) {
+        self.reporter.on_build_complete(source, id);
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
