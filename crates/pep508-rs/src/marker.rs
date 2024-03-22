@@ -377,7 +377,7 @@ pub struct MarkerEnvironment {
 
 impl MarkerEnvironment {
     /// Returns of the PEP 440 version typed value of the key in the current environment
-    fn get_version(&self, key: &MarkerValueVersion) -> &Version {
+    pub fn get_version(&self, key: &MarkerValueVersion) -> &Version {
         match key {
             MarkerValueVersion::ImplementationVersion => &self.implementation_version.version,
             MarkerValueVersion::PythonFullVersion => &self.python_full_version.version,
@@ -386,7 +386,7 @@ impl MarkerEnvironment {
     }
 
     /// Returns of the stringly typed value of the key in the current environment
-    fn get_string(&self, key: &MarkerValueString) -> &str {
+    pub fn get_string(&self, key: &MarkerValueString) -> &str {
         match key {
             MarkerValueString::ImplementationName => &self.implementation_name,
             MarkerValueString::OsName | MarkerValueString::OsNameDeprecated => &self.os_name,
