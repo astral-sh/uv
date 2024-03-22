@@ -34,7 +34,7 @@ use uv_installer::{
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
-    upgrade::Upgrade, ExtrasSpecification, NamedRequirements, RequirementsSource,
+    upgrade::Upgrade, ExtrasSpecification, NamedRequirementsResolver, RequirementsSource,
     RequirementsSpecification,
 };
 use uv_resolver::{
@@ -235,20 +235,10 @@ pub(crate) async fn pip_install(
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
     // Convert from unnamed to named requirements.
-    let NamedRequirements {
-        requirements,
-        constraints,
-        overrides,
-        editables,
-    } = NamedRequirements::from_spec(
-        requirements,
-        constraints,
-        overrides,
-        editables,
-        &resolve_dispatch,
-        &client,
-    )
-    .await?;
+    let requirements = NamedRequirementsResolver::new(requirements)
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve(&resolve_dispatch, &client)
+        .await?;
 
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command. If an editable is already

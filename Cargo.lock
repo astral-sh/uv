@@ -4397,6 +4397,7 @@ dependencies = [
  "uv-cache",
  "uv-client",
  "uv-dispatch",
+ "uv-distribution",
  "uv-fs",
  "uv-installer",
  "uv-interpreter",

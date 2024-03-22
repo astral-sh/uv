@@ -57,7 +57,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         }
     }
 
-    /// Set the [`Reporter`] to use for this unzipper.
+    /// Set the [`Reporter`] to use for this downloader.
     #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         let reporter: Arc<dyn Reporter> = Arc::new(reporter);

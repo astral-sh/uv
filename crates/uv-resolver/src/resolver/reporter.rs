@@ -9,7 +9,7 @@ pub type BuildId = usize;
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a dependency is resolved.
-    fn on_progress(&self, name: &PackageName, version: VersionOrUrl);
+    fn on_progress(&self, name: &PackageName, version: &VersionOrUrl);
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);

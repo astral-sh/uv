@@ -29,7 +29,7 @@ use uv_interpreter::{find_best_python, PythonEnvironment, PythonVersion};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
     upgrade::{read_lockfile, Upgrade},
-    ExtrasSpecification, NamedRequirements, RequirementsSource, RequirementsSpecification,
+    ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
@@ -247,20 +247,10 @@ pub(crate) async fn pip_compile(
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
     // Convert from unnamed to named requirements.
-    let NamedRequirements {
-        requirements,
-        constraints,
-        overrides,
-        editables,
-    } = NamedRequirements::from_spec(
-        requirements,
-        constraints,
-        overrides,
-        editables,
-        &build_dispatch,
-        &client,
-    )
-    .await?;
+    let requirements = NamedRequirementsResolver::new(requirements)
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve(&build_dispatch, &client)
+        .await?;
 
     // Build the editables and add their requirements
     let editable_metadata = if editables.is_empty() {

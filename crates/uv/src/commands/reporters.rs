@@ -228,8 +228,8 @@ impl From<Printer> for ResolverReporter {
     }
 }
 
-impl uv_resolver::ResolverReporter for ResolverReporter {
-    fn on_progress(&self, name: &PackageName, version_or_url: VersionOrUrl) {
+impl ResolverReporter {
+    fn on_progress(&self, name: &PackageName, version_or_url: &VersionOrUrl) {
         match version_or_url {
             VersionOrUrl::Version(version) => {
                 self.progress.set_message(format!("{name}=={version}"));
@@ -301,6 +301,50 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
             url,
             rev.dimmed()
         ));
+    }
+}
+
+impl uv_resolver::ResolverReporter for ResolverReporter {
+    fn on_progress(&self, name: &PackageName, version_or_url: &VersionOrUrl) {
+        self.on_progress(name, version_or_url);
+    }
+
+    fn on_complete(&self) {
+        self.on_complete();
+    }
+
+    fn on_build_start(&self, source: &BuildableSource) -> usize {
+        self.on_build_start(source)
+    }
+
+    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
+        self.on_build_complete(source, index);
+    }
+
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+        self.on_checkout_start(url, rev)
+    }
+
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+        self.on_checkout_complete(url, rev, index);
+    }
+}
+
+impl uv_distribution::Reporter for ResolverReporter {
+    fn on_build_start(&self, source: &BuildableSource) -> usize {
+        self.on_build_start(source)
+    }
+
+    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
+        self.on_build_complete(source, index);
+    }
+
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+        self.on_checkout_start(url, rev)
+    }
+
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+        self.on_checkout_complete(url, rev, index);
     }
 }
 

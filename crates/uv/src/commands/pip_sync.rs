@@ -26,10 +26,12 @@ use uv_resolver::InMemoryIndex;
 use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 use uv_warnings::warn_user;
 
-use crate::commands::reporters::{DownloadReporter, FinderReporter, InstallReporter};
+use crate::commands::reporters::{
+    DownloadReporter, FinderReporter, InstallReporter, ResolverReporter,
+};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
-use uv_requirements::{NamedRequirements, RequirementsSource, RequirementsSpecification};
+use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 
 /// Install a set of locked requirements into the current Python environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
@@ -64,8 +66,8 @@ pub(crate) async fn pip_sync(
     let RequirementsSpecification {
         project: _,
         requirements,
-        constraints,
-        overrides,
+        constraints: _,
+        overrides: _,
         editables,
         extras: _,
         index_url,
@@ -176,20 +178,10 @@ pub(crate) async fn pip_sync(
     );
 
     // Convert from unnamed to named requirements.
-    let NamedRequirements {
-        requirements,
-        constraints: _constraints,
-        overrides: _overrides,
-        editables,
-    } = NamedRequirements::from_spec(
-        requirements,
-        constraints,
-        overrides,
-        editables,
-        &build_dispatch,
-        &client,
-    )
-    .await?;
+    let requirements = NamedRequirementsResolver::new(requirements)
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve(&build_dispatch, &client)
+        .await?;
 
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_executable(&venv)?;

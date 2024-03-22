@@ -1063,10 +1063,10 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
                 PubGrubPackage::Root(_) => {}
                 PubGrubPackage::Python(_) => {}
                 PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-                    reporter.on_progress(package_name, VersionOrUrl::Url(url));
+                    reporter.on_progress(package_name, &VersionOrUrl::Url(url));
                 }
                 PubGrubPackage::Package(package_name, _extra, None) => {
-                    reporter.on_progress(package_name, VersionOrUrl::Version(version));
+                    reporter.on_progress(package_name, &VersionOrUrl::Version(version));
                 }
             }
         }
