@@ -28,6 +28,7 @@
 - Fix self-updates on Windows ([#2598](https://github.com/astral-sh/uv/pull/2598))
 - Fix authentication with usernames that contain `@` characters ([#2592](https://github.com/astral-sh/uv/pull/2592))
 - Do not error when there are warnings on Python interpreter stderr ([#2599](https://github.com/astral-sh/uv/pull/2599))
+- Prevent discovery of cache gitignore when building distributions ([#2615](https://github.com/astral-sh/uv/pull/2615))
 
 ### Rust API
 
