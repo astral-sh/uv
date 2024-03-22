@@ -251,15 +251,6 @@ impl Cache {
             Err(err) => return Err(err),
         }
 
-        // Add a phony .git, if it doesn't exist, to ensure that the cache isn't considered to be
-        // part of a Git repository. (Some packages will include Git metadata (like a hash) in the
-        // built version if they're in a Git repository, but the cache should be viewed as an
-        // isolated store.)
-        fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(root.join(".git"))?;
-
         // Add an empty .gitignore to the build bucket, to ensure that the cache's own .gitignore
         // doesn't interfere with source distribution builds. Build backends (like hatchling) will
         // traverse upwards to look for .gitignore files.
@@ -272,6 +263,18 @@ impl Cache {
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
             Err(err) => return Err(err),
         }
+
+        // Add a phony .git, if it doesn't exist, to ensure that the cache isn't considered to be
+        // part of a Git repository. (Some packages will include Git metadata (like a hash) in the
+        // built version if they're in a Git repository, but the cache should be viewed as an
+        // isolated store.).
+        // We have to put this below the gitignore. Otherwise, if the build backend uses the rust
+        // ignore crate it will walk up to the top level .gitignore and ignore its python source
+        // files.
+        fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(root.join(CacheBucket::BuiltWheels.to_str()).join(".git"))?;
 
         fs::canonicalize(root)
     }
