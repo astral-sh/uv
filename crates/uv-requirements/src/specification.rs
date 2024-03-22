@@ -209,7 +209,7 @@ impl RequirementsSpecification {
                 if let Some(existing) = spec.index_url {
                     if url != existing {
                         return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs.` {url}",
+                            "Multiple index URLs specified: `{existing}` vs. `{url}`",
                         ));
                     }
                 }
@@ -242,7 +242,7 @@ impl RequirementsSpecification {
                 if let Some(existing) = spec.index_url {
                     if url != existing {
                         return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs.` {url}",
+                            "Multiple index URLs specified: `{existing}` vs. `{url}`",
                         ));
                     }
                 }
@@ -275,7 +275,7 @@ impl RequirementsSpecification {
                 if let Some(existing) = spec.index_url {
                     if url != existing {
                         return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs.` {url}",
+                            "Multiple index URLs specified: `{existing}` vs. `{url}`",
                         ));
                     }
                 }
