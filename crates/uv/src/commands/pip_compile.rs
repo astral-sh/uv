@@ -211,22 +211,6 @@ pub(crate) async fn pip_compile(
     // Read the lockfile, if present.
     let preferences = read_lockfile(output_file, upgrade).await?;
 
-    // Convert from unnamed to named requirements.
-    let NamedRequirements {
-        requirements,
-        constraints,
-        overrides,
-        editables,
-    } = NamedRequirements::from_spec(
-        requirements,
-        constraints,
-        overrides,
-        editables,
-        &cache,
-        &client,
-    )
-    .await?;
-
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
@@ -261,6 +245,22 @@ pub(crate) async fn pip_compile(
         &NoBinary::None,
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
+
+    // Convert from unnamed to named requirements.
+    let NamedRequirements {
+        requirements,
+        constraints,
+        overrides,
+        editables,
+    } = NamedRequirements::from_spec(
+        requirements,
+        constraints,
+        overrides,
+        editables,
+        &build_dispatch,
+        &client,
+    )
+    .await?;
 
     // Build the editables and add their requirements
     let editable_metadata = if editables.is_empty() {

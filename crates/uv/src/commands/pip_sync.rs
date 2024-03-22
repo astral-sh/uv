@@ -139,22 +139,6 @@ pub(crate) async fn pip_sync(
         .platform(venv.interpreter().platform())
         .build();
 
-    // Convert from unnamed to named requirements.
-    let NamedRequirements {
-        requirements,
-        constraints: _constraints,
-        overrides: _overrides,
-        editables,
-    } = NamedRequirements::from_spec(
-        requirements,
-        constraints,
-        overrides,
-        editables,
-        &cache,
-        &client,
-    )
-    .await?;
-
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
@@ -190,6 +174,22 @@ pub(crate) async fn pip_sync(
         no_build,
         no_binary,
     );
+
+    // Convert from unnamed to named requirements.
+    let NamedRequirements {
+        requirements,
+        constraints: _constraints,
+        overrides: _overrides,
+        editables,
+    } = NamedRequirements::from_spec(
+        requirements,
+        constraints,
+        overrides,
+        editables,
+        &build_dispatch,
+        &client,
+    )
+    .await?;
 
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_executable(&venv)?;

@@ -4805,6 +4805,7 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-resolver",
+ "uv-traits",
  "uv-warnings",
 ]
 

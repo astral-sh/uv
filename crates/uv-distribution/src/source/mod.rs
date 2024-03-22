@@ -1,5 +1,6 @@
 //! Fetch and build source distributions from remote sources.
 
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -48,7 +49,6 @@ pub struct SourceDistCachedBuilder<'a, T: BuildContext> {
     build_context: &'a T,
     client: &'a RegistryClient,
     reporter: Option<Arc<dyn Reporter>>,
-    tags: &'a Tags,
 }
 
 /// The name of the file that contains the cached manifest, encoded via `MsgPack`.
@@ -59,12 +59,11 @@ pub(crate) const METADATA: &str = "metadata.msgpack";
 
 impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// Initialize a [`SourceDistCachedBuilder`] from a [`BuildContext`].
-    pub fn new(build_context: &'a T, client: &'a RegistryClient, tags: &'a Tags) -> Self {
+    pub fn new(build_context: &'a T, client: &'a RegistryClient) -> Self {
         Self {
             build_context,
             reporter: None,
             client,
-            tags,
         }
     }
 
@@ -80,7 +79,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// Download and build a [`SourceDist`].
     pub async fn download_and_build(
         &self,
-        source: BuildableSource<'_>,
+        source: &BuildableSource<'_>,
+        tags: &Tags,
     ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
@@ -98,7 +98,15 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                         let extracted = extract_archive(path, self.build_context.cache()).await?;
 
                         return self
-                            .path(source, PathSourceUrl { url: &url, path }, extracted.path())
+                            .path(
+                                source,
+                                &PathSourceUrl {
+                                    url: &url,
+                                    path: Cow::Borrowed(path),
+                                },
+                                extracted.path(),
+                                tags,
+                            )
                             .boxed()
                             .await;
                     }
@@ -113,7 +121,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                         .join(dist.filename.version.to_string()),
                 );
 
-                self.url(source, &dist.file.filename, &url, &cache_shard, None)
+                self.url(source, &dist.file.filename, &url, &cache_shard, None, tags)
                     .boxed()
                     .await?
             }
@@ -133,18 +141,21 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     &url,
                     &cache_shard,
                     subdirectory.as_deref(),
+                    tags,
                 )
                 .boxed()
                 .await?
             }
             BuildableSource::Dist(SourceDist::Git(dist)) => {
-                self.git(source, GitSourceUrl::from(dist)).boxed().await?
+                self.git(source, &GitSourceUrl::from(dist), tags)
+                    .boxed()
+                    .await?
             }
             BuildableSource::Dist(SourceDist::Path(dist)) => {
                 // If necessary, extract the archive.
                 let extracted = extract_archive(&dist.path, self.build_context.cache()).await?;
 
-                self.path(source, PathSourceUrl::from(dist), extracted.path())
+                self.path(source, &PathSourceUrl::from(dist), extracted.path(), tags)
                     .boxed()
                     .await?
             }
@@ -167,18 +178,19 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                     &url,
                     &cache_shard,
                     subdirectory.as_deref(),
+                    tags,
                 )
                 .boxed()
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git(source, *resource).boxed().await?
+                self.git(source, resource, tags).boxed().await?
             }
             BuildableSource::Url(SourceUrl::Path(resource)) => {
                 // If necessary, extract the archive.
-                let extracted = extract_archive(resource.path, self.build_context.cache()).await?;
+                let extracted = extract_archive(&resource.path, self.build_context.cache()).await?;
 
-                self.path(source, *resource, extracted.path())
+                self.path(source, resource, extracted.path(), tags)
                     .boxed()
                     .await?
             }
@@ -192,7 +204,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// metadata without building the source distribution.
     pub async fn download_and_build_metadata(
         &self,
-        source: BuildableSource<'_>,
+        source: &BuildableSource<'_>,
     ) -> Result<Metadata23, Error> {
         let metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
@@ -212,7 +224,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                         return self
                             .path_metadata(
                                 source,
-                                PathSourceUrl { url: &url, path },
+                                &PathSourceUrl {
+                                    url: &url,
+                                    path: Cow::Borrowed(path),
+                                },
                                 extracted.path(),
                             )
                             .boxed()
@@ -253,7 +268,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Dist(SourceDist::Git(dist)) => {
-                self.git_metadata(source, GitSourceUrl::from(dist))
+                self.git_metadata(source, &GitSourceUrl::from(dist))
                     .boxed()
                     .await?
             }
@@ -261,7 +276,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 // If necessary, extract the archive.
                 let extracted = extract_archive(&dist.path, self.build_context.cache()).await?;
 
-                self.path_metadata(source, PathSourceUrl::from(dist), extracted.path())
+                self.path_metadata(source, &PathSourceUrl::from(dist), extracted.path())
                     .boxed()
                     .await?
             }
@@ -289,13 +304,13 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git_metadata(source, *resource).boxed().await?
+                self.git_metadata(source, resource).boxed().await?
             }
             BuildableSource::Url(SourceUrl::Path(resource)) => {
                 // If necessary, extract the archive.
-                let extracted = extract_archive(resource.path, self.build_context.cache()).await?;
+                let extracted = extract_archive(&resource.path, self.build_context.cache()).await?;
 
-                self.path_metadata(source, *resource, extracted.path())
+                self.path_metadata(source, resource, extracted.path())
                     .boxed()
                     .await?
             }
@@ -308,11 +323,12 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     #[allow(clippy::too_many_arguments)]
     async fn url<'data>(
         &self,
-        source: BuildableSource<'data>,
+        source: &BuildableSource<'data>,
         filename: &'data str,
         url: &'data Url,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
+        tags: &Tags,
     ) -> Result<BuiltWheelMetadata, Error> {
         let cache_entry = cache_shard.entry(MANIFEST);
         let cache_control = match self.client.connectivity() {
@@ -371,7 +387,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(self.tags, &cache_shard) {
+        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
             return Ok(built_wheel);
         }
 
@@ -412,7 +428,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     #[allow(clippy::too_many_arguments)]
     async fn url_metadata<'data>(
         &self,
-        source: BuildableSource<'data>,
+        source: &BuildableSource<'data>,
         filename: &'data str,
         url: &'data Url,
         cache_shard: &CacheShard,
@@ -530,9 +546,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// Build a source distribution from a local path.
     async fn path(
         &self,
-        source: BuildableSource<'_>,
-        resource: PathSourceUrl<'_>,
+        source: &BuildableSource<'_>,
+        resource: &PathSourceUrl<'_>,
         source_root: &Path,
+        tags: &Tags,
     ) -> Result<BuiltWheelMetadata, Error> {
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
@@ -541,7 +558,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Determine the last-modified time of the source distribution.
         let Some(modified) =
-            ArchiveTimestamp::from_path(resource.path).map_err(Error::CacheRead)?
+            ArchiveTimestamp::from_path(&resource.path).map_err(Error::CacheRead)?
         else {
             return Err(Error::DirWithoutEntrypoint);
         };
@@ -563,7 +580,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         let cache_shard = cache_shard.shard(manifest.id());
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(self.tags, &cache_shard) {
+        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
             return Ok(built_wheel);
         }
 
@@ -602,8 +619,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// building the wheel.
     async fn path_metadata(
         &self,
-        source: BuildableSource<'_>,
-        resource: PathSourceUrl<'_>,
+        source: &BuildableSource<'_>,
+        resource: &PathSourceUrl<'_>,
         source_root: &Path,
     ) -> Result<Metadata23, Error> {
         let cache_shard = self.build_context.cache().shard(
@@ -613,7 +630,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
 
         // Determine the last-modified time of the source distribution.
         let Some(modified) =
-            ArchiveTimestamp::from_path(resource.path).map_err(Error::CacheRead)?
+            ArchiveTimestamp::from_path(&resource.path).map_err(Error::CacheRead)?
         else {
             return Err(Error::DirWithoutEntrypoint);
         };
@@ -694,8 +711,9 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// Build a source distribution from a Git repository.
     async fn git(
         &self,
-        source: BuildableSource<'_>,
-        resource: GitSourceUrl<'_>,
+        source: &BuildableSource<'_>,
+        resource: &GitSourceUrl<'_>,
+        tags: &Tags,
     ) -> Result<BuiltWheelMetadata, Error> {
         let (fetch, subdirectory) = fetch_git_archive(
             resource.url,
@@ -711,7 +729,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         );
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(self.tags, &cache_shard) {
+        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
             return Ok(built_wheel);
         }
 
@@ -749,8 +767,8 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     /// building the wheel.
     async fn git_metadata(
         &self,
-        source: BuildableSource<'_>,
-        resource: GitSourceUrl<'_>,
+        source: &BuildableSource<'_>,
+        resource: &GitSourceUrl<'_>,
     ) -> Result<Metadata23, Error> {
         let (fetch, subdirectory) = fetch_git_archive(
             resource.url,
@@ -826,7 +844,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     async fn persist_url<'data>(
         &self,
         response: Response,
-        source: BuildableSource<'_>,
+        source: &BuildableSource<'_>,
         filename: &str,
         cache_entry: &'data CacheEntry,
     ) -> Result<&'data Path, Error> {
@@ -872,7 +890,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     #[instrument(skip_all, fields(dist))]
     async fn build_distribution(
         &self,
-        source: BuildableSource<'_>,
+        source: &BuildableSource<'_>,
         source_root: &Path,
         subdirectory: Option<&Path>,
         cache_shard: &CacheShard,
@@ -932,7 +950,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     #[instrument(skip_all, fields(dist))]
     async fn build_metadata(
         &self,
-        source: BuildableSource<'_>,
+        source: &BuildableSource<'_>,
         source_root: &Path,
         subdirectory: Option<&Path>,
     ) -> Result<Option<Metadata23>, Error> {

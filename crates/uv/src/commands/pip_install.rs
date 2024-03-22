@@ -197,22 +197,6 @@ pub(crate) async fn pip_install(
         .platform(interpreter.platform())
         .build();
 
-    // Convert from unnamed to named requirements.
-    let NamedRequirements {
-        requirements,
-        constraints,
-        overrides,
-        editables,
-    } = NamedRequirements::from_spec(
-        requirements,
-        constraints,
-        overrides,
-        editables,
-        &cache,
-        &client,
-    )
-    .await?;
-
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
@@ -233,6 +217,7 @@ pub(crate) async fn pip_install(
     // Track in-flight downloads, builds, etc., across resolutions.
     let in_flight = InFlight::default();
 
+    // Create a build dispatch for resolution.
     let resolve_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -248,6 +233,22 @@ pub(crate) async fn pip_install(
         no_binary,
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
+
+    // Convert from unnamed to named requirements.
+    let NamedRequirements {
+        requirements,
+        constraints,
+        overrides,
+        editables,
+    } = NamedRequirements::from_spec(
+        requirements,
+        constraints,
+        overrides,
+        editables,
+        &resolve_dispatch,
+        &client,
+    )
+    .await?;
 
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command. If an editable is already

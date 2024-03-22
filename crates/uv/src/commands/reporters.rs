@@ -115,11 +115,11 @@ impl uv_installer::DownloadReporter for DownloadReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, source: BuildableSource) -> usize {
+    fn on_build_start(&self, source: &BuildableSource) -> usize {
         self.on_any_build_start(&source.to_color_string())
     }
 
-    fn on_build_complete(&self, source: BuildableSource, index: usize) {
+    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
         self.on_any_build_complete(&source.to_color_string(), index);
     }
 
@@ -244,7 +244,7 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
         self.progress.finish_and_clear();
     }
 
-    fn on_build_start(&self, source: BuildableSource) -> usize {
+    fn on_build_start(&self, source: &BuildableSource) -> usize {
         let progress = self.multi_progress.insert_before(
             &self.progress,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -262,7 +262,7 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
         bars.len() - 1
     }
 
-    fn on_build_complete(&self, source: BuildableSource, index: usize) {
+    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
         let bars = self.bars.lock().unwrap();
         let progress = &bars[index];
         progress.finish_with_message(format!(

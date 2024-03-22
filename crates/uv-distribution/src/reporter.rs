@@ -6,10 +6,10 @@ use distribution_types::BuildableSource;
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a source distribution build is kicked off.
-    fn on_build_start(&self, source: BuildableSource) -> usize;
+    fn on_build_start(&self, source: &BuildableSource) -> usize;
 
     /// Callback to invoke when a source distribution build is complete.
-    fn on_build_complete(&self, source: BuildableSource, id: usize);
+    fn on_build_complete(&self, source: &BuildableSource, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
