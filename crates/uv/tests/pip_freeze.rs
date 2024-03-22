@@ -168,8 +168,8 @@ fn freeze_url() -> Result<()> {
     iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
 
     ----- stderr -----
-    warning: The package `anyio` requires `idna >=2.8`, but it's not installed.
-    warning: The package `anyio` requires `sniffio >=1.1`, but it's not installed.
+    warning: The package `anyio` requires `idna>=2.8`, but it's not installed.
+    warning: The package `anyio` requires `sniffio>=1.1`, but it's not installed.
     "###
     );
 

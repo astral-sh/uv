@@ -243,7 +243,7 @@ impl Display for Requirement {
                 VersionOrUrl::VersionSpecifier(version_specifier) => {
                     let version_specifier: Vec<String> =
                         version_specifier.iter().map(ToString::to_string).collect();
-                    write!(f, " {}", version_specifier.join(", "))?;
+                    write!(f, "{}", version_specifier.join(","))?;
                 }
                 VersionOrUrl::Url(url) => {
                     // We add the space for markers later if necessary
@@ -1627,7 +1627,7 @@ mod tests {
 
     #[test]
     fn basic_examples() {
-        let input = r"requests[security,tests] >=2.8.1, ==2.8.* ; python_version < '2.7'";
+        let input = r"requests[security,tests]>=2.8.1,==2.8.* ; python_version < '2.7'";
         let requests = Requirement::from_str(input).unwrap();
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
