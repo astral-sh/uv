@@ -4,7 +4,7 @@
 
 ### Breaking changes
 
-- `uv pip uninstall` no longer supports editable requirements ([#2577](https://github.com/astral-sh/uv/pull/2577))
+- `uv pip uninstall` no longer supports specifying targets with the `-e` / `--editable` flag ([#2577](https://github.com/astral-sh/uv/pull/2577))
 
 ### Enhancements
 
