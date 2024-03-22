@@ -12,9 +12,9 @@ replacement for common `pip` and `pip-tools` workflows.
 
 <p align="center">
   <picture align="center">
-    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/astral-sh/uv/assets/1309177/13126e8d-bf39-422f-b376-2d239905013e">
-    <source media="(prefers-color-scheme: light)" srcset="https://github.com/astral-sh/uv/assets/1309177/d4678d01-0e6d-476f-b242-651207d9d5cc">
-    <img alt="Shows a bar chart with benchmark results." src="https://github.com/astral-sh/uv/assets/1309177/d4678d01-0e6d-476f-b242-651207d9d5cc">
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/astral-sh/ruff/assets/1309177/0de76898-51bc-47e2-a6fe-a002f59d81bd">
+    <source media="(prefers-color-scheme: light)" srcset="https://github.com/astral-sh/ruff/assets/1309177/5a0d50a9-0cbd-4afd-acd6-68d9213e4c02">
+    <img alt="Shows a bar chart with benchmark results." src="https://github.com/astral-sh/ruff/assets/1309177/5a0d50a9-0cbd-4afd-acd6-68d9213e4c02">
   </picture>
 </p>
 
