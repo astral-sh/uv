@@ -1,11 +1,11 @@
 use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use configparser::ini::Ini;
 use futures::{StreamExt, TryStreamExt};
-
 use serde::Deserialize;
 use tracing::debug;
 
@@ -17,63 +17,70 @@ use pep508_rs::{
     Requirement, RequirementsTxtRequirement, Scheme, UnnamedRequirement, VersionOrUrl,
 };
 use pypi_types::Metadata10;
-use requirements_txt::EditableRequirement;
-
 use uv_client::RegistryClient;
-use uv_distribution::SourceDistCachedBuilder;
+use uv_distribution::{Reporter, SourceDistCachedBuilder};
 use uv_normalize::PackageName;
 use uv_traits::BuildContext;
 
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
-#[derive(Debug, Default)]
-pub struct NamedRequirements {
+pub struct NamedRequirementsResolver {
     /// The requirements for the project.
-    pub requirements: Vec<Requirement>,
-    /// The constraints for the project.
-    pub constraints: Vec<Requirement>,
-    /// The overrides for the project.
-    pub overrides: Vec<Requirement>,
-    /// Package to install as editable installs
-    pub editables: Vec<EditableRequirement>,
+    requirements: Vec<RequirementsTxtRequirement>,
+    /// The reporter to use when building source distributions.
+    reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl NamedRequirements {
-    /// Convert a [`RequirementsSpecification`] into a [`NamedRequirements`].
-    pub async fn from_spec<T: BuildContext>(
-        requirements: Vec<RequirementsTxtRequirement>,
-        constraints: Vec<Requirement>,
-        overrides: Vec<Requirement>,
-        editables: Vec<EditableRequirement>,
+impl NamedRequirementsResolver {
+    /// Instantiate a new [`NamedRequirementsResolver`] for a given set of requirements.
+    pub fn new(requirements: Vec<RequirementsTxtRequirement>) -> Self {
+        Self {
+            requirements,
+            reporter: None,
+        }
+    }
+
+    /// Set the [`Reporter`] to use for this resolver.
+    #[must_use]
+    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        let reporter: Arc<dyn Reporter> = Arc::new(reporter);
+        Self {
+            reporter: Some(reporter),
+            ..self
+        }
+    }
+
+    /// Resolve any unnamed requirements in the specification.
+    pub async fn resolve<T: BuildContext>(
+        self,
         context: &T,
         client: &RegistryClient,
-    ) -> Result<Self> {
-        // Resolve all unnamed references.
-        let requirements = futures::stream::iter(requirements)
+    ) -> Result<Vec<Requirement>> {
+        futures::stream::iter(self.requirements)
             .map(|requirement| async {
                 match requirement {
                     RequirementsTxtRequirement::Pep508(requirement) => Ok(requirement),
                     RequirementsTxtRequirement::Unnamed(requirement) => {
-                        Self::name_requirement(requirement, context, client).await
+                        Self::resolve_requirement(
+                            requirement,
+                            context,
+                            client,
+                            self.reporter.clone(),
+                        )
+                        .await
                     }
                 }
             })
-            .buffer_unordered(50)
+            .buffered(50)
             .try_collect()
-            .await?;
-
-        Ok(Self {
-            requirements,
-            constraints,
-            overrides,
-            editables,
-        })
+            .await
     }
 
     /// Infer the package name for a given "unnamed" requirement.
-    async fn name_requirement<T: BuildContext>(
+    async fn resolve_requirement<T: BuildContext>(
         requirement: UnnamedRequirement,
         context: &T,
         client: &RegistryClient,
+        reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Requirement> {
         // If the requirement is a wheel, extract the package name from the wheel filename.
         //
@@ -225,7 +232,13 @@ impl NamedRequirements {
         };
 
         // Run the PEP 517 build process to extract metadata from the source distribution.
-        let metadata = SourceDistCachedBuilder::new(context, client)
+        let builder = if let Some(reporter) = reporter {
+            SourceDistCachedBuilder::new(context, client).with_reporter(reporter)
+        } else {
+            SourceDistCachedBuilder::new(context, client)
+        };
+
+        let metadata = builder
             .download_and_build_metadata(&BuildableSource::Url(source))
             .await
             .context("Failed to build source distribution")?;

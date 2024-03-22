@@ -24,12 +24,13 @@ uv-auth = { workspace = true, features = ["clap"] }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-dispatch = { workspace = true }
+uv-distribution = { workspace = true }
 uv-fs = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
-uv-resolver = { workspace = true, features = ["clap"] }
 uv-requirements = { workspace = true }
+uv-resolver = { workspace = true, features = ["clap"] }
 uv-traits = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
