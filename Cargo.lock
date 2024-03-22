@@ -4802,6 +4802,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-toolchain"
+version = "0.1.0"
+
+[[package]]
 name = "uv-types"
 version = "0.0.1"
 dependencies = [

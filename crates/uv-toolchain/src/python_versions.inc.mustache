@@ -1,0 +1,28 @@
+// DO NOT EDIT
+//
+// Generated with `{{generated_with}}`
+// From template at `{{generated_from}}`
+
+pub(crate) const PYTHON_DOWNLOADS: &[(&str, PythonDownloadMetadata)] = &[
+    {{#versions}}
+    (
+        "{{key}}",
+        PythonDownloadMetadata {
+            major: {{value.major}},
+            minor: {{value.minor}},
+            patch: {{value.patch}},
+            name: ImplementationName::{{value.name}},
+            arch: Arch::{{value.arch}},
+            os: Os::{{value.os}},
+            libc: Libc::{{value.libc}},
+            url: "{{value.url}}",
+            {{#value.sha256}}
+            sha256: Some("{{.}}")
+            {{/value.sha256}}
+            {{^value.sha256}}
+            sha256: None
+            {{/value.sha256}}
+        },
+    ),
+    {{/versions}}
+];
