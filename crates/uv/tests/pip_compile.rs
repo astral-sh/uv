@@ -3831,7 +3831,7 @@ fn conflicting_index_urls_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Multiple index URLs specified: `https://google.com/` vs.` https://wikipedia.org/
+    error: Multiple index URLs specified: `https://google.com/` vs. `https://wikipedia.org/`
     "###
     );
 
