@@ -1,0 +1,21 @@
+[build-system]
+requires = ["maturin>=1,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "deptry_reproducer"
+requires-python = ">=3.8"
+classifiers = [
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = ["cffi"]
+dynamic = ["version"]
+[project.optional-dependencies]
+tests = [
+  "pytest",
+]
+[tool.maturin]
+bindings = "cffi"
+python-source = "python"

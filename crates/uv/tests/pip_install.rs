@@ -6,10 +6,12 @@ use assert_fs::prelude::*;
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::indoc;
 use itertools::Itertools;
+use std::env::current_dir;
 use std::process::Command;
 use url::Url;
 
 use common::{uv_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
+use uv_fs::Simplified;
 
 use crate::common::get_bin;
 
@@ -2949,6 +2951,60 @@ fn install_site_packages_mtime_updated() -> Result<()> {
         (post_mtime, post_mtime_ns) > (pre_mtime, pre_mtime_ns),
         "Expected newer mtime than {pre_mtime}.{pre_mtime_ns} but got {post_mtime}.{post_mtime_ns}"
     );
+
+    Ok(())
+}
+
+/// We had a bug where maturin would walk up to the top level gitignore of the cache with a `*`
+/// entry (because we want to ignore the entire cache from outside), ignoring all python source
+/// files.
+#[test]
+fn deptry_gitignore() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project_root = current_dir()?
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let source_dist_dir = project_root
+        .join("scripts")
+        .join("packages")
+        .join("deptry_reproducer");
+    let filter_path = regex::escape(
+        Url::from_directory_path(source_dist_dir.simplified_display().to_string())
+            .unwrap()
+            .to_string()
+            .trim_end_matches('/'),
+    );
+    let filters: Vec<_> = [(filter_path.as_str(), "[SOURCE_DIST_DIR]")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    uv_snapshot!(filters, command(&context)
+        .arg(format!("deptry_reproducer @ {}/deptry_reproducer-0.1.0.tar.gz", source_dist_dir.simplified_display()))
+        .arg("--strict")
+        .current_dir(source_dist_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + cffi==1.16.0
+     + deptry-reproducer==0.1.0 (from [SOURCE_DIST_DIR]/deptry_reproducer-0.1.0.tar.gz)
+     + pycparser==2.21
+    "###
+    );
+
+    // Check that we packed the python source files
+    context
+        .assert_command("import deptry_reproducer.foo")
+        .success();
 
     Ok(())
 }
