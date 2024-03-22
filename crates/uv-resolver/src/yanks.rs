@@ -13,7 +13,7 @@ use crate::Manifest;
 pub struct AllowedYanks(FxHashMap<PackageName, FxHashSet<Version>>);
 
 impl AllowedYanks {
-    pub(crate) fn from_manifest(manifest: &Manifest, markers: &MarkerEnvironment) -> Self {
+    pub fn from_manifest(manifest: &Manifest, markers: &MarkerEnvironment) -> Self {
         let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();
         for requirement in manifest
             .requirements
@@ -52,10 +52,7 @@ impl AllowedYanks {
 
     /// Returns versions for the given package which are allowed even if marked as yanked by the
     /// relevant index.
-    pub(crate) fn allowed_versions(
-        &self,
-        package_name: &PackageName,
-    ) -> Option<&FxHashSet<Version>> {
+    pub fn allowed_versions(&self, package_name: &PackageName) -> Option<&FxHashSet<Version>> {
         self.0.get(package_name)
     }
 }

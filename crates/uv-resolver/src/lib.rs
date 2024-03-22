@@ -14,6 +14,7 @@ pub use resolver::{
     WheelMetadataResult,
 };
 pub use version_map::VersionMap;
+pub use yanks::AllowedYanks;
 
 mod bare;
 mod candidate_selector;
