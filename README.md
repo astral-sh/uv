@@ -10,7 +10,17 @@
 An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in
 replacement for common `pip` and `pip-tools` workflows.
 
-uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://github.com/astral-sh/ruff).
+<p align="center">
+  <picture align="center">
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/astral-sh/uv/assets/1309177/13126e8d-bf39-422f-b376-2d239905013e">
+    <source media="(prefers-color-scheme: light)" srcset="https://github.com/astral-sh/uv/assets/1309177/d4678d01-0e6d-476f-b242-651207d9d5cc">
+    <img alt="Shows a bar chart with benchmark results." src="https://github.com/astral-sh/uv/assets/1309177/d4678d01-0e6d-476f-b242-651207d9d5cc">
+  </picture>
+</p>
+
+<p align="center">
+  <i>Installing the Trio dependencies with a warm cache.</i>
+</p>
 
 ## Highlights
 
@@ -28,6 +38,8 @@ uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://gith
 - 🤝 Support for a wide range of advanced `pip` features, including editable installs, Git
   dependencies, direct URL dependencies, local dependencies, constraints, source distributions,
   HTML and JSON indexes, and more.
+
+uv is backed by [Astral](https://astral.sh), the creators of [Ruff](https://github.com/astral-sh/ruff).
 
 ## Getting Started
 

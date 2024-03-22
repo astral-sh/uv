@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+  class="marks" width="376" height="107" viewBox="0 0 376 107">
+  <g fill="none" stroke-miterlimit="10" transform="translate(60,0)">
+    <g class="mark-group role-frame root" role="graphics-object"
+      aria-roledescription="group mark container">
+      <g transform="translate(0,0)">
+        <path class="background" aria-hidden="true" d="M0,0h0v0h0Z"/>
+        <g>
+          <g class="mark-group role-scope cell" role="graphics-object"
+            aria-roledescription="group mark container">
+            <g transform="translate(0,0)">
+              <path class="background" aria-hidden="true" d="M0,0h300v90h-300Z"/>
+              <g>
+                <g class="mark-group role-axis" aria-hidden="true">
+                  <g transform="translate(0.5,90.5)">
+                    <path class="background" aria-hidden="true" d="M0,0h0v0h0Z"
+                      pointer-events="none"/>
+                    <g>
+                      <g class="mark-rule role-axis-grid" pointer-events="none">
+                        <line transform="translate(0,0)" x2="0" y2="-90"
+                          stroke="rgba(127,127,127,0.25)" stroke-width="1" opacity="1"/>
+                        <line transform="translate(120,0)" x2="0" y2="-90"
+                          stroke="rgba(127,127,127,0.25)" stroke-width="1" opacity="1"/>
+                        <line transform="translate(240,0)" x2="0" y2="-90"
+                          stroke="rgba(127,127,127,0.25)" stroke-width="1" opacity="1"/>
+                      </g>
+                    </g>
+                    <path class="foreground" aria-hidden="true" d="" pointer-events="none"
+                      display="none"/>
+                  </g>
+                </g>
+                <g class="mark-group role-axis" role="graphics-symbol" aria-roledescription="axis"
+                  aria-label="X-axis for a linear scale with values from 0 to 5">
+                  <g transform="translate(0.5,90.5)">
+                    <path class="background" aria-hidden="true" d="M0,0h0v0h0Z"
+                      pointer-events="none"/>
+                    <g>
+                      <g class="mark-rule role-axis-tick" pointer-events="none">
+                        <line transform="translate(0,0)" x2="0" y2="0"
+                          stroke="rgba(127,127,127,0.25)" stroke-width="1" opacity="1"/>
+                        <line transform="translate(120,0)" x2="0" y2="0"
+                          stroke="rgba(127,127,127,0.25)" stroke-width="1" opacity="1"/>
+                        <line transform="translate(240,0)" x2="0" y2="0"
+                          stroke="rgba(127,127,127,0.25)" stroke-width="1" opacity="1"/>
+                      </g>
+                      <g class="mark-text role-axis-label" pointer-events="none">
+                        <text text-anchor="middle" transform="translate(0,15)"
+                          font-family="-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;"
+                          font-size="12px" fill="#333333" opacity="1">0s
+                        </text>
+                        <text text-anchor="middle" transform="translate(120,15)"
+                          font-family="-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;"
+                          font-size="12px" fill="#333333" opacity="1">2s
+                        </text>
+                        <text text-anchor="middle" transform="translate(240,15)"
+                          font-family="-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;"
+                          font-size="12px" fill="#333333" opacity="1">4s
+                        </text>
+                      </g>
+                    </g>
+                    <path class="foreground" aria-hidden="true" d="" pointer-events="none"
+                      display="none"/>
+                  </g>
+                </g>
+                <g class="mark-group role-axis" role="graphics-symbol" aria-roledescription="axis"
+                  aria-label="Y-axis for a discrete scale with 4 values: uv, poetry, pdm, pip-sync">
+                  <g transform="translate(0.5,0.5)">
+                    <path class="background" aria-hidden="true" d="M0,0h0v0h0Z"
+                      pointer-events="none"/>
+                    <g>
+                      <g class="mark-text role-axis-label" pointer-events="none">
+                        <text text-anchor="end" transform="translate(-10,14.75)"
+                          font-family="-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;"
+                          font-size="12px" font-weight="bold" fill="#333333" opacity="1">uv
+                        </text>
+                        <text text-anchor="end" transform="translate(-10,37.25)"
+                          font-family="-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;"
+                          font-size="12px" fill="#333333" opacity="1">poetry
+                        </text>
+                        <text text-anchor="end" transform="translate(-10,59.75)"
+                          font-family="-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;"
+                          font-size="12px" fill="#333333" opacity="1">pdm
+                        </text>
+                        <text text-anchor="end" transform="translate(-10,82.25)"
+                          font-family="-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;"
+                          font-size="12px" fill="#333333" opacity="1">pip-sync
+                        </text>
+                      </g>
+                    </g>
+                    <path class="foreground" aria-hidden="true" d="" pointer-events="none"
+                      display="none"/>
+                  </g>
+                </g>
+                <g class="mark-rect role-mark child_layer_0_marks" role="graphics-object"
+                  aria-roledescription="rect mark container">
+                  <path aria-label="Sum of time: 0.0576289908; tool: uv" role="graphics-symbol"
+                    aria-roledescription="bar" d="M0,4.75h3.457739448v13h-3.457739448Z"
+                    fill="#6340AC"/>
+                  <path aria-label="Sum of time: 0.9872183659; tool: poetry" role="graphics-symbol"
+                    aria-roledescription="bar"
+                    d="M0,27.25h59.233101954000006v13h-59.233101954000006Z" fill="#6340AC"/>
+                  <path aria-label="Sum of time: 1.8969612492; tool: pdm" role="graphics-symbol"
+                    aria-roledescription="bar"
+                    d="M0,49.75h113.81767495199999v13h-113.81767495199999Z" fill="#6340AC"/>
+                  <path aria-label="Sum of time: 4.6313483826; tool: pip-sync"
+                    role="graphics-symbol" aria-roledescription="bar"
+                    d="M0,72.25h277.880902956v13h-277.880902956Z" fill="#6340AC"/>
+                </g>
+                <g class="mark-text role-mark child_layer_1_marks" role="graphics-object"
+                  aria-roledescription="text mark container">
+                  <text aria-label="Sum of time: 0.9872183659; tool: poetry; timeFormat: 0.99s"
+                    role="graphics-symbol" aria-roledescription="text mark" text-anchor="start"
+                    transform="translate(65.233101954,37.75)"
+                    font-family="-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;"
+                    font-size="12px" fill="#333333">0.99s
+                  </text>
+                  <text aria-label="Sum of time: 1.8969612492; tool: pdm; timeFormat: 1.90s"
+                    role="graphics-symbol" aria-roledescription="text mark" text-anchor="start"
+                    transform="translate(119.81767495199999,60.25)"
+                    font-family="-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;"
+                    font-size="12px" fill="#333333">1.90s
+                  </text>
+                  <text aria-label="Sum of time: 4.6313483826; tool: pip-sync; timeFormat: 4.63s"
+                    role="graphics-symbol" aria-roledescription="text mark" text-anchor="start"
+                    transform="translate(283.880902956,82.75)"
+                    font-family="-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;"
+                    font-size="12px" fill="#333333">4.63s
+                  </text>
+                </g>
+                <g class="mark-text role-mark child_layer_2_marks" role="graphics-object"
+                  aria-roledescription="text mark container">
+                  <text aria-label="Sum of time: 0.0576289908; tool: uv; timeFormat: 0.06s"
+                    role="graphics-symbol" aria-roledescription="text mark" text-anchor="start"
+                    transform="translate(9.457739448,15.25)"
+                    font-family="-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;"
+                    font-size="12px" font-weight="bold" fill="#333333">0.06s
+                  </text>
+                </g>
+              </g>
+              <path class="foreground" aria-hidden="true" d="" display="none"/>
+            </g>
+          </g>
+        </g>
+        <path class="foreground" aria-hidden="true" d="" display="none"/>
+      </g>
+    </g>
+  </g>
+</svg>
