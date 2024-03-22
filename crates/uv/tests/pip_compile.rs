@@ -3838,7 +3838,7 @@ fn conflicting_index_urls_requirements_txt() -> Result<()> {
     Ok(())
 }
 
-/// Doesn't Raise an error when multiple `requirements.txt` files include matching `--index-url` flags.
+/// Doesn't raise an error when multiple `requirements.txt` files include matching `--index-url` flags.
 #[test]
 fn matching_index_urls_requirements_txt() -> Result<()> {
     let context = TestContext::new("3.12");
