@@ -27,7 +27,7 @@ anyhow = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
-rkyv = { workspace = true, features = ["strict", "validation"] }
+rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

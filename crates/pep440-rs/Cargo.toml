@@ -21,7 +21,7 @@ once_cell = { workspace = true }
 pubgrub = { workspace = true, optional = true }
 pyo3 = { workspace = true, optional = true, features = ["extension-module", "abi3-py37"] }
 serde = { workspace = true, features = ["derive"], optional = true }
-rkyv = { workspace = true, features = ["strict", "validation"], optional = true }
+rkyv = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
 unscanny = { workspace = true }

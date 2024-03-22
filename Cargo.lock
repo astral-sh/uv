@@ -283,7 +283,7 @@ checksum = "7dce2f189800bafe8322ef3a4d361ee7373bfc2f8fe052afda404230166dc45f"
 dependencies = [
  "camino",
  "image",
- "miette 7.2.0",
+ "miette",
  "mime",
  "serde",
  "serde_json",
@@ -298,7 +298,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4de46920588aef95658797996130bacd542436aee090084646521260a74bda7d"
 dependencies = [
- "miette 7.2.0",
+ "miette",
  "thiserror",
  "tracing",
 ]
@@ -313,7 +313,7 @@ dependencies = [
  "axoprocess",
  "camino",
  "homedir",
- "miette 7.2.0",
+ "miette",
  "reqwest",
  "serde",
  "temp-dir",
@@ -1422,7 +1422,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "http 0.2.12",
- "indexmap 2.2.5",
+ "indexmap",
  "slab",
  "tokio",
  "tokio-util",
@@ -1441,7 +1441,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "http 1.1.0",
- "indexmap 2.2.5",
+ "indexmap",
  "slab",
  "tokio",
  "tokio-util",
@@ -1753,16 +1753,6 @@ name = "imagesize"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b72ad49b554c1728b1e83254a1b1565aea4161e28dabbfa171fc15fe62299caf"
-
-[[package]]
-name = "indexmap"
-version = "1.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
-dependencies = [
- "autocfg",
- "hashbrown 0.12.3",
-]
 
 [[package]]
 name = "indexmap"
@@ -2129,14 +2119,15 @@ dependencies = [
 
 [[package]]
 name = "miette"
-version = "6.0.1"
+version = "7.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "337e1043bbc086dac9d9674983bef52ac991ce150e09b5b8e35c5a73dd83f66c"
+checksum = "4edc8853320c2a0dab800fbda86253c8938f6ea88510dc92c5f1ed20e794afc1"
 dependencies = [
  "backtrace",
  "backtrace-ext",
- "miette-derive 6.0.1",
- "owo-colors 3.5.0",
+ "cfg-if",
+ "miette-derive",
+ "owo-colors",
  "supports-color",
  "supports-hyperlinks",
  "supports-unicode",
@@ -2144,29 +2135,6 @@ dependencies = [
  "textwrap",
  "thiserror",
  "unicode-width",
-]
-
-[[package]]
-name = "miette"
-version = "7.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4edc8853320c2a0dab800fbda86253c8938f6ea88510dc92c5f1ed20e794afc1"
-dependencies = [
- "cfg-if",
- "miette-derive 7.2.0",
- "thiserror",
- "unicode-width",
-]
-
-[[package]]
-name = "miette-derive"
-version = "6.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71e622f2a0dd84cbca79bc6c3c33f4fd7dc69faf992216516aacc1d136102800"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.52",
 ]
 
 [[package]]
@@ -2400,12 +2368,6 @@ checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 
 [[package]]
 name = "owo-colors"
-version = "3.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"
-
-[[package]]
-name = "owo-colors"
 version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "caff54706df99d2a78a5a4e3455ff45448d81ef1bb63c22cd14052ca0e993a3f"
@@ -2527,7 +2489,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1d3afd2628e69da2be385eb6f2fd57c8ac7977ceeff6dc166ff1657b0e386a9"
 dependencies = [
  "fixedbitset",
- "indexmap 2.2.5",
+ "indexmap",
 ]
 
 [[package]]
@@ -2660,12 +2622,13 @@ dependencies = [
 
 [[package]]
 name = "priority-queue"
-version = "1.4.0"
+version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0bda9164fe05bc9225752d54aae413343c36f684380005398a6a8fde95fe785"
+checksum = "509354d8a769e8d0b567d6821b84495c60213162761a732d68ce87c964bd347f"
 dependencies = [
  "autocfg",
- "indexmap 1.9.3",
+ "equivalent",
+ "indexmap",
 ]
 
 [[package]]
@@ -2700,9 +2663,9 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/astral-sh/pubgrub?rev=addbaf184891d66a2dfd93d241a66d13bfe5de86#addbaf184891d66a2dfd93d241a66d13bfe5de86"
+source = "git+https://github.com/astral-sh/pubgrub?rev=e981e4dfe315582e84e2fd724832fb0e0c50b7aa#e981e4dfe315582e84e2fd724832fb0e0c50b7aa"
 dependencies = [
- "indexmap 2.2.5",
+ "indexmap",
  "log",
  "priority-queue",
  "rustc-hash",
@@ -2807,7 +2770,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b80f889b6d413c3f8963a2c7db03f95dd6e1d85e1074137cb2013ea2faa8898"
 dependencies = [
- "indexmap 2.2.5",
+ "indexmap",
  "pep440_rs",
  "pep508_rs",
  "serde",
@@ -4034,7 +3997,7 @@ version = "0.22.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c12219811e0c1ba077867254e5ad62ee2c9c190b0d957110750ac0cda1ae96cd"
 dependencies = [
- "indexmap 2.2.5",
+ "indexmap",
  "serde",
  "serde_spanned",
  "toml_datetime",
@@ -4337,9 +4300,9 @@ checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 
 [[package]]
 name = "uuid"
-version = "1.7.0"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
+checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 
 [[package]]
 name = "uv"
@@ -4364,9 +4327,9 @@ dependencies = [
  "insta",
  "install-wheel-rs",
  "itertools 0.12.1",
- "miette 6.0.1",
+ "miette",
  "mimalloc",
- "owo-colors 4.0.0",
+ "owo-colors",
  "pep508_rs",
  "platform-tags",
  "predicates",
@@ -4544,7 +4507,7 @@ dependencies = [
  "install-wheel-rs",
  "itertools 0.12.1",
  "mimalloc",
- "owo-colors 4.0.0",
+ "owo-colors",
  "pep440_rs",
  "pep508_rs",
  "petgraph",
@@ -4777,7 +4740,7 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
- "indexmap 2.2.5",
+ "indexmap",
  "pep508_rs",
  "pypi-types",
  "pyproject-toml",
@@ -4810,12 +4773,12 @@ dependencies = [
  "distribution-types",
  "either",
  "futures",
- "indexmap 2.2.5",
+ "indexmap",
  "insta",
  "itertools 0.12.1",
  "once-map",
  "once_cell",
- "owo-colors 4.0.0",
+ "owo-colors",
  "pep440_rs",
  "pep508_rs",
  "petgraph",
@@ -4884,7 +4847,7 @@ version = "0.0.1"
 dependencies = [
  "anstream",
  "once_cell",
- "owo-colors 4.0.0",
+ "owo-colors",
  "rustc-hash",
 ]
 
