@@ -28,7 +28,7 @@ pub enum IndexUrl {
 
 impl IndexUrl {
     /// Return the raw URL for the index.
-    pub(crate) fn url(&self) -> &Url {
+    pub fn url(&self) -> &Url {
         match self {
             Self::Pypi(url) => url.raw(),
             Self::Url(url) => url.raw(),

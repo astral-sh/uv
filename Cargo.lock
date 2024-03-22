@@ -4733,6 +4733,7 @@ name = "uv-requirements"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cache-key",
  "configparser",
  "console",
  "ctrlc",
