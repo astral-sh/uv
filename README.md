@@ -4,10 +4,10 @@
 [![image](https://img.shields.io/pypi/v/uv.svg)](https://pypi.python.org/pypi/uv)
 [![image](https://img.shields.io/pypi/l/uv.svg)](https://pypi.python.org/pypi/uv)
 [![image](https://img.shields.io/pypi/pyversions/uv.svg)](https://pypi.python.org/pypi/uv)
-[![Actions status](https://github.com/astral-sh/uv/actions/workflows/ci.yaml/badge.svg)](https://github.com/astral-sh/uv/actions/workflows/ci.yaml/badge.svg)
+[![Actions status](https://github.com/astral-sh/uv/actions/workflows/ci/badge.svg)](https://github.com/astral-sh/uv/actions/workflows/ci/badge.svg)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
 
-![example workflow](https://github.com/astral-sh/uv/actions/workflows/main.yml/badge.svg)
+![example workflow](https://github.com/astral-sh/uv/actions/workflows/main/badge.svg)
 
 An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in
 replacement for common `pip` and `pip-tools` workflows.
