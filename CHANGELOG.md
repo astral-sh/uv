@@ -4,7 +4,7 @@
 
 ### Breaking changes
 
-- Support unnamed requirements directly in pip uninstall ([#2577](https://github.com/astral-sh/uv/pull/2577))
+- `uv pip uninstall` no longer supports editable requirements ([#2577](https://github.com/astral-sh/uv/pull/2577))
 
 ### Enhancements
 
@@ -18,28 +18,25 @@
 - Respect HTTP client options when reading remote requirements files ([#2434](https://github.com/astral-sh/uv/pull/2434))
 - Use PEP 517 build hooks to resolve unnamed requirements ([#2604](https://github.com/astral-sh/uv/pull/2604))
 - Use c-string literals and update trampolines ([#2590](https://github.com/astral-sh/uv/pull/2590))
+- Support unnamed requirements directly in `uv pip uninstall` ([#2577](https://github.com/astral-sh/uv/pull/2577))
+- Add support for unnamed Git and HTTP requirements ([#2578](https://github.com/astral-sh/uv/pull/2578))
+- Make self-update an opt-in Cargo feature ([#2606](https://github.com/astral-sh/uv/pull/2606))
+- Update minimum rust version (cargo) to 1.76 ([#2618](https://github.com/astral-sh/uv/pull/2618))
 
 ### Bug fixes
 
-- Bump axoupdater to v0.3.3 to fix Windows self-updates ([#2598](https://github.com/astral-sh/uv/pull/2598))
-- Fix authentication with JFrog artifactories ([#2592](https://github.com/astral-sh/uv/pull/2592))
-- fix: do not error when there are warnings on stderr ([#2599](https://github.com/astral-sh/uv/pull/2599))
+- Fix self-updates on Windows ([#2598](https://github.com/astral-sh/uv/pull/2598))
+- Fix authentication with usernames that contain `@` characters ([#2592](https://github.com/astral-sh/uv/pull/2592))
+- Do not error when there are warnings on Python interpreter stderr ([#2599](https://github.com/astral-sh/uv/pull/2599))
 
 ### Rust API
 
-- feat: make direct_url public ([#2584](https://github.com/astral-sh/uv/pull/2584))
-- fix: expose `AllowedYanks` ([#2608](https://github.com/astral-sh/uv/pull/2608))
+- Make `InstallDist.direct_url` public ([#2584](https://github.com/astral-sh/uv/pull/2584))
+- Make `AllowedYanks` public ([#2608](https://github.com/astral-sh/uv/pull/2608))
 
 ### Documentation
 
-- :sparkles: return the link to the CI badge ([#2616](https://github.com/astral-sh/uv/pull/2616))
-
-### Other changes
-
-- Add support for unnamed Git and HTTP requirements ([#2578](https://github.com/astral-sh/uv/pull/2578))
-- Make self-update an opt-in Cargo feature ([#2606](https://github.com/astral-sh/uv/pull/2606))
-- Update badge to current CI status. Remove the link to `/actions` ([#2612](https://github.com/astral-sh/uv/pull/2612))
-- Update minimum rust version (cargo) to 1.76 ([#2618](https://github.com/astral-sh/uv/pull/2618))
+- Fix badge to current CI status ([#2612](https://github.com/astral-sh/uv/pull/2612))
 
 ## 0.1.23
 
