@@ -93,14 +93,14 @@ indoc = { version = "2.0.4" }
 itertools = { version = "0.12.1" }
 junction = { version = "1.0.0" }
 mailparse = { version = "0.14.0" }
-miette = { version = "6.0.0" }
+miette = { version = "7.2.0" }
 nanoid = { version = "0.4.0" }
 once_cell = { version = "1.19.0" }
 owo-colors = { version = "4.0.0" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "addbaf184891d66a2dfd93d241a66d13bfe5de86" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "e981e4dfe315582e84e2fd724832fb0e0c50b7aa" }
 pyo3 = { version = "0.20.3" }
 pyo3-log = { version = "0.9.0" }
 pyproject-toml = { version = "0.10.0" }

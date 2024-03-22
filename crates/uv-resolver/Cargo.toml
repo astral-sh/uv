@@ -44,7 +44,7 @@ once_cell = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }
-rkyv = { workspace = true, features = ["strict", "validation"] }
+rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }

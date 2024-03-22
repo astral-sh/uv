@@ -20,7 +20,7 @@ pep440_rs = { workspace = true }
 platform-tags = { workspace = true }
 uv-normalize = { workspace = true }
 
-rkyv = { workspace = true, features = ["strict", "validation"], optional = true }
+rkyv = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 thiserror = { workspace = true }
 url = { workspace = true }

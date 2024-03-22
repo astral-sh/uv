@@ -31,7 +31,7 @@ http = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
-rkyv = { workspace = true, features = ["strict", "validation"] }
+rkyv = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }

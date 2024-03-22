@@ -6,4 +6,4 @@ description = "Normalization for distribution, package and extra anmes"
 
 [dependencies]
 serde = { workspace = true, features = ["derive"], optional = true }
-rkyv = { workspace = true, features = ["strict", "validation"], optional = true }
+rkyv = { workspace = true, optional = true }
