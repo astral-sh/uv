@@ -62,6 +62,7 @@ pub(crate) async fn pip_compile(
     custom_compile_command: Option<String>,
     include_index_url: bool,
     include_find_links: bool,
+    include_marker_expression: bool,
     index_locations: IndexLocations,
     keyring_provider: KeyringProvider,
     setup_py: SetupPyStrategy,
@@ -348,7 +349,7 @@ pub(crate) async fn pip_compile(
 
     // Resolve the dependencies.
     let resolver = Resolver::new(
-        manifest,
+        manifest.clone(),
         options,
         &markers,
         &interpreter,
@@ -415,6 +416,16 @@ pub(crate) async fn pip_compile(
             )
             .green()
         )?;
+    }
+
+    if include_marker_expression {
+        let relevant_markers = resolution.marker_tree(&manifest, &top_level_index, &markers);
+        writeln!(
+            writer,
+            "{}",
+            "# Pinned dependencies known to be valid for:".green()
+        )?;
+        writeln!(writer, "{}", format!("#    {relevant_markers}").green())?;
     }
 
     // Write the index locations to the output channel.

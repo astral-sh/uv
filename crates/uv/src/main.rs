@@ -476,6 +476,15 @@ struct PipCompileArgs {
     #[clap(long)]
     emit_find_links: bool,
 
+    /// Whether to emit a marker string indicating when it is known that the
+    /// resulting set of pinned dependencies is valid.
+    ///
+    /// The pinned dependencies may be valid even when the marker expression is
+    /// false, but when the expression is true, the requirements are known to
+    /// be correct.
+    #[clap(long, hide = true)]
+    emit_marker_expression: bool,
+
     /// Choose the style of the annotation comments, which indicate the source of each package.
     #[clap(long, default_value_t=AnnotationStyle::Split, value_enum)]
     annotation_style: AnnotationStyle,
@@ -1528,6 +1537,7 @@ async fn run() -> Result<ExitStatus> {
                 args.custom_compile_command,
                 args.emit_index_url,
                 args.emit_find_links,
+                args.emit_marker_expression,
                 index_urls,
                 args.keyring_provider,
                 setup_py,
