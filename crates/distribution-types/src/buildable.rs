@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::Path;
 
 use url::Url;
@@ -12,7 +13,7 @@ use crate::{GitSourceDist, Name, PathSourceDist, SourceDist};
 ///
 /// Distributions can _also_ point to URLs in lieu of a registry; however, the primary distinction
 /// here is that a distribution will always include a package name, while a URL will not.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum BuildableSource<'a> {
     Dist(&'a SourceDist),
     Url(SourceUrl<'a>),
@@ -46,7 +47,7 @@ impl std::fmt::Display for BuildableSource<'_> {
 }
 
 /// A reference to a source distribution defined by a URL.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum SourceUrl<'a> {
     Direct(DirectSourceUrl<'a>),
     Git(GitSourceUrl<'a>),
@@ -63,7 +64,7 @@ impl std::fmt::Display for SourceUrl<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct DirectSourceUrl<'a> {
     pub url: &'a Url,
 }
@@ -74,7 +75,7 @@ impl std::fmt::Display for DirectSourceUrl<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct GitSourceUrl<'a> {
     pub url: &'a Url,
 }
@@ -91,10 +92,10 @@ impl<'a> From<&'a GitSourceDist> for GitSourceUrl<'a> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct PathSourceUrl<'a> {
     pub url: &'a Url,
-    pub path: &'a Path,
+    pub path: Cow<'a, Path>,
 }
 
 impl std::fmt::Display for PathSourceUrl<'_> {
@@ -107,7 +108,7 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
     fn from(dist: &'a PathSourceDist) -> Self {
         Self {
             url: &dist.url,
-            path: &dist.path,
+            path: Cow::Borrowed(&dist.path),
         }
     }
 }

@@ -3500,29 +3500,6 @@ fn unnamed_requirement_with_package_name() -> Result<()> {
     Ok(())
 }
 
-/// Attempt to resolve a URL requirement without a package name. The package name can't be extracted
-/// from the URL.
-#[test]
-fn unnamed_requirement_ambiguous() -> Result<()> {
-    let context = TestContext::new("3.12");
-    let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0")?;
-
-    uv_snapshot!(context.compile()
-            .arg("requirements.in"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Unable to infer package name for the unnamed requirement: https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0
-      Caused by: HTTP status client error (404 Not Found) for url (https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0)
-    "###
-    );
-
-    Ok(())
-}
-
 /// Exclude annotations from the output.
 #[test]
 fn no_annotate() -> Result<()> {

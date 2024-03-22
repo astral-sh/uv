@@ -42,6 +42,7 @@ pub struct DistributionDatabase<'a, Context: BuildContext + Send + Sync> {
     cache: &'a Cache,
     reporter: Option<Arc<dyn Reporter>>,
     locks: Arc<Locks>,
+    tags: &'a Tags,
     client: &'a RegistryClient,
     build_context: &'a Context,
     builder: SourceDistCachedBuilder<'a, Context>,
@@ -58,9 +59,10 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             cache,
             reporter: None,
             locks: Arc::new(Locks::default()),
+            tags,
             client,
             build_context,
-            builder: SourceDistCachedBuilder::new(build_context, client, tags),
+            builder: SourceDistCachedBuilder::new(build_context, client),
         }
     }
 
@@ -287,7 +289,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 let built_wheel = self
                     .builder
-                    .download_and_build(BuildableSource::Dist(source_dist))
+                    .download_and_build(&BuildableSource::Dist(source_dist), self.tags)
                     .boxed()
                     .await?;
 
@@ -363,7 +365,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 let metadata = self
                     .builder
-                    .download_and_build_metadata(BuildableSource::Dist(&source_dist))
+                    .download_and_build_metadata(&BuildableSource::Dist(&source_dist))
                     .boxed()
                     .await?;
                 Ok((metadata, precise))
