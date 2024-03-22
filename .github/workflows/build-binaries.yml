@@ -43,6 +43,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Prep README.md"
+        run: python scripts/transform_readme.py --target pypi
       - name: "Build sdist"
         uses: PyO3/maturin-action@v1
         with:
@@ -70,6 +72,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
+      - name: "Prep README.md"
+        run: python scripts/transform_readme.py --target pypi
       - name: "Build wheels - x86_64"
         uses: PyO3/maturin-action@v1
         with:
@@ -109,6 +113,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
+      - name: "Prep README.md"
+        run: python scripts/transform_readme.py --target pypi
       - name: "Build wheels - universal2"
         uses: PyO3/maturin-action@v1
         with:
@@ -159,6 +165,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
+      - name: "Prep README.md"
+        run: python scripts/transform_readme.py --target pypi
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -206,6 +214,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
+      - name: "Prep README.md"
+        run: python scripts/transform_readme.py --target pypi
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -282,6 +292,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Prep README.md"
+        run: python scripts/transform_readme.py --target pypi
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -347,6 +359,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Prep README.md"
+        run: python scripts/transform_readme.py --target pypi
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -414,6 +428,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Prep README.md"
+        run: python scripts/transform_readme.py --target pypi
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -484,6 +500,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
+      - name: "Prep README.md"
+        run: python scripts/transform_readme.py --target pypi
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -546,6 +564,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: "Prep README.md"
+        run: python scripts/transform_readme.py --target pypi
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
