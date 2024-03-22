@@ -6,7 +6,7 @@ use uv_normalize::PackageName;
 use crate::preferences::Preference;
 
 /// A manifest of requirements, constraints, and preferences.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Manifest {
     pub(crate) requirements: Vec<Requirement>,
     pub(crate) constraints: Vec<Requirement>,

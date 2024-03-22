@@ -19,7 +19,7 @@ pub enum PreferenceError {
 }
 
 /// A pinned requirement, as extracted from a `requirements.txt` file.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Preference {
     requirement: Requirement,
     hashes: Vec<Hashes>,
