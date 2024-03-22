@@ -15,7 +15,6 @@ distribution-types = { workspace = true }
 pep508_rs = { workspace = true }
 pypi-types = { workspace = true }
 requirements-txt = { workspace = true, features = ["reqwest"] }
-uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-distribution = { workspace = true }
 uv-fs = { workspace = true }
@@ -31,17 +30,9 @@ ctrlc = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indexmap = { workspace = true }
-itertools = { workspace = true }
-once_cell = { workspace = true }
 pyproject-toml = { workspace = true }
-regex = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
-tempfile = { workspace = true }
-textwrap = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 

@@ -26,7 +26,6 @@ once_cell = { workspace = true }
 pyo3 = { workspace = true, optional = true, features = ["abi3", "extension-module"] }
 pyo3-log = { workspace = true, optional = true }
 regex = { workspace = true }
-rkyv = { workspace = true, features = ["strict"], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
@@ -42,7 +41,7 @@ testing_logger = { version = "0.1.1" }
 
 [features]
 pyo3 = ["dep:pyo3", "pep440_rs/pyo3", "pyo3-log", "tracing", "tracing/log"]
-rkyv = ["dep:rkyv", "pep440_rs/rkyv", "uv-normalize/rkyv"]
+rkyv = ["pep440_rs/rkyv", "uv-normalize/rkyv"]
 serde = ["dep:serde", "pep440_rs/serde", "uv-normalize/serde", "url/serde"]
 tracing = ["dep:tracing", "pep440_rs/tracing"]
 # PEP 508 allows only URLs such as `foo @ https://example.org/foo` or `foo @ file:///home/ferris/foo`, and

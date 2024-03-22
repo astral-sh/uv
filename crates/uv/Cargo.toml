@@ -43,22 +43,17 @@ clap = { workspace = true, features = ["derive", "string"] }
 clap_complete_command = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
-indexmap = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
 miette = { workspace = true, features = ["fancy"] }
-once_cell = { workspace = true }
 owo-colors = { workspace = true }
-pyproject-toml = { workspace = true }
 regex = { workspace = true }
-rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-toml = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
 tracing-subscriber = { workspace = true, features = ["json"] }
