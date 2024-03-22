@@ -36,7 +36,7 @@ uv-warnings = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
-axoupdater = { workspace = true, features = ["github_releases", "tokio"] }
+axoupdater = { workspace = true, features = ["github_releases", "tokio"], optional = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "string"] }
 clap_complete_command = { workspace = true }
@@ -93,6 +93,8 @@ pypi = []
 git = []
 # Introduces a dependency on Maturin.
 maturin = []
+# Adds self-update functionality.
+self-update = ["axoupdater"]
 
 [build-dependencies]
 fs-err = { workspace = true }
