@@ -136,6 +136,7 @@ enum Commands {
     Cache(CacheNamespace),
     /// Manage the `uv` executable.
     #[clap(name = "self")]
+    #[cfg(feature = "self-update")]
     Self_(SelfNamespace),
     /// Clear the cache, removing all entries or those linked to specific packages.
     #[clap(hide = true)]
@@ -151,12 +152,14 @@ enum Commands {
 }
 
 #[derive(Args)]
+#[cfg(feature = "self-update")]
 struct SelfNamespace {
     #[clap(subcommand)]
     command: SelfCommand,
 }
 
 #[derive(Subcommand)]
+#[cfg(feature = "self-update")]
 enum SelfCommand {
     /// Update `uv` to the latest version.
     Update,
@@ -1822,6 +1825,7 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
+        #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
             command: SelfCommand::Update,
         }) => commands::self_update(printer).await,
