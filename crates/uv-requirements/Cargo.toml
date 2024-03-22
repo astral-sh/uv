@@ -10,6 +10,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+cache-key = { workspace = true }
 distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
 pep508_rs = { workspace = true }

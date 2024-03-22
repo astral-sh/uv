@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use rustc_hash::FxHashSet;
 use tracing::{instrument, Level};
 
-use crate::{ExtrasSpecification, RequirementsSource};
+use cache_key::CanonicalUrl;
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::{Requirement, RequirementsTxtRequirement};
 use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
@@ -13,6 +13,8 @@ use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 use uv_warnings::warn_user;
+
+use crate::{ExtrasSpecification, RequirementsSource};
 
 #[derive(Debug, Default)]
 pub struct RequirementsSpecification {
@@ -205,13 +207,15 @@ impl RequirementsSpecification {
                 spec.project = source.project;
             }
 
-            if let Some(url) = source.index_url {
+            if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url {
-                    return Err(anyhow::anyhow!(
-                        "Multiple index URLs specified: `{existing}` vs.` {url}",
-                    ));
+                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
+                        return Err(anyhow::anyhow!(
+                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                        ));
+                    }
                 }
-                spec.index_url = Some(url);
+                spec.index_url = Some(index_url);
             }
             spec.no_index |= source.no_index;
             spec.extra_index_urls.extend(source.extra_index_urls);
@@ -236,13 +240,15 @@ impl RequirementsSpecification {
             spec.constraints.extend(source.constraints);
             spec.constraints.extend(source.overrides);
 
-            if let Some(url) = source.index_url {
+            if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url {
-                    return Err(anyhow::anyhow!(
-                        "Multiple index URLs specified: `{existing}` vs.` {url}",
-                    ));
+                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
+                        return Err(anyhow::anyhow!(
+                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                        ));
+                    }
                 }
-                spec.index_url = Some(url);
+                spec.index_url = Some(index_url);
             }
             spec.no_index |= source.no_index;
             spec.extra_index_urls.extend(source.extra_index_urls);
@@ -267,13 +273,15 @@ impl RequirementsSpecification {
             spec.overrides.extend(source.constraints);
             spec.overrides.extend(source.overrides);
 
-            if let Some(url) = source.index_url {
+            if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url {
-                    return Err(anyhow::anyhow!(
-                        "Multiple index URLs specified: `{existing}` vs.` {url}",
-                    ));
+                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
+                        return Err(anyhow::anyhow!(
+                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                        ));
+                    }
                 }
-                spec.index_url = Some(url);
+                spec.index_url = Some(index_url);
             }
             spec.no_index |= source.no_index;
             spec.extra_index_urls.extend(source.extra_index_urls);
