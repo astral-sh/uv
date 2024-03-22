@@ -10,13 +10,16 @@ use petgraph::Direction;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use url::Url;
 
 use crate::dependency_provider::UvDependencyProvider;
-use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim};
+use distribution_types::{
+    Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim, VersionOrUrl,
+};
 use once_map::OnceMap;
 use pep440_rs::Version;
+use pep508_rs::MarkerEnvironment;
 use pypi_types::{Hashes, Metadata23};
 use uv_normalize::{ExtraName, PackageName};
 
@@ -25,8 +28,8 @@ use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage};
 use crate::redirect::apply_redirect;
-use crate::resolver::VersionsResponse;
-use crate::ResolveError;
+use crate::resolver::{InMemoryIndex, VersionsResponse};
+use crate::{Manifest, ResolveError};
 
 /// Indicate the style of annotation comments, used to indicate the dependencies that requested each
 /// package.
@@ -315,6 +318,141 @@ impl ResolutionGraph {
     /// Return the underlying graph.
     pub fn petgraph(&self) -> &petgraph::graph::Graph<Dist, Range<Version>, petgraph::Directed> {
         &self.petgraph
+    }
+
+    /// Return the marker tree specific to this resolution.
+    ///
+    /// This accepts a manifest, in-memory-index and marker environment. All
+    /// of which should be the same values given to the resolver that produced
+    /// this graph.
+    ///
+    /// The marker tree returned corresponds to an expression that, when true,
+    /// this resolution is guaranteed to be correct. Note though that it's
+    /// possible for resolution to be correct even if the returned marker
+    /// expression is false.
+    ///
+    /// For example, if the root package has a dependency `foo; sys_platform ==
+    /// "macos"` and resolution was performed on Linux, then the marker tree
+    /// returned will contain a `sys_platform == "linux"` expression. This
+    /// means that whenever the marker expression evaluates to true (i.e., the
+    /// current platform is Linux), then the resolution here is correct. But
+    /// it is possible that the resolution is also correct on other platforms
+    /// that aren't macOS, such as Windows. (It is unclear at time of writing
+    /// whether this is fundamentally impossible to compute, or just impossible
+    /// to compute in some cases.)
+    pub fn marker_tree(
+        &self,
+        manifest: &Manifest,
+        index: &InMemoryIndex,
+        marker_env: &MarkerEnvironment,
+    ) -> pep508_rs::MarkerTree {
+        use pep508_rs::{
+            MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
+            MarkerValueVersion,
+        };
+
+        /// A subset of the possible marker values.
+        ///
+        /// We only track the marker parameters that are referenced in a marker
+        /// expression. We'll use references to the parameter later to generate
+        /// values based on the current marker environment.
+        #[derive(Debug, Eq, Hash, PartialEq)]
+        enum MarkerParam {
+            Version(MarkerValueVersion),
+            String(MarkerValueString),
+        }
+
+        /// Add all marker parameters from the given tree to the given set.
+        fn add_marker_params_from_tree(marker_tree: &MarkerTree, set: &mut FxHashSet<MarkerParam>) {
+            match *marker_tree {
+                MarkerTree::Expression(ref expr) => {
+                    add_marker_value(&expr.l_value, set);
+                    add_marker_value(&expr.r_value, set);
+                }
+                MarkerTree::And(ref exprs) | MarkerTree::Or(ref exprs) => {
+                    for expr in exprs {
+                        add_marker_params_from_tree(expr, set);
+                    }
+                }
+            }
+        }
+
+        /// Add the marker value, if it's a marker parameter, to the set
+        /// given.
+        fn add_marker_value(value: &MarkerValue, set: &mut FxHashSet<MarkerParam>) {
+            match *value {
+                MarkerValue::MarkerEnvVersion(ref value_version) => {
+                    set.insert(MarkerParam::Version(value_version.clone()));
+                }
+                MarkerValue::MarkerEnvString(ref value_string) => {
+                    set.insert(MarkerParam::String(value_string.clone()));
+                }
+                // We specifically don't care about these for the
+                // purposes of generating a marker string for a lock
+                // file. Quoted strings are marker values given by the
+                // user. We don't track those here, since we're only
+                // interested in which markers are used.
+                MarkerValue::Extra | MarkerValue::QuotedString(_) => {}
+            }
+        }
+
+        let mut seen_marker_values = FxHashSet::default();
+        for i in self.petgraph.node_indices() {
+            let dist = &self.petgraph[i];
+            let package_id = match dist.version_or_url() {
+                VersionOrUrl::Version(version) => {
+                    PackageId::from_registry(dist.name().clone(), version.clone())
+                }
+                VersionOrUrl::Url(verbatim_url) => PackageId::from_url(verbatim_url.raw()),
+            };
+            let md = index
+                .distributions
+                .get(&package_id)
+                .expect("every package in resolution graph has metadata");
+            for req in &md.requires_dist {
+                let Some(ref marker_tree) = req.marker else {
+                    continue;
+                };
+                add_marker_params_from_tree(marker_tree, &mut seen_marker_values);
+            }
+        }
+        let direct_reqs = manifest
+            .requirements
+            .iter()
+            .chain(&manifest.constraints)
+            .chain(&manifest.overrides);
+        for direct_req in direct_reqs {
+            let Some(ref marker_tree) = direct_req.marker else {
+                continue;
+            };
+            add_marker_params_from_tree(marker_tree, &mut seen_marker_values);
+        }
+
+        // Generate the final marker expression as a conjunction of
+        // strict equality terms.
+        let mut conjuncts = vec![];
+        for marker_param in seen_marker_values {
+            let expr = match marker_param {
+                MarkerParam::Version(value_version) => {
+                    let from_env = marker_env.get_version(&value_version);
+                    MarkerExpression {
+                        l_value: MarkerValue::MarkerEnvVersion(value_version),
+                        operator: MarkerOperator::Equal,
+                        r_value: MarkerValue::QuotedString(from_env.to_string()),
+                    }
+                }
+                MarkerParam::String(value_string) => {
+                    let from_env = marker_env.get_string(&value_string);
+                    MarkerExpression {
+                        l_value: MarkerValue::MarkerEnvString(value_string),
+                        operator: MarkerOperator::Equal,
+                        r_value: MarkerValue::QuotedString(from_env.to_string()),
+                    }
+                }
+            };
+            conjuncts.push(MarkerTree::Expression(expr));
+        }
+        MarkerTree::And(conjuncts)
     }
 }
 
