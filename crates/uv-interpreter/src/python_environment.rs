@@ -93,9 +93,10 @@ impl PythonEnvironment {
     /// In most cases, `purelib` and `platlib` will be the same, and so the iterator will contain
     /// a single element; however, in some distributions, they may be different.
     pub fn site_packages(&self) -> impl Iterator<Item = &Path> {
-        let mut site_packages = self.interpreter.sys_path();
+        let mut site_packages = Vec::new();
         site_packages.push(self.interpreter.purelib());
         site_packages.push(self.interpreter.platlib());
+        site_packages.extend(self.interpreter.sys_path());
         site_packages.dedup();
         site_packages.into_iter()
     }

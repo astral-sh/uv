@@ -46,7 +46,9 @@ impl<'a> SitePackages<'a> {
             // Read the site-packages directory.
             let site_packages = match fs::read_dir(site_packages) {
                 Ok(site_packages) => site_packages,
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    continue;
+                }
                 Err(err) => return Err(err).context("Failed to read site-packages directory"),
             };
 
