@@ -69,6 +69,9 @@ impl<'a> SitePackages<'a> {
 
                     let idx = distributions.len();
 
+                    if by_name.get(dist_info.name()).is_some() {
+                        continue;
+                    }
                     // Index the distribution by name.
                     by_name
                         .entry(dist_info.name().clone())
@@ -77,6 +80,9 @@ impl<'a> SitePackages<'a> {
 
                     // Index the distribution by URL.
                     if let InstalledDist::Url(dist) = &dist_info {
+                        if by_url.get(&dist.url).is_some() {
+                            continue;
+                        }
                         by_url
                             .entry(dist.url.clone())
                             .or_insert_with(Vec::new)
