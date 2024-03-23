@@ -30,6 +30,7 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
     upgrade::{read_lockfile, Upgrade},
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
+    SourceTreeResolver,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
@@ -102,6 +103,7 @@ pub(crate) async fn pip_compile(
         constraints,
         overrides,
         editables,
+        source_trees,
         extras: used_extras,
         index_url,
         extra_index_urls,
@@ -116,20 +118,23 @@ pub(crate) async fn pip_compile(
     )
     .await?;
 
-    // Check that all provided extras are used.
-    if let ExtrasSpecification::Some(extras) = extras {
-        let mut unused_extras = extras
-            .iter()
-            .filter(|extra| !used_extras.contains(extra))
-            .collect::<Vec<_>>();
-        if !unused_extras.is_empty() {
-            unused_extras.sort_unstable();
-            unused_extras.dedup();
-            let s = if unused_extras.len() == 1 { "" } else { "s" };
-            return Err(anyhow!(
-                "Requested extra{s} not found: {}",
-                unused_extras.iter().join(", ")
-            ));
+    // If all the metadata could be statically resolved, validate that every extra was used. If we
+    // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
+    if source_trees.is_empty() {
+        if let ExtrasSpecification::Some(extras) = extras {
+            let mut unused_extras = extras
+                .iter()
+                .filter(|extra| !used_extras.contains(extra))
+                .collect::<Vec<_>>();
+            if !unused_extras.is_empty() {
+                unused_extras.sort_unstable();
+                unused_extras.dedup();
+                let s = if unused_extras.len() == 1 { "" } else { "s" };
+                return Err(anyhow!(
+                    "Requested extra{s} not found: {}",
+                    unused_extras.iter().join(", ")
+                ));
+            }
         }
     }
 
@@ -246,11 +251,26 @@ pub(crate) async fn pip_compile(
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
-    // Convert from unnamed to named requirements.
-    let requirements = NamedRequirementsResolver::new(requirements)
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve(&build_dispatch, &client)
-        .await?;
+    // Resolve the requirements from the provided sources.
+    let requirements = {
+        // Convert from unnamed to named requirements.
+        let mut requirements = NamedRequirementsResolver::new(requirements)
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve(&build_dispatch, &client)
+            .await?;
+
+        // Resolve any source trees into requirements.
+        if !source_trees.is_empty() {
+            requirements.extend(
+                SourceTreeResolver::new(source_trees, &extras)
+                    .with_reporter(ResolverReporter::from(printer))
+                    .resolve(&build_dispatch, &client)
+                    .await?,
+            );
+        }
+
+        requirements
+    };
 
     // Build the editables and add their requirements
     let editable_metadata = if editables.is_empty() {

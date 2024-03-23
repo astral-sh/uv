@@ -31,7 +31,10 @@ use crate::commands::reporters::{
 };
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
-use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
+use uv_requirements::{
+    ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
+    SourceTreeResolver,
+};
 
 /// Install a set of locked requirements into the current Python environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
@@ -69,6 +72,7 @@ pub(crate) async fn pip_sync(
         constraints: _,
         overrides: _,
         editables,
+        source_trees,
         extras: _,
         index_url,
         extra_index_urls,
@@ -77,7 +81,7 @@ pub(crate) async fn pip_sync(
     } = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
 
     // Validate that the requirements are non-empty.
-    let num_requirements = requirements.len() + editables.len();
+    let num_requirements = requirements.len() + source_trees.len() + editables.len();
     if num_requirements == 0 {
         writeln!(printer.stderr(), "No requirements found")?;
         return Ok(ExitStatus::Success);
@@ -178,10 +182,25 @@ pub(crate) async fn pip_sync(
     );
 
     // Convert from unnamed to named requirements.
-    let requirements = NamedRequirementsResolver::new(requirements)
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve(&build_dispatch, &client)
-        .await?;
+    let requirements = {
+        // Convert from unnamed to named requirements.
+        let mut requirements = NamedRequirementsResolver::new(requirements)
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve(&build_dispatch, &client)
+            .await?;
+
+        // Resolve any source trees into requirements.
+        if !source_trees.is_empty() {
+            requirements.extend(
+                SourceTreeResolver::new(source_trees, &ExtrasSpecification::None)
+                    .with_reporter(ResolverReporter::from(printer))
+                    .resolve(&build_dispatch, &client)
+                    .await?,
+            );
+        }
+
+        requirements
+    };
 
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_executable(&venv)?;

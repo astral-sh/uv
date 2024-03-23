@@ -35,7 +35,7 @@ use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
     upgrade::Upgrade, ExtrasSpecification, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification,
+    RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode, Preference,
@@ -95,6 +95,7 @@ pub(crate) async fn pip_install(
         constraints,
         overrides,
         editables,
+        source_trees,
         index_url,
         extra_index_urls,
         no_index,
@@ -153,6 +154,7 @@ pub(crate) async fn pip_install(
     // magnitude faster to validate the environment than to resolve the requirements.
     if reinstall.is_none()
         && upgrade.is_none()
+        && source_trees.is_empty()
         && site_packages.satisfies(&requirements, &editables, &constraints)?
     {
         let num_requirements = requirements.len() + editables.len();
@@ -234,11 +236,26 @@ pub(crate) async fn pip_install(
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
-    // Convert from unnamed to named requirements.
-    let requirements = NamedRequirementsResolver::new(requirements)
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve(&resolve_dispatch, &client)
-        .await?;
+    // Resolve the requirements from the provided sources.
+    let requirements = {
+        // Convert from unnamed to named requirements.
+        let mut requirements = NamedRequirementsResolver::new(requirements)
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve(&resolve_dispatch, &client)
+            .await?;
+
+        // Resolve any source trees into requirements.
+        if !source_trees.is_empty() {
+            requirements.extend(
+                SourceTreeResolver::new(source_trees, extras)
+                    .with_reporter(ResolverReporter::from(printer))
+                    .resolve(&resolve_dispatch, &client)
+                    .await?,
+            );
+        }
+
+        requirements
+    };
 
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command. If an editable is already
