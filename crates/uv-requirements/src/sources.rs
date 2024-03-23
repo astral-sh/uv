@@ -18,6 +18,10 @@ pub enum RequirementsSource {
     RequirementsTxt(PathBuf),
     /// Dependencies were provided via a `pyproject.toml` file (e.g., `pip-compile pyproject.toml`).
     PyprojectToml(PathBuf),
+    /// Dependencies were provided via a `setup.py` file (e.g., `pip-compile setup.py`).
+    SetupPy(PathBuf),
+    /// Dependencies were provided via a `setup.cfg` file (e.g., `pip-compile setup.cfg`).
+    SetupCfg(PathBuf),
 }
 
 impl RequirementsSource {
@@ -26,6 +30,10 @@ impl RequirementsSource {
     pub fn from_requirements_file(path: PathBuf) -> Self {
         if path.ends_with("pyproject.toml") {
             Self::PyprojectToml(path)
+        } else if path.ends_with("setup.py") {
+            Self::SetupPy(path)
+        } else if path.ends_with("setup.cfg") {
+            Self::SetupCfg(path)
         } else {
             Self::RequirementsTxt(path)
         }
@@ -74,16 +82,27 @@ impl RequirementsSource {
 
         Self::Package(name)
     }
+
+    /// Returns `true` if the source allows extras to be specified.
+    pub fn allows_extras(&self) -> bool {
+        matches!(
+            self,
+            Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
+        )
+    }
 }
 
 impl std::fmt::Display for RequirementsSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Package(package) => write!(f, "{package}"),
             Self::Editable(path) => write!(f, "-e {path}"),
-            Self::RequirementsTxt(path) | Self::PyprojectToml(path) => {
+            Self::RequirementsTxt(path)
+            | Self::PyprojectToml(path)
+            | Self::SetupPy(path)
+            | Self::SetupCfg(path) => {
                 write!(f, "{}", path.simplified_display())
             }
-            Self::Package(package) => write!(f, "{package}"),
         }
     }
 }
