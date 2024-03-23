@@ -1464,17 +1464,17 @@ async fn run() -> Result<ExitStatus> {
             let requirements = args
                 .src_file
                 .into_iter()
-                .map(RequirementsSource::from_path)
+                .map(RequirementsSource::from_requirements_file)
                 .collect::<Vec<_>>();
             let constraints = args
                 .constraint
                 .into_iter()
-                .map(RequirementsSource::from_path)
+                .map(RequirementsSource::from_constraints_file)
                 .collect::<Vec<_>>();
             let overrides = args
                 .r#override
                 .into_iter()
-                .map(RequirementsSource::from_path)
+                .map(RequirementsSource::from_overrides_file)
                 .collect::<Vec<_>>();
             let index_urls = IndexLocations::new(
                 args.index_url.and_then(Maybe::into_option),
@@ -1567,7 +1567,7 @@ async fn run() -> Result<ExitStatus> {
             let sources = args
                 .src_file
                 .into_iter()
-                .map(RequirementsSource::from_path)
+                .map(RequirementsSource::from_requirements_file)
                 .collect::<Vec<_>>();
             let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
             let no_binary = NoBinary::from_args(args.no_binary);
@@ -1618,18 +1618,18 @@ async fn run() -> Result<ExitStatus> {
                 .chain(
                     args.requirement
                         .into_iter()
-                        .map(RequirementsSource::from_path),
+                        .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Vec<_>>();
             let constraints = args
                 .constraint
                 .into_iter()
-                .map(RequirementsSource::from_path)
+                .map(RequirementsSource::from_constraints_file)
                 .collect::<Vec<_>>();
             let overrides = args
                 .r#override
                 .into_iter()
-                .map(RequirementsSource::from_path)
+                .map(RequirementsSource::from_overrides_file)
                 .collect::<Vec<_>>();
             let index_urls = IndexLocations::new(
                 args.index_url.and_then(Maybe::into_option),
@@ -1714,7 +1714,7 @@ async fn run() -> Result<ExitStatus> {
                 .chain(
                     args.requirement
                         .into_iter()
-                        .map(RequirementsSource::from_path),
+                        .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Vec<_>>();
             commands::pip_uninstall(

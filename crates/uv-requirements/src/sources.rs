@@ -4,6 +4,7 @@ use console::Term;
 
 use uv_fs::Simplified;
 use uv_normalize::ExtraName;
+use uv_warnings::warn_user;
 
 use crate::confirm;
 
@@ -20,13 +21,34 @@ pub enum RequirementsSource {
 }
 
 impl RequirementsSource {
-    /// Parse a [`RequirementsSource`] from a [`PathBuf`].
-    pub fn from_path(path: PathBuf) -> Self {
+    /// Parse a [`RequirementsSource`] from a [`PathBuf`]. The file type is determined by the file
+    /// extension.
+    pub fn from_requirements_file(path: PathBuf) -> Self {
         if path.ends_with("pyproject.toml") {
             Self::PyprojectToml(path)
         } else {
             Self::RequirementsTxt(path)
         }
+    }
+
+    /// Parse a [`RequirementsSource`] from a constraints file.
+    pub fn from_constraints_file(path: PathBuf) -> Self {
+        if path.ends_with("pyproject.toml") {
+            warn_user!(
+                "The file `{}` appears to be a `pyproject.toml` file, but constraints must be specified in `requirements.txt` format.", path.user_display()
+            );
+        }
+        Self::RequirementsTxt(path)
+    }
+
+    /// Parse a [`RequirementsSource`] from an overrides file.
+    pub fn from_overrides_file(path: PathBuf) -> Self {
+        if path.ends_with("pyproject.toml") {
+            warn_user!(
+                "The file `{}` appears to be a `pyproject.toml` file, but overrides must be specified in `requirements.txt` format.", path.user_display()
+            );
+        }
+        Self::RequirementsTxt(path)
     }
 
     /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a package.
