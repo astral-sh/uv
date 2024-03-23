@@ -32,6 +32,7 @@ pub struct Interpreter {
     base_prefix: PathBuf,
     base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
+    sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
     tags: OnceCell<Tags>,
 }
@@ -57,6 +58,7 @@ impl Interpreter {
             base_prefix: info.base_prefix,
             base_executable: info.base_executable,
             sys_executable: info.sys_executable,
+            sys_path: info.sys_path,
             stdlib: info.stdlib,
             tags: OnceCell::new(),
         })
@@ -86,6 +88,7 @@ impl Interpreter {
             base_prefix: PathBuf::from("/dev/null"),
             base_executable: None,
             sys_executable: PathBuf::from("/dev/null"),
+            sys_path: vec![],
             stdlib: PathBuf::from("/dev/null"),
             tags: OnceCell::new(),
         }
@@ -254,6 +257,14 @@ impl Interpreter {
         &self.sys_executable
     }
 
+    /// Return the `sys.path` for this Python interpreter.
+    pub fn sys_path(&self) -> Vec<&Path> {
+        self.sys_path
+            .iter()
+            .map(|path| path.as_path())
+            .collect::<Vec<&Path>>()
+    }
+
     /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn stdlib(&self) -> &Path {
         &self.stdlib
@@ -360,6 +371,7 @@ struct InterpreterInfo {
     base_prefix: PathBuf,
     base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
+    sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
 }
 

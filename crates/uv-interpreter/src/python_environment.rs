@@ -93,13 +93,7 @@ impl PythonEnvironment {
     /// In most cases, `purelib` and `platlib` will be the same, and so the iterator will contain
     /// a single element; however, in some distributions, they may be different.
     pub fn site_packages(&self) -> impl Iterator<Item = &Path> {
-        std::iter::once(self.interpreter.purelib()).chain(
-            if self.interpreter.purelib() == self.interpreter.platlib() {
-                None
-            } else {
-                Some(self.interpreter.platlib())
-            },
-        )
+        self.interpreter.sys_path().into_iter()
     }
 
     /// Returns the path to the `bin` directory inside a virtual environment.
