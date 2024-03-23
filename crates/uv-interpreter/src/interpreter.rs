@@ -261,7 +261,7 @@ impl Interpreter {
     pub fn sys_path(&self) -> Vec<&Path> {
         self.sys_path
             .iter()
-            .map(|path| path.as_path())
+            .map(std::path::PathBuf::as_path)
             .collect::<Vec<&Path>>()
     }
 
