@@ -520,6 +520,7 @@ def main() -> None:
         "prefix": sys.prefix,
         "base_executable": getattr(sys, "_base_executable", None),
         "sys_executable": sys.executable,
+        "sys_path": sys.path,
         "stdlib": sysconfig.get_path("stdlib"),
         "scheme": get_scheme(),
         "virtualenv": get_virtualenv(),
