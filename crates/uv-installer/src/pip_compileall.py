@@ -36,6 +36,20 @@ with warnings.catch_warnings():
                 file=sys.stderr,
             )
             sys.exit(1)
+    if invalidation_mode is None:
+        try:
+            invalidation_mode = py_compile._get_default_invalidation_mode()
+        except AttributeError:
+            invalidation_mode = None  # guard against implementation details
+
+    # Unlike pip, we will usually set force=False. It's unclear why pip sets force=True, but it
+    # doesn't matter much for them, as the only compile newly installed files.
+    force = False
+    if invalidation_mode != py_compile.PycInvalidationMode.TIMESTAMP:
+        # Note that compileall has undesirable, arguably buggy behaviour. Even if invalidation_mode
+        # is hash based, compileall will not recompile the file if the existing pyc is timestamp
+        # based and has a matching mtime (unless force=True).
+        force = True
 
     # In rust, we provide one line per file to compile.
     for path in sys.stdin:
@@ -47,7 +61,7 @@ with warnings.catch_warnings():
         # We'd like to show those errors, but given that pip thinks that's totally fine,
         # we can't really change that.
         success = compileall.compile_file(
-            path, invalidation_mode=invalidation_mode, force=True, quiet=2
+            path, invalidation_mode=invalidation_mode, force=force, quiet=2
         )
         # We're ready for the next file.
         print(path)
