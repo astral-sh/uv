@@ -43,7 +43,7 @@ with warnings.catch_warnings():
             invalidation_mode = None  # guard against implementation details
 
     # Unlike pip, we will usually set force=False. It's unclear why pip sets force=True, but it
-    # doesn't matter much for them, as the only compile newly installed files.
+    # doesn't matter much for them, as pip only compiles newly installed files.
     force = False
     if invalidation_mode != py_compile.PycInvalidationMode.TIMESTAMP:
         # Note that compileall has undesirable, arguably buggy behaviour. Even if invalidation_mode
