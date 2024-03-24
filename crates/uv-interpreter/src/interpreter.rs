@@ -588,6 +588,7 @@ mod tests {
                 "base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
                 "prefix": "/home/ferris/projects/uv/.venv",
                 "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
+                "sys_path": [],
                 "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
                 "scheme": {
                     "data": "/home/ferris/.pyenv/versions/3.12.0",

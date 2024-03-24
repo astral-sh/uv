@@ -96,7 +96,13 @@ impl PythonEnvironment {
         let mut site_packages = Vec::new();
         site_packages.push(self.interpreter.purelib());
         site_packages.push(self.interpreter.platlib());
-        site_packages.extend(self.interpreter.sys_path());
+        site_packages.extend(
+            self.interpreter
+                .sys_path()
+                .iter()
+                .filter(|path| path.ends_with("site-packages") || path.ends_with("dist-packages")),
+        );
+        site_packages.sort();
         site_packages.dedup();
         site_packages.into_iter()
     }
