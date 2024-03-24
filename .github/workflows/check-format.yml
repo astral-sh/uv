@@ -1,0 +1,15 @@
+name: Format
+
+on:
+  pull_request:
+
+jobs:
+  format:
+    name: Check code formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Setup Python
+        uses: ./.github/actions/setup
+      - run: ruff format --check

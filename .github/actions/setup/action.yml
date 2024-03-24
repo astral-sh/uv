@@ -1,0 +1,19 @@
+runs:
+  using: "composite"
+  steps:
+    # https://github.com/actions/setup-python
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    # https://github.com/yezz123/setup-uv
+    - name: Setup venv with package dependencies
+      uses: yezz123/setup-uv@v4
+      with:
+        uv-version: "0.1.24"
+    - name: Setup package dependencies
+      run: uv venv; uv pip install --system ruff
+      shell: bash
+    - name: Check command availability
+      run: ruff -V
+      shell: bash
