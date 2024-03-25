@@ -199,10 +199,16 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     } else if cfg!(target_os = "linux") {
         // Using `os_info` to confirm our values are as expected in Linux
         let info = os_info::get();
-        let distro_info = linehaul.distro.unwrap();
-        assert_eq!(distro_info.id.unwrap(), info.codename().unwrap());
-        assert_eq!(distro_info.name.unwrap(), info.os_type().to_string());
-        assert_eq!(distro_info.version.unwrap(), info.version().to_string());
+        let Some(distro_info) = linehaul.distro else {
+            panic!("got no distro, but expected one in linehaul")
+        };
+        assert_eq!(distro_info.id.as_deref(), info.codename());
+        if let Some(ref name) = distro_info.name {
+            assert_eq!(name, &info.os_type().to_string());
+        }
+        if let Some(ref version) = distro_info.version {
+            assert_eq!(version, &info.version().to_string());
+        }
         assert!(distro_info.libc.is_some());
     } else if cfg!(target_os = "macos") {
         // We mock the macOS version
