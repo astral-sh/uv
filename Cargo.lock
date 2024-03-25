@@ -4336,6 +4336,7 @@ dependencies = [
  "regex",
  "requirements-txt",
  "reqwest",
+ "rustc-hash",
  "serde",
  "serde_json",
  "tempfile",
