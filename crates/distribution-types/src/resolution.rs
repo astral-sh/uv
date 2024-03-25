@@ -3,7 +3,7 @@ use rustc_hash::FxHashMap;
 use pep508_rs::Requirement;
 use uv_normalize::PackageName;
 
-use crate::{BuiltDist, Dist, InstalledDist, Name, PathSourceDist, ResolvedDist, SourceDist};
+use crate::{BuiltDist, Dist, InstalledDist, Name, ResolvedDist, SourceDist};
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]
@@ -59,19 +59,17 @@ impl Resolution {
     /// Return the set of [`Requirement`]s that this resolution represents, exclusive of any
     /// editable requirements.
     pub fn requirements(&self) -> Vec<Requirement> {
-        let mut requirements =
-            self.0
-                .values()
-                .filter_map(|dist| match dist {
-                    // Remove editable requirements
-                    &ResolvedDist::Installable(Dist::Source(SourceDist::Path(
-                        PathSourceDist { editable: true, .. },
-                    ))) => None,
-                    // Remove already-installed distributions
-                    &ResolvedDist::Installed(_) => None,
-                    dist => Some(Requirement::from(dist.clone())),
-                })
-                .collect::<Vec<_>>();
+        let mut requirements = self
+            .0
+            .values()
+            // Remove editable requirements
+            .filter(|dist| !dist.is_editable())
+            // Remove already-installed distributions
+            .filter_map(|dist| match dist {
+                &ResolvedDist::Installed(_) => None,
+                dist @ ResolvedDist::Installable(_) => Some(Requirement::from(dist.clone())),
+            })
+            .collect::<Vec<_>>();
         requirements.sort_unstable_by(|a, b| a.name.cmp(&b.name));
         requirements
     }

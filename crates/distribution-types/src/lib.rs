@@ -363,6 +363,14 @@ impl Dist {
         })))
     }
 
+    /// Return true if the distribution is editable.
+    pub fn is_editable(&self) -> bool {
+        match self {
+            Self::Source(dist) => dist.is_editable(),
+            Self::Built(_) => false,
+        }
+    }
+
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
     pub fn file(&self) -> Option<&File> {
         match self {
@@ -425,6 +433,14 @@ impl SourceDist {
                 ..dist
             }),
             dist => dist,
+        }
+    }
+
+    /// Return true if the distribution is editable.
+    pub fn is_editable(&self) -> bool {
+        match self {
+            Self::Path(PathSourceDist { editable, .. }) => *editable,
+            _ => false,
         }
     }
 }

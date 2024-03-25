@@ -23,6 +23,16 @@ pub enum ResolvedDistRef<'a> {
     Installable(&'a Dist),
 }
 
+impl ResolvedDist {
+    /// Return true if the distribution is editable.
+    pub fn is_editable(&self) -> bool {
+        match self {
+            Self::Installable(dist) => dist.is_editable(),
+            Self::Installed(dist) => dist.is_editable(),
+        }
+    }
+}
+
 impl ResolvedDistRef<'_> {
     pub fn as_owned(&self) -> ResolvedDist {
         match self {
