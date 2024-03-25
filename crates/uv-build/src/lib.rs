@@ -213,6 +213,9 @@ pub struct Project {
     pub version: Option<Version>,
     /// The Python version requirements of the project
     pub requires_python: Option<VersionSpecifiers>,
+    /// Specifies which fields listed by PEP 621 were intentionally unspecified so another tool
+    /// can/will provide such metadata dynamically.
+    pub dynamic: Option<Vec<String>>,
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
@@ -347,6 +350,8 @@ pub struct SourceBuild {
     config_settings: ConfigSettings,
     /// If performing a PEP 517 build, the backend to use.
     pep517_backend: Option<Pep517Backend>,
+    /// The PEP 621 project metadata, if any.
+    project: Option<Project>,
     /// The virtual environment in which to build the source distribution.
     venv: PythonEnvironment,
     /// Populated if `prepare_metadata_for_build_wheel` was called.
@@ -399,8 +404,9 @@ impl SourceBuild {
         let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
 
         // Check if we have a PEP 517 build backend.
-        let pep517_backend = Self::get_pep517_backend(setup_py, &source_tree, &default_backend)
-            .map_err(|err| *err)?;
+        let (pep517_backend, project) =
+            Self::extract_pep517_backend(&source_tree, setup_py, &default_backend)
+                .map_err(|err| *err)?;
 
         // Create a virtual environment, or install into the shared environment if requested.
         let venv = match build_isolation {
@@ -487,6 +493,7 @@ impl SourceBuild {
             temp_dir,
             source_tree,
             pep517_backend,
+            project,
             venv,
             build_kind,
             config_settings,
@@ -542,17 +549,18 @@ impl SourceBuild {
         })
     }
 
-    fn get_pep517_backend(
-        setup_py: SetupPyStrategy,
+    /// Extract the PEP 517 backend from the `pyproject.toml` or `setup.py` file.
+    fn extract_pep517_backend(
         source_tree: &Path,
+        setup_py: SetupPyStrategy,
         default_backend: &Pep517Backend,
-    ) -> Result<Option<Pep517Backend>, Box<Error>> {
+    ) -> Result<(Option<Pep517Backend>, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
                 let pyproject_toml: PyProjectToml =
                     toml::from_str(&toml).map_err(Error::InvalidPyprojectToml)?;
-                if let Some(build_system) = pyproject_toml.build_system {
-                    Ok(Some(Pep517Backend {
+                let backend = if let Some(build_system) = pyproject_toml.build_system {
+                    Pep517Backend {
                         // If `build-backend` is missing, inject the legacy setuptools backend, but
                         // retain the `requires`, to match `pip` and `build`. Note that while PEP 517
                         // says that in this case we "should revert to the legacy behaviour of running
@@ -565,12 +573,13 @@ impl SourceBuild {
                             .unwrap_or_else(|| "setuptools.build_meta:__legacy__".to_string()),
                         backend_path: build_system.backend_path,
                         requirements: build_system.requires,
-                    }))
+                    }
                 } else {
                     // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
                     // a PEP 517 build using the default backend, to match `pip` and `build`.
-                    Ok(Some(default_backend.clone()))
-                }
+                    default_backend.clone()
+                };
+                Ok((Some(backend), pyproject_toml.project))
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // We require either a `pyproject.toml` or a `setup.py` file at the top level.
@@ -587,8 +596,8 @@ impl SourceBuild {
                 // 517 builds the default in the future.
                 // See: https://github.com/pypa/pip/issues/9175.
                 match setup_py {
-                    SetupPyStrategy::Pep517 => Ok(Some(default_backend.clone())),
-                    SetupPyStrategy::Setuptools => Ok(None),
+                    SetupPyStrategy::Pep517 => Ok((Some(default_backend.clone()), None)),
+                    SetupPyStrategy::Setuptools => Ok((None, None)),
                 }
             }
             Err(err) => Err(Box::new(err.into())),
@@ -605,6 +614,36 @@ impl SourceBuild {
         // We've already called this method; return the existing result.
         if let Some(metadata_dir) = &self.metadata_directory {
             return Ok(Some(metadata_dir.clone()));
+        }
+
+        // Hatch allows for highly dynamic customization of metadata via hooks. In such cases, Hatch
+        // can't uphold the PEP 517 contract, in that the metadata Hatch would return by
+        // `prepare_metadata_for_build_wheel` isn't guaranteed to match that of the built wheel.
+        //
+        // Hatch disables `prepare_metadata_for_build_wheel` entirely for pip. We'll instead disable
+        // it on our end when metadata is defined as "dynamic" in the pyproject.toml, which should
+        // allow us to leverage the hook in _most_ cases while still avoiding incorrect metadata for
+        // the remaining cases.
+        //
+        // This heuristic will have false positives (i.e., there will be some Hatch projects for
+        // which we could have safely called `prepare_metadata_for_build_wheel`, despite having
+        // dynamic metadata). However, false positives are preferable to false negatives, since
+        // this is just an optimization.
+        //
+        // See: https://github.com/astral-sh/uv/issues/2130
+        if pep517_backend.backend == "hatchling.build" {
+            if self
+                .project
+                .as_ref()
+                .and_then(|project| project.dynamic.as_ref())
+                .is_some_and(|dynamic| {
+                    dynamic
+                        .iter()
+                        .any(|field| field == "dependencies" || field == "optional-dependencies")
+                })
+            {
+                return Ok(None);
+            }
         }
 
         let metadata_directory = self.temp_dir.path().join("metadata_directory");
