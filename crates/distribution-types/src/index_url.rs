@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use pep508_rs::{expand_env_vars, split_scheme, Scheme, VerbatimUrl};
+use pep508_rs::{expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl};
 use uv_fs::normalize_url_path;
 
 use crate::Verbatim;
@@ -124,9 +124,10 @@ impl FromStr for FlatIndexLocation {
         // Parse the expanded path.
         if let Some((scheme, path)) = split_scheme(&expanded) {
             match Scheme::parse(scheme) {
-                // Ex) `file:///home/ferris/project/scripts/...` or `file:../ferris/`
+                // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
                 Some(Scheme::File) => {
-                    let path = path.strip_prefix("//").unwrap_or(path);
+                    // Strip the leading slashes, along with the `localhost` host, if present.
+                    let path = strip_host(path);
 
                     // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
                     let path = normalize_url_path(path);
