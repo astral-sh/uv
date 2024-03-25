@@ -14,6 +14,9 @@
   "cargo": {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     "rangeStrategy": "update-lockfile",
+    "fileMatch": [
+      "^crates/.*Cargo\\.toml$",
+    ],
   },
   "pre-commit": {
     "enabled": true,
