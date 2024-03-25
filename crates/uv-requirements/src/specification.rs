@@ -177,6 +177,28 @@ impl RequirementsSpecification {
                     }
                 }
             }
+            RequirementsSource::SetupPy(path) | RequirementsSource::SetupCfg(path) => {
+                let path = fs_err::canonicalize(path)?;
+                let source_tree = path.parent().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "The file `{}` appears to be a `setup.py` or `setup.cfg` file, which must be in a directory",
+                        path.user_display()
+                    )
+                })?;
+                Self {
+                    project: None,
+                    requirements: vec![],
+                    constraints: vec![],
+                    overrides: vec![],
+                    editables: vec![],
+                    source_trees: vec![source_tree.to_path_buf()],
+                    extras: FxHashSet::default(),
+                    index_url: None,
+                    extra_index_urls: vec![],
+                    no_index: false,
+                    find_links: vec![],
+                }
+            }
         })
     }
 

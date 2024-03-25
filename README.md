@@ -94,9 +94,10 @@ uv pip install "flask[dotenv]"      # Install Flask with "dotenv" extra.
 To generate a set of locked dependencies:
 
 ```shell
-uv pip compile pyproject.toml -o requirements.txt   # Read a pyproject.toml file.
-uv pip compile requirements.in -o requirements.txt  # Read a requirements.in file.
-echo flask | uv pip compile - -o requirements.txt  # Read from stdin.
+uv pip compile requirements.in -o requirements.txt    # Read a requirements.in file.
+uv pip compile pyproject.toml -o requirements.txt     # Read a pyproject.toml file.
+uv pip compile setup.py -o requirements.txt           # Read a setup.py file.
+echo flask | uv pip compile - -o requirements.txt     # Read from stdin.
 uv pip freeze | uv pip compile - -o requirements.txt  # Lock the current environment.
 ```
 
