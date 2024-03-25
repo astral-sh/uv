@@ -264,6 +264,24 @@ pub fn split_scheme(s: &str) -> Option<(&str, &str)> {
     Some((scheme, rest))
 }
 
+/// Strip the `file://localhost/` host from a file path.
+pub fn strip_host(path: &str) -> &str {
+    // Ex) `file://localhost/...`.
+    if let Some(path) = path
+        .strip_prefix("//localhost")
+        .filter(|path| path.starts_with('/'))
+    {
+        return path;
+    }
+
+    // Ex) `file:///...`.
+    if let Some(path) = path.strip_prefix("//") {
+        return path;
+    }
+
+    path
+}
+
 /// Split the fragment from a URL.
 ///
 /// For example, given `file:///home/ferris/project/scripts#hash=somehash`, returns

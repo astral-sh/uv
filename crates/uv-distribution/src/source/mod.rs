@@ -1284,7 +1284,7 @@ pub async fn download_and_extract_archive(
     client: &RegistryClient,
 ) -> Result<ExtractedSource, Error> {
     match Scheme::parse(url.scheme()) {
-        // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`.
+        // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
         Some(Scheme::File) => {
             let path = url.to_file_path().expect("URL to be a file path");
             extract_archive(&path, cache).await

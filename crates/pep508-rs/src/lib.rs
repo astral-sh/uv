@@ -46,7 +46,7 @@ use uv_fs::normalize_url_path;
 // Parity with the crates.io version of pep508_rs
 use crate::verbatim_url::VerbatimUrlError;
 pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
-pub use verbatim_url::{expand_env_vars, split_scheme, Scheme, VerbatimUrl};
+pub use verbatim_url::{expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl};
 
 mod marker;
 mod verbatim_url;
@@ -1018,9 +1018,10 @@ fn preprocess_url(
 
     if let Some((scheme, path)) = split_scheme(&expanded) {
         match Scheme::parse(scheme) {
-            // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`.
+            // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
             Some(Scheme::File) => {
-                let path = path.strip_prefix("//").unwrap_or(path);
+                // Strip the leading slashes, along with the `localhost` host, if present.
+                let path = strip_host(path);
 
                 // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
                 let path = normalize_url_path(path);
@@ -1156,9 +1157,10 @@ fn preprocess_unnamed_url(
 
     if let Some((scheme, path)) = split_scheme(&expanded) {
         match Scheme::parse(scheme) {
-            // Ex) `file:///home/ferris/project/scripts/...` or `file:../editable/`.
+            // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
             Some(Scheme::File) => {
-                let path = path.strip_prefix("//").unwrap_or(path);
+                // Strip the leading slashes, along with the `localhost` host, if present.
+                let path = strip_host(path);
 
                 // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
                 let path = normalize_url_path(path);
