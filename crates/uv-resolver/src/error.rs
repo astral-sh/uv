@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::convert::Infallible;
 use std::fmt::Formatter;
 use std::ops::Deref;
 
@@ -16,6 +15,7 @@ use pep508_rs::Requirement;
 use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
+use crate::dependency_provider::UvDependencyProvider;
 use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
 use crate::resolver::{UnavailablePackage, VersionsResponse};
@@ -100,12 +100,8 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
     }
 }
 
-impl From<pubgrub::error::PubGrubError<PubGrubPackage, Range<Version>, Infallible>>
-    for ResolveError
-{
-    fn from(
-        value: pubgrub::error::PubGrubError<PubGrubPackage, Range<Version>, Infallible>,
-    ) -> Self {
+impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
+    fn from(value: pubgrub::error::PubGrubError<UvDependencyProvider>) -> Self {
         match value {
             // These are all never type variant that can never match, but never is experimental
             pubgrub::error::PubGrubError::ErrorChoosingPackageVersion(_)

@@ -20,6 +20,7 @@ mod bare;
 mod candidate_selector;
 mod constraints;
 mod dependency_mode;
+mod dependency_provider;
 mod editables;
 mod error;
 mod finder;

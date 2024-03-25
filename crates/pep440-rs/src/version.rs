@@ -2509,25 +2509,6 @@ fn parse_u64(bytes: &[u8]) -> Result<u64, VersionParseError> {
 pub static MIN_VERSION: once_cell::sync::Lazy<Version> =
     once_cell::sync::Lazy::new(|| Version::from_str("0a0.dev0").unwrap());
 
-#[cfg(feature = "pubgrub")]
-impl pubgrub::version::Version for Version {
-    fn lowest() -> Self {
-        MIN_VERSION.to_owned()
-    }
-
-    fn bump(&self) -> Self {
-        let mut next = self.clone();
-        if let Some(dev) = next.dev() {
-            next = next.with_dev(Some(dev + 1));
-        } else if let Some(post) = next.post() {
-            next = next.with_post(Some(post + 1));
-        } else {
-            next = next.with_post(Some(0)).with_dev(Some(0));
-        }
-        next
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

@@ -17,7 +17,7 @@ cache-key = { workspace = true }
 distribution-filename = { workspace = true, features = ["serde"] }
 distribution-types = { workspace = true }
 once-map = { workspace = true }
-pep440_rs = { workspace = true, features = ["pubgrub"] }
+pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
