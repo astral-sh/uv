@@ -94,8 +94,7 @@ impl<'a> SourceTreeResolver<'a> {
 
         let metadata = builder
             .download_and_build_metadata(&source)
-            .await
-            .context("Failed to build source distribution")?;
+            .await?;
 
         // Determine the appropriate requirements to return based on the extras. This involves
         // evaluating the `extras` expression in any markers, but preserving the remaining marker

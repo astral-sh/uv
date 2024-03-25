@@ -27,7 +27,7 @@ use tracing::{debug, info_span, instrument, Instrument};
 
 use distribution_types::Resolution;
 use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::Requirement;
+use pep508_rs::{PackageName, Requirement};
 use uv_fs::{PythonExt, Simplified};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_traits::{
@@ -72,7 +72,7 @@ pub enum Error {
     IO(#[from] io::Error),
     #[error("Invalid source distribution: {0}")]
     InvalidSourceDist(String),
-    #[error("Invalid pyproject.toml")]
+    #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectToml(#[from] toml::de::Error),
     #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
     EditableSetupPy,
@@ -208,7 +208,7 @@ pub struct PyProjectToml {
 #[serde(rename_all = "kebab-case")]
 pub struct Project {
     /// The name of the project
-    pub name: String,
+    pub name: PackageName,
     /// The version of the project as supported by PEP 440
     pub version: Option<Version>,
     /// The Python version requirements of the project

@@ -164,7 +164,8 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to build: file:///private/var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpaR20PS/
+      Caused by: Invalid `pyproject.toml`
       Caused by: TOML parse error at line 1, column 5
       |
     1 | 123 - 456
@@ -191,7 +192,8 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
+    error: Failed to build: file:///private/var/folders/nt/6gf2v7_s3k13zq_t3944rwz40000gn/T/.tmpkFQdVF/
+      Caused by: Invalid `pyproject.toml`
       Caused by: TOML parse error at line 1, column 1
       |
     1 | [project]
@@ -215,7 +217,12 @@ dependencies = ["flask==1.0.x"]
 "#,
     )?;
 
-    uv_snapshot!(command(&context)
+        let filters = [(r"file://.*", "[SOURCE_DIR]"), (r#"File ".*[/\\]site-packages"#, "File \"[SOURCE_DIR]")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, command(&context)
         .arg("-r")
         .arg("pyproject.toml"), @r###"
     success: false
@@ -223,15 +230,58 @@ dependencies = ["flask==1.0.x"]
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `pyproject.toml`
-      Caused by: TOML parse error at line 3, column 16
-      |
-    3 | dependencies = ["flask==1.0.x"]
-      |                ^^^^^^^^^^^^^^^^
-    after parsing 1.0, found ".x" after it, which is not part of a valid version
-    flask==1.0.x
-         ^^^^^^^
+    error: Failed to build: [SOURCE_DIR]
+      Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit status: 1
+    --- stdout:
+    configuration error: `project.dependencies[0]` must be pep508
+    DESCRIPTION:
+        Project dependency specification according to PEP 508
 
+    GIVEN VALUE:
+        "flask==1.0.x"
+
+    OFFENDING RULE: 'format'
+
+    DEFINITION:
+        {
+            "$id": "#/definitions/dependency",
+            "title": "Dependency",
+            "type": "string",
+            "format": "pep508"
+        }
+    --- stderr:
+    Traceback (most recent call last):
+      File "<string>", line 14, in <module>
+      File "[SOURCE_DIR]/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+        return self._get_build_requires(config_settings, requirements=['wheel'])
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "[SOURCE_DIR]/setuptools/build_meta.py", line 295, in _get_build_requires
+        self.run_setup()
+      File "[SOURCE_DIR]/setuptools/build_meta.py", line 487, in run_setup
+        super().run_setup(setup_script=setup_script)
+      File "[SOURCE_DIR]/setuptools/build_meta.py", line 311, in run_setup
+        exec(code, locals())
+      File "<string>", line 1, in <module>
+      File "[SOURCE_DIR]/setuptools/__init__.py", line 104, in setup
+        return distutils.core.setup(**attrs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "[SOURCE_DIR]/setuptools/_distutils/core.py", line 159, in setup
+        dist.parse_config_files()
+      File "[SOURCE_DIR]/_virtualenv.py", line 22, in parse_config_files
+        result = old_parse_config_files(self, *args, **kwargs)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "[SOURCE_DIR]/setuptools/dist.py", line 631, in parse_config_files
+        pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
+      File "[SOURCE_DIR]/setuptools/config/pyprojecttoml.py", line 68, in apply_configuration
+        config = read_configuration(filepath, True, ignore_option_errors, dist)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "[SOURCE_DIR]/setuptools/config/pyprojecttoml.py", line 129, in read_configuration
+        validate(subset, filepath)
+      File "[SOURCE_DIR]/setuptools/config/pyprojecttoml.py", line 57, in validate
+        raise ValueError(f"{error}/n{summary}") from None
+    ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
+    configuration error: `project.dependencies[0]` must be pep508
+    ---
     "###
     );
 

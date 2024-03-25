@@ -4,6 +4,7 @@ pub use crate::sources::*;
 pub use crate::specification::*;
 
 mod confirm;
+mod pyproject;
 mod resolver;
 mod source_tree;
 mod sources;
