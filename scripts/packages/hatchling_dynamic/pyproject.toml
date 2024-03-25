@@ -1,0 +1,10 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hatchling-dynamic"
+version = "1.0.0"
+dynamic = ["dependencies"]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
