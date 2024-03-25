@@ -186,6 +186,11 @@ rest_pat_in_fully_bound_structs = "warn"
 inherits = "release"
 debug = true
 
+[profile.fast-build]
+inherits = "dev"
+debug = 0
+strip = "debuginfo"
+
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"
