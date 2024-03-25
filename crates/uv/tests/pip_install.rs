@@ -137,7 +137,7 @@ fn no_solution() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(command(&context)
-        .arg("flask>=3.0.0")
+        .arg("flask>=3.0.2")
         .arg("WerkZeug<1.0.0")
         .arg("--strict"), @r###"
     success: false
@@ -146,10 +146,10 @@ fn no_solution() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only flask<=3.0.0 is available and flask==3.0.0 depends
-          on werkzeug>=3.0.0, we can conclude that flask>=3.0.0 depends on
+      ╰─▶ Because only flask<=3.0.2 is available and flask==3.0.2 depends
+          on werkzeug>=3.0.0, we can conclude that flask>=3.0.2 depends on
           werkzeug>=3.0.0.
-          And because you require flask>=3.0.0 and you require werkzeug<1.0.0, we
+          And because you require flask>=3.0.2 and you require werkzeug<1.0.0, we
           can conclude that the requirements are unsatisfiable.
     "###);
 }
