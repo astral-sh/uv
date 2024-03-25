@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "first-local"
+description = 'A simple package with no dependencies.'
+readme = "README.md"
+requires-python = ">=3.7"
+license = "MIT"
+keywords = []
+authors = [
+  { name = "Astral Software Inc.", email = "hey@astral.sh" },
+]
+classifiers = []
+dependencies = []
+version = "0.1.0"

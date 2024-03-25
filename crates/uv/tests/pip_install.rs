@@ -3031,3 +3031,421 @@ fn deptry_gitignore() {
         .assert_command("import deptry_reproducer.foo")
         .success();
 }
+
+/// Install an editable package that depends on a previously installed editable package.
+#[test]
+fn dependent_editable_previously_installed() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let root_path = current_dir()?.join("../../scripts/packages/dependent_editables");
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    // Install the first editable
+    uv_snapshot!(filters, command(&context)
+        .arg("-e")
+        .arg(root_path.join("first_editable")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + first-editable==0.0.1 (from file://[TEMP_DIR]/first_editable)
+    "###
+    );
+
+    // The second editable depends on the first editable, which is only available
+    // locally and should not be fetched from an index
+    uv_snapshot!(filters, command(&context)
+        .arg("-e")
+        .arg(root_path.join("second_editable")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + second-editable==0.0.1 (from file://[TEMP_DIR]/second_editable)
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install an editable package that depends on a previously installed editable package.
+/// Request reinstall of the first package.
+#[test]
+fn dependent_editable_previously_installed_reinstall() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let root_path = current_dir()?.join("../../scripts/packages/dependent_editables");
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    // Install the first editable
+    uv_snapshot!(filters, command(&context)
+        .arg("-e")
+        .arg(root_path.join("first_editable")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + first-editable==0.0.1 (from file://[TEMP_DIR]/first_editable)
+    "###
+    );
+
+    // The second editable depends on the first editable, which is only available
+    // locally and should not be fetched from an index
+    uv_snapshot!(filters, command(&context)
+        .arg("-e")
+        .arg(root_path.join("second_editable"))
+        .arg("--reinstall-package")
+        .arg("first-editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + second-editable==0.0.1 (from file://[TEMP_DIR]/second_editable)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn previously_installed_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install anyio's dependencies.
+    uv_snapshot!(command(&context)
+        .arg("idna")
+        .arg("sniffio")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Install anyio.
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.3.0
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn reinstall_no_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install anyio
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Install anyio again
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--no-index")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Reinstall
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--no-index")
+        .arg("--reinstall")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 101
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    thread 'main' panicked at crates/uv/src/commands/pip_install.rs:665:18:
+    Resolution should contain all packages
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install an local package that depends on a previously installed local package.
+#[test]
+fn dependent_local_previously_installed() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let root_path = current_dir()?.join("../../scripts/packages/dependent_locals");
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    // Install the first local
+    uv_snapshot!(command(&context)
+        .arg(root_path.join("first_local")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + first-local==0.1.0 (from file:///Users/mz/workspace/uv/scripts/packages/dependent_locals/first_local)
+    "###
+    );
+
+    // The second local depends on the first local, which is only available
+    // locally and should not be fetched from an index
+    uv_snapshot!(filters, command(&context)
+        .arg(root_path.join("second_local")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + second-local==0.1.0 (from file://[TEMP_DIR]/second_local)
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install an local package that depends on a previously installed local package.
+/// Request reinstall of the first package.
+#[test]
+fn dependent_local_previously_installed_reinstall() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let root_path = current_dir()?.join("../../scripts/packages/dependent_locals");
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    // Install the first editable
+    uv_snapshot!(filters, command(&context)
+        .arg(root_path.join("first_local")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + first-local==0.1.0 (from file://[TEMP_DIR]/first_local)
+    "###
+    );
+
+    // The second package depends on the first package, which is only available
+    // locally and should not be fetched from an index
+    uv_snapshot!(filters, command(&context)
+        .arg(root_path.join("second_local"))
+        .arg("--reinstall-package")
+        .arg("first-local"), @r###"
+    success: false
+    exit_code: 101
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    thread 'main' panicked at crates/uv/src/commands/pip_install.rs:665:18:
+    Resolution should contain all packages
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    "###
+    );
+
+    Ok(())
+}
+
+/// A local version of a package shadowing a remote package is installed.
+#[test]
+fn local_version_for_remote_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let root_path = current_dir()?.join("../../scripts/packages");
+
+    // In addition to the standard filters, remove the temporary directory from the snapshot.
+    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect();
+
+    // Install the local anyio first
+    uv_snapshot!(command(&context)
+        .arg(root_path.join("anyio_local")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.3.0+foo (from file:///Users/mz/workspace/uv/scripts/packages/anyio_local)
+    "###
+    );
+
+    // Install again without specifying a local path — this should not pull from the index
+    uv_snapshot!(filters, command(&context)
+        .arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Request reinstallation with the local version segment — this should not pull from the index
+    uv_snapshot!(filters, command(&context)
+        .arg("anyio==4.3.0+foo")
+        .arg("--reinstall"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of anyio==4.3.0+foo and you require
+          anyio==4.3.0+foo, we can conclude that the requirements are
+          unsatisfiable.
+    "###
+    );
+
+    // Request reinstallation — this should not pull from the index
+    uv_snapshot!(filters, command(&context)
+        .arg("anyio")
+        .arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     - anyio==4.3.0+foo (from file://[TEMP_DIR]/anyio_local)
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install a package from a remote URL
+#[test]
+#[cfg(feature = "git")]
+fn remote_url_previously_installed() {
+    let context = TestContext::new("3.8");
+
+    // First, install from the remote URL
+    uv_snapshot!(command(&context).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+    "###);
+
+    // Then, request installation again with just the name
+    uv_snapshot!(
+        command(&context).arg("uv-public-pypackage"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###);
+
+    // Then, request reinstallation
+    uv_snapshot!(
+        command(&context)
+        .arg("uv-public-pypackage")
+        .arg("--reinstall"), @r###"
+    success: false
+    exit_code: 101
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    thread 'main' panicked at crates/uv/src/commands/pip_install.rs:665:18:
+    Resolution should contain all packages
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    "###);
+
+    context.assert_installed("uv_public_pypackage", "0.1.0");
+}
