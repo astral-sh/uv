@@ -13,6 +13,7 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::FxHashMap;
 use url::Url;
 
+use crate::dependency_provider::UvDependencyProvider;
 use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim};
 use once_map::OnceMap;
 use pep440_rs::Version;
@@ -22,7 +23,7 @@ use uv_normalize::{ExtraName, PackageName};
 use crate::editables::Editables;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
-use crate::pubgrub::{PubGrubDistribution, PubGrubPackage, PubGrubPriority};
+use crate::pubgrub::{PubGrubDistribution, PubGrubPackage};
 use crate::redirect::apply_redirect;
 use crate::resolver::VersionsResponse;
 use crate::ResolveError;
@@ -59,12 +60,12 @@ impl ResolutionGraph {
     /// Create a new graph from the resolved `PubGrub` state.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_state(
-        selection: &SelectedDependencies<PubGrubPackage, Version>,
+        selection: &SelectedDependencies<UvDependencyProvider>,
         pins: &FilePins,
         packages: &OnceMap<PackageName, VersionsResponse>,
         distributions: &OnceMap<PackageId, Metadata23>,
         redirects: &DashMap<Url, Url>,
-        state: &State<PubGrubPackage, Range<Version>, PubGrubPriority>,
+        state: &State<UvDependencyProvider>,
         preferences: &Preferences,
         editables: Editables,
     ) -> Result<Self, ResolveError> {

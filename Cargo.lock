@@ -2444,7 +2444,6 @@ version = "0.5.0"
 dependencies = [
  "indoc",
  "once_cell",
- "pubgrub",
  "pyo3",
  "rkyv",
  "serde",
@@ -2663,7 +2662,7 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/astral-sh/pubgrub?rev=e981e4dfe315582e84e2fd724832fb0e0c50b7aa#e981e4dfe315582e84e2fd724832fb0e0c50b7aa"
+source = "git+https://github.com/astral-sh/pubgrub?rev=c26e485213e39582c6f2e4d45c0328422670e7a7#c26e485213e39582c6f2e4d45c0328422670e7a7"
 dependencies = [
  "indexmap",
  "log",
