@@ -584,7 +584,7 @@ fn install_editable() -> Result<()> {
     // Install the editable package.
     uv_snapshot!(filters, command(&context)
         .arg("-e")
-        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("../../scripts/packages/poetry_editable")
         .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
@@ -598,7 +598,7 @@ fn install_editable() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + idna==3.4
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
      + sniffio==1.3.0
     "###
     );
@@ -608,7 +608,7 @@ fn install_editable() -> Result<()> {
         .arg("pip")
         .arg("install")
         .arg("-e")
-        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("../../scripts/packages/poetry_editable")
         .arg("--strict")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
@@ -630,7 +630,7 @@ fn install_editable() -> Result<()> {
         .arg("pip")
         .arg("install")
         .arg("-e")
-        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("../../scripts/packages/poetry_editable")
         .arg("black")
         .arg("--strict")
         .arg("--cache-dir")
@@ -654,8 +654,8 @@ fn install_editable() -> Result<()> {
      + packaging==23.2
      + pathspec==0.11.2
      + platformdirs==4.0.0
-     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
     "###
     );
 
@@ -703,7 +703,7 @@ fn install_editable_and_registry() -> Result<()> {
     // Install the editable version of Black. This should remove the registry-based version.
     uv_snapshot!(filters, command(&context)
         .arg("-e")
-        .arg("../../scripts/editable-installs/black_editable")
+        .arg("../../scripts/packages/black_editable")
         .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
@@ -715,7 +715,7 @@ fn install_editable_and_registry() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==23.11.0
-     + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/black_editable)
     "###
     );
 
@@ -756,7 +756,7 @@ fn install_editable_and_registry() -> Result<()> {
     Resolved 6 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
+     - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/black_editable)
      + black==23.10.0
     "###
     );
@@ -783,7 +783,7 @@ fn install_editable_no_binary() -> Result<()> {
     // Install the editable package with no-binary enabled
     uv_snapshot!(filters, command(&context)
         .arg("-e")
-        .arg("../../scripts/editable-installs/black_editable")
+        .arg("../../scripts/packages/black_editable")
         .arg("--no-binary")
         .arg(":all:")
         .current_dir(&current_dir)
@@ -796,7 +796,7 @@ fn install_editable_no_binary() -> Result<()> {
     Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/black_editable)
     "###
     );
 
@@ -1843,7 +1843,7 @@ fn config_settings() -> Result<()> {
         .arg("pip")
         .arg("install")
         .arg("-e")
-        .arg("../../scripts/editable-installs/setuptools_editable")
+        .arg("../../scripts/packages/setuptools_editable")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .arg("--exclude-newer")
@@ -1860,7 +1860,7 @@ fn config_settings() -> Result<()> {
     Downloaded 1 package in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/setuptools_editable)
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/setuptools_editable)
     "###
     );
 
@@ -1890,7 +1890,7 @@ fn config_settings() -> Result<()> {
         .arg("pip")
         .arg("install")
         .arg("-e")
-        .arg("../../scripts/editable-installs/setuptools_editable")
+        .arg("../../scripts/packages/setuptools_editable")
         .arg("-C")
         .arg("editable_mode=compat")
         .arg("--cache-dir")
@@ -1909,7 +1909,7 @@ fn config_settings() -> Result<()> {
     Downloaded 1 package in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/setuptools_editable)
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/setuptools_editable)
     "###
     );
 

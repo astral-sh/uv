@@ -117,7 +117,7 @@ fn list_editable() -> Result<()> {
     // Install the editable package.
     uv_snapshot!(filters, install_command(&context)
         .arg("-e")
-        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("../../scripts/packages/poetry_editable")
         .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
@@ -131,7 +131,7 @@ fn list_editable() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + idna==3.4
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
      + sniffio==1.3.0
     "###
     );
@@ -141,23 +141,23 @@ fn list_editable() -> Result<()> {
 
     // Origin of lengths used below:
     // - |Editable project location| = 25
-    // - expected length = 57
-    // - expected length - |Editable project location| = 32
+    // - expected length = 48
+    // - expected length - |Editable project location| = 23
     // - |`[WORKSPACE_DIR]/`| = 16
     // - |`file://`| = 7, |`file:///`| = 8 (windows)
 
-    let workspace_len_difference = workspace_dir.as_str().len() + 32 - 16 - prefix.len();
+    let workspace_len_difference = workspace_dir.as_str().len() + 23 - 16 - prefix.len();
     let find_divider = "-".repeat(25 + workspace_len_difference);
-    let replace_divider = "-".repeat(57);
+    let replace_divider = "-".repeat(48);
 
     let find_header = format!(
         "Editable project location{0}",
         " ".repeat(workspace_len_difference)
     );
-    let replace_header = format!("Editable project location{0}", " ".repeat(32));
+    let replace_header = format!("Editable project location{0}", " ".repeat(23));
 
     let find_whitespace = " ".repeat(25 + workspace_len_difference);
-    let replace_whitespace = " ".repeat(57);
+    let replace_whitespace = " ".repeat(48);
 
     let search_workspace = workspace_dir_re.as_str().strip_prefix(prefix).unwrap();
     let replace_workspace = "[WORKSPACE_DIR]/";
@@ -184,10 +184,10 @@ fn list_editable() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     Package         Version Editable project location
-    --------------- ------- ---------------------------------------------------------
+    --------------- ------- ------------------------------------------------
     anyio           4.0.0
     idna            3.4
-    poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
+    poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/packages/poetry_editable
     sniffio         1.3.0
 
     ----- stderr -----
@@ -214,7 +214,7 @@ fn list_editable_only() -> Result<()> {
     // Install the editable package.
     uv_snapshot!(filters, install_command(&context)
         .arg("-e")
-        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("../../scripts/packages/poetry_editable")
         .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
@@ -228,7 +228,7 @@ fn list_editable_only() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + idna==3.4
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
      + sniffio==1.3.0
     "###
     );
@@ -236,18 +236,18 @@ fn list_editable_only() -> Result<()> {
     // Account for difference length workspace dir
     let prefix = if cfg!(windows) { "file:///" } else { "file://" };
 
-    let workspace_len_difference = workspace_dir.as_str().len() + 32 - 16 - prefix.len();
+    let workspace_len_difference = workspace_dir.as_str().len() + 23 - 16 - prefix.len();
     let find_divider = "-".repeat(25 + workspace_len_difference);
-    let replace_divider = "-".repeat(57);
+    let replace_divider = "-".repeat(48);
 
     let find_header = format!(
         "Editable project location{0}",
         " ".repeat(workspace_len_difference)
     );
-    let replace_header = format!("Editable project location{0}", " ".repeat(32));
+    let replace_header = format!("Editable project location{0}", " ".repeat(23));
 
     let find_whitespace = " ".repeat(25 + workspace_len_difference);
-    let replace_whitespace = " ".repeat(57);
+    let replace_whitespace = " ".repeat(48);
 
     let search_workspace = workspace_dir_re.as_str().strip_prefix(prefix).unwrap();
     let replace_workspace = "[WORKSPACE_DIR]/";
@@ -275,8 +275,8 @@ fn list_editable_only() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     Package         Version Editable project location
-    --------------- ------- ---------------------------------------------------------
-    poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
+    --------------- ------- ------------------------------------------------
+    poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/packages/poetry_editable
 
     ----- stderr -----
     "###
@@ -340,7 +340,7 @@ fn list_exclude() -> Result<()> {
     // Install the editable package.
     uv_snapshot!(filters, install_command(&context)
         .arg("-e")
-        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("../../scripts/packages/poetry_editable")
         .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
@@ -354,7 +354,7 @@ fn list_exclude() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + idna==3.4
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
      + sniffio==1.3.0
     "###
     );
@@ -362,18 +362,18 @@ fn list_exclude() -> Result<()> {
     // Account for difference length workspace dir
     let prefix = if cfg!(windows) { "file:///" } else { "file://" };
 
-    let workspace_len_difference = workspace_dir.as_str().len() + 32 - 16 - prefix.len();
+    let workspace_len_difference = workspace_dir.as_str().len() + 23 - 16 - prefix.len();
     let find_divider = "-".repeat(25 + workspace_len_difference);
-    let replace_divider = "-".repeat(57);
+    let replace_divider = "-".repeat(48);
 
     let find_header = format!(
         "Editable project location{0}",
         " ".repeat(workspace_len_difference)
     );
-    let replace_header = format!("Editable project location{0}", " ".repeat(32));
+    let replace_header = format!("Editable project location{0}", " ".repeat(23));
 
     let find_whitespace = " ".repeat(25 + workspace_len_difference);
-    let replace_whitespace = " ".repeat(57);
+    let replace_whitespace = " ".repeat(48);
 
     let search_workspace = workspace_dir_re.as_str().strip_prefix(prefix).unwrap();
     let replace_workspace = "[WORKSPACE_DIR]/";
@@ -402,10 +402,10 @@ fn list_exclude() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     Package         Version Editable project location
-    --------------- ------- ---------------------------------------------------------
+    --------------- ------- ------------------------------------------------
     anyio           4.0.0
     idna            3.4
-    poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/editable-installs/poetry_editable
+    poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/packages/poetry_editable
     sniffio         1.3.0
 
     ----- stderr -----
@@ -481,7 +481,7 @@ fn list_format_json() -> Result<()> {
     // Install the editable package.
     uv_snapshot!(filters, install_command(&context)
         .arg("-e")
-        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("../../scripts/packages/poetry_editable")
         .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
@@ -495,7 +495,7 @@ fn list_format_json() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + idna==3.4
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
      + sniffio==1.3.0
     "###
     );
@@ -509,18 +509,18 @@ fn list_format_json() -> Result<()> {
             .unwrap(),
     );
 
-    let workspace_len_difference = workspace_dir.as_str().len() + 32 - 16;
+    let workspace_len_difference = workspace_dir.as_str().len() + 23 - 16;
     let find_divider = "-".repeat(25 + workspace_len_difference);
-    let replace_divider = "-".repeat(57);
+    let replace_divider = "-".repeat(48);
 
     let find_header = format!(
         "Editable project location{0}",
         " ".repeat(workspace_len_difference)
     );
-    let replace_header = format!("Editable project location{0}", " ".repeat(32));
+    let replace_header = format!("Editable project location{0}", " ".repeat(23));
 
     let find_whitespace = " ".repeat(25 + workspace_len_difference);
-    let replace_whitespace = " ".repeat(57);
+    let replace_whitespace = " ".repeat(48);
 
     let search_workspace = workspace_dir.as_str();
     let search_workspace_escaped = search_workspace.replace('/', "\\\\");
@@ -548,7 +548,7 @@ fn list_format_json() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.0.0"},{"name":"idna","version":"3.4"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable"},{"name":"sniffio","version":"1.3.0"}]
+    [{"name":"anyio","version":"4.0.0"},{"name":"idna","version":"3.4"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/packages/poetry_editable"},{"name":"sniffio","version":"1.3.0"}]
 
     ----- stderr -----
     "###
@@ -566,7 +566,7 @@ fn list_format_json() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable"}]
+    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/packages/poetry_editable"}]
 
     ----- stderr -----
     "###
@@ -630,7 +630,7 @@ fn list_format_freeze() -> Result<()> {
     // Install the editable package.
     uv_snapshot!(filters, install_command(&context)
         .arg("-e")
-        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("../../scripts/packages/poetry_editable")
         .current_dir(&current_dir)
         .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
     success: true
@@ -644,7 +644,7 @@ fn list_format_freeze() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + idna==3.4
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
      + sniffio==1.3.0
     "###
     );
@@ -652,18 +652,18 @@ fn list_format_freeze() -> Result<()> {
     // Account for difference length workspace dir
     let prefix = if cfg!(windows) { "file:///" } else { "file://" };
 
-    let workspace_len_difference = workspace_dir.as_str().len() + 32 - 16 - prefix.len();
+    let workspace_len_difference = workspace_dir.as_str().len() + 23 - 16 - prefix.len();
     let find_divider = "-".repeat(25 + workspace_len_difference);
-    let replace_divider = "-".repeat(57);
+    let replace_divider = "-".repeat(48);
 
     let find_header = format!(
         "Editable project location{0}",
         " ".repeat(workspace_len_difference)
     );
-    let replace_header = format!("Editable project location{0}", " ".repeat(32));
+    let replace_header = format!("Editable project location{0}", " ".repeat(23));
 
     let find_whitespace = " ".repeat(25 + workspace_len_difference);
-    let replace_whitespace = " ".repeat(57);
+    let replace_whitespace = " ".repeat(48);
 
     let search_workspace = workspace_dir.as_str().strip_prefix(prefix).unwrap();
     let replace_workspace = "[WORKSPACE_DIR]/";

@@ -2197,10 +2197,10 @@ fn sync_editable() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
         boltons==23.1.1
-        -e ../../scripts/editable-installs/maturin_editable
+        -e ../../scripts/packages/maturin_editable
         numpy==1.26.2
             # via poetry-editable
-        -e file://{current_dir}/../../scripts/editable-installs/poetry_editable
+        -e file://{current_dir}/../../scripts/packages/poetry_editable
         ",
         current_dir = current_dir.simplified_display(),
     })?;
@@ -2230,9 +2230,9 @@ fn sync_editable() -> Result<()> {
     Downloaded 2 packages in [TIME]
     Installed 4 packages in [TIME]
      + boltons==23.1.1
-     + maturin-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/maturin_editable)
+     + maturin-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/maturin_editable)
      + numpy==1.26.2
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
     "###
     );
 
@@ -2251,14 +2251,14 @@ fn sync_editable() -> Result<()> {
     Built 1 editable in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
     "###
     );
 
     // Make sure we have the right base case.
     let python_source_file =
-        "../../scripts/editable-installs/maturin_editable/python/maturin_editable/__init__.py";
+        "../../scripts/packages/maturin_editable/python/maturin_editable/__init__.py";
     let python_version_1 = indoc::indoc! {r"
         from .maturin_editable import *
 
@@ -2363,7 +2363,7 @@ fn sync_editable_and_registry() -> Result<()> {
     // Use the `file:` syntax for extra coverage.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
-        -e file:../../scripts/editable-installs/black_editable
+        -e file:../../scripts/packages/black_editable
         "
     })?;
 
@@ -2389,7 +2389,7 @@ fn sync_editable_and_registry() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.1.0
-     + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/black_editable)
     "###
     );
 
@@ -2453,7 +2453,7 @@ fn sync_editable_and_registry() -> Result<()> {
     Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/black_editable)
+     - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/black_editable)
      + black==23.10.0
     warning: The package `black` requires `click>=8.0.0`, but it's not installed.
     warning: The package `black` requires `mypy-extensions>=0.4.3`, but it's not installed.
