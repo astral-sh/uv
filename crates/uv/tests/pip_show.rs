@@ -107,6 +107,7 @@ fn show_requires_multiple() -> Result<()> {
     Version: 2.31.0
     Location: [WORKSPACE_DIR]/site-packages
     Requires: certifi, charset-normalizer, idna, urllib3
+    Required-by:
 
     ----- stderr -----
     "###
@@ -166,6 +167,7 @@ fn show_python_version_marker() -> Result<()> {
     Version: 8.1.7
     Location: [WORKSPACE_DIR]/site-packages
     Requires:
+    Required-by:
 
     ----- stderr -----
     "###
@@ -220,6 +222,7 @@ fn show_found_single_package() -> Result<()> {
     Version: 2.1.3
     Location: [WORKSPACE_DIR]/site-packages
     Requires:
+    Required-by:
 
     ----- stderr -----
     "###
@@ -282,11 +285,13 @@ fn show_found_multiple_packages() -> Result<()> {
     Version: 2.1.3
     Location: [WORKSPACE_DIR]/site-packages
     Requires:
+    Required-by:
     ---
     Name: pip
     Version: 21.3.1
     Location: [WORKSPACE_DIR]/site-packages
     Requires:
+    Required-by:
 
     ----- stderr -----
     "###
@@ -296,7 +301,7 @@ fn show_found_multiple_packages() -> Result<()> {
 }
 
 #[test]
-fn show_found_one_out_of_two() -> Result<()> {
+fn show_found_one_out_of_three() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -338,6 +343,7 @@ fn show_found_one_out_of_two() -> Result<()> {
         .arg("show")
         .arg("markupsafe")
         .arg("flask")
+        .arg("django")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -349,9 +355,10 @@ fn show_found_one_out_of_two() -> Result<()> {
     Version: 2.1.3
     Location: [WORKSPACE_DIR]/site-packages
     Requires:
+    Required-by:
 
     ----- stderr -----
-    warning: Package(s) not found for: flask
+    warning: Package(s) not found for: django, flask
     "###
     );
 
@@ -480,10 +487,16 @@ fn show_editable() -> Result<()> {
         .success();
 
     // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters = [(
-        r"Location:.*site-packages",
-        "Location: [WORKSPACE_DIR]/site-packages",
-    )]
+    let filters = [
+        (
+            r"Location:.*site-packages",
+            "Location: [WORKSPACE_DIR]/site-packages",
+        ),
+        (
+            r"Editable project location:.*poetry_editable",
+            "Editable project location: [EDITABLE_INSTALLS_PREFIX]poetry_editable",
+        ),
+    ]
     .to_vec();
 
     uv_snapshot!(filters, Command::new(get_bin())
@@ -500,7 +513,75 @@ fn show_editable() -> Result<()> {
     Name: poetry-editable
     Version: 0.1.0
     Location: [WORKSPACE_DIR]/site-packages
+    Editable project location: [EDITABLE_INSTALLS_PREFIX]poetry_editable
     Requires: anyio
+    Required-by:
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn show_required_by_multiple() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str(indoc! {r"
+        anyio==4.0.0
+        requests==2.31.0
+    "
+    })?;
+
+    uv_snapshot!(install_command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + anyio==4.0.0
+     + certifi==2023.11.17
+     + charset-normalizer==3.3.2
+     + idna==3.4
+     + requests==2.31.0
+     + sniffio==1.3.0
+     + urllib3==2.1.0
+    "###
+    );
+
+    context.assert_command("import requests").success();
+    let filters = [(
+        r"Location:.*site-packages",
+        "Location: [WORKSPACE_DIR]/site-packages",
+    )]
+    .to_vec();
+
+    // idna is required by anyio and requests
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("pip")
+        .arg("show")
+        .arg("idna")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Name: idna
+    Version: 3.4
+    Location: [WORKSPACE_DIR]/site-packages
+    Requires:
+    Required-by: anyio, requests
 
     ----- stderr -----
     "###
