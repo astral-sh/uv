@@ -549,12 +549,12 @@ fn show_required_by_multiple() -> Result<()> {
     Downloaded 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + anyio==4.0.0
-     + certifi==2023.11.17
+     + certifi==2024.2.2
      + charset-normalizer==3.3.2
-     + idna==3.4
+     + idna==3.6
      + requests==2.31.0
-     + sniffio==1.3.0
-     + urllib3==2.1.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
     "###
     );
 
@@ -578,7 +578,7 @@ fn show_required_by_multiple() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     Name: idna
-    Version: 3.4
+    Version: 3.6
     Location: [WORKSPACE_DIR]/site-packages
     Requires:
     Required-by: anyio, requests
