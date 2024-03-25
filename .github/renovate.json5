@@ -1,0 +1,39 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "dependencyDashboard": true,
+  "suppressNotifications": ["prEditedNotification"],
+  "extends": ["config:recommended"],
+  "labels": ["internal"],
+  "schedule": ["before 4am on Monday"],
+  "separateMajorMinor": false,
+  "enabledManagers": [
+    "github-actions",
+    "pre-commit",
+    "cargo",
+  ],
+  "cargo": {
+    // See https://docs.renovatebot.com/configuration-options/#rangestrategy
+    "rangeStrategy": "update-lockfile",
+  },
+  "pre-commit": {
+    "enabled": true,
+  },
+  "packageRules": [
+    {
+      // Group upload/download artifact updates, the versions are dependent
+      "groupName": "Artifact GitHub Actions dependencies",
+      "matchManagers": ["github-actions"],
+      "matchPackagePatterns": ["actions/.*-artifact"],
+      "description": "Weekly update of artifact-related GitHub Actions dependencies",
+    },
+    {
+      "groupName": "pre-commit dependencies",
+      "matchManagers": ["pre-commit"],
+      "description": "Weekly update of pre-commit dependencies",
+    },
+  ],
+  "vulnerabilityAlerts": {
+    "commitMessageSuffix": "",
+    "labels": ["internal", "security"],
+  },
+}
