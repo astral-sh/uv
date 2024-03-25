@@ -173,10 +173,10 @@ fn install_package() {
     Installed 7 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
-     + flask==3.0.0
+     + flask==3.0.2
      + itsdangerous==2.1.2
-     + jinja2==3.1.2
-     + markupsafe==2.1.3
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
      + werkzeug==3.0.1
     "###
     );
@@ -207,10 +207,10 @@ fn install_requirements_txt() -> Result<()> {
     Installed 7 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
-     + flask==3.0.0
+     + flask==3.0.2
      + itsdangerous==2.1.2
-     + jinja2==3.1.2
-     + markupsafe==2.1.3
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
      + werkzeug==3.0.1
     "###
     );
@@ -265,8 +265,8 @@ fn respect_installed_and_reinstall() -> Result<()> {
      + click==8.1.7
      + flask==2.3.2
      + itsdangerous==2.1.2
-     + jinja2==3.1.2
-     + markupsafe==2.1.3
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
      + werkzeug==3.0.1
     "###
     );
@@ -345,7 +345,7 @@ fn respect_installed_and_reinstall() -> Result<()> {
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      - flask==2.3.3
-     + flask==3.0.0
+     + flask==3.0.2
     "###
     );
 
@@ -367,8 +367,8 @@ fn respect_installed_and_reinstall() -> Result<()> {
     ----- stderr -----
     Resolved 7 packages in [TIME]
     Installed 1 package in [TIME]
-     - flask==3.0.0
-     + flask==3.0.0
+     - flask==3.0.2
+     + flask==3.0.2
     "###
     );
 
@@ -396,13 +396,13 @@ fn reinstall_extras() -> Result<()> {
     Resolved 7 packages in [TIME]
     Downloaded 7 packages in [TIME]
     Installed 7 packages in [TIME]
-     + anyio==4.0.0
-     + certifi==2023.11.17
+     + anyio==4.3.0
+     + certifi==2024.2.2
      + h11==0.14.0
-     + httpcore==1.0.2
-     + httpx==0.25.1
-     + idna==3.4
-     + sniffio==1.3.0
+     + httpcore==1.0.4
+     + httpx==0.27.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -459,8 +459,8 @@ fn reinstall_incomplete() -> Result<()> {
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==3.7.0
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -525,10 +525,10 @@ fn allow_incompatibilities() -> Result<()> {
     Installed 7 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
-     + flask==3.0.0
+     + flask==3.0.2
      + itsdangerous==2.1.2
-     + jinja2==3.1.2
-     + markupsafe==2.1.3
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
      + werkzeug==3.0.1
     "###
     );
@@ -552,7 +552,7 @@ fn allow_incompatibilities() -> Result<()> {
     Resolved 2 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     - jinja2==3.1.2
+     - jinja2==3.1.3
      + jinja2==2.11.3
     warning: The package `flask` requires `jinja2>=3.1.2`, but `2.11.3` is installed.
     "###
@@ -596,10 +596,10 @@ fn install_editable() -> Result<()> {
     Resolved 4 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 4 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.4
+     + anyio==4.3.0
+     + idna==3.6
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
-     + sniffio==1.3.0
+     + sniffio==1.3.1
     "###
     );
 
@@ -648,12 +648,12 @@ fn install_editable() -> Result<()> {
     Resolved 10 packages in [TIME]
     Downloaded 6 packages in [TIME]
     Installed 7 packages in [TIME]
-     + black==23.11.0
+     + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
-     + packaging==23.2
-     + pathspec==0.11.2
-     + platformdirs==4.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
      - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
     "###
@@ -691,12 +691,12 @@ fn install_editable_and_registry() -> Result<()> {
     Resolved 6 packages in [TIME]
     Downloaded 6 packages in [TIME]
     Installed 6 packages in [TIME]
-     + black==23.11.0
+     + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
-     + packaging==23.2
-     + pathspec==0.11.2
-     + platformdirs==4.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
     "###
     );
 
@@ -714,7 +714,7 @@ fn install_editable_and_registry() -> Result<()> {
     Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     - black==23.11.0
+     - black==24.3.0
      + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/black_editable)
     "###
     );
@@ -836,8 +836,8 @@ fn reinstall_build_system() -> Result<()> {
      + flask==3.0.0 (from https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz)
      + flit-core==3.9.0
      + itsdangerous==2.1.2
-     + jinja2==3.1.2
-     + markupsafe==2.1.3
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
      + werkzeug==3.0.1
     "###
     );
@@ -1187,9 +1187,9 @@ fn reinstall_no_binary() {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.4
-     + sniffio==1.3.0
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -1242,8 +1242,8 @@ fn reinstall_no_binary() {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.0.0
-     + anyio==4.0.0
+     - anyio==4.3.0
+     + anyio==4.3.0
     "###
     );
 
@@ -1268,13 +1268,13 @@ fn install_executable() {
     Resolved 7 packages in [TIME]
     Downloaded 7 packages in [TIME]
     Installed 7 packages in [TIME]
-     + astroid==3.0.1
-     + dill==0.3.7
-     + isort==5.12.0
+     + astroid==3.0.3
+     + dill==0.3.8
+     + isort==5.13.2
      + mccabe==0.7.0
-     + platformdirs==4.0.0
+     + platformdirs==4.2.0
      + pylint==3.0.0
-     + tomlkit==0.12.3
+     + tomlkit==0.12.4
     "###
     );
 
@@ -1304,13 +1304,13 @@ fn install_executable_copy() {
     Resolved 7 packages in [TIME]
     Downloaded 7 packages in [TIME]
     Installed 7 packages in [TIME]
-     + astroid==3.0.1
-     + dill==0.3.7
-     + isort==5.12.0
+     + astroid==3.0.3
+     + dill==0.3.8
+     + isort==5.13.2
      + mccabe==0.7.0
-     + platformdirs==4.0.0
+     + platformdirs==4.2.0
      + pylint==3.0.0
-     + tomlkit==0.12.3
+     + tomlkit==0.12.4
     "###
     );
 
@@ -1340,13 +1340,13 @@ fn install_executable_hardlink() {
     Resolved 7 packages in [TIME]
     Downloaded 7 packages in [TIME]
     Installed 7 packages in [TIME]
-     + astroid==3.0.1
-     + dill==0.3.7
-     + isort==5.12.0
+     + astroid==3.0.3
+     + dill==0.3.8
+     + isort==5.13.2
      + mccabe==0.7.0
-     + platformdirs==4.0.0
+     + platformdirs==4.2.0
      + pylint==3.0.0
-     + tomlkit==0.12.3
+     + tomlkit==0.12.4
     "###
     );
 
@@ -1376,7 +1376,7 @@ fn no_deps() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + flask==3.0.0
+     + flask==3.0.2
     warning: The package `flask` requires `werkzeug>=3.0.0`, but it's not installed.
     warning: The package `flask` requires `jinja2>=3.1.2`, but it's not installed.
     warning: The package `flask` requires `itsdangerous>=2.1.2`, but it's not installed.
@@ -1407,11 +1407,11 @@ fn install_upgrade() {
     Downloaded 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + anyio==3.6.2
-     + certifi==2023.11.17
+     + certifi==2024.2.2
      + h11==0.14.0
      + httpcore==0.16.3
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -1431,7 +1431,7 @@ fn install_upgrade() {
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==3.6.2
-     + anyio==4.0.0
+     + anyio==4.3.0
     "###
     );
 
@@ -1478,7 +1478,7 @@ fn install_upgrade() {
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      - httpcore==0.16.3
-     + httpcore==1.0.2
+     + httpcore==1.0.4
     "###
     );
 }
@@ -1508,7 +1508,7 @@ fn install_constraints_txt() -> Result<()> {
     Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.3
-     + sniffio==1.3.0
+     + sniffio==1.3.1
     "###
     );
 
@@ -1538,7 +1538,7 @@ fn install_constraints_inline() -> Result<()> {
     Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.3
-     + sniffio==1.3.0
+     + sniffio==1.3.1
     "###
     );
 
@@ -1664,8 +1664,8 @@ fn install_sdist_resolution_lowest() -> Result<()> {
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -1696,12 +1696,12 @@ fn direct_url_zip_file_bunk_permissions() -> Result<()> {
     Resolved 6 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 6 packages in [TIME]
-     + distro==1.8.0
+     + distro==1.9.0
      + opensafely-pipeline==2023.11.6.145820 (from https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip)
-     + pydantic==1.10.13
+     + pydantic==1.10.14
      + ruyaml==0.91.0
-     + setuptools==68.2.2
-     + typing-extensions==4.8.0
+     + setuptools==69.2.0
+     + typing-extensions==4.10.0
     "###
     );
 
@@ -1986,7 +1986,7 @@ fn reinstall_duplicate() -> Result<()> {
     Installed 1 package in [TIME]
      - pip==21.3.1
      - pip==22.1.1
-     + pip==23.3.1
+     + pip==24.0
     "###
     );
 
@@ -2065,8 +2065,8 @@ requires-python = ">=3.8"
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.0.0 (from [WORKSPACE_DIR])
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2160,8 +2160,8 @@ dependencies = {file = ["requirements.txt"]}
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.1.0 (from [WORKSPACE_DIR])
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2244,8 +2244,8 @@ requires-python = ">=3.8"
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.0.0 (from [WORKSPACE_DIR])
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2335,8 +2335,8 @@ requires-python = ">=3.11,<3.13"
     Installed 4 packages in [TIME]
      + anyio==4.0.0
      + example==0.1.0 (from [WORKSPACE_DIR])
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2422,8 +2422,8 @@ fn no_build_isolation() -> Result<()> {
     Resolved 2 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + setuptools==68.2.2
-     + wheel==0.41.3
+     + setuptools==69.2.0
+     + wheel==0.43.0
     "###);
 
     // We expect the build to succeed, since `setuptools` is now installed.
@@ -2440,8 +2440,8 @@ fn no_build_isolation() -> Result<()> {
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==0.0.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2542,13 +2542,13 @@ fn dry_run_install() -> std::result::Result<(), Box<dyn std::error::Error>> {
     Resolved 7 packages in [TIME]
     Would download 7 packages
     Would install 7 packages
-     + anyio==4.0.0
-     + certifi==2023.11.17
+     + anyio==4.3.0
+     + certifi==2024.2.2
      + h11==0.14.0
-     + httpcore==1.0.2
+     + httpcore==1.0.4
      + httpx==0.25.1
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2576,8 +2576,8 @@ fn dry_run_install_url_dependency() -> std::result::Result<(), Box<dyn std::erro
     Would download 3 packages
     Would install 3 packages
      + anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2605,8 +2605,8 @@ fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::er
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2629,7 +2629,7 @@ fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::er
     Would uninstall 1 package
     Would install 1 package
      - anyio==4.2.0 (from https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz)
-     + anyio==4.0.0
+     + anyio==4.3.0
     "###
     );
 
@@ -2656,13 +2656,13 @@ fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::e
     Resolved 7 packages in [TIME]
     Downloaded 7 packages in [TIME]
     Installed 7 packages in [TIME]
-     + anyio==4.0.0
-     + certifi==2023.11.17
+     + anyio==4.3.0
+     + certifi==2024.2.2
      + h11==0.14.0
-     + httpcore==1.0.2
+     + httpcore==1.0.4
      + httpx==0.25.1
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2707,7 +2707,7 @@ fn dry_run_install_transitive_dependency_already_installed(
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + certifi==2023.11.17
+     + certifi==2024.2.2
      + h11==0.14.0
      + httpcore==1.0.2
     "###
@@ -2728,10 +2728,10 @@ fn dry_run_install_transitive_dependency_already_installed(
     Resolved 7 packages in [TIME]
     Would download 4 packages
     Would install 4 packages
-     + anyio==4.0.0
+     + anyio==4.3.0
      + httpx==0.25.1
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2758,13 +2758,13 @@ fn dry_run_install_then_upgrade() -> std::result::Result<(), Box<dyn std::error:
     Resolved 7 packages in [TIME]
     Downloaded 7 packages in [TIME]
     Installed 7 packages in [TIME]
-     + anyio==4.0.0
-     + certifi==2023.11.17
+     + anyio==4.3.0
+     + certifi==2024.2.2
      + h11==0.14.0
      + httpcore==0.18.0
      + httpx==0.25.0
-     + idna==3.4
-     + sniffio==1.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2847,9 +2847,9 @@ fn install_package_basic_auth_from_url() {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.4
-     + sniffio==1.3.0
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2874,9 +2874,9 @@ fn install_index_with_relative_links() {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.4
-     + sniffio==1.3.0
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2901,9 +2901,9 @@ fn install_index_with_relative_links_authenticated() {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.4
-     + sniffio==1.3.0
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
@@ -2937,9 +2937,9 @@ fn install_site_packages_mtime_updated() -> Result<()> {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.4
-     + sniffio==1.3.0
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
