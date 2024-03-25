@@ -64,11 +64,7 @@ impl Resolution {
             .values()
             // Remove editable requirements
             .filter(|dist| !dist.is_editable())
-            // Remove already-installed distributions
-            .filter_map(|dist| match dist {
-                &ResolvedDist::Installed(_) => None,
-                dist @ ResolvedDist::Installable(_) => Some(Requirement::from(dist.clone())),
-            })
+            .map(|dist| Requirement::from(dist.clone()))
             .collect::<Vec<_>>();
         requirements.sort_unstable_by(|a, b| a.name.cmp(&b.name));
         requirements

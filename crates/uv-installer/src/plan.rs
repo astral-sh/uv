@@ -409,7 +409,13 @@ impl<'a> Planner<'a> {
             }
         }
 
-        Ok(Plan { local, remote, reinstalls, installed, extraneous })
+        Ok(Plan {
+            local,
+            remote,
+            reinstalls,
+            installed,
+            extraneous,
+        })
     }
 }
 
