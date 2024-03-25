@@ -391,7 +391,7 @@ fn uninstall_editable_by_name() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
-    requirements_txt.write_str("-e ../../scripts/editable-installs/poetry_editable")?;
+    requirements_txt.write_str("-e ../../scripts/packages/poetry_editable")?;
 
     sync_command(&context)
         .arg(requirements_txt.path())
@@ -414,7 +414,7 @@ fn uninstall_editable_by_name() -> Result<()> {
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
     "###
     );
 
@@ -445,7 +445,7 @@ fn uninstall_by_path() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
-    requirements_txt.write_str("../../scripts/editable-installs/poetry_editable")?;
+    requirements_txt.write_str("../../scripts/packages/poetry_editable")?;
 
     sync_command(&context)
         .arg(requirements_txt.path())
@@ -461,7 +461,7 @@ fn uninstall_by_path() -> Result<()> {
 
     // Uninstall the editable by path.
     uv_snapshot!(filters, uninstall_command(&context)
-        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("../../scripts/packages/poetry_editable")
         .current_dir(&current_dir), @r###"
     success: true
     exit_code: 0
@@ -469,7 +469,7 @@ fn uninstall_by_path() -> Result<()> {
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
     "###
     );
 
@@ -500,7 +500,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
-    requirements_txt.write_str("../../scripts/editable-installs/poetry_editable")?;
+    requirements_txt.write_str("../../scripts/packages/poetry_editable")?;
 
     sync_command(&context)
         .arg(requirements_txt.path())
@@ -517,7 +517,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
     // Uninstall the editable by both path and name.
     uv_snapshot!(filters, uninstall_command(&context)
         .arg("poetry-editable")
-        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("../../scripts/packages/poetry_editable")
         .current_dir(&current_dir), @r###"
     success: true
     exit_code: 0
@@ -525,7 +525,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/editable-installs/poetry_editable)
+     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
     "###
     );
 

@@ -470,7 +470,7 @@ fn show_editable() -> Result<()> {
     // Install the editable package.
     install_command(&context)
         .arg("-e")
-        .arg("../../scripts/editable-installs/poetry_editable")
+        .arg("../../scripts/packages/poetry_editable")
         .current_dir(current_dir()?)
         .env(
             "CARGO_TARGET_DIR",
