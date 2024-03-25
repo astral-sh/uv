@@ -967,6 +967,88 @@ impl MarkerTree {
         }
     }
 
+    /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
+    ///
+    /// Any `extra` markers that are always `true` given the provided extras will be removed.
+    /// Any `extra` markers that are always `false` given the provided extras will be left
+    /// unchanged.
+    ///
+    /// For example, if `dev` is a provided extra, given `sys_platform == 'linux' and extra == 'dev'`,
+    /// the marker will be simplified to `sys_platform == 'linux'`.
+    pub fn simplify_extras(self, extras: &[ExtraName]) -> Option<MarkerTree> {
+        /// Returns `true` if the given expression is always `true` given the set of extras.
+        pub fn is_true(expression: &MarkerExpression, extras: &[ExtraName]) -> bool {
+            // Ex) `extra == 'dev'`
+            if expression.l_value == MarkerValue::Extra {
+                if let MarkerValue::QuotedString(r_string) = &expression.r_value {
+                    if let Ok(r_extra) = ExtraName::from_str(r_string) {
+                        return extras.contains(&r_extra);
+                    }
+                }
+            }
+            // Ex) `'dev' == extra`
+            if expression.r_value == MarkerValue::Extra {
+                if let MarkerValue::QuotedString(l_string) = &expression.l_value {
+                    if let Ok(l_extra) = ExtraName::from_str(l_string) {
+                        return extras.contains(&l_extra);
+                    }
+                }
+            }
+            false
+        }
+
+        match self {
+            Self::Expression(expression) => {
+                // If the expression is true, we can remove the marker entirely.
+                if is_true(&expression, extras) {
+                    None
+                } else {
+                    // If not, return the original marker.
+                    Some(Self::Expression(expression))
+                }
+            }
+            Self::And(expressions) => {
+                // Remove any expressions that are _true_ due to the presence of an extra.
+                let simplified = expressions
+                    .into_iter()
+                    .filter_map(|marker| marker.simplify_extras(extras))
+                    .collect::<Vec<_>>();
+
+                // If there are no expressions left, return None.
+                if simplified.is_empty() {
+                    None
+                } else if simplified.len() == 1 {
+                    // If there is only one expression left, return the remaining expression.
+                    simplified.into_iter().next()
+                } else {
+                    // If there are still expressions left, return the simplified marker.
+                    Some(Self::And(simplified))
+                }
+            }
+            Self::Or(expressions) => {
+                let num_expressions = expressions.len();
+
+                // Remove any expressions that are _true_ due to the presence of an extra.
+                let simplified = expressions
+                    .into_iter()
+                    .filter_map(|marker| marker.simplify_extras(extras))
+                    .collect::<Vec<_>>();
+
+                // If _any_ of the expressions are true (i.e., if any of the markers were filtered
+                // out in the above filter step), the entire marker is true.
+                if simplified.len() < num_expressions {
+                    None
+                } else if simplified.len() == 1 {
+                    // If there is only one expression left, return the remaining expression.
+                    simplified.into_iter().next()
+                } else {
+                    // If there are still expressions left, return the simplified marker.
+                    Some(Self::Or(simplified))
+                }
+            }
+        }
+    }
+
     /// Same as [`Self::evaluate`], but instead of using logging to warn, you can pass your own
     /// handler for warnings
     pub fn evaluate_reporter(
@@ -1368,9 +1450,13 @@ fn parse_markers(markers: &str) -> Result<MarkerTree, Pep508Error> {
 #[cfg(test)]
 mod test {
     use crate::marker::{MarkerEnvironment, StringVersion};
-    use crate::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString};
+    use crate::{
+        MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
+        MarkerValueVersion,
+    };
     use insta::assert_snapshot;
     use std::str::FromStr;
+    use uv_normalize::ExtraName;
 
     fn parse_err(input: &str) -> String {
         MarkerTree::from_str(input).unwrap_err().to_string()
@@ -1615,5 +1701,100 @@ mod test {
             }"##,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn test_simplify_extras() {
+        // Given `os_name == "nt" and extra == "dev"`, simplify to `os_name == "nt"`.
+        let markers = MarkerTree::from_str(r#"os_name == "nt" and extra == "dev""#).unwrap();
+        let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(
+            simplified,
+            Some(MarkerTree::Expression(MarkerExpression {
+                l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+                operator: MarkerOperator::Equal,
+                r_value: MarkerValue::QuotedString("nt".to_string()),
+            }))
+        );
+
+        // Given `os_name == "nt" or extra == "dev"`, remove the marker entirely.
+        let markers = MarkerTree::from_str(r#"os_name == "nt" or extra == "dev""#).unwrap();
+        let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(simplified, None);
+
+        // Given `extra == "dev"`, remove the marker entirely.
+        let markers = MarkerTree::from_str(r#"extra == "dev""#).unwrap();
+        let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(simplified, None);
+
+        // Given `extra == "dev" and extra == "test"`, simplify to `extra == "test"`.
+        let markers = MarkerTree::from_str(r#"extra == "dev" and extra == "test""#).unwrap();
+        let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(
+            simplified,
+            Some(MarkerTree::Expression(MarkerExpression {
+                l_value: MarkerValue::Extra,
+                operator: MarkerOperator::Equal,
+                r_value: MarkerValue::QuotedString("test".to_string()),
+            }))
+        );
+
+        // Given `os_name == "nt" and extra == "test"`, don't simplify.
+        let markers = MarkerTree::from_str(r#"os_name == "nt" and extra == "test""#).unwrap();
+        let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(
+            simplified,
+            Some(MarkerTree::And(vec![
+                MarkerTree::Expression(MarkerExpression {
+                    l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+                    operator: MarkerOperator::Equal,
+                    r_value: MarkerValue::QuotedString("nt".to_string()),
+                }),
+                MarkerTree::Expression(MarkerExpression {
+                    l_value: MarkerValue::Extra,
+                    operator: MarkerOperator::Equal,
+                    r_value: MarkerValue::QuotedString("test".to_string()),
+                }),
+            ]))
+        );
+
+        // Given `os_name == "nt" and (python_version == "3.7" or extra == "dev")`, simplify to
+        // `os_name == "nt".
+        let markers = MarkerTree::from_str(
+            r#"os_name == "nt" and (python_version == "3.7" or extra == "dev")"#,
+        )
+        .unwrap();
+        let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(
+            simplified,
+            Some(MarkerTree::Expression(MarkerExpression {
+                l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+                operator: MarkerOperator::Equal,
+                r_value: MarkerValue::QuotedString("nt".to_string()),
+            }))
+        );
+
+        // Given `os_name == "nt" or (python_version == "3.7" and extra == "dev")`, simplify to
+        // `os_name == "nt" or python_version == "3.7"`.
+        let markers = MarkerTree::from_str(
+            r#"os_name == "nt" or (python_version == "3.7" and extra == "dev")"#,
+        )
+        .unwrap();
+        let simplified = markers.simplify_extras(&[ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(
+            simplified,
+            Some(MarkerTree::Or(vec![
+                MarkerTree::Expression(MarkerExpression {
+                    l_value: MarkerValue::MarkerEnvString(MarkerValueString::OsName),
+                    operator: MarkerOperator::Equal,
+                    r_value: MarkerValue::QuotedString("nt".to_string()),
+                }),
+                MarkerTree::Expression(MarkerExpression {
+                    l_value: MarkerValue::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
+                    operator: MarkerOperator::Equal,
+                    r_value: MarkerValue::QuotedString("3.7".to_string()),
+                }),
+            ]))
+        );
     }
 }

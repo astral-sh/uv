@@ -4750,6 +4750,7 @@ dependencies = [
  "serde",
  "toml",
  "tracing",
+ "url",
  "uv-client",
  "uv-distribution",
  "uv-fs",

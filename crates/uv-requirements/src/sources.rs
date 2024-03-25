@@ -105,4 +105,8 @@ impl ExtrasSpecification<'_> {
             ExtrasSpecification::Some(extras) => extras.contains(name),
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        matches!(self, ExtrasSpecification::None)
+    }
 }

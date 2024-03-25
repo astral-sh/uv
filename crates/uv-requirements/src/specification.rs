@@ -1,7 +1,9 @@
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
+use pyproject_toml::Project;
 use rustc_hash::FxHashSet;
 use tracing::{instrument, Level};
 
@@ -12,7 +14,6 @@ use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
-use uv_warnings::warn_user;
 
 use crate::{ExtrasSpecification, RequirementsSource};
 
@@ -28,6 +29,8 @@ pub struct RequirementsSpecification {
     pub overrides: Vec<Requirement>,
     /// Package to install as editable installs
     pub editables: Vec<EditableRequirement>,
+    /// The source trees from which to extract requirements.
+    pub source_trees: Vec<PathBuf>,
     /// The extras used to collect requirements.
     pub extras: FxHashSet<ExtraName>,
     /// The index URL to use for fetching packages.
@@ -58,6 +61,7 @@ impl RequirementsSpecification {
                     constraints: vec![],
                     overrides: vec![],
                     editables: vec![],
+                    source_trees: vec![],
                     extras: FxHashSet::default(),
                     index_url: None,
                     extra_index_urls: vec![],
@@ -74,6 +78,7 @@ impl RequirementsSpecification {
                     constraints: vec![],
                     overrides: vec![],
                     editables: vec![requirement],
+                    source_trees: vec![],
                     extras: FxHashSet::default(),
                     index_url: None,
                     extra_index_urls: vec![],
@@ -92,8 +97,9 @@ impl RequirementsSpecification {
                         .map(|entry| entry.requirement)
                         .collect(),
                     constraints: requirements_txt.constraints,
-                    editables: requirements_txt.editables,
                     overrides: vec![],
+                    editables: requirements_txt.editables,
+                    source_trees: vec![],
                     extras: FxHashSet::default(),
                     index_url: requirements_txt.index_url.map(IndexUrl::from),
                     extra_index_urls: requirements_txt
@@ -116,66 +122,59 @@ impl RequirementsSpecification {
                 let contents = uv_fs::read_to_string(path).await?;
                 let pyproject_toml = toml::from_str::<pyproject_toml::PyProjectToml>(&contents)
                     .with_context(|| format!("Failed to parse `{}`", path.user_display()))?;
-                let mut used_extras = FxHashSet::default();
-                let mut requirements = Vec::new();
-                let mut project_name = None;
 
-                if let Some(project) = pyproject_toml.project {
-                    // Parse the project name.
-                    let parsed_project_name =
-                        PackageName::new(project.name).with_context(|| {
-                            format!("Invalid `project.name` in {}", path.user_display())
-                        })?;
-
-                    // Include the default dependencies.
-                    requirements.extend(project.dependencies.unwrap_or_default());
-
-                    // Include any optional dependencies specified in `extras`.
-                    if !matches!(extras, ExtrasSpecification::None) {
-                        if let Some(optional_dependencies) = project.optional_dependencies {
-                            for (extra_name, optional_requirements) in &optional_dependencies {
-                                // TODO(konstin): It's not ideal that pyproject-toml doesn't use
-                                // `ExtraName`
-                                let normalized_name = ExtraName::from_str(extra_name)?;
-                                if extras.contains(&normalized_name) {
-                                    used_extras.insert(normalized_name);
-                                    requirements.extend(flatten_extra(
-                                        &parsed_project_name,
-                                        optional_requirements,
-                                        &optional_dependencies,
-                                    )?);
-                                }
-                            }
-                        }
-                    }
-
-                    project_name = Some(parsed_project_name);
-                }
-
-                if requirements.is_empty()
-                    && pyproject_toml.build_system.is_some_and(|build_system| {
-                        build_system.requires.iter().any(|requirement| {
-                            requirement.name.as_dist_info_name().starts_with("poetry")
+                // Attempt to read metadata from the `pyproject.toml` directly.
+                if let Some(project) = pyproject_toml
+                    .project
+                    .map(|project| {
+                        StaticProject::try_from(project, extras).with_context(|| {
+                            format!(
+                                "Failed to extract requirements from `{}`",
+                                path.user_display()
+                            )
                         })
                     })
+                    .transpose()?
+                    .flatten()
                 {
-                    warn_user!("`{}` does not contain any dependencies (hint: specify dependencies in the `project.dependencies` section; `tool.poetry.dependencies` is not currently supported)", path.user_display());
-                }
-
-                Self {
-                    project: project_name,
-                    requirements: requirements
-                        .into_iter()
-                        .map(RequirementsTxtRequirement::Pep508)
-                        .collect(),
-                    constraints: vec![],
-                    overrides: vec![],
-                    editables: vec![],
-                    extras: used_extras,
-                    index_url: None,
-                    extra_index_urls: vec![],
-                    no_index: false,
-                    find_links: vec![],
+                    Self {
+                        project: Some(project.name),
+                        requirements: project
+                            .requirements
+                            .into_iter()
+                            .map(RequirementsTxtRequirement::Pep508)
+                            .collect(),
+                        constraints: vec![],
+                        overrides: vec![],
+                        editables: vec![],
+                        source_trees: vec![],
+                        extras: project.used_extras,
+                        index_url: None,
+                        extra_index_urls: vec![],
+                        no_index: false,
+                        find_links: vec![],
+                    }
+                } else {
+                    let path = fs_err::canonicalize(path)?;
+                    let source_tree = path.parent().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "The file `{}` appears to be a `pyproject.toml` file, which must be in a directory",
+                            path.user_display()
+                        )
+                    })?;
+                    Self {
+                        project: None,
+                        requirements: vec![],
+                        constraints: vec![],
+                        overrides: vec![],
+                        editables: vec![],
+                        source_trees: vec![source_tree.to_path_buf()],
+                        extras: FxHashSet::default(),
+                        index_url: None,
+                        extra_index_urls: vec![],
+                        no_index: false,
+                        find_links: vec![],
+                    }
                 }
             }
         })
@@ -201,6 +200,7 @@ impl RequirementsSpecification {
             spec.overrides.extend(source.overrides);
             spec.extras.extend(source.extras);
             spec.editables.extend(source.editables);
+            spec.source_trees.extend(source.source_trees);
 
             // Use the first project name discovered.
             if spec.project.is_none() {
@@ -304,6 +304,66 @@ impl RequirementsSpecification {
             client_builder,
         )
         .await
+    }
+}
+
+#[derive(Debug)]
+pub struct StaticProject {
+    /// The name of the project.
+    pub name: PackageName,
+    /// The requirements extracted from the project.
+    pub requirements: Vec<Requirement>,
+    /// The extras used to collect requirements.
+    pub used_extras: FxHashSet<ExtraName>,
+}
+
+impl StaticProject {
+    pub fn try_from(project: Project, extras: &ExtrasSpecification) -> Result<Option<Self>> {
+        // Parse the project name.
+        let name =
+            PackageName::new(project.name).with_context(|| "Invalid `project.name`".to_string())?;
+
+        if let Some(dynamic) = project.dynamic.as_ref() {
+            // If the project specifies dynamic dependencies, we can't extract the requirements.
+            if dynamic.iter().any(|field| field == "dependencies") {
+                return Ok(None);
+            }
+            // If we requested extras, and the project specifies dynamic optional dependencies, we can't
+            // extract the requirements.
+            if !extras.is_empty() && dynamic.iter().any(|field| field == "optional-dependencies") {
+                return Ok(None);
+            }
+        }
+
+        let mut requirements = Vec::new();
+        let mut used_extras = FxHashSet::default();
+
+        // Include the default dependencies.
+        requirements.extend(project.dependencies.unwrap_or_default());
+
+        // Include any optional dependencies specified in `extras`.
+        if !extras.is_empty() {
+            if let Some(optional_dependencies) = project.optional_dependencies {
+                for (extra_name, optional_requirements) in &optional_dependencies {
+                    let normalized_name = ExtraName::from_str(extra_name)
+                        .with_context(|| format!("Invalid extra name `{extra_name}`"))?;
+                    if extras.contains(&normalized_name) {
+                        used_extras.insert(normalized_name);
+                        requirements.extend(flatten_extra(
+                            &name,
+                            optional_requirements,
+                            &optional_dependencies,
+                        )?);
+                    }
+                }
+            }
+        }
+
+        Ok(Some(Self {
+            name,
+            requirements,
+            used_extras,
+        }))
     }
 }
 
