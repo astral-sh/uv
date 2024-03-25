@@ -107,7 +107,7 @@ impl<'a> DistFinder<'a> {
                 // We have a URL; fetch the distribution directly.
                 let package_name = requirement.name.clone();
                 let package = Dist::from_url(package_name.clone(), url.clone())?;
-                Ok((package_name, ResolvedDist::Installable(package)))
+                Ok((package_name, package.into()))
             }
         }
     }

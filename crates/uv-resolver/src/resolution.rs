@@ -89,10 +89,7 @@ impl ResolutionGraph {
                 PubGrubPackage::Package(package_name, None, None) => {
                     // Create the distribution.
                     let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
-                        ResolvedDist::Installable(Dist::from_editable(
-                            package_name.clone(),
-                            editable.clone(),
-                        )?)
+                        Dist::from_editable(package_name.clone(), editable.clone())?.into()
                     } else {
                         pins.get(package_name, version)
                             .expect("Every package should be pinned")
@@ -144,7 +141,7 @@ impl ResolutionGraph {
                     }
 
                     // Add the distribution to the graph.
-                    let index = petgraph.add_node(ResolvedDist::Installable(pinned_package));
+                    let index = petgraph.add_node(pinned_package.into());
                     inverse.insert(package_name, index);
                 }
                 PubGrubPackage::Package(package_name, Some(extra), None) => {
@@ -162,7 +159,7 @@ impl ResolutionGraph {
                                 Dist::from_editable(package_name.clone(), editable.clone())?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
-                                dist: ResolvedDist::Installable(pinned_package),
+                                dist: pinned_package.into(),
                                 extra: extra.clone(),
                             });
                         }
@@ -205,13 +202,11 @@ impl ResolutionGraph {
                                 .or_insert_with(Vec::new)
                                 .push(extra.clone());
                         } else {
-                            let pinned_package = ResolvedDist::Installable(Dist::from_editable(
-                                package_name.clone(),
-                                editable.clone(),
-                            )?);
+                            let pinned_package =
+                                Dist::from_editable(package_name.clone(), editable.clone())?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package,
+                                dist: pinned_package.into(),
                                 extra: extra.clone(),
                             });
                         }
@@ -233,13 +228,10 @@ impl ResolutionGraph {
                                 || url.clone(),
                                 |precise| apply_redirect(url, precise.value()),
                             );
-                            let pinned_package = ResolvedDist::Installable(Dist::from_url(
-                                package_name.clone(),
-                                url,
-                            )?);
+                            let pinned_package = Dist::from_url(package_name.clone(), url)?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package,
+                                dist: pinned_package.into(),
                                 extra: extra.clone(),
                             });
                         }
