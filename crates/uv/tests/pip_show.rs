@@ -76,11 +76,11 @@ fn show_requires_multiple() -> Result<()> {
     Resolved 5 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
-     + certifi==2023.11.17
+     + certifi==2024.2.2
      + charset-normalizer==3.3.2
-     + idna==3.4
+     + idna==3.6
      + requests==2.31.0
-     + urllib3==2.1.0
+     + urllib3==2.2.1
     "###
     );
 

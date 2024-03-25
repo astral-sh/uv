@@ -176,7 +176,7 @@ fn seed() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: .venv
-     + pip==23.3.1
+     + pip==24.0
     Activate with: source .venv/bin/activate
     "###
     );
@@ -223,9 +223,9 @@ fn seed_older_python_version() -> Result<()> {
     ----- stderr -----
     Using Python [VERSION] interpreter at: [PATH]
     Creating virtualenv at: .venv
-     + pip==23.3.1
-     + setuptools==68.2.2
-     + wheel==0.41.3
+     + pip==24.0
+     + setuptools==69.2.0
+     + wheel==0.43.0
     Activate with: source .venv/bin/activate
     "###
     );

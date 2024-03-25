@@ -21,7 +21,7 @@ use uv_cache::Cache;
 use uv_interpreter::find_requested_python;
 
 // Exclude any packages uploaded after this date.
-pub static EXCLUDE_NEWER: &str = "2023-11-18T12:00:00Z";
+pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir [^\s]+", "--cache-dir [CACHE_DIR]"),

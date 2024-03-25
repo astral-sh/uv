@@ -66,11 +66,11 @@ fn check_compatible_packages() -> Result<()> {
     Resolved 5 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
-     + certifi==2023.11.17
+     + certifi==2024.2.2
      + charset-normalizer==3.3.2
-     + idna==3.4
+     + idna==3.6
      + requests==2.31.0
-     + urllib3==2.1.0
+     + urllib3==2.2.1
     "###
     );
 
@@ -110,11 +110,11 @@ fn check_incompatible_packages() -> Result<()> {
     Resolved 5 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
-     + certifi==2023.11.17
+     + certifi==2024.2.2
      + charset-normalizer==3.3.2
-     + idna==3.4
+     + idna==3.6
      + requests==2.31.0
-     + urllib3==2.1.0
+     + urllib3==2.2.1
     "###
     );
 
@@ -134,7 +134,7 @@ fn check_incompatible_packages() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     - idna==3.4
+     - idna==3.6
      + idna==2.4
     warning: The package `requests` requires `idna<4,>=2.5`, but `2.4` is installed.
     "###
@@ -178,11 +178,11 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     Resolved 5 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 5 packages in [TIME]
-     + certifi==2023.11.17
+     + certifi==2024.2.2
      + charset-normalizer==3.3.2
-     + idna==3.4
+     + idna==3.6
      + requests==2.31.0
-     + urllib3==2.1.0
+     + urllib3==2.2.1
     "###
     );
 
@@ -202,9 +202,9 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     Resolved 2 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     - idna==3.4
+     - idna==3.6
      + idna==2.4
-     - urllib3==2.1.0
+     - urllib3==2.2.1
      + urllib3==1.20
     warning: The package `requests` requires `idna<4,>=2.5`, but `2.4` is installed.
     warning: The package `requests` requires `urllib3<3,>=1.21.1`, but `1.20` is installed.

@@ -129,10 +129,10 @@ fn list_editable() -> Result<()> {
     Resolved 4 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 4 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.4
+     + anyio==4.3.0
+     + idna==3.6
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
-     + sniffio==1.3.0
+     + sniffio==1.3.1
     "###
     );
 
@@ -185,10 +185,10 @@ fn list_editable() -> Result<()> {
     ----- stdout -----
     Package         Version Editable project location
     --------------- ------- ------------------------------------------------
-    anyio           4.0.0
-    idna            3.4
+    anyio           4.3.0
+    idna            3.6
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/packages/poetry_editable
-    sniffio         1.3.0
+    sniffio         1.3.1
 
     ----- stderr -----
     "###
@@ -226,10 +226,10 @@ fn list_editable_only() -> Result<()> {
     Resolved 4 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 4 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.4
+     + anyio==4.3.0
+     + idna==3.6
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
-     + sniffio==1.3.0
+     + sniffio==1.3.1
     "###
     );
 
@@ -295,9 +295,9 @@ fn list_editable_only() -> Result<()> {
     ----- stdout -----
     Package Version
     ------- -------
-    anyio   4.0.0
-    idna    3.4
-    sniffio 1.3.0
+    anyio   4.3.0
+    idna    3.6
+    sniffio 1.3.1
 
     ----- stderr -----
     "###
@@ -352,10 +352,10 @@ fn list_exclude() -> Result<()> {
     Resolved 4 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 4 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.4
+     + anyio==4.3.0
+     + idna==3.6
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
-     + sniffio==1.3.0
+     + sniffio==1.3.1
     "###
     );
 
@@ -403,10 +403,10 @@ fn list_exclude() -> Result<()> {
     ----- stdout -----
     Package         Version Editable project location
     --------------- ------- ------------------------------------------------
-    anyio           4.0.0
-    idna            3.4
+    anyio           4.3.0
+    idna            3.6
     poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/packages/poetry_editable
-    sniffio         1.3.0
+    sniffio         1.3.1
 
     ----- stderr -----
     "###
@@ -426,9 +426,9 @@ fn list_exclude() -> Result<()> {
     ----- stdout -----
     Package Version
     ------- -------
-    anyio   4.0.0
-    idna    3.4
-    sniffio 1.3.0
+    anyio   4.3.0
+    idna    3.6
+    sniffio 1.3.1
 
     ----- stderr -----
     "###
@@ -450,9 +450,9 @@ fn list_exclude() -> Result<()> {
     ----- stdout -----
     Package Version
     ------- -------
-    anyio   4.0.0
-    idna    3.4
-    sniffio 1.3.0
+    anyio   4.3.0
+    idna    3.6
+    sniffio 1.3.1
 
     ----- stderr -----
     "###
@@ -493,10 +493,10 @@ fn list_format_json() -> Result<()> {
     Resolved 4 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 4 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.4
+     + anyio==4.3.0
+     + idna==3.6
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
-     + sniffio==1.3.0
+     + sniffio==1.3.1
     "###
     );
 
@@ -548,7 +548,7 @@ fn list_format_json() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.0.0"},{"name":"idna","version":"3.4"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/packages/poetry_editable"},{"name":"sniffio","version":"1.3.0"}]
+    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/packages/poetry_editable"},{"name":"sniffio","version":"1.3.1"}]
 
     ----- stderr -----
     "###
@@ -584,7 +584,7 @@ fn list_format_json() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.0.0"},{"name":"idna","version":"3.4"},{"name":"sniffio","version":"1.3.0"}]
+    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"sniffio","version":"1.3.1"}]
 
     ----- stderr -----
     "###
@@ -642,10 +642,10 @@ fn list_format_freeze() -> Result<()> {
     Resolved 4 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 4 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.4
+     + anyio==4.3.0
+     + idna==3.6
      + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
-     + sniffio==1.3.0
+     + sniffio==1.3.1
     "###
     );
 
@@ -690,10 +690,10 @@ fn list_format_freeze() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    anyio==4.0.0
-    idna==3.4
+    anyio==4.3.0
+    idna==3.6
     poetry-editable==0.1.0
-    sniffio==1.3.0
+    sniffio==1.3.1
 
     ----- stderr -----
     "###
@@ -729,9 +729,9 @@ fn list_format_freeze() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    anyio==4.0.0
-    idna==3.4
-    sniffio==1.3.0
+    anyio==4.3.0
+    idna==3.6
+    sniffio==1.3.1
 
     ----- stderr -----
     "###
