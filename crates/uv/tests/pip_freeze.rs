@@ -77,7 +77,7 @@ fn freeze_many() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn freeze_duplicate() -> Result<()> {
-    use crate::common::{copy_dir_all, INSTA_FILTERS};
+    use crate::common::copy_dir_all;
 
     // Sync a version of `pip` into a virtual environment.
     let context1 = TestContext::new("3.12");
@@ -103,31 +103,12 @@ fn freeze_duplicate() -> Result<()> {
 
     // Copy the virtual environment to a new location.
     copy_dir_all(
-        context2
-            .venv
-            .join("lib/python3.12/site-packages/pip-22.1.1.dist-info"),
-        context1
-            .venv
-            .join("lib/python3.12/site-packages/pip-22.1.1.dist-info"),
+        context2.site_packages().join("pip-22.1.1.dist-info"),
+        context1.site_packages().join("pip-22.1.1.dist-info"),
     )?;
 
     // Run `pip freeze`.
-    let filters = INSTA_FILTERS
-        .iter()
-        .chain(&[
-            (
-                ".*/lib/python3.12/site-packages/pip-22.1.1.dist-info",
-                "/pip-22.1.1.dist-info",
-            ),
-            (
-                ".*/lib/python3.12/site-packages/pip-21.3.1.dist-info",
-                "/pip-21.3.1.dist-info",
-            ),
-        ])
-        .copied()
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, command(&context1).arg("--strict"), @r###"
+    uv_snapshot!(context1.filters(), command(&context1).arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -136,8 +117,8 @@ fn freeze_duplicate() -> Result<()> {
 
     ----- stderr -----
     warning: The package `pip` has multiple installed distributions:
-    /pip-21.3.1.dist-info
-    /pip-22.1.1.dist-info
+      - [SITE_PACKAGES]/pip-21.3.1.dist-info
+      - [SITE_PACKAGES]/pip-22.1.1.dist-info
     "###
     );
 

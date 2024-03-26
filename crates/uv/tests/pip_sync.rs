@@ -10,6 +10,7 @@ use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use predicates::Predicate;
 use url::Url;
 
 use common::{
@@ -17,7 +18,7 @@ use common::{
 };
 use uv_fs::Simplified;
 
-use crate::common::{get_bin, TestContext};
+use crate::common::{copy_dir_all, get_bin, TestContext};
 
 mod common;
 
@@ -114,29 +115,22 @@ fn missing_requirements_txt() {
 
 #[test]
 fn missing_venv() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let venv = temp_dir.child(".venv");
+    let context = TestContext::new("3.12");
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("anyio")?;
+    fs::remove_dir_all(&context.venv)?;
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("sync")
-        .arg("requirements.txt")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .current_dir(&temp_dir), @r###"
+    uv_snapshot!(context.filters(), command(&context).arg("requirements.txt"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `requirements.txt`
+    error: failed to canonicalize path `[VENV]/`
       Caused by: No such file or directory (os error 2)
     "###);
 
-    venv.assert(predicates::path::missing());
+    assert!(predicates::path::missing().eval(&context.venv));
 
     Ok(())
 }
@@ -919,7 +913,7 @@ fn warn_on_yanked_version() -> Result<()> {
     // This version is yanked.
     requirements_in.write_str("colorama==0.4.2")?;
 
-    uv_snapshot!(INSTA_FILTERS, windows_filters=false, command(&context)
+    uv_snapshot!(context.filters(), windows_filters=false, command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -955,13 +949,7 @@ fn install_local_wheel() -> Result<()> {
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -982,7 +970,7 @@ fn install_local_wheel() -> Result<()> {
     let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
 
     // Reinstall. The wheel should come from the cache, so there shouldn't be a "download".
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1006,7 +994,7 @@ fn install_local_wheel() -> Result<()> {
     filetime::set_file_mtime(&archive, filetime::FileTime::now()).unwrap();
 
     // Reinstall. The wheel should be "downloaded" again.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1028,7 +1016,7 @@ fn install_local_wheel() -> Result<()> {
     filetime::set_file_mtime(&archive, filetime::FileTime::now()).unwrap();
 
     // Reinstall into the same virtual environment. The wheel should be reinstalled.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1067,13 +1055,7 @@ fn mismatched_version() -> Result<()> {
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -1108,13 +1090,7 @@ fn mismatched_name() -> Result<()> {
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -1149,13 +1125,7 @@ fn install_local_source_distribution() -> Result<()> {
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1267,10 +1237,10 @@ fn install_url_source_dist_cached() -> Result<()> {
     let filters = if cfg!(windows) {
         [("warning: The package `tqdm` requires `colorama ; platform_system == 'Windows'`, but it's not installed.\n", "")]
             .into_iter()
-            .chain(INSTA_FILTERS.to_vec())
+            .chain(context.filters())
             .collect()
     } else {
-        INSTA_FILTERS.to_vec()
+        context.filters()
     };
     uv_snapshot!(filters, command(&context)
         .arg("requirements.txt")
@@ -1290,7 +1260,8 @@ fn install_url_source_dist_cached() -> Result<()> {
     context.assert_command("import tqdm").success();
 
     // Re-run the installation in a new virtual environment.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
     uv_snapshot!(filters, command(&context)
@@ -1310,7 +1281,8 @@ fn install_url_source_dist_cached() -> Result<()> {
     context.assert_command("import tqdm").success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
     uv_snapshot!(Command::new(get_bin())
@@ -1378,7 +1350,8 @@ fn install_git_source_dist_cached() -> Result<()> {
     context.assert_command("import werkzeug").success();
 
     // Re-run the installation in a new virtual environment.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
     uv_snapshot!(command(&context)
@@ -1398,16 +1371,17 @@ fn install_git_source_dist_cached() -> Result<()> {
     check_command(&venv, "import werkzeug", &context.temp_dir);
 
     // Clear the cache, then re-run the installation in a new virtual environment.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
     let filters = if cfg!(windows) {
         [("Removed 2 files", "Removed 3 files")]
             .into_iter()
-            .chain(INSTA_FILTERS.to_vec())
+            .chain(context.filters())
             .collect()
     } else {
-        INSTA_FILTERS.to_vec()
+        context.filters()
     };
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
@@ -1473,7 +1447,8 @@ fn install_registry_source_dist_cached() -> Result<()> {
     context.assert_command("import future").success();
 
     // Re-run the installation in a new virtual environment.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
     uv_snapshot!(command(&context)
@@ -1493,16 +1468,17 @@ fn install_registry_source_dist_cached() -> Result<()> {
     context.assert_command("import future").success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
     let filters = if cfg!(windows) {
         [("Removed 615 files", "Removed 616 files")]
             .into_iter()
-            .chain(INSTA_FILTERS.to_vec())
+            .chain(context.filters())
             .collect()
     } else {
-        INSTA_FILTERS.to_vec()
+        context.filters()
     };
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
@@ -1558,13 +1534,7 @@ fn install_path_source_dist_cached() -> Result<()> {
         Url::from_file_path(archive.path()).unwrap()
     ))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1582,10 +1552,11 @@ fn install_path_source_dist_cached() -> Result<()> {
     context.assert_command("import wheel").success();
 
     // Re-run the installation in a new virtual environment.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1602,18 +1573,19 @@ fn install_path_source_dist_cached() -> Result<()> {
     context.assert_command("import wheel").success();
 
     // Clear the cache, then re-run the installation in a new virtual environment.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    let filters2 = if cfg!(windows) {
+    let filters = if cfg!(windows) {
         [("Removed 3 files", "Removed 4 files")]
             .into_iter()
-            .chain(INSTA_FILTERS.to_vec())
+            .chain(context.filters())
             .collect()
     } else {
-        INSTA_FILTERS.to_vec()
+        context.filters()
     };
-    uv_snapshot!(filters2, Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
         .arg("wheel")
         .arg("--cache-dir")
@@ -1629,7 +1601,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1665,17 +1637,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     let url = Url::from_file_path(archive.path()).unwrap();
     requirements_txt.write_str(&format!("tomli @ {url}"))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let url_escaped = regex::escape(url.as_str());
-    let filters: Vec<_> = [(
-        url_escaped.as_str(),
-        "file://[TEMP_DIR]/tomli-2.0.1-py3-none-any.whl",
-    )]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1693,10 +1655,11 @@ fn install_path_built_dist_cached() -> Result<()> {
     context.assert_command("import tomli").success();
 
     // Re-run the installation in a new virtual environment.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&context.temp_dir, &context.cache_dir, "3.12");
 
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1713,21 +1676,23 @@ fn install_path_built_dist_cached() -> Result<()> {
     check_command(&venv, "import tomli", &parent);
 
     // Clear the cache, then re-run the installation in a new virtual environment.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    let filters2 = if cfg!(windows) {
+    let filters = if cfg!(windows) {
+        // We do not display sizes on Windows
         [(
             "Removed 1 file for tomli",
             "Removed 1 file for tomli ([SIZE])",
         )]
         .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
+        .chain(context.filters())
         .collect()
     } else {
-        INSTA_FILTERS.to_vec()
+        context.filters()
     };
-    uv_snapshot!(filters2, Command::new(get_bin())
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
         .arg("tomli")
         .arg("--cache-dir")
@@ -1743,7 +1708,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict")
         .env("VIRTUAL_ENV", venv.as_os_str()), @r###"
@@ -1776,10 +1741,10 @@ fn install_url_built_dist_cached() -> Result<()> {
     let filters = if cfg!(windows) {
         [("warning: The package `tqdm` requires `colorama ; platform_system == 'Windows'`, but it's not installed.\n", "")]
             .into_iter()
-            .chain(INSTA_FILTERS.to_vec())
+            .chain(context.filters())
             .collect()
     } else {
-        INSTA_FILTERS.to_vec()
+        context.filters()
     };
     uv_snapshot!(filters, command(&context)
         .arg("requirements.txt")
@@ -1799,7 +1764,8 @@ fn install_url_built_dist_cached() -> Result<()> {
     context.assert_command("import tqdm").success();
 
     // Re-run the installation in a new virtual environment.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
     uv_snapshot!(filters, command(&context)
@@ -1819,7 +1785,8 @@ fn install_url_built_dist_cached() -> Result<()> {
     check_command(&venv, "import tqdm", &context.temp_dir);
 
     // Clear the cache, then re-run the installation in a new virtual environment.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
     uv_snapshot!(Command::new(get_bin())
@@ -2096,7 +2063,8 @@ fn refresh() -> Result<()> {
 
     // Re-run the installation into with `--refresh`. Ensure that we resolve and download the
     // latest versions of the packages.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
     uv_snapshot!(command(&context)
@@ -2153,7 +2121,8 @@ fn refresh_package() -> Result<()> {
 
     // Re-run the installation into with `--refresh`. Ensure that we resolve and download the
     // latest versions of the packages.
-    let parent = assert_fs::TempDir::new()?;
+    let parent = context.temp_dir.child("parent");
+    parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
     uv_snapshot!(command(&context)
@@ -2186,40 +2155,20 @@ fn refresh_package() -> Result<()> {
 fn sync_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_url = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str()
-            .trim_end_matches(['\\', '/']),
-    );
-
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
         boltons==23.1.1
-        -e ../../scripts/packages/maturin_editable
+        -e {workspace_root}/scripts/packages/maturin_editable
         numpy==1.26.2
             # via poetry-editable
-        -e file://{current_dir}/../../scripts/packages/poetry_editable
+        -e file://{workspace_root}/scripts/packages/poetry_editable
         ",
-        current_dir = current_dir.simplified_display(),
+        workspace_root = context.workspace_root.simplified_display(),
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.user_display().to_string());
-    let filters = INSTA_FILTERS
-        .iter()
-        .chain(&[
-            (filter_path.as_str(), "requirements.txt"),
-            (&workspace_url, "file://[WORKSPACE_DIR]"),
-        ])
-        .copied()
-        .collect::<Vec<_>>();
-
     // Install the editable packages.
-    uv_snapshot!(filters, command(&context)
-        .arg(requirements_txt.path())
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(requirements_txt.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2230,19 +2179,17 @@ fn sync_editable() -> Result<()> {
     Downloaded 2 packages in [TIME]
     Installed 4 packages in [TIME]
      + boltons==23.1.1
-     + maturin-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/maturin_editable)
+     + maturin-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/maturin_editable)
      + numpy==1.26.2
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
     "###
     );
 
     // Reinstall the editable packages.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg(requirements_txt.path())
         .arg("--reinstall-package")
-        .arg("poetry-editable")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg("poetry-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2251,20 +2198,21 @@ fn sync_editable() -> Result<()> {
     Built 1 editable in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
     "###
     );
 
     // Make sure we have the right base case.
-    let python_source_file =
-        "../../scripts/packages/maturin_editable/python/maturin_editable/__init__.py";
+    let python_source_file = context
+        .workspace_root
+        .join("scripts/packages/maturin_editable/python/maturin_editable/__init__.py");
     let python_version_1 = indoc::indoc! {r"
         from .maturin_editable import *
 
         version = 1
    "};
-    fs_err::write(python_source_file, python_version_1)?;
+    fs_err::write(&python_source_file, python_version_1)?;
 
     let check_installed = indoc::indoc! {r#"
         from maturin_editable import sum_as_string, version
@@ -2280,7 +2228,7 @@ fn sync_editable() -> Result<()> {
 
         version = 2
    "};
-    fs_err::write(python_source_file, python_version_2)?;
+    fs_err::write(&python_source_file, python_version_2)?;
 
     let check_installed = indoc::indoc! {r#"
         from maturin_editable import sum_as_string, version
@@ -2292,12 +2240,10 @@ fn sync_editable() -> Result<()> {
     context.assert_command(check_installed).success();
 
     // Don't create a git diff.
-    fs_err::write(python_source_file, python_version_1)?;
+    fs_err::write(&python_source_file, python_version_1)?;
 
-    uv_snapshot!(filters, command(&context)
-        .arg(requirements_txt.path())
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(requirements_txt.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2314,12 +2260,13 @@ fn sync_editable() -> Result<()> {
 fn sync_editable_and_registry() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_url = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
+    // Copy the black test editable into the "current" directory
+    copy_dir_all(
+        context
+            .workspace_root
+            .join("scripts/packages/black_editable"),
+        context.temp_dir.join("black_editable"),
+    )?;
 
     // Install the registry-based version of Black.
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -2328,20 +2275,9 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.user_display().to_string());
-    let filters = INSTA_FILTERS
-        .iter()
-        .chain(&[
-            (filter_path.as_str(), "requirements.txt"),
-            (workspace_url.as_str(), "file://[WORKSPACE_DIR]/"),
-        ])
-        .copied()
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg(requirements_txt.path())
-        .arg("--strict")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2363,23 +2299,12 @@ fn sync_editable_and_registry() -> Result<()> {
     // Use the `file:` syntax for extra coverage.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
-        -e file:../../scripts/packages/black_editable
+        -e file:./black_editable
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.user_display().to_string());
-    let filters = INSTA_FILTERS
-        .iter()
-        .chain(&[
-            (filter_path.as_str(), "requirements.txt"),
-            (workspace_url.as_str(), "file://[WORKSPACE_DIR]/"),
-        ])
-        .copied()
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, command(&context)
-        .arg(requirements_txt.path())
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(requirements_txt.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2389,7 +2314,7 @@ fn sync_editable_and_registry() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.1.0
-     + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
     "###
     );
 
@@ -2401,19 +2326,8 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.user_display().to_string());
-    let filters = INSTA_FILTERS
-        .iter()
-        .chain(&[
-            (filter_path.as_str(), "requirements.txt"),
-            (workspace_url.as_str(), "file://[WORKSPACE_DIR]/"),
-        ])
-        .copied()
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, command(&context)
-        .arg(requirements_txt.path())
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(requirements_txt.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2430,20 +2344,9 @@ fn sync_editable_and_registry() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_txt.user_display().to_string());
-    let filters = INSTA_FILTERS
-        .iter()
-        .chain(&[
-            (filter_path.as_str(), "requirements.txt"),
-            (workspace_url.as_str(), "file://[WORKSPACE_DIR]/"),
-        ])
-        .copied()
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg(requirements_txt.path())
-        .arg("--strict")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2453,7 +2356,7 @@ fn sync_editable_and_registry() -> Result<()> {
     Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/black_editable)
+     - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
      + black==23.10.0
     warning: The package `black` requires `click>=8.0.0`, but it's not installed.
     warning: The package `black` requires `mypy-extensions>=0.4.3`, but it's not installed.
@@ -2469,24 +2372,13 @@ fn sync_editable_and_registry() -> Result<()> {
 #[test]
 fn incompatible_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
-    let wheel_dir = assert_fs::TempDir::new()?;
-
-    let wheel = wheel_dir.child("foo-1.2.3-not-compatible-wheel.whl");
+    let wheel = context.temp_dir.child("foo-1.2.3-not-compatible-wheel.whl");
     wheel.touch()?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!(
-        "foo @ {}",
-        Url::from_file_path(wheel.path()).unwrap()
-    ))?;
+    requirements_txt.write_str(&format!("foo @ {}", wheel.path().simplified_display()))?;
 
-    let wheel_dir = regex::escape(&wheel_dir.path().canonicalize()?.user_display().to_string());
-    let filters: Vec<_> = [(wheel_dir.as_str(), "[TEMP_DIR]")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
@@ -2495,7 +2387,7 @@ fn incompatible_wheel() -> Result<()> {
 
     ----- stderr -----
     error: Failed to determine installation plan
-      Caused by: A path dependency is incompatible with the current platform: [TEMP_DIR]/foo-1.2.3-not-compatible-wheel.whl
+      Caused by: A path dependency is incompatible with the current platform: foo-1.2.3-not-compatible-wheel.whl
     "###
     );
 
@@ -2566,17 +2458,10 @@ fn find_links() -> Result<()> {
         werkzeug @ https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl
     "})?;
 
-    let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
-    let project_root_string = regex::escape(&project_root.user_display().to_string());
-    let filters: Vec<_> = [(project_root_string.as_str(), "[PROJECT_ROOT]")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--find-links")
-        .arg(project_root.join("scripts/wheels/")), @r###"
+        .arg(context.workspace_root.join("scripts/wheels/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2785,7 +2670,8 @@ fn invalidate_on_change() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package.
-    let editable_dir = assert_fs::TempDir::new()?;
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -2802,12 +2688,7 @@ requires-python = ">=3.8"
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
 
-    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2816,12 +2697,12 @@ requires-python = ">=3.8"
     ----- stderr -----
     Built 1 editable in [TIME]
     Installed 1 package in [TIME]
-     + example==0.0.0 (from [WORKSPACE_DIR])
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );
 
     // Re-installing should be a no-op.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2845,7 +2726,7 @@ requires-python = ">=3.8"
     )?;
 
     // Re-installing should update the package.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2855,8 +2736,8 @@ requires-python = ">=3.8"
     Built 1 editable in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - example==0.0.0 (from [WORKSPACE_DIR])
-     + example==0.0.0 (from [WORKSPACE_DIR])
+     - example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );
 
@@ -2907,29 +2788,19 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
-    let site_packages = regex::escape(
-        &context
-            .site_packages()
-            .canonicalize()
-            .unwrap()
-            .user_display()
-            .to_string(),
-    );
-    let filters: Vec<_> = [
-        (site_packages.as_str(), "[SITE-PACKAGES]"),
-        (r"\.venv/lib/python3.12/site-packages", "[SITE-PACKAGES]"),
-        (r"\.venv/Lib/site-packages", "[SITE-PACKAGES]"),
-        (
-            r#"\[SITE-PACKAGES\].*.py", received: "#,
-            r#"[SITE-PACKAGES]/[FIRST-FILE]", received: "#,
-        ),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect();
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([
+            // The first file can vary so we capture it here
+            (
+                r#"\[SITE_PACKAGES\].*\.py", received: "#,
+                r#"[SITE_PACKAGES]/[FILE].py", received: "#,
+            ),
+        ])
+        .collect();
 
     uv_snapshot!(filters, command(&context)
         .arg("requirements.txt")
@@ -2944,10 +2815,10 @@ fn compile_invalid_pyc_invalidation_mode() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-    error: Failed to bytecode-compile Python file in: [SITE-PACKAGES]
+    error: Failed to bytecode-compile Python file in: [SITE_PACKAGES]/
       Caused by: Python process stderr:
     Invalid value for PYC_INVALIDATION_MODE "bogus", valid are "TIMESTAMP", "CHECKED_HASH", "UNCHECKED_HASH":
-      Caused by: Bytecode compilation failed, expected "[SITE-PACKAGES]/[FIRST-FILE]", received: ""
+      Caused by: Bytecode compilation failed, expected "[SITE_PACKAGES]/[FILE].py", received: ""
     "###
     );
 
@@ -2960,7 +2831,8 @@ fn requires_python_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package with a `Requires-Python` constraint that is not met.
-    let editable_dir = assert_fs::TempDir::new()?;
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -3031,7 +2903,8 @@ fn requires_python_direct_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package with a `Requires-Python` constraint that is not met.
-    let editable_dir = assert_fs::TempDir::new()?;
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]

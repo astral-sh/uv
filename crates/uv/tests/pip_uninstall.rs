@@ -3,9 +3,8 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
-use url::Url;
 
-use common::{uv_snapshot, INSTA_FILTERS};
+use common::uv_snapshot;
 
 use crate::common::{get_bin, venv_to_interpreter, TestContext};
 
@@ -212,41 +211,17 @@ fn missing_record() -> Result<()> {
         .success();
 
     // Delete the RECORD file.
-    let dist_info = fs_err::canonicalize(if cfg!(unix) {
-        context
-            .venv
-            .join("lib")
-            .join("python3.12")
-            .join("site-packages")
-            .join("MarkupSafe-2.1.3.dist-info")
-    } else if cfg!(windows) {
-        context
-            .venv
-            .join("Lib")
-            .join("site-packages")
-            .join("MarkupSafe-2.1.3.dist-info")
-    } else {
-        unimplemented!("Only Windows and Unix are supported")
-    })
-    .unwrap();
+    let dist_info = context.site_packages().join("MarkupSafe-2.1.3.dist-info");
     fs_err::remove_file(dist_info.join("RECORD"))?;
 
-    let filters: Vec<_> = [(
-        r"RECORD file not found at: .*",
-        "RECORD file not found at: [RECORD]",
-    )]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect();
-
-    uv_snapshot!(filters, uninstall_command(&context)
+    uv_snapshot!(context.filters(), uninstall_command(&context)
         .arg("MarkupSafe"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot uninstall package; RECORD file not found at: [RECORD]
+    error: Cannot uninstall package; RECORD file not found at: [SITE_PACKAGES]/MarkupSafe-2.1.3.dist-info/RECORD
     "###
     );
 
@@ -257,25 +232,19 @@ fn missing_record() -> Result<()> {
 fn uninstall_editable_by_name() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
-
-    let filters: Vec<_> = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
-    requirements_txt.write_str("-e ../../scripts/packages/poetry_editable")?;
-
+    requirements_txt.write_str(&format!(
+        "-e {}",
+        context
+            .workspace_root
+            .join("scripts/packages/poetry_editable")
+            .as_os_str()
+            .to_str()
+            .expect("Path is valid unicode")
+    ))?;
     sync_command(&context)
         .arg(requirements_txt.path())
-        .current_dir(&current_dir)
         .assert()
         .success();
 
@@ -286,7 +255,7 @@ fn uninstall_editable_by_name() -> Result<()> {
         .success();
 
     // Uninstall the editable by name.
-    uv_snapshot!(filters, uninstall_command(&context)
+    uv_snapshot!(context.filters(), uninstall_command(&context)
         .arg("poetry-editable"), @r###"
     success: true
     exit_code: 0
@@ -294,7 +263,7 @@ fn uninstall_editable_by_name() -> Result<()> {
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
     "###
     );
 
@@ -311,25 +280,19 @@ fn uninstall_editable_by_name() -> Result<()> {
 fn uninstall_by_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
-
-    let filters: Vec<_> = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
-    requirements_txt.write_str("../../scripts/packages/poetry_editable")?;
+    requirements_txt.write_str(
+        context
+            .workspace_root
+            .join("scripts/packages/poetry_editable")
+            .as_os_str()
+            .to_str()
+            .expect("Path is valid unicode"),
+    )?;
 
     sync_command(&context)
         .arg(requirements_txt.path())
-        .current_dir(&current_dir)
         .assert()
         .success();
 
@@ -340,16 +303,15 @@ fn uninstall_by_path() -> Result<()> {
         .success();
 
     // Uninstall the editable by path.
-    uv_snapshot!(filters, uninstall_command(&context)
-        .arg("../../scripts/packages/poetry_editable")
-        .current_dir(&current_dir), @r###"
+    uv_snapshot!(context.filters(), uninstall_command(&context)
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
     "###
     );
 
@@ -366,25 +328,19 @@ fn uninstall_by_path() -> Result<()> {
 fn uninstall_duplicate_by_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
-
-    let filters: Vec<_> = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
-    requirements_txt.write_str("../../scripts/packages/poetry_editable")?;
+    requirements_txt.write_str(
+        context
+            .workspace_root
+            .join("scripts/packages/poetry_editable")
+            .as_os_str()
+            .to_str()
+            .expect("Path is valid unicode"),
+    )?;
 
     sync_command(&context)
         .arg(requirements_txt.path())
-        .current_dir(&current_dir)
         .assert()
         .success();
 
@@ -395,17 +351,16 @@ fn uninstall_duplicate_by_path() -> Result<()> {
         .success();
 
     // Uninstall the editable by both path and name.
-    uv_snapshot!(filters, uninstall_command(&context)
+    uv_snapshot!(context.filters(), uninstall_command(&context)
         .arg("poetry-editable")
-        .arg("../../scripts/packages/poetry_editable")
-        .current_dir(&current_dir), @r###"
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
     "###
     );
 
@@ -420,7 +375,6 @@ fn uninstall_duplicate_by_path() -> Result<()> {
 
 /// Uninstall a duplicate package in a virtual environment.
 #[test]
-#[cfg(unix)]
 fn uninstall_duplicate() -> Result<()> {
     use crate::common::copy_dir_all;
 
@@ -450,12 +404,8 @@ fn uninstall_duplicate() -> Result<()> {
 
     // Copy the virtual environment to a new location.
     copy_dir_all(
-        context2
-            .venv
-            .join("lib/python3.12/site-packages/pip-22.1.1.dist-info"),
-        context1
-            .venv
-            .join("lib/python3.12/site-packages/pip-22.1.1.dist-info"),
+        context2.site_packages().join("pip-22.1.1.dist-info"),
+        context1.site_packages().join("pip-22.1.1.dist-info"),
     )?;
 
     // Run `pip uninstall`.

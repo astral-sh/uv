@@ -85,14 +85,7 @@ fn show_requires_multiple() -> Result<()> {
     );
 
     context.assert_command("import requests").success();
-    let filters = [(
-        r"Location:.*site-packages",
-        "Location: [WORKSPACE_DIR]/site-packages",
-    )]
-    .to_vec();
-
-    // Guards against the package names being sorted.
-    uv_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(context.filters(), Command::new(get_bin())
         .arg("pip")
         .arg("show")
         .arg("requests")
@@ -105,7 +98,7 @@ fn show_requires_multiple() -> Result<()> {
     ----- stdout -----
     Name: requests
     Version: 2.31.0
-    Location: [WORKSPACE_DIR]/site-packages
+    Location: [SITE_PACKAGES]/
     Requires: certifi, charset-normalizer, idna, urllib3
     Required-by:
 
@@ -144,10 +137,7 @@ fn show_python_version_marker() -> Result<()> {
 
     context.assert_command("import click").success();
 
-    let mut filters = vec![(
-        r"Location:.*site-packages",
-        "Location: [WORKSPACE_DIR]/site-packages",
-    )];
+    let mut filters = context.filters();
     if cfg!(windows) {
         filters.push(("Requires: colorama", "Requires:"));
     }
@@ -165,7 +155,7 @@ fn show_python_version_marker() -> Result<()> {
     ----- stdout -----
     Name: click
     Version: 8.1.7
-    Location: [WORKSPACE_DIR]/site-packages
+    Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
 
@@ -202,12 +192,7 @@ fn show_found_single_package() -> Result<()> {
 
     context.assert_command("import markupsafe").success();
 
-    let filters = vec![(
-        r"Location:.*site-packages",
-        "Location: [WORKSPACE_DIR]/site-packages",
-    )];
-
-    uv_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(context.filters(), Command::new(get_bin())
         .arg("pip")
         .arg("show")
         .arg("markupsafe")
@@ -220,7 +205,7 @@ fn show_found_single_package() -> Result<()> {
     ----- stdout -----
     Name: markupsafe
     Version: 2.1.3
-    Location: [WORKSPACE_DIR]/site-packages
+    Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
 
@@ -262,14 +247,7 @@ fn show_found_multiple_packages() -> Result<()> {
 
     context.assert_command("import markupsafe").success();
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters = [(
-        r"Location:.*site-packages",
-        "Location: [WORKSPACE_DIR]/site-packages",
-    )]
-    .to_vec();
-
-    uv_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(context.filters(), Command::new(get_bin())
         .arg("pip")
         .arg("show")
         .arg("markupsafe")
@@ -283,13 +261,13 @@ fn show_found_multiple_packages() -> Result<()> {
     ----- stdout -----
     Name: markupsafe
     Version: 2.1.3
-    Location: [WORKSPACE_DIR]/site-packages
+    Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
     ---
     Name: pip
     Version: 21.3.1
-    Location: [WORKSPACE_DIR]/site-packages
+    Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
 
@@ -331,14 +309,7 @@ fn show_found_one_out_of_three() -> Result<()> {
 
     context.assert_command("import markupsafe").success();
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters = [(
-        r"Location:.*site-packages",
-        "Location: [WORKSPACE_DIR]/site-packages",
-    )]
-    .to_vec();
-
-    uv_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(context.filters(), Command::new(get_bin())
         .arg("pip")
         .arg("show")
         .arg("markupsafe")
@@ -353,7 +324,7 @@ fn show_found_one_out_of_three() -> Result<()> {
     ----- stdout -----
     Name: markupsafe
     Version: 2.1.3
-    Location: [WORKSPACE_DIR]/site-packages
+    Location: [SITE_PACKAGES]/
     Requires:
     Required-by:
 
@@ -486,20 +457,7 @@ fn show_editable() -> Result<()> {
         .assert()
         .success();
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters = [
-        (
-            r"Location:.*site-packages",
-            "Location: [WORKSPACE_DIR]/site-packages",
-        ),
-        (
-            r"Editable project location:.*poetry_editable",
-            "Editable project location: [EDITABLE_INSTALLS_PREFIX]poetry_editable",
-        ),
-    ]
-    .to_vec();
-
-    uv_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(context.filters(), Command::new(get_bin())
         .arg("pip")
         .arg("show")
         .arg("poetry-editable")
@@ -512,8 +470,8 @@ fn show_editable() -> Result<()> {
     ----- stdout -----
     Name: poetry-editable
     Version: 0.1.0
-    Location: [WORKSPACE_DIR]/site-packages
-    Editable project location: [EDITABLE_INSTALLS_PREFIX]poetry_editable
+    Location: [SITE_PACKAGES]/
+    Editable project location: [WORKSPACE]/scripts/packages/poetry_editable
     Requires: anyio
     Required-by:
 
@@ -559,14 +517,9 @@ fn show_required_by_multiple() -> Result<()> {
     );
 
     context.assert_command("import requests").success();
-    let filters = [(
-        r"Location:.*site-packages",
-        "Location: [WORKSPACE_DIR]/site-packages",
-    )]
-    .to_vec();
 
     // idna is required by anyio and requests
-    uv_snapshot!(filters, Command::new(get_bin())
+    uv_snapshot!(context.filters(), Command::new(get_bin())
         .arg("pip")
         .arg("show")
         .arg("idna")
@@ -579,7 +532,7 @@ fn show_required_by_multiple() -> Result<()> {
     ----- stdout -----
     Name: idna
     Version: 3.6
-    Location: [WORKSPACE_DIR]/site-packages
+    Location: [SITE_PACKAGES]/
     Requires:
     Required-by: anyio, requests
 

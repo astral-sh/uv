@@ -5,8 +5,11 @@ fn main() {
     // The workspace root directory is not available without walking up the tree
     // https://github.com/rust-lang/cargo/issues/3946
     let workspace_root = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
-        .join("..")
-        .join("..");
+        .parent()
+        .expect("CARGO_MANIFEST_DIR should be nested in workspace")
+        .parent()
+        .expect("CARGO_MANIFEST_DIR should be doubly nested in workspace")
+        .to_path_buf();
 
     commit_info(&workspace_root);
 

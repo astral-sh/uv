@@ -11,7 +11,7 @@ use std::process::Command;
 use assert_cmd::assert::Assert;
 use assert_cmd::prelude::*;
 
-use common::{venv_to_interpreter, INSTA_FILTERS};
+use common::venv_to_interpreter;
 
 use crate::common::{get_bin, uv_snapshot, TestContext};
 
@@ -79,7 +79,7 @@ fn requires_package_does_not_exist() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"requires-package-does-not-exist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -118,7 +118,7 @@ fn requires_exact_version_does_not_exist() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"requires-exact-version-does-not-exist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -159,7 +159,7 @@ fn requires_greater_version_does_not_exist() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"requires-greater-version-does-not-exist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -201,7 +201,7 @@ fn requires_less_version_does_not_exist() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"requires-less-version-does-not-exist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -242,7 +242,7 @@ fn transitive_requires_package_does_not_exist() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"transitive-requires-package-does-not-exist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -283,7 +283,7 @@ fn excluded_only_version() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"excluded-only-version-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -338,7 +338,7 @@ fn excluded_only_compatible_version() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"excluded-only-compatible-version-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -440,7 +440,7 @@ fn dependency_excludes_range_of_compatible_versions() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"dependency-excludes-range-of-compatible-versions-",
         "package-",
@@ -501,7 +501,7 @@ fn dependency_excludes_range_of_compatible_versions() {
 /// There is a non-contiguous range of compatible versions for the requested package
 /// `a`, but another dependency `c` excludes the range. This is the same as
 /// `dependency-excludes-range-of-compatible-versions` but some of the versions of
-/// `a` are incompatible for another reason e.g. dependency on non-existent package
+/// `a` are incompatible for another reason e.g. dependency on non-existant package
 /// `d`.
 ///
 /// ```text
@@ -565,7 +565,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"dependency-excludes-non-contiguous-range-of-compatible-versions-",
         "package-",
@@ -646,7 +646,7 @@ fn extra_required() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"extra-required-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -696,7 +696,7 @@ fn missing_extra() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"missing-extra-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -746,7 +746,7 @@ fn multiple_extras_required() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"multiple-extras-required-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -826,7 +826,7 @@ fn all_extras_required() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"all-extras-required-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -894,7 +894,7 @@ fn extra_incompatible_with_extra() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"extra-incompatible-with-extra-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -948,7 +948,7 @@ fn extra_incompatible_with_extra_not_requested() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"extra-incompatible-with-extra-not-requested-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1009,7 +1009,7 @@ fn extra_incompatible_with_root() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"extra-incompatible-with-root-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1068,7 +1068,7 @@ fn extra_does_not_exist_backtrack() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"extra-does-not-exist-backtrack-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1115,7 +1115,7 @@ fn direct_incompatible_versions() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"direct-incompatible-versions-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1168,7 +1168,7 @@ fn transitive_incompatible_with_root_version() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"transitive-incompatible-with-root-version-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1226,7 +1226,7 @@ fn transitive_incompatible_with_transitive() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"transitive-incompatible-with-transitive-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1274,7 +1274,7 @@ fn local_simple() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-simple-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1313,7 +1313,7 @@ fn local_not_used_with_sdist() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-not-used-with-sdist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1360,7 +1360,7 @@ fn local_used_without_sdist() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-used-without-sdist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1405,7 +1405,7 @@ fn local_not_latest() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-not-latest-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1454,7 +1454,7 @@ fn local_transitive() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-transitive-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1512,7 +1512,7 @@ fn local_transitive_greater_than() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-transitive-greater-than-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1565,7 +1565,7 @@ fn local_transitive_greater_than_or_equal() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-transitive-greater-than-or-equal-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1623,7 +1623,7 @@ fn local_transitive_less_than() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-transitive-less-than-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1676,7 +1676,7 @@ fn local_transitive_less_than_or_equal() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-transitive-less-than-or-equal-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1734,7 +1734,7 @@ fn local_transitive_confounding() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-transitive-confounding-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1782,7 +1782,7 @@ fn local_transitive_conflicting() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-transitive-conflicting-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1841,7 +1841,7 @@ fn local_transitive_backtrack() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-transitive-backtrack-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1892,7 +1892,7 @@ fn local_greater_than() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-greater-than-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1927,7 +1927,7 @@ fn local_greater_than_or_equal() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-greater-than-or-equal-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -1970,7 +1970,7 @@ fn local_less_than() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-less-than-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2005,7 +2005,7 @@ fn local_less_than_or_equal() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"local-less-than-or-equal-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2045,7 +2045,7 @@ fn post_simple() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"post-simple-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2080,7 +2080,7 @@ fn post_greater_than_or_equal() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"post-greater-than-or-equal-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2123,7 +2123,7 @@ fn post_greater_than() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"post-greater-than-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2160,7 +2160,7 @@ fn post_greater_than_post() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"post-greater-than-post-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2206,7 +2206,7 @@ fn post_greater_than_or_equal_post() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"post-greater-than-or-equal-post-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2249,7 +2249,7 @@ fn post_less_than_or_equal() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"post-less-than-or-equal-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2288,7 +2288,7 @@ fn post_less_than() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"post-less-than-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2325,7 +2325,7 @@ fn post_local_greater_than() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"post-local-greater-than-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2366,7 +2366,7 @@ fn post_local_greater_than_post() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"post-local-greater-than-post-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2407,7 +2407,7 @@ fn post_equal_not_available() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"post-equal-not-available-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2448,7 +2448,7 @@ fn post_equal_available() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"post-equal-available-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2494,7 +2494,7 @@ fn post_greater_than_post_not_available() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"post-greater-than-post-not-available-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2534,7 +2534,7 @@ fn package_only_prereleases() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"package-only-prereleases-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2580,7 +2580,7 @@ fn package_only_prereleases_in_range() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"package-only-prereleases-in-range-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2626,7 +2626,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"requires-package-only-prereleases-in-range-global-opt-in-",
         "package-",
@@ -2674,7 +2674,7 @@ fn requires_package_prerelease_and_final_any() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"requires-package-prerelease-and-final-any-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2723,7 +2723,7 @@ fn package_prerelease_specified_only_final_available() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"package-prerelease-specified-only-final-available-",
         "package-",
@@ -2774,7 +2774,7 @@ fn package_prerelease_specified_only_prerelease_available() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"package-prerelease-specified-only-prerelease-available-",
         "package-",
@@ -2827,7 +2827,7 @@ fn package_prerelease_specified_mixed_available() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"package-prerelease-specified-mixed-available-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2876,7 +2876,7 @@ fn package_multiple_prereleases_kinds() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"package-multiple-prereleases-kinds-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2923,7 +2923,7 @@ fn package_multiple_prereleases_numbers() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"package-multiple-prereleases-numbers-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -2971,7 +2971,7 @@ fn transitive_package_only_prereleases() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"transitive-package-only-prereleases-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3028,7 +3028,7 @@ fn transitive_package_only_prereleases_in_range() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"transitive-package-only-prereleases-in-range-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3082,7 +3082,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"transitive-package-only-prereleases-in-range-opt-in-",
         "package-",
@@ -3149,7 +3149,7 @@ fn transitive_prerelease_and_stable_dependency() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"transitive-prerelease-and-stable-dependency-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3214,7 +3214,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"transitive-prerelease-and-stable-dependency-opt-in-",
         "package-",
@@ -3313,7 +3313,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"transitive-prerelease-and-stable-dependency-many-versions-",
         "package-",
@@ -3397,7 +3397,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"transitive-prerelease-and-stable-dependency-many-versions-holes-",
         "package-",
@@ -3465,7 +3465,7 @@ fn package_only_prereleases_boundary() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"package-only-prereleases-boundary-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3483,7 +3483,7 @@ fn package_only_prereleases_boundary() {
     "###);
 
     // Since there are only prerelease versions of `a` available, a prerelease is
-    // allowed. Since the user did not explicitly request a pre-release, pre-releases at
+    // allowed. Since the user did not explictly request a pre-release, pre-releases at
     // the boundary should not be selected.
     assert_installed(
         &context.venv,
@@ -3513,7 +3513,7 @@ fn package_prereleases_boundary() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"package-prereleases-boundary-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3561,7 +3561,7 @@ fn package_prereleases_global_boundary() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"package-prereleases-global-boundary-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3612,7 +3612,7 @@ fn package_prereleases_specifier_boundary() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"package-prereleases-specifier-boundary-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3657,7 +3657,7 @@ fn python_version_does_not_exist() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"python-version-does-not-exist-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3699,7 +3699,7 @@ fn python_less_than_current() {
     let context = TestContext::new("3.9");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"python-less-than-current-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3741,7 +3741,7 @@ fn python_greater_than_current() {
     let context = TestContext::new("3.9");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"python-greater-than-current-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3783,7 +3783,7 @@ fn python_greater_than_current_patch() {
     let context = TestContext::new("3.8.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"python-greater-than-current-patch-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3847,7 +3847,7 @@ fn python_greater_than_current_many() {
     let context = TestContext::new("3.9");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"python-greater-than-current-many-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3896,7 +3896,7 @@ fn python_greater_than_current_backtrack() {
     let context = TestContext::new("3.9");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"python-greater-than-current-backtrack-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -3947,7 +3947,7 @@ fn python_greater_than_current_excluded() {
     let context = TestContext::new("3.9");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"python-greater-than-current-excluded-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4003,7 +4003,7 @@ fn specific_tag_and_default() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"specific-tag-and-default-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4038,7 +4038,7 @@ fn only_wheels() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"only-wheels-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4073,7 +4073,7 @@ fn no_wheels() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"no-wheels-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4108,7 +4108,7 @@ fn no_wheels_with_matching_platform() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"no-wheels-with-matching-platform-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4144,7 +4144,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"no-sdist-no-wheels-with-matching-platform-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4185,7 +4185,7 @@ fn no_sdist_no_wheels_with_matching_python() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"no-sdist-no-wheels-with-matching-python-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4226,7 +4226,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"no-sdist-no-wheels-with-matching-abi-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4267,7 +4267,7 @@ fn no_wheels_no_build() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"no-wheels-no-build-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4306,7 +4306,7 @@ fn only_wheels_no_binary() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"only-wheels-no-binary-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4345,7 +4345,7 @@ fn no_build() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"no-build-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4385,7 +4385,7 @@ fn no_binary() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"no-binary-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4425,7 +4425,7 @@ fn package_only_yanked() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"package-only-yanked-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4464,7 +4464,7 @@ fn package_only_yanked_in_range() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"package-only-yanked-in-range-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4511,7 +4511,7 @@ fn requires_package_yanked_and_unyanked_any() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"requires-package-yanked-and-unyanked-any-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4559,7 +4559,7 @@ fn package_yanked_specified_mixed_available() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"package-yanked-specified-mixed-available-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4607,7 +4607,7 @@ fn transitive_package_only_yanked() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"transitive-package-only-yanked-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4656,7 +4656,7 @@ fn transitive_package_only_yanked_in_range() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"transitive-package-only-yanked-in-range-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4711,7 +4711,7 @@ fn transitive_package_only_yanked_in_range_opt_in() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"transitive-package-only-yanked-in-range-opt-in-",
         "package-",
@@ -4779,7 +4779,7 @@ fn transitive_yanked_and_unyanked_dependency() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"transitive-yanked-and-unyanked-dependency-", "package-"));
 
     uv_snapshot!(filters, command(&context)
@@ -4841,7 +4841,7 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
     let context = TestContext::new("3.8");
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"transitive-yanked-and-unyanked-dependency-opt-in-",
         "package-",

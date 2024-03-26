@@ -13,7 +13,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use predicates::prelude::predicate;
 
-use common::{create_bin_with_executables, get_bin, uv_snapshot, TestContext, INSTA_FILTERS};
+use common::{create_bin_with_executables, get_bin, uv_snapshot, TestContext};
 
 mod common;
 
@@ -67,7 +67,7 @@ fn incompatible_python_compatible_override() -> Result<()> {
     let python_versions = &[];
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"incompatible-python-compatible-override-", "package-"));
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -116,7 +116,7 @@ fn compatible_python_incompatible_override() -> Result<()> {
     let python_versions = &[];
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"compatible-python-incompatible-override-", "package-"));
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -163,7 +163,7 @@ fn incompatible_python_compatible_override_unavailable_no_wheels() -> Result<()>
     let python_versions = &[];
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"incompatible-python-compatible-override-unavailable-no-wheels-",
         "package-",
@@ -219,7 +219,7 @@ fn incompatible_python_compatible_override_available_no_wheels() -> Result<()> {
     let python_versions = &["3.11"];
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"incompatible-python-compatible-override-available-no-wheels-",
         "package-",
@@ -274,7 +274,7 @@ fn incompatible_python_compatible_override_no_compatible_wheels() -> Result<()> 
     let python_versions = &[];
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"incompatible-python-compatible-override-no-compatible-wheels-",
         "package-",
@@ -332,7 +332,7 @@ fn incompatible_python_compatible_override_other_wheel() -> Result<()> {
     let python_versions = &[];
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((
         r"incompatible-python-compatible-override-other-wheel-",
         "package-",
@@ -392,7 +392,7 @@ fn python_patch_override_no_patch() -> Result<()> {
     let python_versions = &[];
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"python-patch-override-no-patch-", "package-"));
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -439,7 +439,7 @@ fn python_patch_override_patch_compatible() -> Result<()> {
     let python_versions = &[];
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"python-patch-override-patch-compatible-", "package-"));
 
     let requirements_in = context.temp_dir.child("requirements.in");
