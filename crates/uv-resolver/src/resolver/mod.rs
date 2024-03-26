@@ -1069,7 +1069,7 @@ impl<
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(candidate.package_id()) {
-                    let dist = dist.for_resolution().as_owned();
+                    let dist = dist.for_resolution().to_owned();
 
                     let response = match dist {
                         ResolvedDist::Installable(dist) => {

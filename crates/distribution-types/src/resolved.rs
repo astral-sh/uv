@@ -34,7 +34,7 @@ impl ResolvedDist {
 }
 
 impl ResolvedDistRef<'_> {
-    pub fn as_owned(&self) -> ResolvedDist {
+    pub fn to_owned(&self) -> ResolvedDist {
         match self {
             Self::Installable(dist) => ResolvedDist::Installable((*dist).clone()),
             Self::Installed(dist) => ResolvedDist::Installed((*dist).clone()),

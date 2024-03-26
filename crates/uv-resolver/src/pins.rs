@@ -17,7 +17,7 @@ impl FilePins {
     pub(crate) fn insert(&mut self, candidate: &Candidate, dist: &CompatibleDist) {
         self.0.entry(candidate.name().clone()).or_default().insert(
             candidate.version().clone(),
-            dist.for_installation().as_owned(),
+            dist.for_installation().to_owned(),
         );
     }
 
