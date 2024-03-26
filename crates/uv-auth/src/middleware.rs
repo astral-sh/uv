@@ -45,13 +45,17 @@ impl Middleware for AuthMiddleware {
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
         let url = req.url().clone();
+        let stored_auth = GLOBAL_AUTH_STORE.get(&url);
 
         // If the request already has an authorization header with a URL-encoded password,
         // we don't need to do anything.
         // This gives in-URL credentials precedence over the netrc file.
         let original_header = if req.headers().contains_key(reqwest::header::AUTHORIZATION) {
-            match GLOBAL_AUTH_STORE.get(&url) {
+            match &stored_auth {
                 Some(Some(Credential::UrlEncoded(auth))) if auth.password.is_none() => {
+                    req.headers_mut().remove(reqwest::header::AUTHORIZATION)
+                }
+                Some(Some(Credential::Basic(_))) => {
                     req.headers_mut().remove(reqwest::header::AUTHORIZATION)
                 }
                 _ => {
@@ -63,10 +67,8 @@ impl Middleware for AuthMiddleware {
             None
         };
 
-        let stored_auth = GLOBAL_AUTH_STORE.get(&url);
-
         // Try auth strategies in order of precedence:
-        if original_header.is_none() && stored_auth.is_some() {
+        if stored_auth.is_some() && !matches!(stored_auth, Some(Some(Credential::UrlEncoded(_)))) {
             // If we've already seen this URL, we can use the stored credentials
             if let Some(auth) = stored_auth.flatten() {
                 debug!("Adding authentication to already-seen URL: {url}");
@@ -255,6 +257,34 @@ mod tests {
             .await?
             .status();
 
+        assert_eq!(status, 200);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_with_keyring_multiple_calls() -> Result<(), Box<dyn std::error::Error>> {
+        let server = MockServer::start().await;
+        let url = server.uri();
+        let url = url.splitn(2, "://").collect::<Vec<_>>().join("://myuser@");
+        assert!(url.starts_with("http://myuser@"));
+        GLOBAL_AUTH_STORE.save_from_url(&Url::parse(&url).expect("valid URL"));
+
+        Mock::given(method("GET"))
+            .and(path("/hello"))
+            .and(basic_auth("myuser", "mypassword"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let client = ClientBuilder::new(Client::builder().build()?)
+            .with(AuthMiddleware::new(KeyringProvider::Subprocess))
+            .build();
+
+        let status = client.get(format!("{}/hello", url)).send().await?.status();
+        assert_eq!(status, 200);
+
+        // makes sure subsequent calls don't short-circuit
+        let status = client.get(format!("{}/hello", url)).send().await?.status();
         assert_eq!(status, 200);
         Ok(())
     }
