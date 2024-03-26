@@ -271,6 +271,7 @@ async fn black_mypy_extensions() -> Result<()> {
         vec![],
         None,
         vec![],
+        vec![],
     );
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -306,6 +307,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         vec![],
         None,
         vec![],
+        vec![],
     );
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -340,6 +342,7 @@ async fn black_flake8() -> Result<()> {
         vec![],
         vec![],
         None,
+        vec![],
         vec![],
     );
     let options = OptionsBuilder::new()
@@ -430,6 +433,7 @@ async fn black_respect_preference() -> Result<()> {
         )?)],
         None,
         vec![],
+        vec![],
     );
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -464,6 +468,7 @@ async fn black_ignore_preference() -> Result<()> {
             "black==23.9.2",
         )?)],
         None,
+        vec![],
         vec![],
     );
     let options = OptionsBuilder::new()

@@ -55,6 +55,7 @@ pub use crate::id::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
 pub use crate::prioritized_distribution::*;
+pub use crate::requirements::*;
 pub use crate::resolution::*;
 pub use crate::traits::*;
 
@@ -69,6 +70,7 @@ mod id;
 mod index_url;
 mod installed;
 mod prioritized_distribution;
+mod requirements;
 mod resolution;
 mod traits;
 
@@ -423,6 +425,14 @@ impl SourceDist {
                 ..dist
             }),
             dist => dist,
+        }
+    }
+
+    /// Returns the path to the source distribution, if if it's a local distribution.
+    pub fn as_path(&self) -> Option<&Path> {
+        match self {
+            Self::Path(dist) => Some(&dist.path),
+            _ => None,
         }
     }
 }

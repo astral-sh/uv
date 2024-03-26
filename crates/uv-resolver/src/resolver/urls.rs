@@ -23,16 +23,39 @@ impl Urls {
         let mut required: FxHashMap<PackageName, VerbatimUrl> = FxHashMap::default();
         let mut allowed: FxHashMap<VerbatimUrl, VerbatimUrl> = FxHashMap::default();
 
+        // Add any lookahead requirements. If there are any conflicts, return an error.
+        for lookahead in &manifest.lookaheads {
+            for requirement in lookahead
+                .requirements()
+                .iter()
+                .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
+            {
+                if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
+                    if let Some(previous) = required.insert(requirement.name.clone(), url.clone()) {
+                        if !is_equal(&previous, url) {
+                            if is_precise(&previous, url) {
+                                debug!("Assuming {url} is a precise variant of {previous}");
+                                allowed.insert(url.clone(), previous);
+                            } else {
+                                return Err(ResolveError::ConflictingUrlsDirect(
+                                    requirement.name.clone(),
+                                    previous.verbatim().to_string(),
+                                    url.verbatim().to_string(),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Add all direct requirements and constraints. If there are any conflicts, return an error.
         for requirement in manifest
             .requirements
             .iter()
             .chain(manifest.constraints.iter())
+            .filter(|requirement| requirement.evaluate_markers(markers, &[]))
         {
-            if !requirement.evaluate_markers(markers, &[]) {
-                continue;
-            }
-
             if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
                 if let Some(previous) = required.insert(requirement.name.clone(), url.clone()) {
                     if is_equal(&previous, url) {
@@ -74,11 +97,11 @@ impl Urls {
                 }
             }
 
-            for requirement in &metadata.requires_dist {
-                if !requirement.evaluate_markers(markers, &editable.extras) {
-                    continue;
-                }
-
+            for requirement in metadata
+                .requires_dist
+                .iter()
+                .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
+            {
                 if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
                     if let Some(previous) = required.insert(requirement.name.clone(), url.clone()) {
                         if !is_equal(&previous, url) {
@@ -100,11 +123,11 @@ impl Urls {
 
         // Add any overrides. Conflicts here are fine, as the overrides are meant to be
         // authoritative.
-        for requirement in &manifest.overrides {
-            if !requirement.evaluate_markers(markers, &[]) {
-                continue;
-            }
-
+        for requirement in manifest
+            .overrides
+            .iter()
+            .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+        {
             if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
                 required.insert(requirement.name.clone(), url.clone());
             }
