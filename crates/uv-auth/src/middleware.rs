@@ -68,7 +68,9 @@ impl Middleware for AuthMiddleware {
         };
 
         // Try auth strategies in order of precedence:
-        if stored_auth.is_some() && !matches!(stored_auth, Some(Some(Credential::UrlEncoded(_)))) {
+        if matches!(stored_auth, Some(Some(Credential::Basic(_))))
+            || (stored_auth.is_some() && original_header.is_none())
+        {
             // If we've already seen this URL, we can use the stored credentials
             if let Some(auth) = stored_auth.flatten() {
                 debug!("Adding authentication to already-seen URL: {url}");
