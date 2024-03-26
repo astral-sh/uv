@@ -22,6 +22,10 @@ use uv_installer::{
     is_dynamic, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
 use uv_interpreter::{Interpreter, PythonEnvironment};
+use uv_requirements::{
+    ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
+    SourceTreeResolver,
+};
 use uv_resolver::InMemoryIndex;
 use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 use uv_warnings::warn_user;
@@ -31,10 +35,6 @@ use crate::commands::reporters::{
 };
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
-use uv_requirements::{
-    ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
-    SourceTreeResolver,
-};
 
 /// Install a set of locked requirements into the current Python environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]

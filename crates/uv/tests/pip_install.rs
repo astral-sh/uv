@@ -133,6 +133,112 @@ fn empty_requirements_txt() -> Result<()> {
 }
 
 #[test]
+fn missing_pyproject_toml() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("pyproject.toml"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: failed to read from file `pyproject.toml`
+      Caused by: No such file or directory (os error 2)
+    "###
+    );
+}
+
+#[test]
+fn invalid_pyproject_toml_syntax() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str("123 - 456")?;
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("pyproject.toml"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `pyproject.toml`
+      Caused by: TOML parse error at line 1, column 5
+      |
+    1 | 123 - 456
+      |     ^
+    expected `.`, `=`
+
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_pyproject_toml_schema() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str("[project]")?;
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("pyproject.toml"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `pyproject.toml`
+      Caused by: TOML parse error at line 1, column 1
+      |
+    1 | [project]
+      | ^^^^^^^^^
+    missing field `name`
+
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_pyproject_toml_requirement() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "project"
+dependencies = ["flask==1.0.x"]
+"#,
+    )?;
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("pyproject.toml"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `pyproject.toml`
+      Caused by: TOML parse error at line 3, column 16
+      |
+    3 | dependencies = ["flask==1.0.x"]
+      |                ^^^^^^^^^^^^^^^^
+    after parsing 1.0, found ".x" after it, which is not part of a valid version
+    flask==1.0.x
+         ^^^^^^^
+
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn no_solution() {
     let context = TestContext::new("3.12");
 

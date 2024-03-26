@@ -39,22 +39,44 @@ impl RequirementsSource {
         }
     }
 
-    /// Parse a [`RequirementsSource`] from a constraints file.
-    pub fn from_constraints_file(path: PathBuf) -> Self {
-        if path.ends_with("pyproject.toml") {
-            warn_user!(
-                "The file `{}` appears to be a `pyproject.toml` file, but constraints must be specified in `requirements.txt` format.", path.user_display()
-            );
+    /// Parse a [`RequirementsSource`] from a `requirements.txt` file.
+    pub fn from_requirements_txt(path: PathBuf) -> Self {
+        for filename in ["pyproject.toml", "setup.py", "setup.cfg"] {
+            if path.ends_with(filename) {
+                warn_user!(
+                    "The file `{}` appears to be a `{}` file, but requirements must be specified in `requirements.txt` format.",
+                    path.user_display(),
+                    filename
+                );
+            }
         }
         Self::RequirementsTxt(path)
     }
 
-    /// Parse a [`RequirementsSource`] from an overrides file.
-    pub fn from_overrides_file(path: PathBuf) -> Self {
-        if path.ends_with("pyproject.toml") {
-            warn_user!(
-                "The file `{}` appears to be a `pyproject.toml` file, but overrides must be specified in `requirements.txt` format.", path.user_display()
-            );
+    /// Parse a [`RequirementsSource`] from a `constraints.txt` file.
+    pub fn from_constraints_txt(path: PathBuf) -> Self {
+        for filename in ["pyproject.toml", "setup.py", "setup.cfg"] {
+            if path.ends_with(filename) {
+                warn_user!(
+                    "The file `{}` appears to be a `{}` file, but constraints must be specified in `requirements.txt` format.",
+                    path.user_display(),
+                    filename
+                );
+            }
+        }
+        Self::RequirementsTxt(path)
+    }
+
+    /// Parse a [`RequirementsSource`] from an `overrides.txt` file.
+    pub fn from_overrides_txt(path: PathBuf) -> Self {
+        for filename in ["pyproject.toml", "setup.py", "setup.cfg"] {
+            if path.ends_with(filename) {
+                warn_user!(
+                    "The file `{}` appears to be a `{}` file, but overrides must be specified in `requirements.txt` format.",
+                    path.user_display(),
+                    filename
+                );
+            }
         }
         Self::RequirementsTxt(path)
     }
