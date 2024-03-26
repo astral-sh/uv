@@ -23,7 +23,7 @@ pub enum Error {
 }
 
 /// The value to use for the shell prompt when inside a virtual environment.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum Prompt {
     /// Use the current directory name as the prompt.
     CurrentDirectoryName,
@@ -31,6 +31,7 @@ pub enum Prompt {
     Static(String),
     /// Default to no prompt. The prompt is then set by the activator script
     /// to the virtual environment's directory name.
+    #[default]
     None,
 }
 
