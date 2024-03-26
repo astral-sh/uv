@@ -19,9 +19,12 @@ use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder}
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::NoBinary;
-use uv_interpreter::{find_default_python, find_requested_python, Error};
+use uv_interpreter::{
+    find_default_python, find_requested_python, Error, Interpreter, PythonEnvironment,
+};
 use uv_resolver::{InMemoryIndex, OptionsBuilder};
 use uv_traits::{BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_virtualenv::Prompt;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -34,7 +37,7 @@ pub(crate) async fn venv(
     python_request: Option<&str>,
     index_locations: &IndexLocations,
     keyring_provider: KeyringProvider,
-    prompt: uv_virtualenv::Prompt,
+    prompt: Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
@@ -93,7 +96,7 @@ async fn venv_impl(
     python_request: Option<&str>,
     index_locations: &IndexLocations,
     keyring_provider: KeyringProvider,
-    prompt: uv_virtualenv::Prompt,
+    prompt: Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
@@ -127,13 +130,9 @@ async fn venv_impl(
     )
     .into_diagnostic()?;
 
-    // Extra cfg for pyvenv.cfg to specify uv version
-    let extra_cfg = vec![("uv".to_string(), env!("CARGO_PKG_VERSION").to_string())];
-
     // Create the virtual environment.
     let venv =
-        uv_virtualenv::create_venv(path, interpreter, prompt, system_site_packages, extra_cfg)
-            .map_err(VenvError::Creation)?;
+        create(path, interpreter, prompt, system_site_packages).map_err(VenvError::Creation)?;
 
     // Install seed packages.
     if seed {
@@ -227,7 +226,30 @@ async fn venv_impl(
     }
 
     // Determine the appropriate activation command.
-    let activation = match Shell::from_env() {
+    if let Some(activation) = activation(path) {
+        writeln!(printer.stderr(), "Activate with: {}", activation.green()).into_diagnostic()?;
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+/// Create a virtual environment at the given path.
+pub(crate) fn create(
+    path: &Path,
+    interpreter: Interpreter,
+    prompt: Prompt,
+    system_site_packages: bool,
+) -> Result<PythonEnvironment, uv_virtualenv::Error> {
+    // Extra cfg for pyvenv.cfg to specify uv version.
+    let extra_cfg = vec![("uv".to_string(), env!("CARGO_PKG_VERSION").to_string())];
+
+    // Create the virtual environment.
+    uv_virtualenv::create_venv(path, interpreter, prompt, system_site_packages, extra_cfg)
+}
+
+/// Returns the appropriate activation command for the given shell.
+pub(crate) fn activation(path: &Path) -> Option<String> {
+    match Shell::from_env() {
         None => None,
         Some(Shell::Bash | Shell::Zsh) => Some(format!(
             "source {}",
@@ -253,12 +275,7 @@ async fn venv_impl(
             path.join("Scripts").join("activate"),
             Shell::Cmd,
         )),
-    };
-    if let Some(act) = activation {
-        writeln!(printer.stderr(), "Activate with: {}", act.green()).into_diagnostic()?;
     }
-
-    Ok(ExitStatus::Success)
 }
 
 /// Quote a path, if necessary, for safe use in a POSIX-compatible shell command.

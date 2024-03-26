@@ -5,6 +5,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use crate::commands;
 use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
@@ -21,13 +22,14 @@ use uv_fs::Simplified;
 use uv_installer::{
     is_dynamic, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
 };
-use uv_interpreter::{Interpreter, PythonEnvironment};
+use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
 use uv_resolver::InMemoryIndex;
 use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_virtualenv::Prompt;
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{
@@ -93,7 +95,27 @@ pub(crate) async fn pip_sync(
     } else if system {
         PythonEnvironment::from_default_python(&cache)?
     } else {
-        PythonEnvironment::from_virtualenv(&cache)?
+        match PythonEnvironment::from_virtualenv(&cache) {
+            Ok(venv) => venv,
+            Err(uv_interpreter::Error::VenvNotFound) => {
+                let path = std::env::current_dir()?.join(".venv");
+                let interpreter = find_default_python(&cache)?;
+
+                writeln!(
+                    printer.stderr(),
+                    "Creating Python {} virtual environment at: {}",
+                    interpreter.python_version(),
+                    path.user_display().cyan()
+                )?;
+
+                if let Some(activation) = commands::venv::activation(&path) {
+                    writeln!(printer.stderr(), "Activate with: {}", activation.green())?;
+                }
+
+                commands::venv::create(&path, interpreter, Prompt::default(), false)?
+            }
+            Err(err) => return Err(err.into()),
+        }
     };
     debug!(
         "Using Python {} environment at {}",

@@ -112,13 +112,23 @@ fn missing_requirements_txt() {
     requirements_txt.assert(predicates::path::missing());
 }
 
+/// Attempt to install a package into a virtual environment that doesn't exist.
 #[test]
 fn missing_venv() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let cache_dir = assert_fs::TempDir::new()?;
     let venv = temp_dir.child(".venv");
 
-    uv_snapshot!(Command::new(get_bin())
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    let filters = [(r"`.*`", "`[VENV]`")]
+        .into_iter()
+        .chain(INSTA_FILTERS.to_vec())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, Command::new(get_bin())
         .arg("pip")
         .arg("sync")
         .arg("requirements.txt")
@@ -132,11 +142,49 @@ fn missing_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `requirements.txt`
+    error: failed to canonicalize path `[VENV]`
       Caused by: No such file or directory (os error 2)
     "###);
 
     venv.assert(predicates::path::missing());
+
+    Ok(())
+}
+
+/// Attempt to install a package without a virtual environment. An environment should be created
+/// in the current directory.
+#[test]
+fn no_venv() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+
+    let requirements_txt = temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(Command::new(get_bin())
+        .arg("pip")
+        .arg("sync")
+        .arg("requirements.txt")
+        .arg("--strict")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating Python 3.12.2 virtual environment at: .venv
+    Activate with: source .venv/bin/activate
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    "###);
+
+    let venv = temp_dir.child(".venv");
+    venv.assert(predicates::path::is_dir());
 
     Ok(())
 }
