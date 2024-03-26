@@ -1,5 +1,6 @@
 //! Derived from `pypi_types_crate`.
 
+use indexmap::IndexMap;
 use std::io;
 use std::str::FromStr;
 
@@ -22,11 +23,10 @@ use crate::LenientVersionSpecifiers;
 /// fields that are relevant to dependency resolution.
 ///
 /// At present, we support up to version 2.3 of the metadata specification.
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata23 {
     // Mandatory fields
-    pub metadata_version: String,
     pub name: PackageName,
     pub version: Version,
     // Optional fields
@@ -46,6 +46,9 @@ pub enum Error {
     /// mail parse error
     #[error(transparent)]
     MailParse(#[from] MailParseError),
+    /// TOML parse error
+    #[error(transparent)]
+    Toml(#[from] toml::de::Error),
     /// Metadata field not found
     #[error("metadata field {0} not found")]
     FieldNotFound(&'static str),
@@ -86,9 +89,6 @@ impl Metadata23 {
     pub fn parse_metadata(content: &[u8]) -> Result<Self, Error> {
         let headers = Headers::parse(content)?;
 
-        let metadata_version = headers
-            .get_first_value("Metadata-Version")
-            .ok_or(Error::FieldNotFound("Metadata-Version"))?;
         let name = PackageName::new(
             headers
                 .get_first_value("Name")
@@ -124,7 +124,6 @@ impl Metadata23 {
             .collect::<Vec<_>>();
 
         Ok(Self {
-            metadata_version,
             name,
             version,
             requires_dist,
@@ -200,7 +199,62 @@ impl Metadata23 {
             .collect::<Vec<_>>();
 
         Ok(Self {
-            metadata_version,
+            name,
+            version,
+            requires_dist,
+            requires_python,
+            provides_extras,
+        })
+    }
+
+    /// Extract the metadata from a `pyproject.toml` file, as specified in PEP 621.
+    pub fn parse_pyproject_toml(contents: &str) -> Result<Self, Error> {
+        let pyproject_toml: PyProjectToml = toml::from_str(contents)?;
+
+        let project = pyproject_toml
+            .project
+            .ok_or(Error::FieldNotFound("project"))?;
+
+        // If any of the fields we need were declared as dynamic, we can't use the `pyproject.toml` file.
+        let dynamic = project.dynamic.unwrap_or_default();
+        for field in dynamic {
+            match field.as_str() {
+                "dependencies" => return Err(Error::DynamicField("dependencies")),
+                "optional-dependencies" => {
+                    return Err(Error::DynamicField("optional-dependencies"))
+                }
+                "requires-python" => return Err(Error::DynamicField("requires-python")),
+                "version" => return Err(Error::DynamicField("version")),
+                _ => (),
+            }
+        }
+
+        let name = project.name;
+        let version = project.version.ok_or(Error::FieldNotFound("version"))?;
+        let requires_python = project.requires_python.map(VersionSpecifiers::from);
+
+        // Extract the requirements.
+        let mut requires_dist = project
+            .dependencies
+            .unwrap_or_default()
+            .into_iter()
+            .map(Requirement::from)
+            .collect::<Vec<_>>();
+
+        // Extract the optional dependencies.
+        let mut provides_extras: Vec<ExtraName> = Vec::new();
+        for (extra, requirements) in project.optional_dependencies.unwrap_or_default() {
+            requires_dist.extend(
+                requirements
+                    .into_iter()
+                    .map(Requirement::from)
+                    .map(|requirement| requirement.with_extra_marker(&extra))
+                    .collect::<Vec<_>>(),
+            );
+            provides_extras.push(extra);
+        }
+
+        Ok(Self {
             name,
             version,
             requires_dist,
@@ -210,12 +264,44 @@ impl Metadata23 {
     }
 }
 
+/// A `pyproject.toml` as specified in PEP 517.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct PyProjectToml {
+    /// Project metadata
+    pub(crate) project: Option<Project>,
+}
+
+/// PEP 621 project metadata.
+///
+/// This is a subset of the full metadata specification, and only includes the fields that are
+/// relevant for dependency resolution.
+///
+/// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct Project {
+    /// The name of the project
+    pub(crate) name: PackageName,
+    /// The version of the project as supported by PEP 440
+    pub(crate) version: Option<Version>,
+    /// The Python version requirements of the project
+    pub(crate) requires_python: Option<LenientVersionSpecifiers>,
+    /// Project dependencies
+    pub(crate) dependencies: Option<Vec<LenientRequirement>>,
+    /// Optional dependencies
+    pub(crate) optional_dependencies: Option<IndexMap<ExtraName, Vec<LenientRequirement>>>,
+    /// Specifies which fields listed by PEP 621 were intentionally unspecified
+    /// so another tool can/will provide such metadata dynamically.
+    pub(crate) dynamic: Option<Vec<String>>,
+}
+
 /// Python Package Metadata 1.0 and later as specified in
 /// <https://peps.python.org/pep-0241/>.
 ///
 /// This is a subset of the full metadata specification, and only includes the
 /// fields that have been consistent across all versions of the specification.
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata10 {
     pub name: PackageName,
@@ -303,19 +389,16 @@ mod tests {
 
         let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0";
         let meta = Metadata23::parse_metadata(s.as_bytes()).unwrap();
-        assert_eq!(meta.metadata_version, "1.0");
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
 
         let s = "Metadata-Version: 1.0\nName: asdf\nVersion: 1.0\nAuthor: 中文\n\n一个 Python 包";
         let meta = Metadata23::parse_metadata(s.as_bytes()).unwrap();
-        assert_eq!(meta.metadata_version, "1.0");
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
 
         let s = "Metadata-Version: 1.0\nName: =?utf-8?q?foobar?=\nVersion: 1.0";
         let meta = Metadata23::parse_metadata(s.as_bytes()).unwrap();
-        assert_eq!(meta.metadata_version, "1.0");
         assert_eq!(meta.name, PackageName::from_str("foobar").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
 
@@ -340,7 +423,6 @@ mod tests {
 
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0";
         let meta = Metadata23::parse_pkg_info(s.as_bytes()).unwrap();
-        assert_eq!(meta.metadata_version, "2.3");
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
 
@@ -350,9 +432,88 @@ mod tests {
 
         let s = "Metadata-Version: 2.3\nName: asdf\nVersion: 1.0\nRequires-Dist: foo";
         let meta = Metadata23::parse_pkg_info(s.as_bytes()).unwrap();
-        assert_eq!(meta.metadata_version, "2.3");
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
         assert_eq!(meta.requires_dist, vec!["foo".parse().unwrap()]);
+    }
+
+    #[test]
+    fn test_parse_pyproject_toml() {
+        let s = r#"
+            [project]
+            name = "asdf"
+        "#;
+        let meta = Metadata23::parse_pyproject_toml(s);
+        assert!(matches!(meta, Err(Error::FieldNotFound("version"))));
+
+        let s = r#"
+            [project]
+            name = "asdf"
+            dynamic = ["version"]
+        "#;
+        let meta = Metadata23::parse_pyproject_toml(s);
+        assert!(matches!(meta, Err(Error::DynamicField("version"))));
+
+        let s = r#"
+            [project]
+            name = "asdf"
+            version = "1.0"
+        "#;
+        let meta = Metadata23::parse_pyproject_toml(s).unwrap();
+        assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
+        assert_eq!(meta.version, Version::new([1, 0]));
+        assert!(meta.requires_python.is_none());
+        assert!(meta.requires_dist.is_empty());
+        assert!(meta.provides_extras.is_empty());
+
+        let s = r#"
+            [project]
+            name = "asdf"
+            version = "1.0"
+            requires-python = ">=3.6"
+        "#;
+        let meta = Metadata23::parse_pyproject_toml(s).unwrap();
+        assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
+        assert_eq!(meta.version, Version::new([1, 0]));
+        assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));
+        assert!(meta.requires_dist.is_empty());
+        assert!(meta.provides_extras.is_empty());
+
+        let s = r#"
+            [project]
+            name = "asdf"
+            version = "1.0"
+            requires-python = ">=3.6"
+            dependencies = ["foo"]
+        "#;
+        let meta = Metadata23::parse_pyproject_toml(s).unwrap();
+        assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
+        assert_eq!(meta.version, Version::new([1, 0]));
+        assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));
+        assert_eq!(meta.requires_dist, vec!["foo".parse().unwrap()]);
+        assert!(meta.provides_extras.is_empty());
+
+        let s = r#"
+            [project]
+            name = "asdf"
+            version = "1.0"
+            requires-python = ">=3.6"
+            dependencies = ["foo"]
+
+            [project.optional-dependencies]
+            dotenv = ["bar"]
+        "#;
+        let meta = Metadata23::parse_pyproject_toml(s).unwrap();
+        assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
+        assert_eq!(meta.version, Version::new([1, 0]));
+        assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));
+        assert_eq!(
+            meta.requires_dist,
+            vec![
+                "foo".parse().unwrap(),
+                "bar; extra == \"dotenv\"".parse().unwrap()
+            ]
+        );
+        assert_eq!(meta.provides_extras, vec!["dotenv".parse().unwrap()]);
     }
 }

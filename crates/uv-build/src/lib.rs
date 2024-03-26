@@ -18,7 +18,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_hash::FxHashMap;
 use serde::de::{value, SeqAccess, Visitor};
-use serde::{de, Deserialize, Deserializer, Serialize};
+use serde::{de, Deserialize, Deserializer};
 use tempfile::{tempdir_in, TempDir};
 use thiserror::Error;
 use tokio::process::Command;
@@ -26,7 +26,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, info_span, instrument, Instrument};
 
 use distribution_types::Resolution;
-use pep440_rs::{Version, VersionSpecifiers};
+use pep440_rs::Version;
 use pep508_rs::{PackageName, Requirement};
 use uv_fs::{PythonExt, Simplified};
 use uv_interpreter::{Interpreter, PythonEnvironment};
@@ -193,8 +193,8 @@ impl Error {
     }
 }
 
-/// A pyproject.toml as specified in PEP 517.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+/// A `pyproject.toml` as specified in PEP 517.
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyProjectToml {
     /// Build-related data
@@ -204,22 +204,23 @@ pub struct PyProjectToml {
 }
 
 /// The `[project]` section of a pyproject.toml as specified in PEP 621.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+///
+/// This representation only includes a subset of the fields defined in PEP 621 necessary for
+/// informing wheel builds.
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct Project {
     /// The name of the project
     pub name: PackageName,
     /// The version of the project as supported by PEP 440
     pub version: Option<Version>,
-    /// The Python version requirements of the project
-    pub requires_python: Option<VersionSpecifiers>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified so another tool
     /// can/will provide such metadata dynamically.
     pub dynamic: Option<Vec<String>>,
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.
@@ -237,8 +238,7 @@ impl BackendPath {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BackendPath(Vec<String>);
 
 impl<'de> Deserialize<'de> for BackendPath {

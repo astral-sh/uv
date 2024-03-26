@@ -4,11 +4,12 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 use pep508_rs::Requirement;
+use pypi_types::LenientRequirement;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::ExtrasSpecification;
 
-/// A pyproject.toml as specified in PEP 517
+/// A `pyproject.toml` as specified in PEP 517.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct PyProjectToml {
@@ -16,7 +17,12 @@ pub(crate) struct PyProjectToml {
     pub(crate) project: Option<Project>,
 }
 
-/// PEP 621 project metadata
+/// PEP 621 project metadata.
+///
+/// This is a subset of the full metadata specification, and only includes the fields that are
+/// relevant for extracting static requirements.
+///
+/// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct Project {
@@ -80,7 +86,7 @@ impl Pep621Metadata {
             .unwrap_or_default()
             .iter()
             .map(String::as_str)
-            .map(Requirement::from_str)
+            .map(|s| LenientRequirement::from_str(s).map(Requirement::from))
             .collect::<Result<Vec<_>, _>>()?;
 
         // Include any optional dependencies specified in `extras`.
@@ -94,7 +100,7 @@ impl Pep621Metadata {
                         let requirements = requirements
                             .iter()
                             .map(String::as_str)
-                            .map(Requirement::from_str)
+                            .map(|s| LenientRequirement::from_str(s).map(Requirement::from))
                             .collect::<Result<Vec<_>, _>>()?;
                         Ok::<(ExtraName, Vec<Requirement>), Pep621Error>((extra, requirements))
                     })

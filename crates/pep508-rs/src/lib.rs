@@ -471,6 +471,32 @@ impl Requirement {
             (true, Vec::new())
         }
     }
+
+    /// Return the requirement with an additional marker added, to require the given extra.
+    ///
+    /// For example, given `flask >= 2.0.2`, calling `with_extra_marker("dotenv")` would return
+    /// `flask >= 2.0.2 ; extra == "dotenv"`.
+    pub fn with_extra_marker(self, extra: &ExtraName) -> Self {
+        let marker = match self.marker {
+            Some(expression) => MarkerTree::And(vec![
+                expression,
+                MarkerTree::Expression(MarkerExpression {
+                    l_value: MarkerValue::Extra,
+                    operator: MarkerOperator::Equal,
+                    r_value: MarkerValue::QuotedString(extra.to_string()),
+                }),
+            ]),
+            None => MarkerTree::Expression(MarkerExpression {
+                l_value: MarkerValue::Extra,
+                operator: MarkerOperator::Equal,
+                r_value: MarkerValue::QuotedString(extra.to_string()),
+            }),
+        };
+        Self {
+            marker: Some(marker),
+            ..self
+        }
+    }
 }
 
 impl UnnamedRequirement {
@@ -1560,7 +1586,7 @@ mod tests {
     use insta::assert_snapshot;
 
     use pep440_rs::{Operator, Version, VersionPattern, VersionSpecifier};
-    use uv_normalize::{ExtraName, PackageName};
+    use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 
     use crate::marker::{
         parse_markers_impl, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
@@ -2261,6 +2287,32 @@ mod tests {
                 url.path()
             );
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn add_extra_marker() -> Result<(), InvalidNameError> {
+        let requirement = Requirement::from_str("pytest").unwrap();
+        let expected = Requirement::from_str("pytest; extra == 'dotenv'").unwrap();
+        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
+        assert_eq!(actual, expected);
+
+        let requirement = Requirement::from_str("pytest; '4.0' >= python_version").unwrap();
+        let expected =
+            Requirement::from_str("pytest; '4.0' >= python_version and extra == 'dotenv'").unwrap();
+        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
+        assert_eq!(actual, expected);
+
+        let requirement =
+            Requirement::from_str("pytest; '4.0' >= python_version or sys_platform == 'win32'")
+                .unwrap();
+        let expected = Requirement::from_str(
+            "pytest; ('4.0' >= python_version or sys_platform == 'win32') and extra == 'dotenv'",
+        )
+        .unwrap();
+        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
+        assert_eq!(actual, expected);
 
         Ok(())
     }
