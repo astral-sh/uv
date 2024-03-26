@@ -385,6 +385,11 @@ impl Scheme {
             _ => None,
         }
     }
+
+    /// Returns `true` if the scheme is a file scheme.
+    pub fn is_file(self) -> bool {
+        matches!(self, Self::File)
+    }
 }
 
 impl std::fmt::Display for Scheme {
