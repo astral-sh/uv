@@ -8,6 +8,7 @@ use tracing::debug;
 use uv_normalize::PackageName;
 use uv_traits::InstalledPackagesProvider;
 
+use crate::editables::Editables;
 use crate::preferences::Preferences;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::resolution_mode::ResolutionStrategy;
@@ -70,6 +71,7 @@ impl CandidateSelector {
         version_map: &'a VersionMap,
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
+        editables: &'a Editables,
     ) -> Option<Candidate<'a>> {
         // If the package has a preference (e.g., an existing version from an existing lockfile),
         // and the preference satisfies the current range, use that.
@@ -81,7 +83,7 @@ impl CandidateSelector {
             }
         }
 
-        if preferences.version(package_name).is_some() || version_map.len() == 0 {
+        if preferences.version(package_name).is_some() {
             // If it's not in the version map, check if it's satisfied by the current
             // environment
             for dist in installed_packages.get_packages(package_name) {

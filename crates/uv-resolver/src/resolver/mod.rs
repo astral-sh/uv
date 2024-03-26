@@ -671,6 +671,7 @@ impl<
                     version_map,
                     &self.preferences,
                     self.installed_packages,
+                    &self.editables,
                 ) else {
                     // Short circuit: we couldn't find _any_ versions for a package.
                     return Ok(None);
@@ -1058,6 +1059,7 @@ impl<
                     version_map,
                     &self.preferences,
                     self.installed_packages,
+                    &self.editables,
                 ) else {
                     return Ok(None);
                 };
