@@ -147,8 +147,8 @@ impl From<InstalledDist> for Requirement {
 impl From<ResolvedDist> for Requirement {
     fn from(dist: ResolvedDist) -> Self {
         match dist {
-            ResolvedDist::Installable(dist) => dist.clone().into(),
-            ResolvedDist::Installed(dist) => dist.clone().into(),
+            ResolvedDist::Installable(dist) => dist.into(),
+            ResolvedDist::Installed(dist) => dist.into(),
         }
     }
 }
