@@ -638,15 +638,15 @@ async fn install(
     }
 
     let Plan {
-        local,
+        cached,
         remote,
         reinstalls,
-        installed: _,
+        local: _,
         extraneous: _,
     } = plan;
 
     // Nothing to do.
-    if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
+    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
@@ -729,7 +729,7 @@ async fn install(
     }
 
     // Install the resolved distributions.
-    let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
+    let wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
         uv_installer::Installer::new(venv)
@@ -802,15 +802,15 @@ async fn install(
         printer: Printer,
     ) -> Result<(), Error> {
         let Plan {
-            local,
+            cached,
             remote,
             reinstalls,
-            installed: _,
+            local: _,
             extraneous: _,
         } = plan;
 
         // Nothing to do.
-        if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
+        if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
             let s = if resolution.len() == 1 { "" } else { "s" };
             writeln!(
                 printer.stderr(),
@@ -869,7 +869,7 @@ async fn install(
         }
 
         // Install the resolved distributions.
-        let installs = wheels.len() + local.len();
+        let installs = wheels.len() + cached.len();
 
         if installs > 0 {
             let s = if installs == 1 { "" } else { "s" };
@@ -892,7 +892,7 @@ async fn install(
                 version: distribution.version_or_url().to_string(),
                 kind: ChangeEventKind::Added,
             }))
-            .chain(local.into_iter().map(|distribution| DryRunEvent {
+            .chain(cached.into_iter().map(|distribution| DryRunEvent {
                 name: distribution.name().clone(),
                 version: distribution.installed_version().to_string(),
                 kind: ChangeEventKind::Added,

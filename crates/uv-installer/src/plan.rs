@@ -68,10 +68,10 @@ impl<'a> Planner<'a> {
         // Index all the already-downloaded wheels in the cache.
         let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations);
 
-        let mut local = vec![];
+        let mut cached = vec![];
         let mut remote = vec![];
         let mut reinstalls = vec![];
-        let installed = vec![];
+        let local = vec![];
         let mut extraneous = vec![];
         let mut seen = FxHashMap::with_capacity_and_hasher(
             self.requirements.len(),
@@ -123,7 +123,7 @@ impl<'a> Planner<'a> {
                     let existing = site_packages.remove_packages(built.name());
                     reinstalls.extend(existing);
 
-                    local.push(built.wheel.clone());
+                    cached.push(built.wheel.clone());
                 }
             }
         }
@@ -230,7 +230,7 @@ impl<'a> Planner<'a> {
                         registry_index.get(&requirement.name).next()
                     {
                         debug!("Requirement already cached: {distribution}");
-                        local.push(CachedDist::Registry(distribution.clone()));
+                        cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
                 }
@@ -247,7 +247,7 @@ impl<'a> Planner<'a> {
                             })
                     {
                         debug!("Requirement already cached: {distribution}");
-                        local.push(CachedDist::Registry(distribution.clone()));
+                        cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
                 }
@@ -292,7 +292,7 @@ impl<'a> Planner<'a> {
                                     );
 
                                     debug!("URL wheel requirement already cached: {cached_dist}");
-                                    local.push(CachedDist::Url(cached_dist));
+                                    cached.push(CachedDist::Url(cached_dist));
                                     continue;
                                 }
                                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
@@ -340,7 +340,7 @@ impl<'a> Planner<'a> {
                                         debug!(
                                             "URL wheel requirement already cached: {cached_dist}"
                                         );
-                                        local.push(CachedDist::Url(cached_dist));
+                                        cached.push(CachedDist::Url(cached_dist));
                                         continue;
                                     }
                                 }
@@ -356,7 +356,7 @@ impl<'a> Planner<'a> {
                             if let Some(wheel) = BuiltWheelIndex::url(&sdist, cache, tags)? {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("URL source requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist));
+                                cached.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
                         }
@@ -366,7 +366,7 @@ impl<'a> Planner<'a> {
                             if let Some(wheel) = BuiltWheelIndex::path(&sdist, cache, tags)? {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("Path source requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist));
+                                cached.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
                         }
@@ -376,7 +376,7 @@ impl<'a> Planner<'a> {
                             if let Some(wheel) = BuiltWheelIndex::git(&sdist, cache, tags) {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("Git source requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist));
+                                cached.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
                         }
@@ -410,10 +410,10 @@ impl<'a> Planner<'a> {
         }
 
         Ok(Plan {
-            local,
+            cached,
             remote,
             reinstalls,
-            installed,
+            local,
             extraneous,
         })
     }
@@ -431,7 +431,11 @@ enum Specifier<'a> {
 pub struct Plan {
     /// The distributions that are not already installed in the current environment, but are
     /// available in the local cache.
-    pub local: Vec<CachedDist>,
+    pub cached: Vec<CachedDist>,
+
+    /// Any distributions that are already installed in the current environment, and can be used
+    /// to satisfy the requirements.
+    pub local: Vec<InstalledDist>,
 
     /// The distributions that are not already installed in the current environment, and are
     /// not available in the local cache.
@@ -440,10 +444,6 @@ pub struct Plan {
     /// Any distributions that are already installed in the current environment, but will be
     /// re-installed (including upgraded) to satisfy the requirements.
     pub reinstalls: Vec<InstalledDist>,
-
-    /// Any distributions that are already installed in the current environment, and can be used
-    /// to satisfy the requirements without reinstallation.
-    pub installed: Vec<InstalledDist>,
 
     /// Any distributions that are already installed in the current environment, and are
     /// _not_ necessary to satisfy the requirements.

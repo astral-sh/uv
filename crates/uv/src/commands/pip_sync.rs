@@ -227,13 +227,13 @@ pub(crate) async fn pip_sync(
     )
     .await?;
 
-    // Partition into those that should be linked from the cache (`local`), those that need to be
+    // Partition into those that should be linked from the cache (`cached`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
     let Plan {
-        local,
+        cached,
         remote,
         reinstalls,
-        installed: _,
+        local: _,
         extraneous,
     } = Planner::with_requirements(&requirements)
         .with_editable_requirements(&resolved_editables.editables)
@@ -249,7 +249,7 @@ pub(crate) async fn pip_sync(
         .context("Failed to determine installation plan")?;
 
     // Nothing to do.
-    if remote.is_empty() && local.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
+    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
         let s = if num_requirements == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
@@ -378,7 +378,7 @@ pub(crate) async fn pip_sync(
     }
 
     // Install the resolved distributions.
-    let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
+    let wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
         uv_installer::Installer::new(&venv)

@@ -186,9 +186,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             let site_packages = SitePackages::from_executable(venv)?;
 
             let Plan {
-                local,
+                cached,
                 remote,
-                installed: _,
+                local: _,
                 reinstalls,
                 extraneous: _,
             } = Planner::with_requirements(&resolution.requirements()).build(
@@ -202,7 +202,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             )?;
 
             // Nothing to do.
-            if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
+            if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
                 debug!("No build requirements to install for build");
                 return Ok(());
             }
@@ -254,7 +254,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             }
 
             // Install the resolved distributions.
-            let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
+            let wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
             if !wheels.is_empty() {
                 debug!(
                     "Installing build requirement{}: {}",
