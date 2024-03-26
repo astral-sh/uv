@@ -1408,6 +1408,38 @@ fn reinstall_no_binary() {
     context.assert_command("import anyio").success();
 }
 
+/// Respect `--only-binary` flags in `requirements.txt`
+#[test]
+fn only_binary_requirements_txt() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(indoc! {r"
+        django_allauth==0.51.0
+        --only-binary django_allauth
+        "
+        })
+        .unwrap();
+
+    uv_snapshot!(command(&context)
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because django-allauth==0.51.0 is unusable because no wheels
+          are usable and building from source is disabled and you require
+          django-allauth==0.51.0, we can conclude that the requirements are
+          unsatisfiable.
+    "###
+    );
+}
+
 /// Install a package into a virtual environment, and ensuring that the executable permissions
 /// are retained.
 ///

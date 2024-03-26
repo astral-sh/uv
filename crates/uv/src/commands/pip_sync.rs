@@ -49,8 +49,8 @@ pub(crate) async fn pip_sync(
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
-    no_build: &NoBuild,
-    no_binary: &NoBinary,
+    no_build: NoBuild,
+    no_binary: NoBinary,
     strict: bool,
     python: Option<String>,
     system: bool,
@@ -78,6 +78,8 @@ pub(crate) async fn pip_sync(
         extra_index_urls,
         no_index,
         find_links,
+        no_binary: specified_no_binary,
+        no_build: specified_no_build,
     } = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
 
     // Validate that the requirements are non-empty.
@@ -165,6 +167,10 @@ pub(crate) async fn pip_sync(
         BuildIsolation::Isolated
     };
 
+    // Combine the `--no-binary` and `--no-build` flags.
+    let no_binary = no_binary.combine(specified_no_binary);
+    let no_build = no_build.combine(specified_no_build);
+
     // Prep the build context.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -177,8 +183,8 @@ pub(crate) async fn pip_sync(
         setup_py,
         config_settings,
         build_isolation,
-        no_build,
-        no_binary,
+        &no_build,
+        &no_binary,
     );
 
     // Convert from unnamed to named requirements.
@@ -231,7 +237,7 @@ pub(crate) async fn pip_sync(
         .build(
             site_packages,
             reinstall,
-            no_binary,
+            &no_binary,
             &index_locations,
             &cache,
             &venv,
@@ -267,8 +273,8 @@ pub(crate) async fn pip_sync(
             &client,
             venv.interpreter(),
             &flat_index,
-            no_binary,
-            no_build,
+            &no_binary,
+            &no_build,
         )
         .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
         let resolution = wheel_finder.resolve(&remote).await?;

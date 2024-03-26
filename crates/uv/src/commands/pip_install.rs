@@ -70,8 +70,8 @@ pub(crate) async fn pip_install(
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
-    no_build: &NoBuild,
-    no_binary: &NoBinary,
+    no_build: NoBuild,
+    no_binary: NoBinary,
     strict: bool,
     exclude_newer: Option<DateTime<Utc>>,
     python: Option<String>,
@@ -100,6 +100,8 @@ pub(crate) async fn pip_install(
         extra_index_urls,
         no_index,
         find_links,
+        no_binary: specified_no_binary,
+        no_build: specified_no_build,
         extras: _,
     } = read_requirements(
         requirements,
@@ -213,6 +215,10 @@ pub(crate) async fn pip_install(
         BuildIsolation::Isolated
     };
 
+    // Combine the `--no-binary` and `--no-build` flags.
+    let no_binary = no_binary.combine(specified_no_binary);
+    let no_build = no_build.combine(specified_no_build);
+
     // Create a shared in-memory index.
     let index = InMemoryIndex::default();
 
@@ -231,8 +237,8 @@ pub(crate) async fn pip_install(
         setup_py,
         config_settings,
         build_isolation,
-        no_build,
-        no_binary,
+        &no_build,
+        &no_binary,
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
 
@@ -336,8 +342,8 @@ pub(crate) async fn pip_install(
             setup_py,
             config_settings,
             build_isolation,
-            no_build,
-            no_binary,
+            &no_build,
+            &no_binary,
         )
         .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build())
     };
@@ -348,7 +354,7 @@ pub(crate) async fn pip_install(
         editables,
         site_packages,
         reinstall,
-        no_binary,
+        &no_binary,
         link_mode,
         compile,
         &index_locations,

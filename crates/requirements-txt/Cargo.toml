@@ -17,6 +17,7 @@ pep508_rs = { workspace = true, features = ["rkyv", "serde", "non-pep508-extensi
 uv-client = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
+uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 
 async-recursion = { workspace = true }

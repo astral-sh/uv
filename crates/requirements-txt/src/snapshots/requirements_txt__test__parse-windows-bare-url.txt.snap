@@ -93,4 +93,6 @@ RequirementsTxt {
     extra_index_urls: [],
     find_links: [],
     no_index: false,
+    no_binary: None,
+    only_binary: None,
 }

@@ -38,6 +38,7 @@ use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use async_recursion::async_recursion;
 use serde::{Deserialize, Serialize};
@@ -54,6 +55,7 @@ use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
 use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
+use uv_types::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_warnings::warn_user;
 
 /// We emit one of those for each requirements.txt entry
@@ -82,6 +84,10 @@ enum RequirementsTxtStatement {
     FindLinks(FindLink),
     /// `--no-index`
     NoIndex,
+    /// `--no-binary`
+    NoBinary(NoBinary),
+    /// `only-binary`
+    OnlyBinary(NoBuild),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -328,6 +334,10 @@ pub struct RequirementsTxt {
     pub find_links: Vec<FindLink>,
     /// Whether to ignore the index, specified with `--no-index`.
     pub no_index: bool,
+    /// Whether to disallow wheels, specified with `--no-binary`.
+    pub no_binary: NoBinary,
+    /// Whether to allow only wheels, specified with `--only-binary`.
+    pub only_binary: NoBuild,
 }
 
 impl RequirementsTxt {
@@ -516,6 +526,12 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::NoIndex => {
                     data.no_index = true;
                 }
+                RequirementsTxtStatement::NoBinary(no_binary) => {
+                    data.no_binary.extend(no_binary);
+                }
+                RequirementsTxtStatement::OnlyBinary(only_binary) => {
+                    data.only_binary.extend(only_binary);
+                }
             }
         }
         Ok(data)
@@ -531,6 +547,8 @@ impl RequirementsTxt {
             extra_index_urls,
             find_links,
             no_index,
+            no_binary,
+            only_binary,
         } = other;
         self.requirements.extend(requirements);
         self.constraints.extend(constraints);
@@ -541,6 +559,8 @@ impl RequirementsTxt {
         self.extra_index_urls.extend(extra_index_urls);
         self.find_links.extend(find_links);
         self.no_index = self.no_index || no_index;
+        self.no_binary.extend(no_binary);
+        self.only_binary.extend(only_binary);
     }
 }
 
@@ -622,6 +642,28 @@ fn parse_entry(
             }
         })?;
         RequirementsTxtStatement::FindLinks(path_or_url)
+    } else if s.eat_if("--no-binary") {
+        let given = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
+        let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
+            RequirementsTxtParserError::NoBinary {
+                source: err,
+                specifier: given.to_string(),
+                start,
+                end: s.cursor(),
+            }
+        })?;
+        RequirementsTxtStatement::NoBinary(NoBinary::from_arg(specifier))
+    } else if s.eat_if("--only-binary") {
+        let given = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
+        let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
+            RequirementsTxtParserError::NoBinary {
+                source: err,
+                specifier: given.to_string(),
+                start,
+                end: s.cursor(),
+            }
+        })?;
+        RequirementsTxtStatement::OnlyBinary(NoBuild::from_arg(specifier))
     } else if s.at(char::is_ascii_alphanumeric) || s.at(|char| matches!(char, '.' | '/' | '$')) {
         let (requirement, hashes) = parse_requirement_and_hashes(s, content, working_dir)?;
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
@@ -867,6 +909,18 @@ pub enum RequirementsTxtParserError {
     InvalidEditablePath(String),
     UnsupportedUrl(String),
     MissingRequirementPrefix(String),
+    NoBinary {
+        source: uv_normalize::InvalidNameError,
+        specifier: String,
+        start: usize,
+        end: usize,
+    },
+    OnlyBinary {
+        source: uv_normalize::InvalidNameError,
+        specifier: String,
+        start: usize,
+        end: usize,
+    },
     UnnamedConstraint {
         start: usize,
         end: usize,
@@ -918,6 +972,28 @@ impl RequirementsTxtParserError {
             },
             Self::UnsupportedUrl(url) => Self::UnsupportedUrl(url),
             Self::MissingRequirementPrefix(given) => Self::MissingRequirementPrefix(given),
+            Self::NoBinary {
+                source,
+                specifier,
+                start,
+                end,
+            } => Self::NoBinary {
+                source,
+                specifier,
+                start: start + offset,
+                end: end + offset,
+            },
+            Self::OnlyBinary {
+                source,
+                specifier,
+                start,
+                end,
+            } => Self::OnlyBinary {
+                source,
+                specifier,
+                start: start + offset,
+                end: end + offset,
+            },
             Self::UnnamedConstraint { start, end } => Self::UnnamedConstraint {
                 start: start + offset,
                 end: end + offset,
@@ -969,6 +1045,12 @@ impl Display for RequirementsTxtParserError {
             Self::MissingRequirementPrefix(given) => {
                 write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
             }
+            Self::NoBinary { specifier, .. } => {
+                write!(f, "Invalid specifier for `--no-binary`: {specifier}")
+            }
+            Self::OnlyBinary { specifier, .. } => {
+                write!(f, "Invalid specifier for `--only-binary`: {specifier}")
+            }
             Self::UnnamedConstraint { .. } => {
                 write!(f, "Unnamed requirements are not allowed as constraints")
             }
@@ -1011,6 +1093,8 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::InvalidEditablePath(_) => None,
             Self::UnsupportedUrl(_) => None,
             Self::MissingRequirementPrefix(_) => None,
+            Self::NoBinary { source, .. } => Some(source),
+            Self::OnlyBinary { source, .. } => Some(source),
             Self::UnnamedConstraint { .. } => None,
             Self::UnsupportedRequirement { source, .. } => Some(source),
             Self::Pep508 { source, .. } => Some(source),
@@ -1052,6 +1136,20 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Requirement `{given}` in `{}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?",
+                    self.file.user_display(),
+                )
+            }
+            RequirementsTxtParserError::NoBinary { specifier, .. } => {
+                write!(
+                    f,
+                    "Invalid specifier for `--no-binary` in `{}`: {specifier}",
+                    self.file.user_display(),
+                )
+            }
+            RequirementsTxtParserError::OnlyBinary { specifier, .. } => {
+                write!(
+                    f,
+                    "Invalid specifier for `--only-binary` in `{}`: {specifier}",
                     self.file.user_display(),
                 )
             }
@@ -1653,6 +1751,69 @@ mod test {
             extra_index_urls: [],
             find_links: [],
             no_index: false,
+            no_binary: None,
+            only_binary: None,
+        }
+        "###);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn nested_no_binary() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            flask
+            --no-binary :none:
+            -r child.txt
+        "})?;
+
+        let child = temp_dir.child("child.txt");
+        child.write_str(indoc! {"
+            --no-binary flask
+        "})?;
+
+        let requirements = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            &BaseClientBuilder::new(),
+        )
+        .await
+        .unwrap();
+        insta::assert_debug_snapshot!(requirements, @r###"
+        RequirementsTxt {
+            requirements: [
+                RequirementEntry {
+                    requirement: Pep508(
+                        Requirement {
+                            name: PackageName(
+                                "flask",
+                            ),
+                            extras: [],
+                            version_or_url: None,
+                            marker: None,
+                        },
+                    ),
+                    hashes: [],
+                    editable: false,
+                },
+            ],
+            constraints: [],
+            editables: [],
+            index_url: None,
+            extra_index_urls: [],
+            find_links: [],
+            no_index: false,
+            no_binary: Packages(
+                [
+                    PackageName(
+                        "flask",
+                    ),
+                ],
+            ),
+            only_binary: None,
         }
         "###);
 
@@ -1689,37 +1850,39 @@ mod test {
         .unwrap();
 
         insta::assert_debug_snapshot!(requirements, @r###"
-            RequirementsTxt {
-                requirements: [],
-                constraints: [],
-                editables: [
-                    EditableRequirement {
-                        url: VerbatimUrl {
-                            url: Url {
-                                scheme: "file",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: None,
-                                port: None,
-                                path: "/foo/bar",
-                                query: None,
-                                fragment: None,
-                            },
-                            given: Some(
-                                "/foo/bar",
-                            ),
+        RequirementsTxt {
+            requirements: [],
+            constraints: [],
+            editables: [
+                EditableRequirement {
+                    url: VerbatimUrl {
+                        url: Url {
+                            scheme: "file",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: None,
+                            port: None,
+                            path: "/foo/bar",
+                            query: None,
+                            fragment: None,
                         },
-                        extras: [],
-                        path: "/foo/bar",
+                        given: Some(
+                            "/foo/bar",
+                        ),
                     },
-                ],
-                index_url: None,
-                extra_index_urls: [],
-                find_links: [],
-                no_index: true,
-            }
-            "###);
+                    extras: [],
+                    path: "/foo/bar",
+                },
+            ],
+            index_url: None,
+            extra_index_urls: [],
+            find_links: [],
+            no_index: true,
+            no_binary: None,
+            only_binary: None,
+        }
+        "###);
 
         Ok(())
     }

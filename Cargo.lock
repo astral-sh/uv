@@ -2980,6 +2980,7 @@ dependencies = [
  "uv-client",
  "uv-fs",
  "uv-normalize",
+ "uv-types",
  "uv-warnings",
 ]
 

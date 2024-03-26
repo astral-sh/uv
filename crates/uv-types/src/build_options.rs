@@ -47,9 +47,10 @@ impl Display for BuildKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum NoBinary {
     /// Allow installation of any wheel.
+    #[default]
     None,
 
     /// Do not allow installation from any wheels.
@@ -60,13 +61,61 @@ pub enum NoBinary {
 }
 
 impl NoBinary {
-    /// Determine the binary installation strategy to use.
+    /// Determine the binary installation strategy to use for the given arguments.
     pub fn from_args(no_binary: Vec<PackageNameSpecifier>) -> Self {
         let combined = PackageNameSpecifiers::from_iter(no_binary.into_iter());
         match combined {
             PackageNameSpecifiers::All => Self::All,
             PackageNameSpecifiers::None => Self::None,
             PackageNameSpecifiers::Packages(packages) => Self::Packages(packages),
+        }
+    }
+
+    /// Determine the binary installation strategy to use for the given argument.
+    pub fn from_arg(no_binary: PackageNameSpecifier) -> Self {
+        Self::from_args(vec![no_binary])
+    }
+
+    /// Combine a set of [`NoBinary`] values.
+    #[must_use]
+    pub fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            // If both are `None`, the result is `None`.
+            (Self::None, Self::None) => Self::None,
+            // If either is `All`, the result is `All`.
+            (Self::All, _) | (_, Self::All) => Self::All,
+            // If one is `None`, the result is the other.
+            (Self::Packages(a), Self::None) => Self::Packages(a),
+            (Self::None, Self::Packages(b)) => Self::Packages(b),
+            // If both are `Packages`, the result is the union of the two.
+            (Self::Packages(mut a), Self::Packages(b)) => {
+                a.extend(b);
+                Self::Packages(a)
+            }
+        }
+    }
+
+    /// Extend a [`NoBinary`] value with another.
+    pub fn extend(&mut self, other: Self) {
+        match (&mut *self, other) {
+            // If either is `All`, the result is `All`.
+            (Self::All, _) | (_, Self::All) => *self = Self::All,
+            // If both are `None`, the result is `None`.
+            (Self::None, Self::None) => {
+                // Nothing to do.
+            }
+            // If one is `None`, the result is the other.
+            (Self::Packages(_), Self::None) => {
+                // Nothing to do.
+            }
+            (Self::None, Self::Packages(b)) => {
+                // Take ownership of `b`.
+                *self = Self::Packages(b);
+            }
+            // If both are `Packages`, the result is the union of the two.
+            (Self::Packages(a), Self::Packages(b)) => {
+                a.extend(b);
+            }
         }
     }
 }
@@ -78,9 +127,10 @@ impl NoBinary {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum NoBuild {
     /// Allow building wheels from any source distribution.
+    #[default]
     None,
 
     /// Do not allow building wheels from any source distribution.
@@ -91,7 +141,7 @@ pub enum NoBuild {
 }
 
 impl NoBuild {
-    /// Determine the build strategy to use.
+    /// Determine the build strategy to use for the given arguments.
     pub fn from_args(only_binary: Vec<PackageNameSpecifier>, no_build: bool) -> Self {
         if no_build {
             Self::All
@@ -101,6 +151,54 @@ impl NoBuild {
                 PackageNameSpecifiers::All => Self::All,
                 PackageNameSpecifiers::None => Self::None,
                 PackageNameSpecifiers::Packages(packages) => Self::Packages(packages),
+            }
+        }
+    }
+
+    /// Determine the build strategy to use for the given argument.
+    pub fn from_arg(no_build: PackageNameSpecifier) -> Self {
+        Self::from_args(vec![no_build], false)
+    }
+
+    /// Combine a set of [`NoBuild`] values.
+    #[must_use]
+    pub fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            // If both are `None`, the result is `None`.
+            (Self::None, Self::None) => Self::None,
+            // If either is `All`, the result is `All`.
+            (Self::All, _) | (_, Self::All) => Self::All,
+            // If one is `None`, the result is the other.
+            (Self::Packages(a), Self::None) => Self::Packages(a),
+            (Self::None, Self::Packages(b)) => Self::Packages(b),
+            // If both are `Packages`, the result is the union of the two.
+            (Self::Packages(mut a), Self::Packages(b)) => {
+                a.extend(b);
+                Self::Packages(a)
+            }
+        }
+    }
+
+    /// Extend a [`NoBuild`] value with another.
+    pub fn extend(&mut self, other: Self) {
+        match (&mut *self, other) {
+            // If either is `All`, the result is `All`.
+            (Self::All, _) | (_, Self::All) => *self = Self::All,
+            // If both are `None`, the result is `None`.
+            (Self::None, Self::None) => {
+                // Nothing to do.
+            }
+            // If one is `None`, the result is the other.
+            (Self::Packages(_), Self::None) => {
+                // Nothing to do.
+            }
+            (Self::None, Self::Packages(b)) => {
+                // Take ownership of `b`.
+                *self = Self::Packages(b);
+            }
+            // If both are `Packages`, the result is the union of the two.
+            (Self::Packages(a), Self::Packages(b)) => {
+                a.extend(b);
             }
         }
     }
