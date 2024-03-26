@@ -71,7 +71,7 @@ impl<'a> Planner<'a> {
         let mut cached = vec![];
         let mut remote = vec![];
         let mut reinstalls = vec![];
-        let local = vec![];
+        let mut local = vec![];
         let mut extraneous = vec![];
         let mut seen = FxHashMap::with_capacity_and_hasher(
             self.requirements.len(),
@@ -174,44 +174,12 @@ impl<'a> Planner<'a> {
                 match installed.as_slice() {
                     [] => {}
                     [distribution] => {
-                        // Filter out already-installed packages.
-                        match requirement.version_or_url.as_ref() {
-                            // Accept any version of the package.
-                            None => continue,
-
-                            // If the requirement comes from a registry, check by name.
-                            Some(VersionOrUrl::VersionSpecifier(version_specifier)) => {
-                                if version_specifier.contains(distribution.version()) {
-                                    debug!("Requirement already satisfied: {distribution}");
-                                    continue;
-                                }
-                            }
-
-                            // If the requirement comes from a direct URL, check by URL.
-                            Some(VersionOrUrl::Url(url)) => {
-                                if let InstalledDist::Url(installed) = &distribution {
-                                    if &installed.url == url.raw() {
-                                        // If the requirement came from a local path, check freshness.
-                                        if let Ok(archive) = url.to_file_path() {
-                                            if ArchiveTimestamp::up_to_date_with(
-                                                &archive,
-                                                ArchiveTarget::Install(distribution),
-                                            )? {
-                                                debug!("Requirement already satisfied (and up-to-date): {installed}");
-                                                continue;
-                                            }
-                                            debug!("Requirement already satisfied (but not up-to-date): {installed}");
-                                        } else {
-                                            // Otherwise, assume the requirement is up-to-date.
-                                            debug!("Requirement already satisfied (assumed up-to-date): {installed}");
-                                            continue;
-                                        }
-                                    }
-                                }
-                            }
+                        if installed_satisfies_requirement(distribution, requirement)? {
+                            local.push(distribution.clone());
+                            continue;
+                        } else {
+                            reinstalls.push(distribution.clone());
                         }
-
-                        reinstalls.push(distribution.clone());
                     }
                     _ => reinstalls.extend(installed),
                 }
@@ -223,7 +191,7 @@ impl<'a> Planner<'a> {
                 continue;
             }
 
-            // Identify any locally-available distributions that satisfy the requirement.
+            // Identify any cached distributions that satisfy the requirement.
             match requirement.version_or_url.as_ref() {
                 None => {
                     if let Some((_version, distribution)) =
@@ -483,4 +451,54 @@ impl Reinstall {
     pub fn is_all(&self) -> bool {
         matches!(self, Self::All)
     }
+}
+
+/// Returns true if a requirement is satisfied by an installed distribution.
+///
+/// Returns an error if IO fails during a freshness check for a local path.
+fn installed_satisfies_requirement(
+    distribution: &InstalledDist,
+    requirement: &Requirement,
+) -> Result<bool> {
+    // Filter out already-installed packages.
+    match requirement.version_or_url.as_ref() {
+        // Accept any version of the package.
+        None => return Ok(true),
+
+        // If the requirement comes from a registry, check by name.
+        Some(VersionOrUrl::VersionSpecifier(version_specifier)) => {
+            if version_specifier.contains(distribution.version()) {
+                debug!("Requirement already satisfied: {distribution}");
+                return Ok(true);
+            }
+        }
+
+        // If the requirement comes from a direct URL, check by URL.
+        Some(VersionOrUrl::Url(url)) => {
+            if let InstalledDist::Url(installed) = &distribution {
+                if &installed.url == url.raw() {
+                    // If the requirement came from a local path, check freshness.
+                    if let Ok(archive) = url.to_file_path() {
+                        if ArchiveTimestamp::up_to_date_with(
+                            &archive,
+                            ArchiveTarget::Install(distribution),
+                        )? {
+                            debug!("Requirement already satisfied (and up-to-date): {installed}");
+                            return Ok(true);
+                        } else {
+                            debug!(
+                                "Requirement already satisfied (but not up-to-date): {installed}"
+                            );
+                        }
+                    } else {
+                        // Otherwise, assume the requirement is up-to-date.
+                        debug!("Requirement already satisfied (assumed up-to-date): {installed}");
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(false)
 }
