@@ -1892,7 +1892,7 @@ async fn run() -> Result<ExitStatus> {
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
             command: SelfCommand::Update,
-        }) => commands::self_update(printer).await,
+        }) => commands::self_update(printer, cache).await,
         Commands::Version { output_format } => {
             commands::version(output_format, &mut stdout())?;
             Ok(ExitStatus::Success)

@@ -498,7 +498,7 @@ async fn build_editables(
 
 /// Resolve a set of requirements, similar to running `pip compile`.
 #[allow(clippy::too_many_arguments)]
-async fn resolve(
+pub(crate) async fn resolve(
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
@@ -603,7 +603,7 @@ async fn resolve(
 
 /// Install a set of requirements into the current environment.
 #[allow(clippy::too_many_arguments)]
-async fn install(
+pub(crate) async fn install(
     resolution: &Resolution,
     built_editables: Vec<BuiltEditable>,
     site_packages: SitePackages<'_>,
@@ -994,7 +994,7 @@ fn validate(
 }
 
 #[derive(thiserror::Error, Debug)]
-enum Error {
+pub(crate) enum Error {
     #[error(transparent)]
     Resolve(#[from] uv_resolver::ResolveError),
 
