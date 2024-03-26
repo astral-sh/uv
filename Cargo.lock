@@ -4361,7 +4361,7 @@ dependencies = [
  "uv-normalize",
  "uv-requirements",
  "uv-resolver",
- "uv-traits",
+ "uv-types",
  "uv-virtualenv",
  "uv-warnings",
 ]
@@ -4411,7 +4411,7 @@ dependencies = [
  "tracing",
  "uv-fs",
  "uv-interpreter",
- "uv-traits",
+ "uv-types",
  "uv-virtualenv",
 ]
 
@@ -4533,7 +4533,7 @@ dependencies = [
  "uv-interpreter",
  "uv-normalize",
  "uv-resolver",
- "uv-traits",
+ "uv-types",
  "walkdir",
 ]
 
@@ -4554,7 +4554,7 @@ dependencies = [
  "uv-installer",
  "uv-interpreter",
  "uv-resolver",
- "uv-traits",
+ "uv-types",
 ]
 
 [[package]]
@@ -4590,7 +4590,7 @@ dependencies = [
  "uv-fs",
  "uv-git",
  "uv-normalize",
- "uv-traits",
+ "uv-types",
  "zip",
 ]
 
@@ -4684,7 +4684,7 @@ dependencies = [
  "uv-fs",
  "uv-interpreter",
  "uv-normalize",
- "uv-traits",
+ "uv-types",
  "uv-warnings",
  "walkdir",
 ]
@@ -4757,7 +4757,7 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-resolver",
- "uv-traits",
+ "uv-types",
  "uv-warnings",
 ]
 
@@ -4801,18 +4801,19 @@ dependencies = [
  "uv-distribution",
  "uv-interpreter",
  "uv-normalize",
- "uv-traits",
+ "uv-types",
  "uv-warnings",
 ]
 
 [[package]]
-name = "uv-traits"
+name = "uv-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
  "distribution-types",
  "once-map",
  "pep508_rs",
+ "rustc-hash",
  "serde",
  "serde_json",
  "uv-cache",

@@ -1,48 +1,11 @@
 use std::path::Path;
 
 use anyhow::Result;
-use rustc_hash::FxHashSet;
 
 use requirements_txt::RequirementsTxt;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_normalize::PackageName;
 use uv_resolver::{Preference, PreferenceError};
-
-/// Whether to allow package upgrades.
-#[derive(Debug)]
-pub enum Upgrade {
-    /// Prefer pinned versions from the existing lockfile, if possible.
-    None,
-
-    /// Allow package upgrades for all packages, ignoring the existing lockfile.
-    All,
-
-    /// Allow package upgrades, but only for the specified packages.
-    Packages(FxHashSet<PackageName>),
-}
-
-impl Upgrade {
-    /// Determine the upgrade strategy from the command-line arguments.
-    pub fn from_args(upgrade: bool, upgrade_package: Vec<PackageName>) -> Self {
-        if upgrade {
-            Self::All
-        } else if !upgrade_package.is_empty() {
-            Self::Packages(upgrade_package.into_iter().collect())
-        } else {
-            Self::None
-        }
-    }
-
-    /// Returns `true` if no packages should be upgraded.
-    pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
-    }
-
-    /// Returns `true` if all packages should be upgraded.
-    pub fn is_all(&self) -> bool {
-        matches!(self, Self::All)
-    }
-}
+use uv_types::Upgrade;
 
 /// Load the preferred requirements from an existing lockfile, applying the upgrade strategy.
 pub async fn read_lockfile(

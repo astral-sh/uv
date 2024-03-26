@@ -20,7 +20,7 @@ use uv_resolver::{
     DisplayResolutionGraph, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_traits::{
+use uv_types::{
     BuildContext, BuildIsolation, BuildKind, NoBinary, NoBuild, SetupPyStrategy, SourceBuildTrait,
 };
 

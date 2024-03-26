@@ -17,7 +17,7 @@ use uv_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
-use uv_traits::NoBinary;
+use uv_types::NoBinary;
 
 use crate::{ResolvedEditable, SitePackages};
 

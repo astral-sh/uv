@@ -31,7 +31,7 @@ uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true, features = ["clap"] }
-uv-traits = { workspace = true }
+uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
 

@@ -26,7 +26,7 @@ uv-extract = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true, features = ["vendored-openssl"] }
 uv-normalize = { workspace = true }
-uv-traits = { workspace = true }
+uv-types = { workspace = true }
 pypi-types = { workspace = true }
 
 anyhow = { workspace = true }

@@ -10,7 +10,7 @@ use distribution_types::{BuildableSource, PathSourceUrl, SourceUrl};
 use pep508_rs::Requirement;
 use uv_client::RegistryClient;
 use uv_distribution::{Reporter, SourceDistCachedBuilder};
-use uv_traits::BuildContext;
+use uv_types::BuildContext;
 
 use crate::ExtrasSpecification;
 

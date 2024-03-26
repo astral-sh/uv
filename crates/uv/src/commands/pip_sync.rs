@@ -27,7 +27,7 @@ use uv_requirements::{
     SourceTreeResolver,
 };
 use uv_resolver::InMemoryIndex;
-use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_types::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{

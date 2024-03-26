@@ -31,7 +31,7 @@ uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-resolver = { workspace = true }
-uv-traits = { workspace = true }
+uv-types = { workspace = true }
 
 # Any dependencies that are exclusively used in `uv-dev` should be listed as non-workspace
 # dependencies, to ensure that we're forced to think twice before including them in other crates.

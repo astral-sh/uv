@@ -27,7 +27,7 @@ uv-client = { workspace = true }
 uv-distribution = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
-uv-traits = { workspace = true }
+uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 
 anstream = { workspace = true }

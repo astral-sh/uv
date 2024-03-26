@@ -33,7 +33,7 @@ use uv_client::{
 };
 use uv_fs::{write_atomic, LockedFile};
 use uv_git::{Fetch, GitSource};
-use uv_traits::{BuildContext, BuildKind, NoBuild, SourceBuildTrait};
+use uv_types::{BuildContext, BuildKind, NoBuild, SourceBuildTrait};
 
 use crate::error::Error;
 use crate::reporter::Facade;

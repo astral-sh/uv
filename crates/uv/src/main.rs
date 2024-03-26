@@ -19,10 +19,10 @@ use uv_client::Connectivity;
 use uv_installer::{NoBinary, Reinstall};
 use uv_interpreter::PythonVersion;
 use uv_normalize::{ExtraName, PackageName};
-use uv_requirements::{upgrade::Upgrade, ExtrasSpecification, RequirementsSource};
+use uv_requirements::{ExtrasSpecification, RequirementsSource};
 use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
-use uv_traits::{
-    ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, SetupPyStrategy,
+use uv_types::{
+    ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, SetupPyStrategy, Upgrade,
 };
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, ListFormat, VersionFormat};

@@ -30,7 +30,7 @@ use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{PackageName, Requirement};
 use uv_fs::{PythonExt, Simplified};
 use uv_interpreter::{Interpreter, PythonEnvironment};
-use uv_traits::{
+use uv_types::{
     BuildContext, BuildIsolation, BuildKind, ConfigSettings, SetupPyStrategy, SourceBuildTrait,
 };
 

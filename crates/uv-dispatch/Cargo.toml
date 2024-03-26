@@ -22,7 +22,7 @@ uv-client = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-resolver = { workspace = true }
-uv-traits = { workspace = true }
+uv-types = { workspace = true }
 
 anyhow = { workspace = true }
 futures = { workspace = true }

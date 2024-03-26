@@ -5,7 +5,7 @@
 use anyhow::Result;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
 use rustc_hash::FxHashMap;
-use uv_traits::{NoBinary, NoBuild};
+use uv_types::{NoBinary, NoBuild};
 
 use distribution_filename::DistFilename;
 use distribution_types::{Dist, IndexUrl, Resolution};

@@ -15,7 +15,7 @@ use platform_tags::Tags;
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, LocalWheel, Unzip};
-use uv_traits::{BuildContext, InFlight};
+use uv_types::{BuildContext, InFlight};
 
 use crate::editable::BuiltEditable;
 
