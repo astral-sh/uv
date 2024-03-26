@@ -4748,6 +4748,7 @@ dependencies = [
  "requirements-txt",
  "rustc-hash",
  "serde",
+ "thiserror",
  "toml",
  "tracing",
  "url",
