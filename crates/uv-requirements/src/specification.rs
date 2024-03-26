@@ -117,20 +117,23 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
-                // Attempt to read metadata from the `pyproject.toml` directly. If we fail to
-                // deserialize the metadata, fall back to treating it as a source tree, as there
-                // are some cases where the `pyproject.toml` may not be a valid PEP 621 file, but
-                // might still resolve under PEP 517. (If the source tree doesn't resolve under
-                // PEP 517, we'll catch that later.)
+                let contents = uv_fs::read_to_string(path).await?;
+                let pyproject = toml::from_str::<PyProjectToml>(&contents)
+                    .with_context(|| format!("Failed to parse `{}`", path.user_display()))?;
+
+                // Attempt to read metadata from the `pyproject.toml` directly.
+                //
+                // If we fail to extract the PEP 621 metadata, fall back to treating it as a source
+                // tree, as there are some cases where the `pyproject.toml` may not be a valid PEP
+                // 621 file, but might still resolve under PEP 517. (If the source tree doesn't
+                // resolve under PEP 517, we'll catch that later.)
                 //
                 // For example, Hatch's "Context formatting" API is not compliant with PEP 621, as
                 // it expects dynamic processing by the build backend for the static metadata
                 // fields. See: https://hatch.pypa.io/latest/config/context/
-                let contents = uv_fs::read_to_string(path).await?;
-                if let Some(project) = toml::from_str::<PyProjectToml>(&contents)
-                    .ok()
-                    .and_then(|pyproject_toml| pyproject_toml.project)
-                    .and_then(|project| Pep621Metadata::try_from(project, extras))
+                if let Some(project) = pyproject
+                    .project
+                    .and_then(|project| Pep621Metadata::try_from(project, extras).ok().flatten())
                 {
                     Self {
                         project: Some(project.name),

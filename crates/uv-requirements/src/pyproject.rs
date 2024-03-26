@@ -1,6 +1,7 @@
 use indexmap::IndexMap;
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 use pep508_rs::Requirement;
 use uv_normalize::{ExtraName, PackageName};
@@ -22,9 +23,9 @@ pub(crate) struct Project {
     /// The name of the project
     pub(crate) name: PackageName,
     /// Project dependencies
-    pub(crate) dependencies: Option<Vec<Requirement>>,
+    pub(crate) dependencies: Option<Vec<String>>,
     /// Optional dependencies
-    pub(crate) optional_dependencies: Option<IndexMap<ExtraName, Vec<Requirement>>>,
+    pub(crate) optional_dependencies: Option<IndexMap<ExtraName, Vec<String>>>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified
     /// so another tool can/will provide such metadata dynamically.
     pub(crate) dynamic: Option<Vec<String>>,
@@ -41,30 +42,65 @@ pub(crate) struct Pep621Metadata {
     pub(crate) used_extras: FxHashSet<ExtraName>,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum Pep621Error {
+    #[error(transparent)]
+    Pep508(#[from] pep508_rs::Pep508Error),
+}
+
 impl Pep621Metadata {
-    pub(crate) fn try_from(project: Project, extras: &ExtrasSpecification) -> Option<Self> {
+    /// Extract the static [`Pep621Metadata`] from a [`Project`] and [`ExtrasSpecification`], if
+    /// possible.
+    ///
+    /// If the project specifies dynamic dependencies, or if the project specifies dynamic optional
+    /// dependencies and the extras are requested, the requirements cannot be extracted.
+    ///
+    /// Returns an error if the requirements are not valid PEP 508 requirements.
+    pub(crate) fn try_from(
+        project: Project,
+        extras: &ExtrasSpecification,
+    ) -> Result<Option<Self>, Pep621Error> {
         if let Some(dynamic) = project.dynamic.as_ref() {
             // If the project specifies dynamic dependencies, we can't extract the requirements.
             if dynamic.iter().any(|field| field == "dependencies") {
-                return None;
+                return Ok(None);
             }
             // If we requested extras, and the project specifies dynamic optional dependencies, we can't
             // extract the requirements.
             if !extras.is_empty() && dynamic.iter().any(|field| field == "optional-dependencies") {
-                return None;
+                return Ok(None);
             }
         }
 
-        let mut requirements = Vec::new();
-        let mut used_extras = FxHashSet::default();
+        let name = project.name;
 
-        // Include the default dependencies.
-        requirements.extend(project.dependencies.unwrap_or_default());
+        // Parse out the project requirements.
+        let mut requirements = project
+            .dependencies
+            .unwrap_or_default()
+            .iter()
+            .map(String::as_str)
+            .map(Requirement::from_str)
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Include any optional dependencies specified in `extras`.
-        let name = project.name;
+        let mut used_extras = FxHashSet::default();
         if !extras.is_empty() {
             if let Some(optional_dependencies) = project.optional_dependencies {
+                // Parse out the optional dependencies.
+                let optional_dependencies = optional_dependencies
+                    .into_iter()
+                    .map(|(extra, requirements)| {
+                        let requirements = requirements
+                            .iter()
+                            .map(String::as_str)
+                            .map(Requirement::from_str)
+                            .collect::<Result<Vec<_>, _>>()?;
+                        Ok::<(ExtraName, Vec<Requirement>), Pep621Error>((extra, requirements))
+                    })
+                    .collect::<Result<IndexMap<_, _>, _>>()?;
+
+                // Include the optional dependencies if the extras are requested.
                 for (extra, optional_requirements) in &optional_dependencies {
                     if extras.contains(extra) {
                         used_extras.insert(extra.clone());
@@ -78,11 +114,11 @@ impl Pep621Metadata {
             }
         }
 
-        Some(Self {
+        Ok(Some(Self {
             name,
             requirements,
             used_extras,
-        })
+        }))
     }
 }
 

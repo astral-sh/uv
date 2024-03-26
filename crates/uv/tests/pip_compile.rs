@@ -642,9 +642,7 @@ dependencies = [
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build source distribution
-      Caused by: Failed to build: file://[TEMP_DIR]/
-      Caused by: Invalid `pyproject.toml`
+    error: Failed to parse `pyproject.toml`
       Caused by: TOML parse error at line 5, column 8
       |
     5 | name = "!project"
