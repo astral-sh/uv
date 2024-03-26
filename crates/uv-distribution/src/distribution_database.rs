@@ -19,7 +19,7 @@ use pypi_types::Metadata23;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
 use uv_git::GitSource;
-use uv_traits::{BuildContext, NoBinary, NoBuild};
+use uv_types::{BuildContext, NoBinary, NoBuild};
 
 use crate::download::{BuiltWheel, UnzippedWheel};
 use crate::locks::Locks;

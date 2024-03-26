@@ -23,7 +23,7 @@ use uv_installer::{Downloader, NoBinary};
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_resolver::{DistFinder, InMemoryIndex};
-use uv_traits::{BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_types::{BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct InstallManyArgs {

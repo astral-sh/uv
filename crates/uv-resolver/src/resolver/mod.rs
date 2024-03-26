@@ -31,7 +31,7 @@ use uv_client::{FlatIndex, RegistryClient};
 use uv_distribution::DistributionDatabase;
 use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
-use uv_traits::BuildContext;
+use uv_types::BuildContext;
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::constraints::Constraints;

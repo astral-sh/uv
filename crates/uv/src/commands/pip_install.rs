@@ -34,14 +34,14 @@ use uv_installer::{
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
-    upgrade::Upgrade, ExtrasSpecification, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTreeResolver,
+    ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
+    SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode, Preference,
     ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_types::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy, Upgrade};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};

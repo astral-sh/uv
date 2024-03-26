@@ -1,5 +1,5 @@
 [package]
-name = "uv-traits"
+name = "uv-types"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -21,6 +21,7 @@ uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 
 anyhow = { workspace = true }
+rustc-hash = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 

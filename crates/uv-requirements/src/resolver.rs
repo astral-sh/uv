@@ -20,7 +20,7 @@ use pypi_types::Metadata10;
 use uv_client::RegistryClient;
 use uv_distribution::{Reporter, SourceDistCachedBuilder};
 use uv_normalize::PackageName;
-use uv_traits::BuildContext;
+use uv_types::BuildContext;
 
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
 pub struct NamedRequirementsResolver {

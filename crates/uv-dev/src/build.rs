@@ -14,7 +14,7 @@ use uv_dispatch::BuildDispatch;
 use uv_installer::NoBinary;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::InMemoryIndex;
-use uv_traits::{
+use uv_types::{
     BuildContext, BuildIsolation, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy,
 };
 

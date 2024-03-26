@@ -19,7 +19,7 @@ pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 uv-fs = { workspace = true }
 uv-interpreter = { workspace = true }
-uv-traits = { workspace = true, features = ["serde"] }
+uv-types = { workspace = true, features = ["serde"] }
 uv-virtualenv = { workspace = true }
 
 anyhow = { workspace = true }

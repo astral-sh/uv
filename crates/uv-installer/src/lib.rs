@@ -5,7 +5,7 @@ pub use installer::{Installer, Reporter as InstallReporter};
 pub use plan::{Plan, Planner, Reinstall};
 pub use site_packages::{Diagnostic, SitePackages};
 pub use uninstall::{uninstall, UninstallError};
-pub use uv_traits::NoBinary;
+pub use uv_types::NoBinary;
 
 mod compile;
 mod downloader;

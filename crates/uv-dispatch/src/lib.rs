@@ -20,7 +20,7 @@ use uv_client::{FlatIndex, RegistryClient};
 use uv_installer::{Downloader, Installer, NoBinary, Plan, Planner, Reinstall, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use uv_traits::{
+use uv_types::{
     BuildContext, BuildIsolation, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy,
 };
 

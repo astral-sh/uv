@@ -21,7 +21,7 @@ uv-distribution = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-resolver = { workspace = true, features = ["clap"] }
-uv-traits = { workspace = true }
+uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }

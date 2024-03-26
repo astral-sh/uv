@@ -66,7 +66,7 @@ Development utilities for uv.
 ## [uv-dispatch](./uv-dispatch)
 
 A centralized `struct` for resolving and building source distributions in isolated environments.
-Implements the traits defined in `uv-traits`.
+Implements the traits defined in `uv-types`.
 
 ## [uv-distribution](./uv-distribution)
 
@@ -109,7 +109,7 @@ Utilities for reading package requirements from `pyproject.toml` and `requiremen
 
 Functionality for resolving Python packages and their dependencies.
 
-## [uv-traits](./uv-traits)
+## [uv-types](./uv-types)
 
 Shared traits for uv, to avoid circular dependencies.
 

@@ -28,15 +28,14 @@ use uv_installer::{Downloader, NoBinary};
 use uv_interpreter::{find_best_python, PythonEnvironment, PythonVersion};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
-    upgrade::{read_lockfile, Upgrade},
-    ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
-    SourceTreeResolver,
+    upgrade::read_lockfile, ExtrasSpecification, NamedRequirementsResolver, RequirementsSource,
+    RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
     OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
-use uv_traits::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_types::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy, Upgrade};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
