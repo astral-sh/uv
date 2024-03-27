@@ -5,7 +5,9 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name};
+use distribution_types::{
+    IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name, ResolvedDist,
+};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use pypi_types::Yanked;
@@ -231,6 +233,7 @@ pub(crate) async fn pip_sync(
         local,
         remote,
         reinstalls,
+        installed: _,
         extraneous,
     } = Planner::with_requirements(&requirements)
         .with_editable_requirements(&resolved_editables.editables)
@@ -291,7 +294,13 @@ pub(crate) async fn pip_sync(
             .dimmed()
         )?;
 
-        resolution.into_distributions().collect::<Vec<_>>()
+        resolution
+            .into_distributions()
+            .filter_map(|dist| match dist {
+                ResolvedDist::Installable(dist) => Some(dist),
+                ResolvedDist::Installed(_) => None,
+            })
+            .collect::<Vec<_>>()
     };
 
     // Download, build, and unzip any missing distributions.

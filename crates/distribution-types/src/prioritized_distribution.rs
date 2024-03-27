@@ -4,7 +4,7 @@ use pep440_rs::VersionSpecifiers;
 use platform_tags::{IncompatibleTag, TagCompatibility, TagPriority};
 use pypi_types::{Hashes, Yanked};
 
-use crate::Dist;
+use crate::{Dist, InstalledDist, ResolvedDistRef};
 
 /// A collection of distributions that have been filtered by relevance.
 #[derive(Debug, Default, Clone)]
@@ -25,7 +25,7 @@ struct PrioritizedDistInner {
 #[derive(Debug, Clone)]
 pub enum CompatibleDist<'a> {
     /// The distribution is already installed and can be used.
-    InstalledDist(Dist),
+    InstalledDist(&'a InstalledDist),
     /// The distribution should be resolved and installed using a source distribution.
     SourceDist(&'a Dist),
     /// The distribution should be resolved and installed using a wheel distribution.
@@ -286,29 +286,29 @@ impl PrioritizedDist {
 }
 
 impl<'a> CompatibleDist<'a> {
-    /// Return the [`Dist`] to use during resolution.
-    pub fn for_resolution(&self) -> &Dist {
+    /// Return the [`ResolvedDistRef`] to use during resolution.
+    pub fn for_resolution(&self) -> ResolvedDistRef<'a> {
         match *self {
-            CompatibleDist::InstalledDist(ref dist) => dist,
-            CompatibleDist::SourceDist(sdist) => sdist,
-            CompatibleDist::CompatibleWheel(wheel, _) => wheel,
+            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed(dist),
+            CompatibleDist::SourceDist(sdist) => ResolvedDistRef::Installable(sdist),
+            CompatibleDist::CompatibleWheel(wheel, _) => ResolvedDistRef::Installable(wheel),
             CompatibleDist::IncompatibleWheel {
                 source_dist: _,
                 wheel,
-            } => wheel,
+            } => ResolvedDistRef::Installable(wheel),
         }
     }
 
-    /// Return the [`Dist`] to use during installation.
-    pub fn for_installation(&self) -> &Dist {
+    /// Return the [`ResolvedDistRef`] to use during installation.
+    pub fn for_installation(&self) -> ResolvedDistRef<'a> {
         match *self {
-            CompatibleDist::InstalledDist(ref dist) => dist,
-            CompatibleDist::SourceDist(sdist) => sdist,
-            CompatibleDist::CompatibleWheel(wheel, _) => wheel,
+            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed(dist),
+            CompatibleDist::SourceDist(sdist) => ResolvedDistRef::Installable(sdist),
+            CompatibleDist::CompatibleWheel(wheel, _) => ResolvedDistRef::Installable(wheel),
             CompatibleDist::IncompatibleWheel {
                 source_dist,
                 wheel: _,
-            } => source_dist,
+            } => ResolvedDistRef::Installable(source_dist),
         }
     }
 }

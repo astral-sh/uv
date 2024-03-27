@@ -101,9 +101,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             NoBinary::Packages(packages) => packages.contains(dist.name()),
         };
         match &dist {
-            Dist::Installed(_) => {
-                unreachable!("Wheels should not be retrieved for already installed distributions")
-            }
             Dist::Built(BuiltDist::Registry(wheel)) => {
                 if no_binary {
                     return Err(Error::NoBinary);
@@ -328,8 +325,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         dist: &Dist,
     ) -> Result<(Metadata23, Option<Url>), Error> {
         match dist {
-            // TODO(zanieb): `dist.metadata()` should return us the right error kind so we can use `Error::Metadata` here
-            Dist::Installed(dist) => Ok(dist.metadata().map(|metadata| (metadata, None)).unwrap()),
             Dist::Built(built_dist) => {
                 match self.client.wheel_metadata(built_dist).boxed().await {
                     Ok(metadata) => Ok((metadata, None)),

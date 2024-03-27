@@ -11,7 +11,7 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use distribution_types::{DistributionMetadata, IndexLocations, Name};
+use distribution_types::{DistributionMetadata, IndexLocations, Name, ResolvedDist};
 use pep508_rs::Requirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
@@ -213,6 +213,10 @@ async fn venv_impl(
 
         for distribution in resolution
             .distributions()
+            .filter_map(|dist| match dist {
+                ResolvedDist::Installable(dist) => Some(dist),
+                ResolvedDist::Installed(_) => None,
+            })
             .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(&b.version())))
         {
             writeln!(

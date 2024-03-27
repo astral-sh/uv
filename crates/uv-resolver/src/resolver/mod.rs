@@ -19,7 +19,7 @@ use url::Url;
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    Name, RemoteSource, SourceDist, VersionOrUrl,
+    InstalledDist, Name, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrl,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -687,24 +687,26 @@ impl<
                     }
                 };
 
+                let filename = match dist.for_installation() {
+                    ResolvedDistRef::Installable(dist) => {
+                        dist.filename().unwrap_or(Cow::Borrowed("unknown filename"))
+                    }
+                    ResolvedDistRef::Installed(_) => Cow::Borrowed("installed"),
+                };
                 if let Some(extra) = extra {
                     debug!(
                         "Selecting: {}[{}]=={} ({})",
                         candidate.name(),
                         extra,
                         candidate.version(),
-                        dist.for_resolution()
-                            .filename()
-                            .unwrap_or(Cow::Borrowed("unknown filename"))
+                        filename,
                     );
                 } else {
                     debug!(
                         "Selecting: {}=={} ({})",
                         candidate.name(),
                         candidate.version(),
-                        dist.for_resolution()
-                            .filename()
-                            .unwrap_or(Cow::Borrowed("unknown filename"))
+                        filename,
                     );
                 }
 
@@ -715,11 +717,14 @@ impl<
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
-                if self.index.distributions.register(candidate.package_id()) {
-                    let dist = dist.for_resolution().clone();
-                    request_sink.send(Request::Dist(dist)).await?;
-                }
 
+                if self.index.distributions.register(candidate.package_id()) {
+                    let request = match dist.for_resolution() {
+                        ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
+                        ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
+                    };
+                    request_sink.send(request).await?;
+                }
                 Ok(Some(ResolverVersion::Available(version)))
             }
         }
@@ -922,6 +927,10 @@ impl<
                     trace!("Received package metadata for: {package_name}");
                     self.index.packages.done(package_name, version_map);
                 }
+                Some(Response::Installed { dist, metadata }) => {
+                    trace!("Received installed distribution metadata for: {dist}");
+                    self.index.distributions.done(dist.package_id(), metadata);
+                }
                 Some(Response::Dist {
                     dist: Dist::Built(dist),
                     metadata,
@@ -954,11 +963,6 @@ impl<
                         }
                     }
                 }
-                Some(Response::Dist {
-                    dist: dist @ Dist::Installed(_),
-                    metadata,
-                    ..
-                }) => self.index.distributions.done(dist.package_id(), metadata),
                 None => {}
             }
         }
@@ -999,13 +1003,18 @@ impl<
                         Dist::Source(source_dist) => {
                             ResolveError::FetchAndBuild(Box::new(source_dist), err)
                         }
-                        Dist::Installed(_) => unreachable!(),
                     })?;
                 Ok(Some(Response::Dist {
                     dist,
                     metadata,
                     precise,
                 }))
+            }
+
+            Request::Installed(dist) => {
+                // TODO(zanieb): Forward the error from `metadata`
+                let metadata = dist.metadata().unwrap();
+                Ok(Some(Response::Installed { dist, metadata }))
             }
 
             // Pre-fetch the package and distribution metadata.
@@ -1060,34 +1069,43 @@ impl<
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions.register(candidate.package_id()) {
-                    let dist = dist.for_resolution().clone();
+                    let dist = dist.for_resolution().as_owned();
 
-                    let (metadata, precise) = self
-                        .provider
-                        .get_or_build_wheel_metadata(&dist)
-                        .boxed()
-                        .await
-                        .map_err(|err| match dist.clone() {
-                            Dist::Built(BuiltDist::Path(built_dist)) => {
-                                ResolveError::Read(Box::new(built_dist), err)
+                    let response = match dist {
+                        ResolvedDist::Installable(dist) => {
+                            let (metadata, precise) = self
+                                .provider
+                                .get_or_build_wheel_metadata(&dist)
+                                .boxed()
+                                .await
+                                .map_err(|err| match dist.clone() {
+                                    Dist::Built(BuiltDist::Path(built_dist)) => {
+                                        ResolveError::Read(Box::new(built_dist), err)
+                                    }
+                                    Dist::Source(SourceDist::Path(source_dist)) => {
+                                        ResolveError::Build(Box::new(source_dist), err)
+                                    }
+                                    Dist::Built(built_dist) => {
+                                        ResolveError::Fetch(Box::new(built_dist), err)
+                                    }
+                                    Dist::Source(source_dist) => {
+                                        ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                                    }
+                                })?;
+                            Response::Dist {
+                                dist,
+                                metadata,
+                                precise,
                             }
-                            Dist::Source(SourceDist::Path(source_dist)) => {
-                                ResolveError::Build(Box::new(source_dist), err)
-                            }
-                            Dist::Built(built_dist) => {
-                                ResolveError::Fetch(Box::new(built_dist), err)
-                            }
-                            Dist::Source(source_dist) => {
-                                ResolveError::FetchAndBuild(Box::new(source_dist), err)
-                            }
-                            Dist::Installed(_) => unreachable!(),
-                        })?;
+                        }
+                        ResolvedDist::Installed(dist) => {
+                            // TODO(zanieb): Forward the error from `metadata`
+                            let metadata = dist.metadata().unwrap();
+                            Response::Installed { dist, metadata }
+                        }
+                    };
 
-                    Ok(Some(Response::Dist {
-                        dist,
-                        metadata,
-                        precise,
-                    }))
+                    Ok(Some(response))
                 } else {
                     Ok(None)
                 }
@@ -1125,6 +1143,8 @@ pub(crate) enum Request {
     Package(PackageName),
     /// A request to fetch the metadata for a built or source distribution.
     Dist(Dist),
+    /// A request to fetch the metadata from an already-installed distribution.
+    Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>),
 }
@@ -1137,6 +1157,9 @@ impl Display for Request {
             }
             Self::Dist(dist) => {
                 write!(f, "Metadata {dist}")
+            }
+            Self::Installed(dist) => {
+                write!(f, "Installed metadata {dist}")
             }
             Self::Prefetch(package_name, range) => {
                 write!(f, "Prefetch {package_name} {range}")
@@ -1155,6 +1178,11 @@ enum Response {
         dist: Dist,
         metadata: Metadata23,
         precise: Option<Url>,
+    },
+    /// The returned metadata for an already-installed distribution.
+    Installed {
+        dist: InstalledDist,
+        metadata: Metadata23,
     },
 }
 

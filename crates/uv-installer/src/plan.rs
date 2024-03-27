@@ -71,6 +71,7 @@ impl<'a> Planner<'a> {
         let mut local = vec![];
         let mut remote = vec![];
         let mut reinstalls = vec![];
+        let installed = vec![];
         let mut extraneous = vec![];
         let mut seen = FxHashMap::with_capacity_and_hasher(
             self.requirements.len(),
@@ -252,9 +253,6 @@ impl<'a> Planner<'a> {
                 }
                 Some(VersionOrUrl::Url(url)) => {
                     match Dist::from_url(requirement.name.clone(), url.clone())? {
-                        Dist::Installed(_) => {
-                            // Nothing to do.
-                        }
                         Dist::Built(BuiltDist::Registry(_)) => {
                             // Nothing to do.
                         }
@@ -411,12 +409,7 @@ impl<'a> Planner<'a> {
             }
         }
 
-        Ok(Plan {
-            local,
-            remote,
-            reinstalls,
-            extraneous,
-        })
+        Ok(Plan { local, remote, reinstalls, installed, extraneous })
     }
 }
 
@@ -441,6 +434,10 @@ pub struct Plan {
     /// Any distributions that are already installed in the current environment, but will be
     /// re-installed (including upgraded) to satisfy the requirements.
     pub reinstalls: Vec<InstalledDist>,
+
+    /// Any distributions that are already installed in the current environment, and can be used
+    /// to satisfy the requirements without reinstallation.
+    pub installed: Vec<InstalledDist>,
 
     /// Any distributions that are already installed in the current environment, and are
     /// _not_ necessary to satisfy the requirements.

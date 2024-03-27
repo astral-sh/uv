@@ -8,7 +8,7 @@ use rustc_hash::FxHashMap;
 use uv_types::{NoBinary, NoBuild};
 
 use distribution_filename::DistFilename;
-use distribution_types::{Dist, IndexUrl, Resolution};
+use distribution_types::{Dist, IndexUrl, Resolution, ResolvedDist};
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::{TagCompatibility, Tags};
 use uv_client::{
@@ -66,7 +66,7 @@ impl<'a> DistFinder<'a> {
         &self,
         requirement: &Requirement,
         flat_index: Option<&FlatDistributions>,
-    ) -> Result<(PackageName, Dist), ResolveError> {
+    ) -> Result<(PackageName, ResolvedDist), ResolveError> {
         match requirement.version_or_url.as_ref() {
             None | Some(VersionOrUrl::VersionSpecifier(_)) => {
                 // Query the index(es) (cached) to get the URLs for the available files.
@@ -107,7 +107,7 @@ impl<'a> DistFinder<'a> {
                 // We have a URL; fetch the distribution directly.
                 let package_name = requirement.name.clone();
                 let package = Dist::from_url(package_name.clone(), url.clone())?;
-                Ok((package_name, package))
+                Ok((package_name, ResolvedDist::Installable(package)))
             }
         }
     }
@@ -116,7 +116,7 @@ impl<'a> DistFinder<'a> {
     pub fn resolve_stream<'data>(
         &'data self,
         requirements: &'data [Requirement],
-    ) -> impl Stream<Item = Result<(PackageName, Dist), ResolveError>> + 'data {
+    ) -> impl Stream<Item = Result<(PackageName, ResolvedDist), ResolveError>> + 'data {
         stream::iter(requirements)
             .map(move |requirement| {
                 self.resolve_requirement(requirement, self.flat_index.get(&requirement.name))
@@ -130,7 +130,7 @@ impl<'a> DistFinder<'a> {
             return Ok(Resolution::default());
         }
 
-        let resolution: FxHashMap<PackageName, Dist> =
+        let resolution: FxHashMap<PackageName, ResolvedDist> =
             self.resolve_stream(requirements).try_collect().await?;
 
         if let Some(reporter) = self.reporter.as_ref() {
@@ -150,7 +150,7 @@ impl<'a> DistFinder<'a> {
         metadata: SimpleMetadata,
         index: &IndexUrl,
         flat_index: Option<&FlatDistributions>,
-    ) -> Option<Dist> {
+    ) -> Option<ResolvedDist> {
         let no_binary = match self.no_binary {
             NoBinary::None => false,
             NoBinary::All => true,
@@ -264,7 +264,9 @@ impl<'a> DistFinder<'a> {
             }
         }
 
-        best_wheel.map_or(best_sdist, |(wheel, ..)| Some(wheel))
+        best_wheel
+            .map_or(best_sdist, |(wheel, ..)| Some(wheel))
+            .map(ResolvedDist::Installable)
     }
 
     /// Select a matching version from a flat index.
@@ -291,7 +293,7 @@ impl<'a> DistFinder<'a> {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a package is resolved to a specific distribution.
-    fn on_progress(&self, dist: &Dist);
+    fn on_progress(&self, dist: &ResolvedDist);
 
     /// Callback to invoke when the resolution is complete.
     fn on_complete(&self);

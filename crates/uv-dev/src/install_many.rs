@@ -10,7 +10,8 @@ use rustc_hash::FxHashMap;
 use tracing::info;
 
 use distribution_types::{
-    CachedDist, Dist, DistributionMetadata, IndexLocations, Name, Resolution, VersionOrUrl,
+    CachedDist, Dist, DistributionMetadata, IndexLocations, Name, Resolution, ResolvedDist,
+    VersionOrUrl,
 };
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
@@ -125,7 +126,7 @@ async fn install_chunk(
     .resolve_stream(requirements)
     .collect()
     .await;
-    let (resolution, failures): (FxHashMap<PackageName, Dist>, Vec<_>) =
+    let (resolution, failures): (FxHashMap<PackageName, ResolvedDist>, Vec<_>) =
         resolution.into_iter().partition_result();
     for failure in &failures {
         info!("Failed to find wheel: {failure}");
@@ -140,9 +141,11 @@ async fn install_chunk(
         let only_wheels: FxHashMap<_, _> = resolution
             .into_iter()
             .filter(|(_, dist)| match dist {
-                Dist::Installed(_) => true,
-                Dist::Built(_) => true,
-                Dist::Source(_) => false,
+                ResolvedDist::Installable(dist) => match dist {
+                    Dist::Built(_) => true,
+                    Dist::Source(_) => false,
+                },
+                ResolvedDist::Installed(_) => true,
             })
             .collect();
         info!(
@@ -171,9 +174,16 @@ async fn install_chunk(
     });
     info!("Cached: {}, Uncached {}", cached.len(), uncached.len());
 
+    let (_installed, remote): (Vec<_>, Vec<_>) =
+        dists.into_iter().partition_map(|dist| match dist {
+            ResolvedDist::Installed(dist) => Either::Left(dist),
+            ResolvedDist::Installable(dist) => Either::Right(dist),
+        });
+    info!("Cached: {}, Uncached {}", cached.len(), uncached.len());
+
     let downloader = Downloader::new(build_dispatch.cache(), tags, client, build_dispatch);
     let in_flight = InFlight::default();
-    let fetches: Vec<_> = futures::stream::iter(uncached)
+    let fetches: Vec<_> = futures::stream::iter(remote)
         .map(|dist| downloader.get_wheel(dist, &in_flight))
         .buffer_unordered(50)
         .collect()

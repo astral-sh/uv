@@ -1,6 +1,6 @@
 use pubgrub::range::Range;
 
-use distribution_types::{CompatibleDist, Dist, IncompatibleDist, IncompatibleSource};
+use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
 use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
@@ -91,9 +91,7 @@ impl CandidateSelector {
                     return Some(Candidate {
                         name: package_name,
                         version,
-                        dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
-                            Dist::Installed(dist.clone()),
-                        )),
+                        dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
                     });
                 }
             }

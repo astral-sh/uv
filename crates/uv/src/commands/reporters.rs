@@ -6,8 +6,8 @@ use owo_colors::OwoColorize;
 use url::Url;
 
 use distribution_types::{
-    BuildableSource, CachedDist, Dist, DistributionMetadata, LocalEditable, Name, SourceDist,
-    VersionOrUrl,
+    BuildableSource, CachedDist, DistributionMetadata, LocalEditable, Name, ResolvedDist,
+    SourceDist, VersionOrUrl,
 };
 use uv_normalize::PackageName;
 
@@ -38,7 +38,7 @@ impl FinderReporter {
 }
 
 impl uv_resolver::FinderReporter for FinderReporter {
-    fn on_progress(&self, dist: &Dist) {
+    fn on_progress(&self, dist: &ResolvedDist) {
         self.progress.set_message(format!("{dist}"));
         self.progress.inc(1);
     }
