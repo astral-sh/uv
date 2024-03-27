@@ -38,8 +38,9 @@ pub enum Error {
 
 /// Download, build, and unzip a set of distributions.
 pub struct Downloader<'a, Context: BuildContext + Send + Sync> {
-    database: DistributionDatabase<'a, Context>,
+    tags: &'a Tags,
     cache: &'a Cache,
+    database: DistributionDatabase<'a, Context>,
     reporter: Option<Arc<dyn Reporter>>,
 }
 
@@ -51,9 +52,10 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         build_context: &'a Context,
     ) -> Self {
         Self {
-            database: DistributionDatabase::new(cache, tags, client, build_context),
-            reporter: None,
+            tags,
             cache,
+            database: DistributionDatabase::new(cache, client, build_context),
+            reporter: None,
         }
     }
 
@@ -62,9 +64,10 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         let reporter: Arc<dyn Reporter> = Arc::new(reporter);
         Self {
-            reporter: Some(reporter.clone()),
-            database: self.database.with_reporter(Facade::from(reporter.clone())),
+            tags: self.tags,
             cache: self.cache,
+            database: self.database.with_reporter(Facade::from(reporter.clone())),
+            reporter: Some(reporter.clone()),
         }
     }
 
@@ -165,7 +168,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         if in_flight.downloads.register(id.clone()) {
             let download: LocalWheel = self
                 .database
-                .get_or_build_wheel(dist.clone())
+                .get_or_build_wheel(&dist, self.tags)
                 .boxed()
                 .map_err(|err| Error::Fetch(dist.clone(), err))
                 .await?;

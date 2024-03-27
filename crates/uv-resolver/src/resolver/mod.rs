@@ -129,7 +129,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
     ) -> Result<Self, ResolveError> {
         let provider = DefaultResolverProvider::new(
             client,
-            DistributionDatabase::new(build_context.cache(), tags, client, build_context),
+            DistributionDatabase::new(build_context.cache(), client, build_context),
             flat_index,
             tags,
             PythonRequirement::new(interpreter, markers),
