@@ -1,4 +1,5 @@
 use pep508_rs::PackageName;
+
 use rustc_hash::FxHashSet;
 
 /// Whether to reinstall packages.
@@ -38,7 +39,7 @@ impl Reinstall {
 }
 
 /// Whether to allow package upgrades.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Upgrade {
     /// Prefer pinned versions from the existing lockfile, if possible.
     None,

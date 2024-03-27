@@ -6,14 +6,14 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use tracing::debug;
 use uv_normalize::PackageName;
-use uv_traits::InstalledPackagesProvider;
+use uv_types::InstalledPackagesProvider;
 
-use crate::editables::Editables;
+
 use crate::preferences::Preferences;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
-use crate::{Manifest, Options};
+use crate::{Exclusions, Manifest, Options};
 
 #[derive(Debug, Clone)]
 pub(crate) struct CandidateSelector {
@@ -71,7 +71,7 @@ impl CandidateSelector {
         version_map: &'a VersionMap,
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
-        editables: &'a Editables,
+        exclusions: &'a Exclusions,
     ) -> Option<Candidate<'a>> {
         // If the package has a preference (e.g., an existing version from an existing lockfile),
         // and the preference satisfies the current range, use that.
@@ -83,19 +83,20 @@ impl CandidateSelector {
             }
         }
 
-        if preferences.version(package_name).is_some() {
-            // If it's not in the version map, check if it's satisfied by the current
-            // environment
+        if !exclusions.contains(package_name) {
+            // Allow locally installed distributions to be candidates
             for dist in installed_packages.get_packages(package_name) {
                 let version = dist.version();
                 if range.contains(version) {
                     debug!("Found installed version of {dist} that satisfies request");
+
                     return Some(Candidate {
                         name: package_name,
                         version,
                         dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
                     });
                 }
+                debug!("Installed version of {package_name} does not satisfy version");
             }
         }
 

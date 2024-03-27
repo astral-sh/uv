@@ -18,10 +18,11 @@ use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_installer::NoBinary;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{InMemoryIndex, OptionsBuilder};
-use uv_types::{BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_types::{
+    BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, SetupPyStrategy,
+};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;

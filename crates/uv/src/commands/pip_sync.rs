@@ -20,16 +20,16 @@ use uv_client::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_installer::{
-    is_dynamic, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
-};
+use uv_installer::{is_dynamic, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
 use uv_resolver::InMemoryIndex;
-use uv_types::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_types::{
+    BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
+};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{

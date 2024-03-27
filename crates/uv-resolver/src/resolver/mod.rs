@@ -55,7 +55,7 @@ pub use crate::resolver::provider::{
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
-use crate::{DependencyMode, Options, VersionMap};
+use crate::{DependencyMode, Exclusions, Options, VersionMap};
 
 mod index;
 mod locals;
@@ -99,6 +99,7 @@ pub struct Resolver<
     constraints: Constraints,
     overrides: Overrides,
     preferences: Preferences,
+    exclusions: Exclusions,
     editables: Editables,
     urls: Urls,
     locals: Locals,
@@ -189,7 +190,12 @@ impl<
             requirements: manifest.requirements,
             constraints: Constraints::from_requirements(manifest.constraints),
             overrides: Overrides::from_requirements(manifest.overrides),
-            preferences: Preferences::from_requirements(manifest.preferences, markers),
+            preferences: Preferences::from_iter(
+                manifest.preferences,
+                &manifest.exclusions,
+                markers,
+            ),
+            exclusions: manifest.exclusions,
             editables: Editables::from_requirements(manifest.editables),
             markers,
             python_requirement,
@@ -671,7 +677,7 @@ impl<
                     version_map,
                     &self.preferences,
                     self.installed_packages,
-                    &self.editables,
+                    &self.exclusions,
                 ) else {
                     // Short circuit: we couldn't find _any_ versions for a package.
                     return Ok(None);
@@ -1059,7 +1065,7 @@ impl<
                     version_map,
                     &self.preferences,
                     self.installed_packages,
-                    &self.editables,
+                    &self.exclusions,
                 ) else {
                     return Ok(None);
                 };

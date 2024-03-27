@@ -17,11 +17,12 @@ use uv_cache::Cache;
 use uv_client::{FlatIndex, RegistryClientBuilder};
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_resolver::{
-    DisplayResolutionGraph, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
-    Preference, ResolutionGraph, ResolutionMode, Resolver,
+    DisplayResolutionGraph, Exclusions, InMemoryIndex, Manifest, Options, OptionsBuilder,
+    PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, NoBinary, EmptyInstalledPackages, NoBuild, SetupPyStrategy, SourceBuildTrait,
+    BuildContext, BuildIsolation, BuildKind, EmptyInstalledPackages, NoBinary, NoBuild,
+    SetupPyStrategy, SourceBuildTrait,
 };
 
 // Exclude any packages uploaded after this date.
@@ -273,6 +274,7 @@ async fn black_mypy_extensions() -> Result<()> {
         vec![],
         None,
         vec![],
+        Exclusions::default(),
     );
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -308,6 +310,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         vec![],
         None,
         vec![],
+        Exclusions::default(),
     );
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -343,6 +346,7 @@ async fn black_flake8() -> Result<()> {
         vec![],
         None,
         vec![],
+        Exclusions::default(),
     );
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -432,6 +436,7 @@ async fn black_respect_preference() -> Result<()> {
         )?)],
         None,
         vec![],
+        Exclusions::default(),
     );
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
@@ -467,6 +472,7 @@ async fn black_ignore_preference() -> Result<()> {
         )?)],
         None,
         vec![],
+        Exclusions::default(),
     );
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))

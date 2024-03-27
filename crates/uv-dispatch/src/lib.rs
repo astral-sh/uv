@@ -17,11 +17,12 @@ use pep508_rs::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::{FlatIndex, RegistryClient};
-use uv_installer::{Downloader, Installer, NoBinary, Plan, Planner, Reinstall, SitePackages};
+use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
 use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, ConfigSettings, InFlight, NoBuild, EmptyInstalledPackages, SetupPyStrategy,
+    BuildContext, BuildIsolation, BuildKind, ConfigSettings, EmptyInstalledPackages, InFlight,
+    NoBinary, NoBuild, Reinstall, SetupPyStrategy,
 };
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]

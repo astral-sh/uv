@@ -16,13 +16,14 @@ use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheArgs, Refresh};
 use uv_client::Connectivity;
-use uv_installer::{NoBinary, Reinstall};
 use uv_interpreter::PythonVersion;
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{ExtrasSpecification, RequirementsSource};
 use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
+use uv_types::NoBinary;
 use uv_types::{
-    ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, SetupPyStrategy, Upgrade,
+    ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, Reinstall, SetupPyStrategy,
+    Upgrade,
 };
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, ListFormat, VersionFormat};
@@ -1689,7 +1690,7 @@ async fn run() -> Result<ExitStatus> {
                 upgrade,
                 index_urls,
                 args.keyring_provider,
-                &reinstall,
+                reinstall,
                 args.link_mode,
                 args.compile,
                 setup_py,

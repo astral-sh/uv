@@ -4544,6 +4544,7 @@ dependencies = [
  "uv-client",
  "uv-installer",
  "uv-interpreter",
+ "uv-requirements",
  "uv-resolver",
  "uv-types",
 ]

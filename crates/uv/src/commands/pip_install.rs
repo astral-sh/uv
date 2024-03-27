@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+
 use std::fmt::Write;
 use std::path::Path;
 use std::time::Instant;
@@ -28,9 +28,7 @@ use uv_client::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_installer::{
-    BuiltEditable, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
-};
+use uv_installer::{BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
@@ -38,10 +36,13 @@ use uv_requirements::{
     SourceTreeResolver,
 };
 use uv_resolver::{
-    DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode, Preference,
-    ResolutionGraph, ResolutionMode, Resolver,
+    DependencyMode, Exclusions, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
+    Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_types::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy, Upgrade};
+use uv_types::{
+    BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
+    Upgrade,
+};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
@@ -63,7 +64,7 @@ pub(crate) async fn pip_install(
     upgrade: Upgrade,
     index_locations: IndexLocations,
     keyring_provider: KeyringProvider,
-    reinstall: &Reinstall,
+    reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
     setup_py: SetupPyStrategy,
@@ -299,7 +300,7 @@ pub(crate) async fn pip_install(
         project,
         &editables,
         &site_packages,
-        reinstall,
+        &reinstall,
         &upgrade,
         &interpreter,
         tags,
@@ -353,7 +354,7 @@ pub(crate) async fn pip_install(
         &resolution,
         editables,
         site_packages,
-        reinstall,
+        &reinstall,
         &no_binary,
         link_mode,
         compile,
@@ -514,27 +515,14 @@ async fn resolve(
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
-    let preferences = if upgrade.is_all() || reinstall.is_all() {
-        vec![]
-    } else {
-        // Combine upgrade and reinstall lists
-        let mut exclusions: HashSet<&PackageName> = if let Reinstall::Packages(packages) = reinstall
-        {
-            HashSet::from_iter(packages)
-        } else {
-            HashSet::default()
-        };
-        if let Upgrade::Packages(packages) = upgrade {
-            exclusions.extend(packages);
-        };
+    // Prefer current site packages; these will be filtered during manifest creation
+    let preferences = site_packages
+        .requirements()
+        .map(Preference::from_requirement)
+        .collect();
 
-        // Prefer current site packages, unless in the upgrade or reinstall lists
-        site_packages
-            .requirements()
-            .map(Preference::from_requirement)
-            .filter(|preference| !exclusions.contains(preference.name()))
-            .collect()
-    };
+    // TODO(zanieb): Consider consuming these instead of cloning
+    let exclusions = Exclusions::new(reinstall.clone(), upgrade.clone());
 
     // Map the editables to their metadata.
     let editables = editables
@@ -555,6 +543,7 @@ async fn resolve(
         preferences,
         project,
         editables,
+        exclusions,
     );
 
     // Resolve the dependencies.

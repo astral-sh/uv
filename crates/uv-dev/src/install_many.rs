@@ -20,11 +20,13 @@ use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::RegistryWheelIndex;
-use uv_installer::{Downloader, NoBinary};
+use uv_installer::Downloader;
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_resolver::{DistFinder, InMemoryIndex};
-use uv_types::{BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_types::{
+    BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, SetupPyStrategy,
+};
 
 #[derive(Parser)]
 pub(crate) struct InstallManyArgs {

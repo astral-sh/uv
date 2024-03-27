@@ -16,8 +16,7 @@ use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, WheelCache};
 use uv_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
-use uv_normalize::PackageName;
-use uv_types::NoBinary;
+use uv_types::{NoBinary, Reinstall};
 
 use crate::{ResolvedEditable, SitePackages};
 
@@ -177,9 +176,8 @@ impl<'a> Planner<'a> {
                         if installed_satisfies_requirement(distribution, requirement)? {
                             local.push(distribution.clone());
                             continue;
-                        } else {
-                            reinstalls.push(distribution.clone());
                         }
+                        reinstalls.push(distribution.clone());
                     }
                     _ => reinstalls.extend(installed),
                 }
@@ -379,9 +377,9 @@ impl<'a> Planner<'a> {
 
         Ok(Plan {
             cached,
+            local,
             remote,
             reinstalls,
-            local,
             extraneous,
         })
     }
@@ -418,41 +416,6 @@ pub struct Plan {
     pub extraneous: Vec<InstalledDist>,
 }
 
-#[derive(Debug, Clone)]
-pub enum Reinstall {
-    /// Don't reinstall any packages; respect the existing installation.
-    None,
-
-    /// Reinstall all packages in the plan.
-    All,
-
-    /// Reinstall only the specified packages.
-    Packages(Vec<PackageName>),
-}
-
-impl Reinstall {
-    /// Determine the reinstall strategy to use.
-    pub fn from_args(reinstall: bool, reinstall_package: Vec<PackageName>) -> Self {
-        if reinstall {
-            Self::All
-        } else if !reinstall_package.is_empty() {
-            Self::Packages(reinstall_package)
-        } else {
-            Self::None
-        }
-    }
-
-    /// Returns `true` if no packages should be reinstalled.
-    pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
-    }
-
-    /// Returns `true` if all packages should be reinstalled.
-    pub fn is_all(&self) -> bool {
-        matches!(self, Self::All)
-    }
-}
-
 /// Returns true if a requirement is satisfied by an installed distribution.
 ///
 /// Returns an error if IO fails during a freshness check for a local path.
@@ -485,11 +448,8 @@ fn installed_satisfies_requirement(
                         )? {
                             debug!("Requirement already satisfied (and up-to-date): {installed}");
                             return Ok(true);
-                        } else {
-                            debug!(
-                                "Requirement already satisfied (but not up-to-date): {installed}"
-                            );
                         }
+                        debug!("Requirement already satisfied (but not up-to-date): {installed}");
                     } else {
                         // Otherwise, assume the requirement is up-to-date.
                         debug!("Requirement already satisfied (assumed up-to-date): {installed}");

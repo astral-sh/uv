@@ -3116,15 +3116,18 @@ fn dependent_editable_previously_installed_reinstall() -> Result<()> {
         .arg(root_path.join("second_editable"))
         .arg("--reinstall-package")
         .arg("first-editable"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    Resolved 2 packages in [TIME]
-    Installed 1 package in [TIME]
-     + second-editable==0.0.1 (from file://[TEMP_DIR]/second_editable)
+      × No solution found when resolving dependencies:
+      ╰─▶ Because first-editable was not found in the package registry and
+          second-editable==0.0.1 depends on first-editable, we can conclude that
+          second-editable==0.0.1 cannot be used.
+          And because you require second-editable==0.0.1, we can conclude that the
+          requirements are unsatisfiable.
     "###
     );
 
@@ -3215,14 +3218,17 @@ fn reinstall_no_index() -> Result<()> {
         .arg("--reinstall")
         .arg("--strict"), @r###"
     success: false
-    exit_code: 101
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    thread 'main' panicked at crates/uv/src/commands/pip_install.rs:665:18:
-    Resolution should contain all packages
-    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the provided package locations and you
+          require anyio, we can conclude that the requirements are unsatisfiable.
+
+          hint: Packages were unavailable because index lookups were disabled
+          and no additional package locations were provided (try: `--find-links
+          <uri>`)
     "###
     );
 
@@ -3310,14 +3316,16 @@ fn dependent_local_previously_installed_reinstall() -> Result<()> {
         .arg("--reinstall-package")
         .arg("first-local"), @r###"
     success: false
-    exit_code: 101
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    thread 'main' panicked at crates/uv/src/commands/pip_install.rs:665:18:
-    Resolution should contain all packages
-    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+      × No solution found when resolving dependencies:
+      ╰─▶ Because first-local was not found in the package registry and
+          second-local==0.1.0 depends on first-local, we can conclude that
+          second-local==0.1.0 cannot be used.
+          And because only second-local==0.1.0 is available and you require
+          second-local, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -3437,14 +3445,14 @@ fn remote_url_previously_installed() {
         .arg("uv-public-pypackage")
         .arg("--reinstall"), @r###"
     success: false
-    exit_code: 101
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    thread 'main' panicked at crates/uv/src/commands/pip_install.rs:665:18:
-    Resolution should contain all packages
-    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+      × No solution found when resolving dependencies:
+      ╰─▶ Because uv-public-pypackage was not found in the package registry and
+          you require uv-public-pypackage, we can conclude that the requirements
+          are unsatisfiable.
     "###);
 
     context.assert_installed("uv_public_pypackage", "0.1.0");

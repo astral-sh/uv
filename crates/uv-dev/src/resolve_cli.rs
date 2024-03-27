@@ -14,10 +14,10 @@ use pep508_rs::Requirement;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
-use uv_installer::{NoBinary, SitePackages};
+use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use uv_types::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_types::{BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, SetupPyStrategy};
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {

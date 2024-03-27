@@ -14,7 +14,7 @@ use requirements_txt::EditableRequirement;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
-use uv_traits::InstalledPackagesProvider;
+use uv_types::InstalledPackagesProvider;
 
 use crate::is_dynamic;
 
