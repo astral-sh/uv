@@ -3516,6 +3516,25 @@ fn already_installed_local_version_of_remote_package() {
     Audited 3 packages in [TIME]
     "###
     );
+
+    // Install something that depends on anyio
+    // We shouldn't overwrite our local version with the remote anyio here
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("httpx"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Downloaded 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + certifi==2024.2.2
+     + h11==0.14.0
+     + httpcore==1.0.4
+     + httpx==0.27.0
+    "###
+    );
 }
 
 /// Install a package from a remote URL
