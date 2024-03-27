@@ -3017,7 +3017,7 @@ requires-python = "<=3.5"
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + example==0.0.0 (from file://[TEMP_DIR])
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );
 
