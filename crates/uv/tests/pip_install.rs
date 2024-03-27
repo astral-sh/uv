@@ -91,7 +91,7 @@ fn missing_requirements_txt() {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
 
-    uv_snapshot!(command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-r")
         .arg("requirements.txt")
         .arg("--strict"), @r###"
@@ -3032,98 +3032,69 @@ fn deptry_gitignore() {
         .success();
 }
 
-/// Install an editable package that depends on a previously installed editable package.
+/// Reinstall an installed package with `--no-index`
 #[test]
-fn dependent_editable_previously_installed() -> Result<()> {
+fn reinstall_no_index() {
     let context = TestContext::new("3.12");
-    let root_path = context.workspace_root.join("scripts/packages/dependent_editables");
 
-    // Install the first editable
-    uv_snapshot!(context.filters(), command(&context)
-        .arg("-e")
-        .arg(root_path.join("first_editable")), @r###"
+    // Install anyio
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
-    Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
-    // The second editable depends on the first editable, which is only available
-    // locally and should not be fetched from an index
-    uv_snapshot!(context.filters(), command(&context)
-        .arg("-e")
-        .arg(root_path.join("second_editable")), @r###"
+    // Install anyio again
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--no-index")
+        .arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
-    Resolved 2 packages in [TIME]
-    Installed 1 package in [TIME]
-     + second-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/second_editable)
+    Audited 1 package in [TIME]
     "###
     );
 
-    Ok(())
-}
-
-/// Install an editable package that depends on a previously installed editable package.
-/// Request reinstall of the first package.
-#[test]
-fn dependent_editable_previously_installed_reinstall() -> Result<()> {
-    let context = TestContext::new("3.12");
-    let root_path = context.workspace_root.join("scripts/packages/dependent_editables");
-
-    // Install the first editable
-    uv_snapshot!(context.filters(), command(&context)
-        .arg("-e")
-        .arg(root_path.join("first_editable")), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Built 1 editable in [TIME]
-    Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
-    "###
-    );
-
-    // The second editable depends on the first editable, which is only available
-    // locally and should not be fetched from an index
-    uv_snapshot!(context.filters(), command(&context)
-        .arg("-e")
-        .arg(root_path.join("second_editable"))
-        .arg("--reinstall-package")
-        .arg("first-editable"), @r###"
+    // Reinstall
+    // We should not consider the already installed package as a source and
+    // should attempt to pull from the index
+    uv_snapshot!(command(&context)
+        .arg("anyio")
+        .arg("--no-index")
+        .arg("--reinstall")
+        .arg("--strict"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Built 1 editable in [TIME]
       × No solution found when resolving dependencies:
-      ╰─▶ Because first-editable was not found in the package registry and
-          second-editable==0.0.1 depends on first-editable, we can conclude that
-          second-editable==0.0.1 cannot be used.
-          And because you require second-editable==0.0.1, we can conclude that the
-          requirements are unsatisfiable.
+      ╰─▶ Because anyio was not found in the provided package locations and you
+          require anyio, we can conclude that the requirements are unsatisfiable.
+
+          hint: Packages were unavailable because index lookups were disabled
+          and no additional package locations were provided (try: `--find-links
+          <uri>`)
     "###
     );
-
-    Ok(())
 }
 
 #[test]
-fn previously_installed_dependencies() -> Result<()> {
+fn already_installed_remote_dependencies() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Install anyio's dependencies.
@@ -3163,33 +3134,53 @@ fn previously_installed_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Install an editable package that depends on a previously installed editable package.
 #[test]
-fn reinstall_no_index() -> Result<()> {
+fn already_installed_dependent_editable() {
     let context = TestContext::new("3.12");
+    let root_path = context
+        .workspace_root
+        .join("scripts/packages/dependent_editables");
 
-    // Install anyio
-    uv_snapshot!(command(&context)
-        .arg("anyio")
-        .arg("--strict"), @r###"
+    // Install the first editable
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(root_path.join("first_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
     "###
     );
 
-    // Install anyio again
-    uv_snapshot!(command(&context)
-        .arg("anyio")
+    // Install the second editable which depends on the first editable
+    // The already installed first editable package should satisfy the requirement
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(root_path.join("second_editable"))
+        // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
-        .arg("--strict"), @r###"
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.12/vendor/links.html"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + second-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/second_editable)
+    "###
+    );
+
+    // Request install of the first editable by full path again
+    // We should audit the installed package
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(root_path.join("first_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3199,78 +3190,59 @@ fn reinstall_no_index() -> Result<()> {
     "###
     );
 
-    // Reinstall
-    uv_snapshot!(command(&context)
-        .arg("anyio")
+    // Request reinstallation of the first package during install of the second
+    // It's not available on an index and the user has not specified the path so we fail
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(root_path.join("second_editable"))
+        .arg("--reinstall-package")
+        .arg("first-editable")
+        // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
-        .arg("--reinstall")
-        .arg("--strict"), @r###"
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.12/vendor/links.html"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the provided package locations and you
-          require anyio, we can conclude that the requirements are unsatisfiable.
-
-          hint: Packages were unavailable because index lookups were disabled
-          and no additional package locations were provided (try: `--find-links
-          <uri>`)
+      ╰─▶ Because first-editable was not found in the provided package locations
+          and second-editable==0.0.1 depends on first-editable, we can conclude
+          that second-editable==0.0.1 cannot be used.
+          And because only second-editable==0.0.1 is available and you
+          require second-editable, we can conclude that the requirements are
+          unsatisfiable.
     "###
     );
 
-    Ok(())
-}
-
-/// Install an local package that depends on a previously installed local package.
-#[test]
-fn dependent_local_previously_installed() -> Result<()> {
-    let context = TestContext::new("3.12");
-    let root_path = context.workspace_root.join("scripts/packages/dependent_locals");
-
-    // Install the first local
-    uv_snapshot!(command(&context)
-        .arg(root_path.join("first_local")), @r###"
+    // Request reinstallation of the first package
+    // We include it in the install command with a full path so we should succeed
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(root_path.join("first_editable"))
+        .arg("--reinstall-package")
+        .arg("first-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + first-local==0.1.0 (from file:///Users/mz/workspace/uv/scripts/packages/dependent_locals/first_local)
+     - first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
+     + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
     "###
     );
-
-    // The second local depends on the first local, which is only available
-    // locally and should not be fetched from an index
-    uv_snapshot!(context.filters(), command(&context)
-        .arg(root_path.join("second_local")), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
-    "###
-    );
-
-    Ok(())
 }
 
 /// Install an local package that depends on a previously installed local package.
-/// Request reinstall of the first package.
 #[test]
-fn dependent_local_previously_installed_reinstall() -> Result<()> {
+fn already_installed_local_path_dependent() {
     let context = TestContext::new("3.12");
-    let root_path = context.workspace_root.join("scripts/packages/dependent_locals");
+    let root_path = context
+        .workspace_root
+        .join("scripts/packages/dependent_locals");
 
-    // Install the first editable
+    // Install the first local
     uv_snapshot!(context.filters(), command(&context)
         .arg(root_path.join("first_local")), @r###"
     success: true
@@ -3285,37 +3257,91 @@ fn dependent_local_previously_installed_reinstall() -> Result<()> {
     "###
     );
 
-    // The second package depends on the first package, which is only available
-    // locally and should not be fetched from an index
+    // Install the second local which depends on the first local
+    // The already installed first local package should satisfy the requirement
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(root_path.join("second_local"))
+        // Disable the index to guard this test against dependency confusion attacks
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.12/vendor/links.html"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
+    "###
+    );
+
+    // Request install of the first local by full path again
+    // We should audit the installed package
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(root_path.join("first_local")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Request reinstallation of the first package during install of the second
+    // It's not available on an index and the user has not specified the path so we fail
     uv_snapshot!(context.filters(), command(&context)
         .arg(root_path.join("second_local"))
         .arg("--reinstall-package")
-        .arg("first-local"), @r###"
+        .arg("first-local")
+        // Disable the index to guard this test against dependency confusion attacks
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.12/vendor/links.html"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because first-local was not found in the package registry and
-          second-local==0.1.0 depends on first-local, we can conclude that
+      ╰─▶ Because first-local was not found in the provided package locations
+          and second-local==0.1.0 depends on first-local, we can conclude that
           second-local==0.1.0 cannot be used.
           And because only second-local==0.1.0 is available and you require
           second-local, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
-    Ok(())
+    // Request reinstallation of the first package
+    // We include it in the install command with a full path so we succeed
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(root_path.join("second_local"))
+        .arg(root_path.join("first_local"))
+        .arg("--reinstall-package")
+        .arg("first-local"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     - first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+    "###
+    );
 }
 
 /// A local version of a package shadowing a remote package is installed.
 #[test]
-fn local_version_for_remote_package() -> Result<()> {
+fn already_installed_local_version_of_remote_package() {
     let context = TestContext::new("3.12");
     let root_path = context.workspace_root.join("scripts/packages");
 
     // Install the local anyio first
-    uv_snapshot!(command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg(root_path.join("anyio_local")), @r###"
     success: true
     exit_code: 0
@@ -3325,7 +3351,7 @@ fn local_version_for_remote_package() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from file:///Users/mz/workspace/uv/scripts/packages/anyio_local)
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
     "###
     );
 
@@ -3341,7 +3367,30 @@ fn local_version_for_remote_package() -> Result<()> {
     "###
     );
 
-    // Request reinstallation with the local version segment — this should not pull from the index
+    // Request install with a different version
+    // We should attempt to pull from the index since the installed version does not match
+    // but we disable it here to preserve this dependency for future tests
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("anyio==4.2.0")
+        .arg("--no-index"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio==4.2.0 was not found in the provided package locations
+          and you require anyio==4.2.0, we can conclude that the requirements
+          are unsatisfiable.
+
+          hint: Packages were unavailable because index lookups were disabled
+          and no additional package locations were provided (try: `--find-links
+          <uri>`)
+    "###
+    );
+
+    // Request reinstallation with the local version segment — this should fail since it is not available
+    // in the index and the path was not provided
     uv_snapshot!(context.filters(), command(&context)
         .arg("anyio==4.3.0+foo")
         .arg("--reinstall"), @r###"
@@ -3357,7 +3406,26 @@ fn local_version_for_remote_package() -> Result<()> {
     "###
     );
 
-    // Request reinstallation — this should not pull from the index
+    // Request reinstall with the full path, this should reinstall from the path
+    // and not pull from the index
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(root_path.join("anyio_local"))
+        .arg("--reinstall")
+        .arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+    "###
+    );
+
+    // Request reinstallation with just the name, this should pull from the index
+    // and replace the path dependency
     uv_snapshot!(context.filters(), command(&context)
         .arg("anyio")
         .arg("--reinstall"), @r###"
@@ -3375,18 +3443,16 @@ fn local_version_for_remote_package() -> Result<()> {
      + sniffio==1.3.1
     "###
     );
-
-    Ok(())
 }
 
 /// Install a package from a remote URL
 #[test]
 #[cfg(feature = "git")]
-fn remote_url_previously_installed() {
+fn already_installed_remote_url() {
     let context = TestContext::new("3.8");
 
     // First, install from the remote URL
-    uv_snapshot!(command(&context).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @r###"
+    uv_snapshot!(context.filters(), command(&context).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3398,7 +3464,10 @@ fn remote_url_previously_installed() {
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
 
-    // Then, request installation again with just the name
+    context.assert_installed("uv_public_pypackage", "0.1.0");
+
+    // Request installation again with just the name
+    // We should just audit the URL package since it fulfills this requirement
     uv_snapshot!(
         command(&context).arg("uv-public-pypackage"), @r###"
     success: true
@@ -3409,10 +3478,12 @@ fn remote_url_previously_installed() {
     Audited 1 package in [TIME]
     "###);
 
-    // Then, request reinstallation
+    // Request reinstallation
+    // We should fail since the URL was not provided
     uv_snapshot!(
         command(&context)
         .arg("uv-public-pypackage")
+        .arg("--no-index")
         .arg("--reinstall"), @r###"
     success: false
     exit_code: 1
@@ -3420,10 +3491,61 @@ fn remote_url_previously_installed() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because uv-public-pypackage was not found in the package registry and
-          you require uv-public-pypackage, we can conclude that the requirements
-          are unsatisfiable.
+      ╰─▶ Because uv-public-pypackage was not found in the provided package
+          locations and you require uv-public-pypackage, we can conclude that the
+          requirements are unsatisfiable.
+
+          hint: Packages were unavailable because index lookups were disabled
+          and no additional package locations were provided (try: `--find-links
+          <uri>`)
     "###);
 
-    context.assert_installed("uv_public_pypackage", "0.1.0");
+    // Request installation again with just the full URL
+    // We should just audit the existing package
+    uv_snapshot!(
+        command(&context).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Request reinstallation with the full URL
+    // We should reinstall successfully
+    uv_snapshot!(
+        command(&context)
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
+        .arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+    "###);
+
+    // Request installation again with a different version
+    // We should attempt to pull from the index since the local version does not match
+    uv_snapshot!(
+        command(&context).arg("uv-public-pypackage==0.2.0").arg("--no-index"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because uv-public-pypackage==0.2.0 was not found in the provided package
+          locations and you require uv-public-pypackage==0.2.0, we can conclude
+          that the requirements are unsatisfiable.
+
+          hint: Packages were unavailable because index lookups were disabled
+          and no additional package locations were provided (try: `--find-links
+          <uri>`)
+    "###);
 }

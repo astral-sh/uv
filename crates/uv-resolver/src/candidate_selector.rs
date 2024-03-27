@@ -8,7 +8,6 @@ use tracing::debug;
 use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
 
-
 use crate::preferences::Preferences;
 use crate::prerelease_mode::PreReleaseStrategy;
 use crate::resolution_mode::ResolutionStrategy;

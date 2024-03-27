@@ -1,4 +1,3 @@
-
 use std::fmt::Write;
 use std::path::Path;
 use std::time::Instant;

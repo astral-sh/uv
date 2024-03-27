@@ -13,9 +13,7 @@ use indoc::indoc;
 use predicates::Predicate;
 use url::Url;
 
-use common::{
-    create_bin_with_executables, create_venv, uv_snapshot, venv_to_interpreter,
-};
+use common::{create_bin_with_executables, create_venv, uv_snapshot, venv_to_interpreter};
 use uv_fs::Simplified;
 
 use crate::common::{copy_dir_all, get_bin, TestContext};
@@ -3008,7 +3006,6 @@ requires-python = "<=3.5"
     // Write to a requirements file.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("example @ {}", editable_dir.path().display()))?;
-
 
     uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.in"), @r###"

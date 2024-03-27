@@ -11,7 +11,7 @@ use requirements_txt::RequirementEntry;
 use tracing::debug;
 use uv_normalize::PackageName;
 
-use crate::{Exclusions};
+use crate::Exclusions;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
