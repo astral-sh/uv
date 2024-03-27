@@ -955,10 +955,10 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
     ) -> Result<Option<Metadata23>, Error> {
         debug!("Preparing metadata for: {source}");
 
-        // Attempt to read static metadata from the source distribution.
+        // Attempt to read static metadata from the `PKG-INFO` file.
         match read_pkg_info(source_root).await {
             Ok(metadata) => {
-                debug!("Found static metadata for: {source}");
+                debug!("Found static `PKG-INFO` for: {source}");
 
                 // Validate the metadata.
                 if let Some(name) = source.name() {
@@ -973,7 +973,30 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
                 return Ok(Some(metadata));
             }
             Err(err @ (Error::MissingPkgInfo | Error::DynamicPkgInfo(_))) => {
-                debug!("No static metadata available for: {source} ({err:?})");
+                debug!("No static `PKG-INFO` available for: {source} ({err:?})");
+            }
+            Err(err) => return Err(err),
+        }
+
+        // Attempt to read static metadata from the `pyproject.toml`.
+        match read_pyproject_toml(source_root).await {
+            Ok(metadata) => {
+                debug!("Found static `pyproject.toml` for: {source}");
+
+                // Validate the metadata.
+                if let Some(name) = source.name() {
+                    if metadata.name != *name {
+                        return Err(Error::NameMismatch {
+                            metadata: metadata.name,
+                            given: name.clone(),
+                        });
+                    }
+                }
+
+                return Ok(Some(metadata));
+            }
+            Err(err @ (Error::MissingPyprojectToml | Error::DynamicPyprojectToml(_))) => {
+                debug!("No static `pyproject.toml` available for: {source} ({err:?})");
             }
             Err(err) => return Err(err),
         }
@@ -1101,6 +1124,25 @@ pub(crate) async fn read_pkg_info(source_tree: &Path) -> Result<Metadata23, Erro
 
     // Parse the metadata.
     let metadata = Metadata23::parse_pkg_info(&content).map_err(Error::DynamicPkgInfo)?;
+
+    Ok(metadata)
+}
+
+/// Read the [`Metadata23`] from a source distribution's `pyproject.tom` file, if it defines static
+/// metadata consistent with PEP 621.
+pub(crate) async fn read_pyproject_toml(source_tree: &Path) -> Result<Metadata23, Error> {
+    // Read the `pyproject.toml` file.
+    let content = match fs::read_to_string(source_tree.join("pyproject.toml")).await {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::MissingPyprojectToml);
+        }
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    // Parse the metadata.
+    let metadata =
+        Metadata23::parse_pyproject_toml(&content).map_err(Error::DynamicPyprojectToml)?;
 
     Ok(metadata)
 }

@@ -2750,6 +2750,7 @@ name = "pypi-types"
 version = "0.0.1"
 dependencies = [
  "chrono",
+ "indexmap",
  "mailparse",
  "once_cell",
  "pep440_rs",
@@ -2758,6 +2759,7 @@ dependencies = [
  "rkyv",
  "serde",
  "thiserror",
+ "toml",
  "tracing",
  "url",
  "uv-normalize",

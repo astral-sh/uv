@@ -881,7 +881,6 @@ fn install_editable_no_binary() {
 fn reinstall_build_system() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Install devpi.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
         flit_core<4.0.0
@@ -900,7 +899,7 @@ fn reinstall_build_system() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Downloaded 7 packages in [TIME]
+    Downloaded 8 packages in [TIME]
     Installed 8 packages in [TIME]
      + blinker==1.7.0
      + click==8.1.7
