@@ -469,11 +469,11 @@ struct PipCompileArgs {
     no_emit_package: Vec<PackageName>,
 
     /// Include `--index-url` and `--extra-index-url` entries in the generated output file.
-    #[clap(long, hide = true)]
+    #[clap(long)]
     emit_index_url: bool,
 
     /// Include `--find-links` entries in the generated output file.
-    #[clap(long, hide = true)]
+    #[clap(long)]
     emit_find_links: bool,
 
     /// Choose the style of the annotation comments, which indicate the source of each package.
