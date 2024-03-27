@@ -41,11 +41,16 @@ impl ResolutionStrategy {
             ResolutionMode::Highest => Self::Highest,
             ResolutionMode::Lowest => Self::Lowest,
             ResolutionMode::LowestDirect => Self::LowestDirect(
-                // Consider `requirements` and dependencies of `editables` to be "direct" dependencies.
+                // Consider `requirements` and dependencies of any local requirements to be "direct" dependencies.
                 manifest
                     .requirements
                     .iter()
                     .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+                    .chain(manifest.lookaheads.iter().flat_map(|lookahead| {
+                        lookahead.requirements().iter().filter(|requirement| {
+                            requirement.evaluate_markers(markers, lookahead.extras())
+                        })
+                    }))
                     .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
                         metadata.requires_dist.iter().filter(|requirement| {
                             requirement.evaluate_markers(markers, &editable.extras)

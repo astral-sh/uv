@@ -1,7 +1,6 @@
 pub use dependency_mode::DependencyMode;
 pub use error::ResolveError;
 pub use exclusions::Exclusions;
-pub use finder::{DistFinder, Reporter as FinderReporter};
 pub use manifest::Manifest;
 pub use options::{Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError};
@@ -25,7 +24,6 @@ mod dependency_provider;
 mod editables;
 mod error;
 mod exclusions;
-mod finder;
 mod manifest;
 mod options;
 mod overrides;

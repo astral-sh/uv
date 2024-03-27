@@ -26,15 +26,14 @@ use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
-use uv_resolver::InMemoryIndex;
+use uv_resolver::{DependencyMode, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
 use uv_types::{
-    BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
+    BuildIsolation, ConfigSettings, EmptyInstalledPackages, InFlight, NoBinary, NoBuild, Reinstall,
+    SetupPyStrategy,
 };
 use uv_warnings::warn_user;
 
-use crate::commands::reporters::{
-    DownloadReporter, FinderReporter, InstallReporter, ResolverReporter,
-};
+use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
 use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 
@@ -271,16 +270,35 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let wheel_finder = uv_resolver::DistFinder::new(
+        // Determine the tags, markers, and interpreter to use for resolution.
+        let interpreter = venv.interpreter();
+        let tags = interpreter.tags()?;
+        let markers = interpreter.markers();
+
+        // Resolve with `--no-deps`.
+        let options = OptionsBuilder::new()
+            .dependency_mode(DependencyMode::Direct)
+            .build();
+
+        // Create a bound on the progress bar, since we know the number of packages upfront.
+        let reporter = ResolverReporter::from(printer).with_length(remote.len() as u64);
+
+        // Run the resolver.
+        let resolver = Resolver::new(
+            Manifest::simple(remote),
+            options,
+            markers,
+            interpreter,
             tags,
             &client,
-            venv.interpreter(),
             &flat_index,
-            &no_binary,
-            &no_build,
-        )
-        .with_reporter(FinderReporter::from(printer).with_length(remote.len() as u64));
-        let resolution = wheel_finder.resolve(&remote).await?;
+            &index,
+            &build_dispatch,
+            // TODO(zanieb): We should consier support for installed packages in pip sync
+            &EmptyInstalledPackages,
+        )?
+        .with_reporter(reporter);
+        let resolution = resolver.resolve().await?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(

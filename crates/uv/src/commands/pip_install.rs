@@ -1,6 +1,5 @@
 use std::fmt::Write;
 use std::path::Path;
-use std::time::Instant;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
@@ -31,8 +30,8 @@ use uv_installer::{BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, S
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
-    ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
-    SourceTreeResolver,
+    ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
+    RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
@@ -82,7 +81,7 @@ pub(crate) async fn pip_install(
     dry_run: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let start = Instant::now();
+    let start = std::time::Instant::now();
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
@@ -437,7 +436,7 @@ async fn build_editables(
     build_dispatch: &BuildDispatch<'_>,
     printer: Printer,
 ) -> Result<Vec<BuiltEditable>, Error> {
-    let start = Instant::now();
+    let start = std::time::Instant::now();
 
     let downloader = Downloader::new(cache, tags, client, build_dispatch)
         .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
@@ -535,6 +534,12 @@ async fn resolve(
         })
         .collect();
 
+    // Determine any lookahead requirements.
+    let lookaheads = LookaheadResolver::new(&requirements)
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve(build_dispatch, client)
+        .await?;
+
     // Create a manifest of the requirements.
     let manifest = Manifest::new(
         requirements,
@@ -544,6 +549,7 @@ async fn resolve(
         project,
         editables,
         exclusions,
+        lookaheads,
     );
 
     // Resolve the dependencies.
@@ -665,7 +671,7 @@ async fn install(
     let wheels = if remote.is_empty() {
         vec![]
     } else {
-        let start = Instant::now();
+        let start = std::time::Instant::now();
 
         let downloader = Downloader::new(cache, tags, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
@@ -787,7 +793,7 @@ async fn install(
     fn report_dry_run(
         resolution: &Resolution,
         plan: Plan,
-        start: Instant,
+        start: std::time::Instant,
         printer: Printer,
     ) -> Result<(), Error> {
         let Plan {

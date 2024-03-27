@@ -6,47 +6,12 @@ use owo_colors::OwoColorize;
 use url::Url;
 
 use distribution_types::{
-    BuildableSource, CachedDist, DistributionMetadata, LocalEditable, Name, ResolvedDist,
-    SourceDist, VersionOrUrl,
+    BuildableSource, CachedDist, DistributionMetadata, LocalEditable, Name, SourceDist,
+    VersionOrUrl,
 };
 use uv_normalize::PackageName;
 
 use crate::printer::Printer;
-
-#[derive(Debug)]
-pub(crate) struct FinderReporter {
-    progress: ProgressBar,
-}
-
-impl From<Printer> for FinderReporter {
-    fn from(printer: Printer) -> Self {
-        let progress = ProgressBar::with_draw_target(None, printer.target());
-        progress.set_style(
-            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
-        );
-        progress.set_message("Resolving dependencies...");
-        Self { progress }
-    }
-}
-
-impl FinderReporter {
-    #[must_use]
-    pub(crate) fn with_length(self, length: u64) -> Self {
-        self.progress.set_length(length);
-        self
-    }
-}
-
-impl uv_resolver::FinderReporter for FinderReporter {
-    fn on_progress(&self, dist: &ResolvedDist) {
-        self.progress.set_message(format!("{dist}"));
-        self.progress.inc(1);
-    }
-
-    fn on_complete(&self) {
-        self.progress.finish_and_clear();
-    }
-}
 
 #[derive(Debug)]
 pub(crate) struct DownloadReporter {
@@ -229,6 +194,12 @@ impl From<Printer> for ResolverReporter {
 }
 
 impl ResolverReporter {
+    #[must_use]
+    pub(crate) fn with_length(self, length: u64) -> Self {
+        self.progress.set_length(length);
+        self
+    }
+
     fn on_progress(&self, name: &PackageName, version_or_url: &VersionOrUrl) {
         match version_or_url {
             VersionOrUrl::Version(version) => {

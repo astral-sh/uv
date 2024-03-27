@@ -1,7 +1,7 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use pep440_rs::Version;
-use pep508_rs::MarkerEnvironment;
+use pep508_rs::{MarkerEnvironment, VersionOrUrl};
 use uv_normalize::PackageName;
 
 use crate::preferences::Preference;
@@ -15,22 +15,26 @@ pub struct AllowedYanks(FxHashMap<PackageName, FxHashSet<Version>>);
 impl AllowedYanks {
     pub fn from_manifest(manifest: &Manifest, markers: &MarkerEnvironment) -> Self {
         let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();
-        for requirement in manifest
-            .requirements
-            .iter()
-            .chain(manifest.constraints.iter())
-            .chain(manifest.overrides.iter())
-            .chain(manifest.preferences.iter().map(Preference::requirement))
-            .filter(|requirement| requirement.evaluate_markers(markers, &[]))
-            .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
-                metadata
-                    .requires_dist
-                    .iter()
-                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
-            }))
+        for requirement in
+            manifest
+                .requirements
+                .iter()
+                .chain(manifest.constraints.iter())
+                .chain(manifest.overrides.iter())
+                .chain(manifest.preferences.iter().map(Preference::requirement))
+                .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+                .chain(manifest.lookaheads.iter().flat_map(|lookahead| {
+                    lookahead.requirements().iter().filter(|requirement| {
+                        requirement.evaluate_markers(markers, lookahead.extras())
+                    })
+                }))
+                .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
+                    metadata.requires_dist.iter().filter(|requirement| {
+                        requirement.evaluate_markers(markers, &editable.extras)
+                    })
+                }))
         {
-            let Some(pep508_rs::VersionOrUrl::VersionSpecifier(specifiers)) =
-                &requirement.version_or_url
+            let Some(VersionOrUrl::VersionSpecifier(specifiers)) = &requirement.version_or_url
             else {
                 continue;
             };

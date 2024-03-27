@@ -18,15 +18,12 @@ workspace = true
 [dependencies]
 distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
-install-wheel-rs = { workspace = true }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
-platform-tags = { workspace = true }
 uv-build = { workspace = true }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-dispatch = { workspace = true }
-uv-distribution = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
