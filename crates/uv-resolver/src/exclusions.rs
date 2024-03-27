@@ -7,9 +7,9 @@ use uv_types::{Reinstall, Upgrade};
 pub enum Exclusions {
     #[default]
     None,
-    /// Exclude some local packages from consideration, e.g. from `--reinstall all`
+    /// Exclude some local packages from consideration, e.g. from `--reinstall-package foo --upgrade-package bar`
     Some(FxHashSet<PackageName>),
-    /// Exclude all local packages from consideration, e.g. from `--reinstall`
+    /// Exclude all local packages from consideration, e.g. from `--reinstall` or `--upgrade`
     All,
 }
 
