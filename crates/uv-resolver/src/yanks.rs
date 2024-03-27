@@ -16,6 +16,8 @@ impl AllowedYanks {
     pub fn from_manifest(manifest: &Manifest, markers: &MarkerEnvironment) -> Self {
         let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();
         for requirement in
+            // TODO(charlie): Should requirements be included here, if they're overridden by
+            // overrides?
             manifest
                 .requirements
                 .iter()
@@ -23,6 +25,7 @@ impl AllowedYanks {
                 .chain(manifest.overrides.iter())
                 .chain(manifest.preferences.iter().map(Preference::requirement))
                 .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+                // TODO(charlie): Should lookaheads and editables be included here?
                 .chain(manifest.lookaheads.iter().flat_map(|lookahead| {
                     lookahead.requirements().iter().filter(|requirement| {
                         requirement.evaluate_markers(markers, lookahead.extras())

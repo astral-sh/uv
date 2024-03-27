@@ -24,6 +24,7 @@ impl Locals {
 
         // Add all direct requirements and constraints. There's no need to look for conflicts,
         // since conflicting versions will be tracked upstream.
+        // TODO(charlie): Respect overrides.
         for requirement in
             manifest
                 .requirements

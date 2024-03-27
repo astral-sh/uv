@@ -50,6 +50,7 @@ impl Urls {
         }
 
         // Add all direct requirements and constraints. If there are any conflicts, return an error.
+        // TODO(charlie): Should this _not_ error if the package has an override that would make it _not_ a conflict?
         for requirement in manifest
             .requirements
             .iter()
