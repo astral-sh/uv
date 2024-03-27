@@ -23,6 +23,11 @@ impl Error {
         *self.kind
     }
 
+    /// Get a reference to the [`ErrorKind`] variant of this error.
+    pub fn kind(&self) -> &ErrorKind {
+        &self.kind
+    }
+
     /// Create a new error from a JSON parsing error.
     pub(crate) fn from_json_err(err: serde_json::Error, url: Url) -> Self {
         ErrorKind::BadJson { source: err, url }.into()

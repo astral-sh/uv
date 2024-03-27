@@ -70,11 +70,29 @@ impl<'a> DistFinder<'a> {
         match requirement.version_or_url.as_ref() {
             None | Some(VersionOrUrl::VersionSpecifier(_)) => {
                 // Query the index(es) (cached) to get the URLs for the available files.
-                let (index, raw_metadata) = self.client.simple(&requirement.name).await?;
-                let metadata = OwnedArchive::deserialize(&raw_metadata);
+                let dist = match self.client.simple(&requirement.name).await {
+                    Ok((index, raw_metadata)) => {
+                        let metadata = OwnedArchive::deserialize(&raw_metadata);
 
-                // Pick a version that satisfies the requirement.
-                let Some(dist) = self.select(requirement, metadata, &index, flat_index) else {
+                        // Pick a version that satisfies the requirement.
+                        self.select_from_index(requirement, metadata, &index, flat_index)
+                    }
+                    Err(err) => match err.kind() {
+                        uv_client::ErrorKind::PackageNotFound(_)
+                        | uv_client::ErrorKind::NoIndex(_)
+                        | uv_client::ErrorKind::Offline(_) => {
+                            if let Some(flat_index) = self.flat_index.get(&requirement.name) {
+                                Self::select_from_flat_index(requirement, flat_index)
+                            } else {
+                                return Err(ResolveError::Client(err));
+                            }
+                        }
+                        _ => return Err(ResolveError::Client(err)),
+                    },
+                };
+
+                // Verify that a distribution was found.
+                let Some(dist) = dist else {
                     return Err(ResolveError::NotFound(requirement.clone()));
                 };
 
@@ -126,7 +144,7 @@ impl<'a> DistFinder<'a> {
     ///
     /// Wheels are preferred to source distributions unless `no_binary` excludes wheels
     /// for the requirement.
-    fn select(
+    fn select_from_index(
         &self,
         requirement: &Requirement,
         metadata: SimpleMetadata,
@@ -247,6 +265,27 @@ impl<'a> DistFinder<'a> {
         }
 
         best_wheel.map_or(best_sdist, |(wheel, ..)| Some(wheel))
+    }
+
+    /// Select a matching version from a flat index.
+    fn select_from_flat_index(
+        requirement: &Requirement,
+        flat_index: &FlatDistributions,
+    ) -> Option<Dist> {
+        let matching_override = match &requirement.version_or_url {
+            None => flat_index.iter().next(),
+            Some(VersionOrUrl::Url(_)) => None,
+            Some(VersionOrUrl::VersionSpecifier(specifiers)) => flat_index
+                .iter()
+                .find(|(version, _)| specifiers.contains(version)),
+        };
+
+        let (_, resolvable_dist) = matching_override?;
+
+        resolvable_dist.compatible_wheel().map_or_else(
+            || resolvable_dist.compatible_source().cloned(),
+            |(dist, _)| Some(dist.clone()),
+        )
     }
 }
 
