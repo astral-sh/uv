@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::Write;
 use std::path::Path;
 
@@ -6,7 +7,6 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use rustc_hash::FxHashSet;
 use tempfile::tempdir_in;
 use tracing::debug;
 
@@ -517,12 +517,12 @@ async fn resolve(
         vec![]
     } else {
         // Combine upgrade and reinstall lists
-        let mut exclusions: FxHashSet<&PackageName> =
-            if let Reinstall::Packages(packages) = reinstall {
-                FxHashSet::from_iter(packages)
-            } else {
-                FxHashSet::default()
-            };
+        let mut exclusions: HashSet<&PackageName> = if let Reinstall::Packages(packages) = reinstall
+        {
+            HashSet::from_iter(packages)
+        } else {
+            HashSet::default()
+        };
         if let Upgrade::Packages(packages) = upgrade {
             exclusions.extend(packages);
         };

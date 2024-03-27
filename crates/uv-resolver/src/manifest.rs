@@ -1,7 +1,8 @@
-use distribution_types::{LocalEditable, RequestedRequirements};
+use distribution_types::LocalEditable;
 use pep508_rs::Requirement;
 use pypi_types::Metadata23;
 use uv_normalize::PackageName;
+use uv_types::RequestedRequirements;
 
 use crate::preferences::Preference;
 

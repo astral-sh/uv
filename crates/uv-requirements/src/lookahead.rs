@@ -3,11 +3,11 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use futures::{StreamExt, TryStreamExt};
 
-use distribution_types::{BuildableSource, Dist, RequestedRequirements};
+use distribution_types::{BuildableSource, Dist};
 use pep508_rs::{Requirement, VersionOrUrl};
 use uv_client::RegistryClient;
 use uv_distribution::{Reporter, SourceDistCachedBuilder};
-use uv_types::BuildContext;
+use uv_types::{BuildContext, RequestedRequirements};
 
 /// A resolver for resolving lookahead requirements from local dependencies.
 ///
