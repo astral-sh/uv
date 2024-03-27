@@ -83,6 +83,7 @@ impl<'a> DistFinder<'a> {
                         | uv_client::ErrorKind::Offline(_) => {
                             if let Some(flat_index) = self.flat_index.get(&requirement.name) {
                                 Self::select_from_flat_index(requirement, flat_index)
+                                    .map(Into::into)
                             } else {
                                 return Err(ResolveError::Client(err));
                             }
