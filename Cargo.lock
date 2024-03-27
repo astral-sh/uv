@@ -2755,19 +2755,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pyproject-toml"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b80f889b6d413c3f8963a2c7db03f95dd6e1d85e1074137cb2013ea2faa8898"
-dependencies = [
- "indexmap",
- "pep440_rs",
- "pep508_rs",
- "serde",
- "toml",
-]
-
-[[package]]
 name = "quote"
 version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4495,14 +4482,12 @@ dependencies = [
  "fs-err",
  "futures",
  "indicatif",
- "install-wheel-rs",
  "itertools 0.12.1",
  "mimalloc",
  "owo-colors",
  "pep440_rs",
  "pep508_rs",
  "petgraph",
- "platform-tags",
  "poloto",
  "resvg",
  "rustc-hash",
@@ -4519,7 +4504,6 @@ dependencies = [
  "uv-cache",
  "uv-client",
  "uv-dispatch",
- "uv-distribution",
  "uv-installer",
  "uv-interpreter",
  "uv-normalize",
@@ -4658,7 +4642,6 @@ dependencies = [
  "pep508_rs",
  "platform-tags",
  "pypi-types",
- "pyproject-toml",
  "rayon",
  "requirements-txt",
  "rustc-hash",
@@ -4736,7 +4719,6 @@ dependencies = [
  "indexmap",
  "pep508_rs",
  "pypi-types",
- "pyproject-toml",
  "requirements-txt",
  "rustc-hash",
  "serde",

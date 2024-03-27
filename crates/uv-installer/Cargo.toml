@@ -34,7 +34,6 @@ anyhow = { workspace = true }
 async-channel = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
-pyproject-toml = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
