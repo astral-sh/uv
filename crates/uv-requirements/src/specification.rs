@@ -11,6 +11,7 @@ use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
+use uv_types::{NoBinary, NoBuild};
 
 use crate::pyproject::{Pep621Metadata, PyProjectToml};
 use crate::{ExtrasSpecification, RequirementsSource};
@@ -39,6 +40,10 @@ pub struct RequirementsSpecification {
     pub no_index: bool,
     /// The `--find-links` locations to use for fetching packages.
     pub find_links: Vec<FlatIndexLocation>,
+    /// The `--no-binary` flags to enforce when selecting distributions.
+    pub no_binary: NoBinary,
+    /// The `--no-build` flags to enforce when selecting distributions.
+    pub no_build: NoBuild,
 }
 
 impl RequirementsSpecification {
@@ -65,6 +70,8 @@ impl RequirementsSpecification {
                     extra_index_urls: vec![],
                     no_index: false,
                     find_links: vec![],
+                    no_binary: NoBinary::default(),
+                    no_build: NoBuild::default(),
                 }
             }
             RequirementsSource::Editable(name) => {
@@ -82,6 +89,8 @@ impl RequirementsSpecification {
                     extra_index_urls: vec![],
                     no_index: false,
                     find_links: vec![],
+                    no_binary: NoBinary::default(),
+                    no_build: NoBuild::default(),
                 }
             }
             RequirementsSource::RequirementsTxt(path) => {
@@ -114,6 +123,8 @@ impl RequirementsSpecification {
                             FindLink::Path(path) => FlatIndexLocation::Path(path),
                         })
                         .collect(),
+                    no_binary: requirements_txt.no_binary,
+                    no_build: requirements_txt.only_binary,
                 }
             }
             RequirementsSource::PyprojectToml(path) => {
@@ -151,6 +162,8 @@ impl RequirementsSpecification {
                         extra_index_urls: vec![],
                         no_index: false,
                         find_links: vec![],
+                        no_binary: NoBinary::default(),
+                        no_build: NoBuild::default(),
                     }
                 } else {
                     let path = fs_err::canonicalize(path)?;
@@ -172,6 +185,8 @@ impl RequirementsSpecification {
                         extra_index_urls: vec![],
                         no_index: false,
                         find_links: vec![],
+                        no_binary: NoBinary::default(),
+                        no_build: NoBuild::default(),
                     }
                 }
             }
@@ -195,6 +210,8 @@ impl RequirementsSpecification {
                     extra_index_urls: vec![],
                     no_index: false,
                     find_links: vec![],
+                    no_binary: NoBinary::default(),
+                    no_build: NoBuild::default(),
                 }
             }
         })
@@ -240,6 +257,8 @@ impl RequirementsSpecification {
             spec.no_index |= source.no_index;
             spec.extra_index_urls.extend(source.extra_index_urls);
             spec.find_links.extend(source.find_links);
+            spec.no_binary.extend(source.no_binary);
+            spec.no_build.extend(source.no_build);
         }
 
         // Read all constraints, treating _everything_ as a constraint.
@@ -273,6 +292,8 @@ impl RequirementsSpecification {
             spec.no_index |= source.no_index;
             spec.extra_index_urls.extend(source.extra_index_urls);
             spec.find_links.extend(source.find_links);
+            spec.no_binary.extend(source.no_binary);
+            spec.no_build.extend(source.no_build);
         }
 
         // Read all overrides, treating both requirements _and_ constraints as overrides.
@@ -306,6 +327,8 @@ impl RequirementsSpecification {
             spec.no_index |= source.no_index;
             spec.extra_index_urls.extend(source.extra_index_urls);
             spec.find_links.extend(source.find_links);
+            spec.no_binary.extend(source.no_binary);
+            spec.no_build.extend(source.no_build);
         }
 
         Ok(spec)

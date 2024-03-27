@@ -68,7 +68,7 @@ pub(crate) async fn pip_compile(
     config_settings: ConfigSettings,
     connectivity: Connectivity,
     no_build_isolation: bool,
-    no_build: &NoBuild,
+    no_build: NoBuild,
     python_version: Option<PythonVersion>,
     exclude_newer: Option<DateTime<Utc>>,
     annotation_style: AnnotationStyle,
@@ -105,6 +105,8 @@ pub(crate) async fn pip_compile(
         extra_index_urls,
         no_index,
         find_links,
+        no_binary: _,
+        no_build: specified_no_build,
     } = RequirementsSpecification::from_sources(
         requirements,
         constraints,
@@ -231,6 +233,9 @@ pub(crate) async fn pip_compile(
         BuildIsolation::Isolated
     };
 
+    // Combine the `--no-build` flags.
+    let no_build = no_build.combine(specified_no_build);
+
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -242,7 +247,7 @@ pub(crate) async fn pip_compile(
         setup_py,
         &config_settings,
         build_isolation,
-        no_build,
+        &no_build,
         &NoBinary::None,
     )
     .with_options(OptionsBuilder::new().exclude_newer(exclude_newer).build());
