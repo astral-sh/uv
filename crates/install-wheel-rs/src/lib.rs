@@ -90,9 +90,9 @@ pub enum Error {
         "The .dist-info directory {0} does not consist of the normalized package name and version"
     )]
     MissingDistInfoSegments(String),
-    #[error("The .dist-info directory {0} does not start with the normalized package name: {0}")]
+    #[error("The .dist-info directory {0} does not start with the normalized package name: {1}")]
     MissingDistInfoPackageName(String, String),
-    #[error("The .dist-info directory {0} does not start with the normalized version: {0}")]
+    #[error("The .dist-info directory {0} does not start with the normalized version: {1}")]
     MissingDistInfoVersion(String, String),
     #[error("The .dist-info directory name contains invalid characters")]
     InvalidDistInfoPrefix,
