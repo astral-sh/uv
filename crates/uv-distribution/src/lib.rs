@@ -9,6 +9,7 @@ pub use unzip::Unzip;
 mod distribution_database;
 mod download;
 mod error;
+mod git;
 mod index;
 mod locks;
 mod reporter;

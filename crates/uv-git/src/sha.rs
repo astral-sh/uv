@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 /// A complete Git SHA, i.e., a 40-character hexadecimal representation of a Git commit.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct GitSha(git2::Oid);
 
 impl GitSha {

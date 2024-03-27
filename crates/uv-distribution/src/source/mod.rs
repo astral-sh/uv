@@ -17,8 +17,8 @@ use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, DirectArchiveUrl, DirectGitUrl, Dist, FileLocation, GitSourceUrl,
-    LocalEditable, PathSourceDist, PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
+    BuildableSource, DirectArchiveUrl, Dist, FileLocation, GitSourceUrl, LocalEditable,
+    PathSourceDist, PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
 };
 use install_wheel_rs::metadata::read_archive_metadata;
 use pep508_rs::Scheme;
@@ -31,12 +31,11 @@ use uv_cache::{
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_fs::{write_atomic, LockedFile};
-use uv_git::{Fetch, GitSource};
+use uv_fs::write_atomic;
 use uv_types::{BuildContext, BuildKind, NoBuild, SourceBuildTrait};
 
 use crate::error::Error;
-use crate::reporter::Facade;
+use crate::git::fetch_git_archive;
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::manifest::Manifest;
 use crate::Reporter;
@@ -1231,40 +1230,6 @@ async fn extract_archive(path: &Path, cache: &Cache) -> Result<ExtractedSource, 
 
         Ok(ExtractedSource::Archive(extracted, temp_dir))
     }
-}
-
-/// Download a source distribution from a Git repository.
-async fn fetch_git_archive(
-    url: &Url,
-    cache: &Cache,
-    reporter: Option<&Arc<dyn Reporter>>,
-) -> Result<(Fetch, Option<PathBuf>), Error> {
-    debug!("Fetching source distribution from Git: {url}");
-    let git_dir = cache.bucket(CacheBucket::Git);
-
-    // Avoid races between different processes, too.
-    let lock_dir = git_dir.join("locks");
-    fs::create_dir_all(&lock_dir)
-        .await
-        .map_err(Error::CacheWrite)?;
-    let canonical_url = cache_key::CanonicalUrl::new(url);
-    let _lock = LockedFile::acquire(
-        lock_dir.join(cache_key::digest(&canonical_url)),
-        &canonical_url,
-    )
-    .map_err(Error::CacheWrite)?;
-
-    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Error::Git)?;
-
-    let source = if let Some(reporter) = reporter {
-        GitSource::new(url, git_dir).with_reporter(Facade::from(reporter.clone()))
-    } else {
-        GitSource::new(url, git_dir)
-    };
-    let fetch = tokio::task::spawn_blocking(move || source.fetch())
-        .await?
-        .map_err(Error::Git)?;
-    Ok((fetch, subdirectory))
 }
 
 /// Download and extract a source distribution from a URL.
