@@ -1,4 +1,3 @@
-use pyproject_toml::Project;
 use serde::Deserialize;
 
 use distribution_types::{
@@ -95,6 +94,12 @@ pub fn is_dynamic(editable: &EditableRequirement) -> bool {
 struct PyProjectToml {
     project: Option<Project>,
     tool: Option<Tool>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct Project {
+    dynamic: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug)]

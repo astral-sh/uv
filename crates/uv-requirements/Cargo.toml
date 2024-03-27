@@ -31,7 +31,6 @@ ctrlc = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indexmap = { workspace = true }
-pyproject-toml = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
