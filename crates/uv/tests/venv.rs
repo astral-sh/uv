@@ -1,11 +1,13 @@
 #![cfg(feature = "python")]
 
+use std::ffi::OsString;
 use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
+use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
-
+use fs_err::PathExt;
 use uv_fs::Simplified;
 
 use crate::common::{
@@ -14,35 +16,74 @@ use crate::common::{
 
 mod common;
 
+struct VenvTestContext {
+    cache_dir: assert_fs::TempDir,
+    temp_dir: assert_fs::TempDir,
+    venv: ChildPath,
+    bin: OsString,
+}
+
+impl VenvTestContext {
+    fn new(python_versions: &[&str]) -> Self {
+        let temp_dir = assert_fs::TempDir::new().unwrap();
+        let bin = create_bin_with_executables(&temp_dir, python_versions)
+            .expect("Failed to create bin dir");
+        let venv = temp_dir.child(".venv");
+        Self {
+            cache_dir: assert_fs::TempDir::new().unwrap(),
+            temp_dir,
+            venv,
+            bin,
+        }
+    }
+
+    fn venv_command(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        command
+            .arg("venv")
+            .arg("--cache-dir")
+            .arg(self.cache_dir.path())
+            .arg("--exclude-newer")
+            .arg(EXCLUDE_NEWER)
+            .env("UV_TEST_PYTHON_PATH", self.bin.clone())
+            .current_dir(self.temp_dir.path());
+        command
+    }
+
+    fn filters(&self) -> Vec<(String, String)> {
+        // For mac, otherwise it shows some /var/folders/ path.
+        let venv_full = regex::escape(
+            &self
+                .venv
+                .path()
+                .fs_err_canonicalize()
+                .unwrap()
+                .simplified_display()
+                .to_string(),
+        );
+        vec![
+            (venv_full, ".venv".to_string()),
+            (
+                r"Using Python 3\.\d+\.\d+ interpreter at: .+".to_string(),
+                "Using Python [VERSION] interpreter at: [PATH]".to_string(),
+            ),
+            (
+                r"Activate with: (?:.*)\\Scripts\\activate".to_string(),
+                "Activate with: source .venv/bin/activate".to_string(),
+            ),
+        ]
+    }
+}
+
 #[test]
-fn create_venv() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
+fn create_venv() {
+    let context = VenvTestContext::new(&["3.12"]);
 
     // Create a virtual environment at `.venv`.
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
-    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (filter_prompt, "Activate with: source .venv/bin/activate"),
-        (&filter_venv, ".venv"),
-    ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_TEST_PYTHON_PATH", bin.clone())
-        .current_dir(&temp_dir), @r###"
+        .arg("3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -54,31 +95,14 @@ fn create_venv() -> Result<()> {
     "###
     );
 
-    venv.assert(predicates::path::is_dir());
+    context.venv.assert(predicates::path::is_dir());
 
     // Create a virtual environment at the same location, which should replace it.
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
-    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (filter_prompt, "Activate with: source .venv/bin/activate"),
-        (&filter_venv, ".venv"),
-    ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
-        .current_dir(&temp_dir), @r###"
+        .env("UV_NO_WRAP", "1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -90,39 +114,16 @@ fn create_venv() -> Result<()> {
     "###
     );
 
-    venv.assert(predicates::path::is_dir());
-
-    Ok(())
+    context.venv.assert(predicates::path::is_dir());
 }
 
 #[test]
-fn create_venv_defaults_to_cwd() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
-
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
-    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (&filter_venv, ".venv"),
-        (filter_prompt, "Activate with: source .venv/bin/activate"),
-    ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
+fn create_venv_defaults_to_cwd() {
+    let context = VenvTestContext::new(&["3.12"]);
+    uv_snapshot!(context.filters(), context.venv_command()
         .arg("--python")
         .arg("3.12")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
-        .current_dir(&temp_dir), @r###"
+        .env("UV_NO_WRAP", "1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -134,41 +135,18 @@ fn create_venv_defaults_to_cwd() -> Result<()> {
     "###
     );
 
-    venv.assert(predicates::path::is_dir());
-
-    Ok(())
+    context.venv.assert(predicates::path::is_dir());
 }
 
 #[test]
-fn seed() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
-
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
-    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (filter_prompt, "Activate with: source .venv/bin/activate"),
-        (&filter_venv, ".venv"),
-    ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
+fn seed() {
+    let context = VenvTestContext::new(&["3.12"]);
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
         .arg("--seed")
         .arg("--python")
         .arg("3.12")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
-        .current_dir(&temp_dir), @r###"
+        .env("UV_NO_WRAP", "1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -181,41 +159,18 @@ fn seed() -> Result<()> {
     "###
     );
 
-    venv.assert(predicates::path::is_dir());
-
-    Ok(())
+    context.venv.assert(predicates::path::is_dir());
 }
 
 #[test]
-fn seed_older_python_version() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.10"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
-
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
-    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (filter_prompt, "Activate with: source .venv/bin/activate"),
-        (&filter_venv, ".venv"),
-    ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
+fn seed_older_python_version() {
+    let context = VenvTestContext::new(&["3.10"]);
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
         .arg("--seed")
         .arg("--python")
         .arg("3.10")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
-        .current_dir(&temp_dir), @r###"
+        .env("UV_NO_WRAP", "1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -230,31 +185,19 @@ fn seed_older_python_version() -> Result<()> {
     "###
     );
 
-    venv.assert(predicates::path::is_dir());
-
-    Ok(())
+    context.venv.assert(predicates::path::is_dir());
 }
 
 #[test]
-fn create_venv_unknown_python_minor() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
+fn create_venv_unknown_python_minor() {
+    let context = VenvTestContext::new(&["3.12"]);
 
-    let mut command = Command::new(get_bin());
+    let mut command = context.venv_command();
     command
-        .arg("venv")
-        .arg(venv.as_os_str())
+        .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.15")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
-        .current_dir(&temp_dir);
+        .env("UV_NO_WRAP", "1");
     if cfg!(windows) {
         uv_snapshot!(&mut command, @r###"
         success: false
@@ -277,19 +220,13 @@ fn create_venv_unknown_python_minor() -> Result<()> {
         );
     }
 
-    venv.assert(predicates::path::missing());
-
-    Ok(())
+    context.venv.assert(predicates::path::missing());
 }
 
 #[test]
-fn create_venv_unknown_python_patch() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
+fn create_venv_unknown_python_patch() {
+    let context = VenvTestContext::new(&["3.12"]);
 
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
     let filters = &[
         (
             r"Using Python 3\.\d+\.\d+ interpreter at: .+",
@@ -299,20 +236,12 @@ fn create_venv_unknown_python_patch() -> Result<()> {
             r"No Python 3\.8\.0 found through `py --list-paths` or in `PATH`\. Is Python 3\.8\.0 installed\?",
             "No Python 3.8.0 in `PATH`. Is Python 3.8.0 installed?",
         ),
-        (&filter_venv, ".venv"),
     ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
+    uv_snapshot!(filters, context.venv_command()
+        .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.8.0")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
-        .current_dir(&temp_dir), @r###"
+        .env("UV_NO_WRAP", "1"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -322,38 +251,23 @@ fn create_venv_unknown_python_patch() -> Result<()> {
     "###
     );
 
-    venv.assert(predicates::path::missing());
-
-    Ok(())
+    context.venv.assert(predicates::path::missing());
 }
 
 #[test]
-fn create_venv_python_patch() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin =
-        create_bin_with_executables(&temp_dir, &["3.12.1"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
+fn create_venv_python_patch() {
+    let context = VenvTestContext::new(&["3.12.1"]);
 
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
     let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (r"interpreter at: .+", "interpreter at: [PATH]"),
         (filter_prompt, "Activate with: source .venv/bin/activate"),
-        (&filter_venv, ".venv"),
     ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
+    uv_snapshot!(filters, context.venv_command()
+        .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12.1")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
-        .current_dir(&temp_dir), @r###"
+        .env("UV_NO_WRAP", "1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -365,41 +279,25 @@ fn create_venv_python_patch() -> Result<()> {
     "###
     );
 
-    venv.assert(predicates::path::is_dir());
-
-    Ok(())
+    context.venv.assert(predicates::path::is_dir());
 }
 
 #[test]
 fn file_exists() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
+    let context = VenvTestContext::new(&["3.12"]);
 
     // Create a file at `.venv`. Creating a virtualenv at the same path should fail.
-    venv.touch()?;
+    context.venv.touch()?;
 
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (&filter_venv, ".venv"),
-    ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
+    let filters = &[(
+        r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+        "Using Python [VERSION] interpreter at: [PATH]",
+    )];
+    uv_snapshot!(filters, context.venv_command()
+        .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
-        .current_dir(&temp_dir), @r###"
+        .env("UV_NO_WRAP", "1"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -419,36 +317,15 @@ fn file_exists() -> Result<()> {
 
 #[test]
 fn empty_dir_exists() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
+    let context = VenvTestContext::new(&["3.12"]);
 
     // Create an empty directory at `.venv`. Creating a virtualenv at the same path should succeed.
-    venv.create_dir_all()?;
-
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
-    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (filter_prompt, "Activate with: source .venv/bin/activate"),
-        (&filter_venv, ".venv"),
-    ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
+    context.venv.create_dir_all()?;
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
-        .current_dir(&temp_dir), @r###"
+        .env("UV_NO_WRAP", "1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -460,42 +337,28 @@ fn empty_dir_exists() -> Result<()> {
     "###
     );
 
-    venv.assert(predicates::path::is_dir());
+    context.venv.assert(predicates::path::is_dir());
 
     Ok(())
 }
 
 #[test]
 fn non_empty_dir_exists() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
+    let context = VenvTestContext::new(&["3.12"]);
 
     // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should fail.
-    venv.create_dir_all()?;
-    venv.child("file").touch()?;
+    context.venv.create_dir_all()?;
+    context.venv.child("file").touch()?;
 
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (&filter_venv, ".venv"),
-    ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
+    let filters = &[(
+        r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+        "Using Python [VERSION] interpreter at: [PATH]",
+    )];
+    uv_snapshot!(filters, context.venv_command()
+        .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
-        .current_dir(&temp_dir), @r###"
+        .env("UV_NO_WRAP", "1"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -516,14 +379,10 @@ fn non_empty_dir_exists() -> Result<()> {
 #[test]
 #[cfg(windows)]
 fn windows_shims() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin =
-        create_bin_with_executables(&temp_dir, &["3.9", "3.8"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
-    let shim_path = temp_dir.child("shim");
+    let context = VenvTestContext::new(&["3.9"]);
+    let shim_path = context.temp_dir.child("shim");
 
-    let py38 = std::env::split_paths(&bin)
+    let py38 = std::env::split_paths(&context.bin)
         .last()
         .expect("create_bin_with_executables to set up the python versions");
     // We want 3.8 and the first version should be 3.9.
@@ -540,7 +399,6 @@ fn windows_shims() -> Result<()> {
     )?;
 
     // Create a virtual environment at `.venv`, passing the redundant `--clear` flag.
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
     let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
     let filters = &[
         (
@@ -548,18 +406,11 @@ fn windows_shims() -> Result<()> {
             "Using Python 3.8.x interpreter at: [PATH]",
         ),
         (&filter_prompt, "Activate with: source .venv/bin/activate"),
-        (&filter_venv, ".venv"),
     ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
+    uv_snapshot!(filters, context.venv_command()
+        .arg(context.venv.as_os_str())
         .arg("--clear")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_TEST_PYTHON_PATH", format!("{};{}", shim_path.display(), bin.simplified_display()))
-        .current_dir(&temp_dir), @r###"
+        .env("UV_TEST_PYTHON_PATH", format!("{};{}", shim_path.display(), context.bin.simplified_display())), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -572,41 +423,21 @@ fn windows_shims() -> Result<()> {
     "###
     );
 
-    venv.assert(predicates::path::is_dir());
+    context.venv.assert(predicates::path::is_dir());
 
     Ok(())
 }
 
 #[test]
-fn virtualenv_compatibility() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
+fn virtualenv_compatibility() {
+    let context = VenvTestContext::new(&["3.12"]);
 
     // Create a virtual environment at `.venv`, passing the redundant `--clear` flag.
-    let filter_venv = regex::escape(&venv.simplified_display().to_string());
-    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
-    let filters = &[
-        (
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-            "Using Python [VERSION] interpreter at: [PATH]",
-        ),
-        (filter_prompt, "Activate with: source .venv/bin/activate"),
-        (&filter_venv, ".venv"),
-    ];
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
+    uv_snapshot!(context.filters(), context.venv_command()
+        .arg(context.venv.as_os_str())
         .arg("--clear")
         .arg("--python")
-        .arg("3.12")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_TEST_PYTHON_PATH", bin)
-        .current_dir(&temp_dir), @r###"
+        .arg("3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -619,9 +450,7 @@ fn virtualenv_compatibility() -> Result<()> {
     "###
     );
 
-    venv.assert(predicates::path::is_dir());
-
-    Ok(())
+    context.venv.assert(predicates::path::is_dir());
 }
 
 #[test]
@@ -644,27 +473,18 @@ fn verify_pyvenv_cfg() {
 /// Ensure that a nested virtual environment uses the same `home` directory as the parent.
 #[test]
 fn verify_nested_pyvenv_cfg() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let cache_dir = assert_fs::TempDir::new()?;
-    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
-    let venv = temp_dir.child(".venv");
+    let context = VenvTestContext::new(&["3.12"]);
 
     // Create a virtual environment at `.venv`.
-    Command::new(get_bin())
-        .arg("venv")
-        .arg(venv.as_os_str())
+    context
+        .venv_command()
+        .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("UV_TEST_PYTHON_PATH", bin.clone())
-        .current_dir(&temp_dir)
         .assert()
         .success();
 
-    let pyvenv_cfg = venv.child("pyvenv.cfg");
+    let pyvenv_cfg = context.venv.child("pyvenv.cfg");
 
     // Check pyvenv.cfg exists
     pyvenv_cfg.assert(predicates::path::is_file());
@@ -677,19 +497,13 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
         .expect("home line not found");
 
     // Now, create a virtual environment from within the virtual environment.
-    let subvenv = temp_dir.child(".subvenv");
-    Command::new(get_bin())
-        .arg("venv")
+    let subvenv = context.temp_dir.child(".subvenv");
+    context
+        .venv_command()
         .arg(subvenv.as_os_str())
         .arg("--python")
         .arg("3.12")
-        .arg("--cache-dir")
-        .arg(cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", venv.as_os_str())
-        .env("UV_TEST_PYTHON_PATH", bin.clone())
-        .current_dir(&temp_dir)
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
         .assert()
         .success();
 
