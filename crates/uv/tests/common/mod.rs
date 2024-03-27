@@ -417,6 +417,10 @@ pub fn run_and_format<'a>(
         }
     }
 
+    // This is a heuristic filter meant to try and make *most* of our tests
+    // pass whether it's on Windows or Unix. In particular, there are some very
+    // common Windows-only dependencies that, when removed from a resolution,
+    // cause the set of dependencies to be the same across platforms.
     if cfg!(windows) && windows_filters {
         // The optional leading +/- is for install logs, the optional next line is for lock files
         let windows_only_deps = [
