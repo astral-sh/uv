@@ -72,8 +72,8 @@ impl Preferences {
     /// Create a map of pinned packages from an iterator of [`Preference`] entries.
     /// Takes ownership of the [`Preference`] entries.
     ///
-    /// The provided [`MarkerEnvironment`] will be used to filter
-    /// the preferences to an applicable step.
+    /// The provided [`MarkerEnvironment`] will be used to filter  the preferences
+    /// to an applicable subset.
     pub(crate) fn from_iter<PreferenceIterator: IntoIterator<Item = Preference>>(
         preferences: PreferenceIterator,
         markers: &MarkerEnvironment,
