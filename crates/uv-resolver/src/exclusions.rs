@@ -3,7 +3,7 @@ use rustc_hash::FxHashSet;
 use uv_types::{Reinstall, Upgrade};
 
 /// Tracks locally installed packages that should not be selected during resolution.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub enum Exclusions {
     #[default]
     None,

@@ -8,10 +8,8 @@ use pep508_rs::{
 };
 use pypi_types::{HashError, Hashes};
 use requirements_txt::RequirementEntry;
-use tracing::{trace};
+use tracing::trace;
 use uv_normalize::PackageName;
-
-
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
