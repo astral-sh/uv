@@ -60,12 +60,15 @@ impl PreReleaseStrategy {
             PreReleaseMode::Allow => Self::Allow,
             PreReleaseMode::IfNecessary => Self::IfNecessary,
             PreReleaseMode::Explicit => Self::Explicit(
+                // TODO(charlie): Should requirements be included here, if they're overridden by
+                // overrides?
                 manifest
                     .requirements
                     .iter()
                     .chain(manifest.constraints.iter())
                     .chain(manifest.overrides.iter())
                     .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+                    // TODO(charlie): should lookaheads be included here, beyond the top-level?
                     .chain(manifest.lookaheads.iter().flat_map(|lookahead| {
                         lookahead.requirements().iter().filter(|requirement| {
                             requirement.evaluate_markers(markers, lookahead.extras())

@@ -22,16 +22,16 @@ use uv_types::BuildContext;
 ///
 /// The lookahead resolver resolves requirements for local dependencies, so that the resolver can
 /// treat them as first-party dependencies for the purpose of analyzing their specifiers.
-pub struct LookaheadResolver<'a> {
+pub struct LookaheadResolver {
     /// The requirements for the project.
-    requirements: &'a [Requirement],
+    requirements: Vec<Requirement>,
     /// The reporter to use when building source distributions.
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl<'a> LookaheadResolver<'a> {
+impl LookaheadResolver {
     /// Instantiate a new [`LookaheadResolver`] for a given set of `source_trees`.
-    pub fn new(requirements: &'a [Requirement]) -> Self {
+    pub fn new(requirements: Vec<Requirement>) -> Self {
         Self {
             requirements,
             reporter: None,
@@ -54,18 +54,8 @@ impl<'a> LookaheadResolver<'a> {
         context: &T,
         client: &RegistryClient,
     ) -> Result<Vec<RequestedRequirements>> {
-        // Develop a (very) basic model of dependency resolution:
-        // - All requirements (and requirements of editables) are required.
-        // - Apply any URL-based constraints.
-        // - Apply any URL-based overrides.
-        // It's not exactly correct to include all constraints and overrides here... If a constraint
-        // or override were _excluded_ from the resolution (e.g., you have a constraint, but the
-        // dependency doesn't appear in the requirements, so it's never enforced), then we'd be
-        // incorrectly including it here. But it's a start.
-        //
-        // Actually, we should omit constraints and overrides (except for those that affect requirements).
-        // Because we can't know that they'll be included.
-        let mut queue = VecDeque::from(self.requirements.to_vec());
+        // TODO(charlie): Apply overrides and constraints.
+        let mut queue = VecDeque::from(self.requirements.clone());
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
 
