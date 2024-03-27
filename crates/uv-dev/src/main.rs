@@ -21,7 +21,6 @@ use resolve_many::ResolveManyArgs;
 use crate::build::{build, BuildArgs};
 use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
-use crate::install_many::InstallManyArgs;
 use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::resolve_cli::ResolveCliArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
@@ -45,7 +44,6 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 mod build;
 mod clear_compile;
 mod compile;
-mod install_many;
 mod render_benchmarks;
 mod resolve_cli;
 mod resolve_many;
@@ -66,7 +64,6 @@ enum Cli {
     /// cargo run --bin uv-dev -- resolve-many scripts/popular_packages/pypi_10k_most_dependents.txt
     /// ```
     ResolveMany(ResolveManyArgs),
-    InstallMany(InstallManyArgs),
     /// Resolve requirements passed on the CLI
     Resolve(ResolveCliArgs),
     WheelMetadata(WheelMetadataArgs),
@@ -87,9 +84,6 @@ async fn run() -> Result<()> {
         }
         Cli::ResolveMany(args) => {
             resolve_many::resolve_many(args).await?;
-        }
-        Cli::InstallMany(args) => {
-            install_many::install_many(args).await?;
         }
         Cli::Resolve(args) => {
             resolve_cli::resolve_cli(args).await?;

@@ -310,6 +310,15 @@ impl ResolutionGraph {
             .any(|index| self.petgraph[index].name() == name)
     }
 
+    /// Iterate over the [`Dist`] entities in this resolution.
+    pub fn into_distributions(self) -> impl Iterator<Item = Dist> {
+        self.petgraph
+            .into_nodes_edges()
+            .0
+            .into_iter()
+            .map(|node| node.weight)
+    }
+
     /// Return the [`Diagnostic`]s that were encountered while building the graph.
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics

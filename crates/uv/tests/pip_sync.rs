@@ -584,7 +584,7 @@ fn install_git_tag() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@2.0.0)
+     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
     "###
     );
 
@@ -844,7 +844,9 @@ fn install_no_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: markupsafe isn't available locally, but making network requests to registries was banned.
+    error: Because markupsafe==2.1.3 was not found in the provided package locations and you require markupsafe==2.1.3, we can conclude that the requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
     );
 
@@ -894,7 +896,9 @@ fn install_no_index_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: markupsafe isn't available locally, but making network requests to registries was banned.
+    error: Because markupsafe==2.1.3 was not found in the provided package locations and you require markupsafe==2.1.3, we can conclude that the requirements are unsatisfiable.
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
     );
 
@@ -1098,10 +1102,8 @@ fn mismatched_name() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    error: Failed to install: foo-2.0.1-py3-none-any.whl (foo==2.0.1 (from file://[TEMP_DIR]/foo-2.0.1-py3-none-any.whl))
-      Caused by: Wheel package name does not match filename: tomli != foo
+    error: Failed to read: foo @ file://[TEMP_DIR]/foo-2.0.1-py3-none-any.whl
+      Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
     "###
     );
 
@@ -1801,7 +1803,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 2 files for tqdm ([SIZE])
+    Removed 3 files for tqdm ([SIZE])
     "###
     );
 
@@ -2561,7 +2563,9 @@ fn find_links_offline_no_match() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Network connectivity is disabled, but the requested data wasn't found in the cache for: `numpy`
+    error: Because numpy was not found in the cache and you require numpy, we can conclude that the requirements are unsatisfiable.
+
+    hint: Packages were unavailable because the network was disabled
     "###
     );
 
@@ -2584,7 +2588,9 @@ fn offline() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Network connectivity is disabled, but the requested data wasn't found in the cache for: `black`
+    error: Because black==23.10.1 was not found in the cache and you require black==23.10.1, we can conclude that the requirements are unsatisfiable.
+
+    hint: Packages were unavailable because the network was disabled
     "###
     );
 
@@ -2982,10 +2988,6 @@ fn no_stream() -> Result<()> {
 }
 
 /// Raise an error when a direct URL dependency's `Requires-Python` constraint is not met.
-///
-/// TODO(charlie): This currently passes, but should fail. `sync` does not currently validate the
-/// `Requires-Python` constraint for direct URL dependencies. (It _does_ respect `Requires-Python`
-/// for registry-based dependencies.)
 #[test]
 fn requires_python_direct_url() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -3017,15 +3019,13 @@ requires-python = "<=3.5"
 
     uv_snapshot!(filters, command(&context)
         .arg("requirements.in"), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + example==0.0.0 (from file://[TEMP_DIR])
+    error: Because the current Python version (3.12.1) does not satisfy Python<=3.5 and example==0.0.0 depends on Python<=3.5, we can conclude that example==0.0.0 cannot be used.
+    And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
