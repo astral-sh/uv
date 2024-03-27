@@ -854,7 +854,7 @@ impl<
                 };
                 let package_id = dist.package_id();
 
-                // If the package does not exist in the registry, we cannot fetch its dependencies
+                // If the package does not exist in the registry or locally, we cannot fetch its dependencies
                 if self.unavailable_packages.get(package_name).is_some()
                     && self
                         .installed_packages
