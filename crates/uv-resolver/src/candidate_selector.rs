@@ -87,7 +87,7 @@ impl CandidateSelector {
             for dist in installed_packages.get_packages(package_name) {
                 let version = dist.version();
                 if range.contains(version) {
-                    debug!("Found installed version of {dist} that satisfies request");
+                    debug!("Found installed version of {dist} that satisfies {range}");
 
                     return Some(Candidate {
                         name: package_name,
@@ -95,7 +95,6 @@ impl CandidateSelector {
                         dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
                     });
                 }
-                debug!("Installed version of {package_name} does not satisfy version");
             }
         }
 
@@ -121,7 +120,7 @@ impl CandidateSelector {
         };
 
         tracing::trace!(
-            "selecting candidate for package {:?} with range {:?} with {} versions",
+            "selecting candidate for package {:?} with range {:?} with {} remote versions",
             package_name,
             range,
             version_map.len()
