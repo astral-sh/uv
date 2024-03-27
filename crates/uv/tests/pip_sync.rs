@@ -2480,6 +2480,94 @@ fn find_links() -> Result<()> {
     Ok(())
 }
 
+/// Sync using `--find-links` with `--no-index`, which should accept the local wheel.
+#[test]
+fn find_links_no_index_match() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        tqdm==1000.0.0
+    "})?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("requirements.txt")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/wheels/")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Sync using `--find-links` with `--offline`, which should accept the local wheel.
+#[test]
+fn find_links_offline_match() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        tqdm==1000.0.0
+    "})?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("requirements.txt")
+        .arg("--offline")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/wheels/")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Sync using `--find-links` with `--offline`, which should fail to find `numpy`.
+#[test]
+fn find_links_offline_no_match() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        numpy
+        tqdm==1000.0.0
+    "})?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("requirements.txt")
+        .arg("--offline")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/wheels/")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Network connectivity is disabled, but the requested data wasn't found in the cache for: `numpy`
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install without network access via the `--offline` flag.
 #[test]
 fn offline() -> Result<()> {
