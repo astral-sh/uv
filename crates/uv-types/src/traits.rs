@@ -127,3 +127,25 @@ pub trait SourceBuildTrait {
     fn wheel<'a>(&'a self, wheel_dir: &'a Path)
         -> impl Future<Output = Result<String>> + Send + 'a;
 }
+
+/// A wrapper for [`uv_installer::SitePackages`]
+pub trait InstalledPackagesProvider {
+    fn iter(&self) -> impl Iterator<Item = &InstalledDist>;
+    fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist>;
+}
+
+/// An [`InstalledPackagesProvider`] with no packages in it.
+pub struct EmptyInstalledPackages;
+
+impl InstalledPackagesProvider for EmptyInstalledPackages {
+    fn get_packages(
+        &self,
+        _name: &pep508_rs::PackageName,
+    ) -> Vec<&distribution_types::InstalledDist> {
+        Vec::new()
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &distribution_types::InstalledDist> {
+        std::iter::empty()
+    }
+}

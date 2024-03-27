@@ -31,7 +31,7 @@ use uv_client::{FlatIndex, RegistryClient};
 use uv_distribution::DistributionDatabase;
 use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
-use uv_types::BuildContext;
+use uv_types::{BuildContext, InstalledPackagesProvider};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::constraints::Constraints;
@@ -89,7 +89,11 @@ enum ResolverVersion {
     Unavailable(Version, UnavailableVersion),
 }
 
-pub struct Resolver<'a, Provider: ResolverProvider> {
+pub struct Resolver<
+    'a,
+    Provider: ResolverProvider,
+    InstalledPackages: InstalledPackagesProvider + Send + Sync,
+> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
     constraints: Constraints,
@@ -103,6 +107,7 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     python_requirement: PythonRequirement,
     selector: CandidateSelector,
     index: &'a InMemoryIndex,
+    installed_packages: &'a InstalledPackages,
     /// Incompatibilities for packages that are entirely unavailable
     unavailable_packages: DashMap<PackageName, UnavailablePackage>,
     /// The set of all registry-based packages visited during resolution.
@@ -111,7 +116,12 @@ pub struct Resolver<'a, Provider: ResolverProvider> {
     provider: Provider,
 }
 
-impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvider<'a, Context>> {
+impl<
+        'a,
+        Context: BuildContext + Send + Sync,
+        InstalledPackages: InstalledPackagesProvider + Send + Sync,
+    > Resolver<'a, DefaultResolverProvider<'a, Context>, InstalledPackages>
+{
     /// Initialize a new resolver using the default backend doing real requests.
     ///
     /// Reads the flat index entries.
@@ -126,6 +136,7 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
         build_context: &'a Context,
+        installed_packages: &'a InstalledPackages,
     ) -> Result<Self, ResolveError> {
         let provider = DefaultResolverProvider::new(
             client,
@@ -145,11 +156,17 @@ impl<'a, Context: BuildContext + Send + Sync> Resolver<'a, DefaultResolverProvid
             PythonRequirement::new(interpreter, markers),
             index,
             provider,
+            installed_packages,
         )
     }
 }
 
-impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
+impl<
+        'a,
+        Provider: ResolverProvider,
+        InstalledPackages: InstalledPackagesProvider + Send + Sync,
+    > Resolver<'a, Provider, InstalledPackages>
+{
     /// Initialize a new resolver using a user provided backend.
     pub fn new_custom_io(
         manifest: Manifest,
@@ -158,6 +175,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
         python_requirement: PythonRequirement,
         index: &'a InMemoryIndex,
         provider: Provider,
+        installed_packages: &'a InstalledPackages,
     ) -> Result<Self, ResolveError> {
         Ok(Self {
             index,
@@ -177,6 +195,7 @@ impl<'a, Provider: ResolverProvider> Resolver<'a, Provider> {
             python_requirement,
             reporter: None,
             provider,
+            installed_packages,
         })
     }
 

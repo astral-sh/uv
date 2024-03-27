@@ -14,7 +14,7 @@ use pep508_rs::Requirement;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
-use uv_installer::NoBinary;
+use uv_installer::{NoBinary, SitePackages};
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
 use uv_types::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
@@ -88,6 +88,8 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         &NoBinary::None,
     );
 
+    let site_packages = SitePackages::from_executable(&venv)?;
+
     // Copied from `BuildDispatch`
     let tags = venv.interpreter().tags()?;
     let resolver = Resolver::new(
@@ -100,6 +102,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         &flat_index,
         &index,
         &build_dispatch,
+        &site_packages,
     )?;
     let resolution_graph = resolver.resolve().await.with_context(|| {
         format!(

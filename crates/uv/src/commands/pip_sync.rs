@@ -171,6 +171,9 @@ pub(crate) async fn pip_sync(
     let no_binary = no_binary.combine(specified_no_binary);
     let no_build = no_build.combine(specified_no_build);
 
+    // Determine the set of installed packages.
+    let site_packages = SitePackages::from_executable(&venv)?;
+
     // Prep the build context.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -207,9 +210,6 @@ pub(crate) async fn pip_sync(
 
         requirements
     };
-
-    // Determine the set of installed packages.
-    let site_packages = SitePackages::from_executable(&venv)?;
 
     // Resolve any editables.
     let resolved_editables = resolve_editables(
