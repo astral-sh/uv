@@ -28,8 +28,8 @@ use uv_installer::{Downloader, NoBinary};
 use uv_interpreter::{find_best_python, PythonEnvironment, PythonVersion};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
-    upgrade::read_lockfile, ExtrasSpecification, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTreeResolver,
+    upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
+    RequirementsSource, RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
@@ -274,6 +274,12 @@ pub(crate) async fn pip_compile(
         requirements
     };
 
+    // Determine any lookahead requirements.
+    let lookaheads = LookaheadResolver::new(&requirements)
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve(&build_dispatch, &client)
+        .await?;
+
     // Build the editables and add their requirements
     let editable_metadata = if editables.is_empty() {
         Vec::new()
@@ -338,6 +344,7 @@ pub(crate) async fn pip_compile(
         preferences,
         project,
         editable_metadata,
+        lookaheads,
     );
 
     let options = OptionsBuilder::new()
