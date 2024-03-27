@@ -637,23 +637,19 @@ impl<
                 let empty_version_map = VersionMap::default();
                 let version_map = match *versions_response {
                     VersionsResponse::Found(ref version_map) => version_map,
-                    // Short-circuit if we do not find any versions for the package
                     VersionsResponse::NoIndex => {
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::NoIndex);
-
                         &empty_version_map
                     }
                     VersionsResponse::Offline => {
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::Offline);
-
                         &empty_version_map
                     }
                     VersionsResponse::NotFound => {
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::NotFound);
-
                         &empty_version_map
                     }
                 };
