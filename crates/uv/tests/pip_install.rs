@@ -3094,7 +3094,7 @@ fn reinstall_no_index() {
 }
 
 #[test]
-fn already_installed_remote_dependencies() -> Result<()> {
+fn already_installed_remote_dependencies() {
     let context = TestContext::new("3.12");
 
     // Install anyio's dependencies.
@@ -3130,8 +3130,6 @@ fn already_installed_remote_dependencies() -> Result<()> {
      + anyio==4.3.0
     "###
     );
-
-    Ok(())
 }
 
 /// Install an editable package that depends on a previously installed editable package.
@@ -3332,6 +3330,51 @@ fn already_installed_local_path_dependent() {
      + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
+
+    // Request upgrade of the first package
+    // It's not available on an index and the user has not specified the path so we fail
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(root_path.join("second_local"))
+        .arg("--upgrade-package")
+        .arg("first-local")
+        // Disable the index to guard this test against dependency confusion attacks
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.12/vendor/links.html"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because first-local was not found in the provided package locations
+          and second-local==0.1.0 depends on first-local, we can conclude that
+          second-local==0.1.0 cannot be used.
+          And because only second-local==0.1.0 is available and you require
+          second-local, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    // Request upgrade of the first package
+    // A full path is specified and there's nothing to upgrade to so we should just audit
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(root_path.join("first_local"))
+        .arg(root_path.join("second_local"))
+        .arg("--upgrade-package")
+        .arg("first-local")
+        // Disable the index to guard this test against dependency confusion attacks
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.12/vendor/links.html"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
+    "###
+    );
 }
 
 /// A local version of a package shadowing a remote package is installed.
@@ -3441,6 +3484,36 @@ fn already_installed_local_version_of_remote_package() {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
+    "###
+    );
+
+    // Install the local anyio again so we can test upgrades
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(root_path.join("anyio_local")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.3.0
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+    "###
+    );
+
+    // Request upgrade with just the name
+    // We shouldn't pull from the index because the local version is "newer"
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("anyio")
+        .arg("--upgrade"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
     "###
     );
 }
