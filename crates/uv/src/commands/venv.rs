@@ -231,28 +231,25 @@ async fn venv_impl(
         None => None,
         Some(Shell::Bash | Shell::Zsh) => Some(format!(
             "source {}",
-            shlex_posix(path.join("bin").join("activate"))
+            shlex_posix(venv.scripts().join("activate"))
         )),
         Some(Shell::Fish) => Some(format!(
             "source {}",
-            shlex_posix(path.join("bin").join("activate.fish"))
+            shlex_posix(venv.scripts().join("activate.fish"))
         )),
         Some(Shell::Nushell) => Some(format!(
             "overlay use {}",
-            shlex_posix(path.join("bin").join("activate.nu"))
+            shlex_posix(venv.scripts().join("activate.nu"))
         )),
         Some(Shell::Csh) => Some(format!(
             "source {}",
-            shlex_posix(path.join("bin").join("activate.csh"))
+            shlex_posix(venv.scripts().join("activate.csh"))
         )),
         Some(Shell::Powershell) => Some(shlex_windows(
-            path.join("Scripts").join("activate"),
+            venv.scripts().join("activate"),
             Shell::Powershell,
         )),
-        Some(Shell::Cmd) => Some(shlex_windows(
-            path.join("Scripts").join("activate"),
-            Shell::Cmd,
-        )),
+        Some(Shell::Cmd) => Some(shlex_windows(venv.scripts().join("activate"), Shell::Cmd)),
     };
     if let Some(act) = activation {
         writeln!(printer.stderr(), "Activate with: {}", act.green()).into_diagnostic()?;
