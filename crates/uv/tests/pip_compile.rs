@@ -6373,6 +6373,9 @@ fn local_version_of_remote_package() -> Result<()> {
     })?;
 
     // The local version is _still_ excluded from the resolution
+    // `uv pip compile` does not have access to an environment and cannot consider installed packages
+    // We may want to allow the lock file to be preserved in this case in the future, but right now
+    // we require the URL to always be in the input file.
     uv_snapshot!(context.filters(), context.compile()
         .arg(requirements_in.path())
         .arg("--output-file")
