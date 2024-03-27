@@ -514,14 +514,15 @@ async fn resolve(
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
-    // Prefer current site packages; these will be filtered during manifest creation
-    let preferences = site_packages
-        .requirements()
-        .map(Preference::from_requirement)
-        .collect();
-
     // TODO(zanieb): Consider consuming these instead of cloning
     let exclusions = Exclusions::new(reinstall.clone(), upgrade.clone());
+
+    // Prefer current site packages; filter out packages that are marked for reinstall or upgrade
+    let preferences = site_packages
+        .requirements()
+        .filter(|requirement| !exclusions.contains(&requirement.name))
+        .map(Preference::from_requirement)
+        .collect();
 
     // Map the editables to their metadata.
     let editables = editables

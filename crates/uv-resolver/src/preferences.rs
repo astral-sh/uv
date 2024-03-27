@@ -8,10 +8,10 @@ use pep508_rs::{
 };
 use pypi_types::{HashError, Hashes};
 use requirements_txt::RequirementEntry;
-use tracing::debug;
+use tracing::{trace};
 use uv_normalize::PackageName;
 
-use crate::Exclusions;
+
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
@@ -74,11 +74,10 @@ impl Preferences {
     /// Create a map of pinned packages from an iterator of [`Preference`] entries.
     /// Takes ownership of the [`Preference`] entries.
     ///
-    /// The provided [`Exclusions`] and [`MarkerEnvironment`] will be used to filter
+    /// The provided [`MarkerEnvironment`] will be used to filter
     /// the preferences to an applicable step.
     pub(crate) fn from_iter<PreferenceIterator: IntoIterator<Item = Preference>>(
         preferences: PreferenceIterator,
-        exclusions: &Exclusions,
         markers: &MarkerEnvironment,
     ) -> Self {
         Self(
@@ -90,16 +89,9 @@ impl Preferences {
                         hashes,
                     } = preference;
 
-                    if exclusions.contains(&requirement.name) {
-                        debug!(
-                            "Excluding {requirement} from preferences due to presence in exclusions."
-                        );
-                        return None;
-                    }
-
                     // Search for, e.g., `flask==1.2.3` entries that match the current environment.
                     if !requirement.evaluate_markers(markers, &[]) {
-                        debug!(
+                        trace!(
                             "Excluding {requirement} from preferences due to unmatched markers."
                         );
                         return None;
@@ -108,13 +100,13 @@ impl Preferences {
                         Some(VersionOrUrl::VersionSpecifier(version_specifiers)) =>
                          {
                             let [version_specifier] = version_specifiers.as_ref() else {
-                                debug!(
+                                trace!(
                                     "Excluding {requirement} from preferences due to multiple version specifiers."
                                 );
                                 return None;
                             };
                             if *version_specifier.operator() != Operator::Equal {
-                                debug!(
+                                trace!(
                                     "Excluding {requirement} from preferences due to inexact version specifier."
                                 );
                                 return None;
@@ -128,7 +120,7 @@ impl Preferences {
                             ))
                         }
                         Some(VersionOrUrl::Url(_)) => {
-                            debug!(
+                            trace!(
                                 "Excluding {requirement} from preferences due to URL dependency."
                             );
                             None

@@ -190,11 +190,7 @@ impl<
             requirements: manifest.requirements,
             constraints: Constraints::from_requirements(manifest.constraints),
             overrides: Overrides::from_requirements(manifest.overrides),
-            preferences: Preferences::from_iter(
-                manifest.preferences,
-                &manifest.exclusions,
-                markers,
-            ),
+            preferences: Preferences::from_iter(manifest.preferences, markers),
             exclusions: manifest.exclusions,
             editables: Editables::from_requirements(manifest.editables),
             markers,
