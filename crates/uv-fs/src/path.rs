@@ -3,7 +3,12 @@ use std::path::{Component, Path, PathBuf};
 
 use once_cell::sync::Lazy;
 
-pub static CWD: Lazy<PathBuf> = Lazy::new(|| std::env::current_dir().unwrap());
+pub static CWD: Lazy<PathBuf> = Lazy::new(|| {
+    std::env::current_dir()
+        .unwrap()
+        .canonicalize()
+        .expect("The current directory must exist")
+});
 
 pub trait Simplified {
     /// Simplify a [`Path`].
@@ -34,7 +39,9 @@ impl<T: AsRef<Path>> Simplified for T {
 
     fn user_display(&self) -> std::path::Display {
         let path = dunce::simplified(self.as_ref());
-        path.strip_prefix(&*CWD).unwrap_or(path).display()
+        path.strip_prefix(CWD.simplified())
+            .unwrap_or(path)
+            .display()
     }
 }
 

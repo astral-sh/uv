@@ -12,7 +12,7 @@ use assert_fs::TempDir;
 use indoc::indoc;
 use url::Url;
 
-use common::{uv_snapshot, TestContext, INSTA_FILTERS};
+use common::{uv_snapshot, TestContext};
 use uv_fs::Simplified;
 
 use crate::common::{get_bin, EXCLUDE_NEWER};
@@ -629,13 +629,7 @@ dependencies = [
 "#,
     )?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
             .arg("pyproject.toml"), @r###"
     success: false
     exit_code: 2
@@ -862,7 +856,7 @@ fn compile_python_37() -> Result<()> {
         ),
     ]
         .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
+        .chain(context.filters())
         .collect();
 
     uv_snapshot!(filters, context.compile()
@@ -1083,7 +1077,7 @@ fn compile_git_https_dependency() -> Result<()> {
     // In addition to the standard filters, remove the `main` commit, which will change frequently.
     let filters: Vec<_> = [(r"@(\d|\w){40}", "@[COMMIT]")]
         .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
+        .chain(context.filters())
         .collect();
 
     uv_snapshot!(filters, context.compile()
@@ -2096,13 +2090,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
         Url::from_file_path(flask_wheel.path()).unwrap()
     ))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
             .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2229,14 +2217,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("flask @ {}", flask_wheel.path().display()))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filter_path = regex::escape(&flask_wheel.user_display().to_string());
-    let filters: Vec<_> = [(filter_path.as_str(), "/[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
             .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2247,7 +2228,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
         # via flask
     click==8.1.7
         # via flask
-    flask @ /[TEMP_DIR]/
+    flask @ [TEMP_DIR]/flask-3.0.0-py3-none-any.whl
     itsdangerous==2.1.2
         # via flask
     jinja2==3.1.3
@@ -2269,14 +2250,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("flask @ file://{}", flask_wheel.path().display()))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filter_path = regex::escape(&flask_wheel.user_display().to_string());
-    let filters: Vec<_> = [(filter_path.as_str(), "/[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
             .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2287,7 +2261,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
         # via flask
     click==8.1.7
         # via flask
-    flask @ file:///[TEMP_DIR]/
+    flask @ file://[TEMP_DIR]/flask-3.0.0-py3-none-any.whl
     itsdangerous==2.1.2
         # via flask
     jinja2==3.1.3
@@ -2312,14 +2286,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
         flask_wheel.path().display()
     ))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filter_path = regex::escape(&flask_wheel.user_display().to_string());
-    let filters: Vec<_> = [(filter_path.as_str(), "/[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
             .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2330,7 +2297,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
         # via flask
     click==8.1.7
         # via flask
-    flask @ file://localhost//[TEMP_DIR]/
+    flask @ file://localhost/[TEMP_DIR]/flask-3.0.0-py3-none-any.whl
     itsdangerous==2.1.2
         # via flask
     jinja2==3.1.3
@@ -2366,13 +2333,7 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
         Url::from_file_path(flask_wheel.path()).unwrap()
     ))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
             .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -2407,15 +2368,15 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
 fn compile_wheel_path_dependency_missing() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("flask @ file:///path/to/flask-3.0.0-py3-none-any.whl")?;
+    requirements_in.write_str(&format!(
+        "flask @ {}",
+        context
+            .temp_dir
+            .join("flask-3.0.0-py3-none-any.whl")
+            .simplified_display()
+    ))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
             .arg("requirements.in"), @r###"
     success: false
     exit_code: 2
@@ -2892,20 +2853,14 @@ fn compile_editable() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_in.user_display().to_string());
-    let filters: Vec<_> = [(filter_path.as_str(), "requirements.in")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
         .arg(requirements_in.path())
         .current_dir(current_dir()?), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z requirements.in
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z [TEMP_DIR]/requirements.in
     -e ${PROJECT_ROOT}/../../scripts/packages/maturin_editable
     -e ../../scripts/packages/poetry_editable
     -e file://../../scripts/packages/black_editable
@@ -2951,12 +2906,6 @@ fn recursive_extras_direct_url() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("black[dev] @ ../../scripts/packages/black_editable")?;
 
-    let filter_path = regex::escape(&requirements_in.user_display().to_string());
-    let filters: Vec<_> = [(filter_path.as_str(), "requirements.in")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
     let mut command = Command::new(get_bin());
     if cfg!(all(windows, debug_assertions)) {
         // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
@@ -2964,7 +2913,7 @@ fn recursive_extras_direct_url() -> Result<()> {
         command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
     }
 
-    uv_snapshot!(filters, command
+    uv_snapshot!(context.filters(), command
             .arg("pip")
             .arg("compile")
             .arg(requirements_in.path())
@@ -2977,7 +2926,7 @@ fn recursive_extras_direct_url() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
-    #    uv pip compile requirements.in --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z
+    #    uv pip compile [TEMP_DIR]/requirements.in --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z
     aiohttp==3.9.3
         # via black
     aiosignal==1.3.1
@@ -3014,20 +2963,14 @@ fn compile_editable_url_requirement() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-e ../../scripts/packages/hatchling_editable")?;
 
-    let filter_path = regex::escape(&requirements_in.user_display().to_string());
-    let filters: Vec<_> = [(filter_path.as_str(), "requirements.in")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
         .arg(requirements_in.path())
         .current_dir(current_dir()?), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z requirements.in
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z [TEMP_DIR]/requirements.in
     -e ../../scripts/packages/hatchling_editable
     iniconfig @ git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4
         # via hatchling-editable
@@ -3296,7 +3239,7 @@ fn generate_hashes() -> Result<()> {
         vec![]
     }
     .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
+    .chain(context.filters())
     .collect();
 
     uv_snapshot!(filters, context.compile()
@@ -3414,24 +3357,10 @@ fn find_links_directory() -> Result<()> {
         werkzeug @ https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl
     "})?;
 
-    let project_root = fs_err::canonicalize(std::env::current_dir()?.join("..").join(".."))?;
-    let project_root_string = regex::escape(&project_root.user_display().to_string());
-    let filters: Vec<_> = [
-        (project_root_string.as_str(), "[PROJECT_ROOT]"),
-        // Unify trailing (back)slash between Windows and Unix.
-        (
-            "[PROJECT_ROOT]/scripts/wheels/",
-            "[PROJECT_ROOT]/scripts/wheels",
-        ),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
             .arg("requirements.in")
             .arg("--find-links")
-            .arg(project_root.join("scripts").join("wheels")), @r###"
+            .arg(context.workspace_root.join("scripts").join("wheels")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3708,7 +3637,7 @@ fn missing_path_requirement() -> Result<()> {
 
     let filters: Vec<_> = [(r"/C:/", "/")]
         .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
+        .chain(context.filters())
         .collect();
 
     uv_snapshot!(filters, context.compile()
@@ -3718,7 +3647,7 @@ fn missing_path_requirement() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Distribution not found at: file:///tmp/anyio-3.7.0.tar.gz
+    error: Distribution not found at: file://tmp/anyio-3.7.0.tar.gz
     "###);
 
     Ok(())
@@ -3729,19 +3658,9 @@ fn missing_path_requirement() -> Result<()> {
 fn missing_editable_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("-e ../tmp/anyio-3.7.0.tar.gz")?;
+    requirements_in.write_str("-e foo/anyio-3.7.0.tar.gz")?;
 
-    // File url, absolute Unix path or absolute Windows path
-    let filters: Vec<_> = [
-        (r" file://.*/", " file://[TEMP_DIR]/"),
-        (r" /.*/", " /[TEMP_DIR]/"),
-        (r" [A-Z]:\\.*\\", " /[TEMP_DIR]/"),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
             .arg("requirements.in"), @r###"
     success: false
     exit_code: 2
@@ -3749,7 +3668,7 @@ fn missing_editable_requirement() -> Result<()> {
 
     ----- stderr -----
     error: Failed to build editables
-      Caused by: Source distribution not found at: /[TEMP_DIR]/anyio-3.7.0.tar.gz
+      Caused by: Source distribution not found at: [TEMP_DIR]/foo/anyio-3.7.0.tar.gz
     "###);
 
     Ok(())
@@ -4612,29 +4531,20 @@ fn editable_invalid_extra() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-e ../../scripts/packages/black_editable[empty]")?;
 
-    let requirements_path = regex::escape(&requirements_in.user_display().to_string());
-    let filters: Vec<_> = [
-        (r" file://.*/", " file://[TEMP_DIR]/"),
-        (requirements_path.as_str(), "requirements.in"),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
             .arg(requirements_in.path())
             .current_dir(current_dir()?), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z requirements.in
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z [TEMP_DIR]/requirements.in
     -e ../../scripts/packages/black_editable
 
     ----- stderr -----
     Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
-    warning: The package `black @ file://[TEMP_DIR]/black_editable` does not have an extra named `empty`.
+    warning: The package `black @ file://[WORKSPACE]/scripts/packages/black_editable` does not have an extra named `empty`.
     "###);
 
     Ok(())
@@ -4930,17 +4840,7 @@ fn override_editable() -> Result<()> {
     let overrides_txt = context.temp_dir.child("overrides.txt");
     overrides_txt.write_str("black==23.10.1")?;
 
-    let requirements_path = regex::escape(&requirements_in.user_display().to_string());
-    let overrides_path = regex::escape(&overrides_txt.user_display().to_string());
-    let filters: Vec<_> = [
-        (requirements_path.as_str(), "requirements.in"),
-        (overrides_path.as_str(), "overrides.txt"),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
             .arg(requirements_in.path())
             .arg("--override")
             .arg(overrides_txt.path())
@@ -4949,7 +4849,7 @@ fn override_editable() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z requirements.in --override overrides.txt
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z [TEMP_DIR]/requirements.in --override [TEMP_DIR]/overrides.txt
     -e ../../scripts/packages/black_editable
 
     ----- stderr -----
@@ -5278,16 +5178,7 @@ fn editable_direct_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-e ../../scripts/packages/setuptools_editable")?;
 
-    let requirements_path = regex::escape(&requirements_in.user_display().to_string());
-    let filters: Vec<_> = [
-        (r" file://.*/", " file://[TEMP_DIR]/"),
-        (requirements_path.as_str(), "requirements.in"),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
             .arg(requirements_in.path())
             .arg("--resolution")
             .arg("lowest-direct")
@@ -5296,7 +5187,7 @@ fn editable_direct_dependency() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z requirements.in --resolution lowest-direct
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z [TEMP_DIR]/requirements.in --resolution lowest-direct
     -e ../../scripts/packages/setuptools_editable
     iniconfig==0.1
         # via setuptools-editable
@@ -5468,7 +5359,8 @@ fn requires_python_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package with a `Requires-Python` constraint that is not met.
-    let editable_dir = TempDir::new()?;
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -5505,7 +5397,8 @@ fn requires_python_editable_target_version() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package with a `Requires-Python` constraint that is not met.
-    let editable_dir = TempDir::new()?;
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -5530,7 +5423,7 @@ requires-python = "<=3.8"
         ),
     ]
         .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
+        .chain(context.filters())
         .collect();
 
     uv_snapshot!(filters, context.compile()
@@ -5720,7 +5613,8 @@ fn requires_python_direct_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package with a `Requires-Python` constraint that is not met.
-    let editable_dir = TempDir::new()?;
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -5764,14 +5658,8 @@ fn compile_root_uri_editable() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-e ${ROOT_PATH}")?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
     let root_path = current_dir()?.join("../../scripts/packages/root_editable");
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
         .arg("requirements.in")
         .env("ROOT_PATH", root_path.as_os_str()), @r###"
     success: true
@@ -5780,7 +5668,7 @@ fn compile_root_uri_editable() -> Result<()> {
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z requirements.in
     -e ${ROOT_PATH}
-    black @ file://[TEMP_DIR]/black_editable
+    black @ file://[WORKSPACE]/scripts/packages/root_editable/../black_editable
         # via root-editable
 
     ----- stderr -----
@@ -5800,15 +5688,9 @@ fn compile_root_uri_non_editable() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("${ROOT_PATH}\n${BLACK_PATH}")?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
     let root_path = current_dir()?.join("../../scripts/packages/root_editable");
     let black_path = current_dir()?.join("../../scripts/packages/black_editable");
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
         .arg("requirements.in")
         .env("ROOT_PATH", root_path.as_os_str())
         .env("BLACK_PATH", black_path.as_os_str()), @r###"
@@ -6098,20 +5980,14 @@ fn unnamed_path_requirement() -> Result<()> {
         "
     })?;
 
-    let filter_path = regex::escape(&requirements_in.user_display().to_string());
-    let filters: Vec<_> = [(filter_path.as_str(), "requirements.in")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
         .arg(requirements_in.path())
         .current_dir(current_dir()?), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z requirements.in
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z [TEMP_DIR]/requirements.in
     anyio==4.3.0
         # via
         #   httpx
@@ -6236,20 +6112,14 @@ fn dynamic_dependencies() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("hatchling-dynamic @ ../../scripts/packages/hatchling_dynamic")?;
 
-    let filter_path = regex::escape(&requirements_in.user_display().to_string());
-    let filters: Vec<_> = [(filter_path.as_str(), "requirements.in")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
-    uv_snapshot!(filters, context.compile()
+    uv_snapshot!(context.filters(), context.compile()
         .arg(requirements_in.path())
         .current_dir(current_dir()?), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z requirements.in
+    #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z [TEMP_DIR]/requirements.in
     anyio==4.3.0
         # via hatchling-dynamic
     hatchling-dynamic @ ../../scripts/packages/hatchling_dynamic

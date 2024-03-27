@@ -8,7 +8,7 @@ use assert_fs::prelude::*;
 
 use common::uv_snapshot;
 
-use crate::common::{get_bin, TestContext, INSTA_FILTERS};
+use crate::common::{get_bin, TestContext};
 
 mod common;
 
@@ -66,18 +66,13 @@ fn prune_no_op() -> Result<()> {
         .assert()
         .success();
 
-    let filters = [(r"Pruning cache at: .*", "Pruning cache at: [CACHE_DIR]")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, prune_command(&context).arg("--verbose"), @r###"
+    uv_snapshot!(context.filters(), prune_command(&context).arg("--verbose"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Pruning cache at: [CACHE_DIR]
+    Pruning cache at: [CACHE_DIR]/
     No unused entries found
     "###);
 
@@ -102,25 +97,14 @@ fn prune_stale_directory() -> Result<()> {
     let simple = context.cache_dir.child("simple-v4");
     simple.create_dir_all()?;
 
-    let filters = [
-        (r"Pruning cache at: .*", "Pruning cache at: [CACHE_DIR]"),
-        (
-            r"Removing dangling cache entry: .*[\\|/]simple-v4",
-            "Pruning cache at: [CACHE_DIR]/simple-v4",
-        ),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, prune_command(&context).arg("--verbose"), @r###"
+    uv_snapshot!(context.filters(), prune_command(&context).arg("--verbose"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Pruning cache at: [CACHE_DIR]
-    DEBUG Pruning cache at: [CACHE_DIR]/simple-v4
+    Pruning cache at: [CACHE_DIR]/
+    DEBUG Removing dangling cache entry: [CACHE_DIR]/simple-v4
     Removed 1 directory
     "###);
 
@@ -145,16 +129,17 @@ fn prune_stale_symlink() -> Result<()> {
     let wheels = context.cache_dir.child("wheels-v0");
     fs_err::remove_dir_all(wheels)?;
 
-    let filters = [
-        (r"Pruning cache at: .*", "Pruning cache at: [CACHE_DIR]"),
-        (
-            r"Removing dangling cache entry: .*[\\|/]archive-v0[\\|/].*",
-            "Pruning cache at: [CACHE_DIR]/archive-v0/anyio",
-        ),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect::<Vec<_>>();
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([
+            // The cache entry does not have a stable key, so we filter it out
+            (
+                r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
+                "[CACHE_DIR]/$2/[ENTRY]",
+            ),
+        ])
+        .collect();
 
     uv_snapshot!(filters, prune_command(&context).arg("--verbose"), @r###"
     success: true
@@ -162,8 +147,8 @@ fn prune_stale_symlink() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Pruning cache at: [CACHE_DIR]
-    DEBUG Pruning cache at: [CACHE_DIR]/archive-v0/anyio
+    Pruning cache at: [CACHE_DIR]/
+    DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed 44 files ([SIZE])
     "###);
 

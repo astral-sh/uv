@@ -64,7 +64,7 @@ fn {{module_name}}() -> Result<()> {
     let python_versions = &[{{#environment.additional_python}}"{{.}}", {{/environment.additional_python}}];
 
     // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = INSTA_FILTERS.to_vec();
+    let mut filters = context.filters();
     filters.push((r"{{name}}-", "package-"));
 
     let requirements_in = context.temp_dir.child("requirements.in");

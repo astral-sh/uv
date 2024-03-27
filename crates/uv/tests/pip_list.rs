@@ -3,11 +3,10 @@ use std::process::Command;
 use anyhow::Result;
 use assert_fs::fixture::PathChild;
 use assert_fs::fixture::{FileTouch, FileWriteStr};
-use url::Url;
 
 use common::uv_snapshot;
 
-use crate::common::{get_bin, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
+use crate::common::{get_bin, TestContext, EXCLUDE_NEWER};
 
 mod common;
 
@@ -101,25 +100,13 @@ fn list_single_no_editable() -> Result<()> {
 }
 
 #[test]
-fn list_editable() -> Result<()> {
+fn list_editable() {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir =
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?).unwrap();
-    let workspace_dir_re = regex::escape(workspace_dir.as_str());
-
-    let filters = [(workspace_dir_re.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
     // Install the editable package.
-    uv_snapshot!(filters, install_command(&context)
+    uv_snapshot!(context.filters(), install_command(&context)
         .arg("-e")
-        .arg("../../scripts/packages/poetry_editable")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -131,92 +118,47 @@ fn list_editable() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
 
-    // Account for difference length workspace dir
-    let prefix = if cfg!(windows) { "file:///" } else { "file://" };
-
-    // Origin of lengths used below:
-    // - |Editable project location| = 25
-    // - expected length = 48
-    // - expected length - |Editable project location| = 23
-    // - |`[WORKSPACE_DIR]/`| = 16
-    // - |`file://`| = 7, |`file:///`| = 8 (windows)
-
-    let workspace_len_difference = workspace_dir.as_str().len() + 23 - 16 - prefix.len();
-    let find_divider = "-".repeat(25 + workspace_len_difference);
-    let replace_divider = "-".repeat(48);
-
-    let find_header = format!(
-        "Editable project location{0}",
-        " ".repeat(workspace_len_difference)
-    );
-    let replace_header = format!("Editable project location{0}", " ".repeat(23));
-
-    let find_whitespace = " ".repeat(25 + workspace_len_difference);
-    let replace_whitespace = " ".repeat(48);
-
-    let search_workspace = workspace_dir_re.as_str().strip_prefix(prefix).unwrap();
-    let replace_workspace = "[WORKSPACE_DIR]/";
-
-    let filters = INSTA_FILTERS
-        .iter()
-        .copied()
-        .chain(vec![
-            (search_workspace, replace_workspace),
-            (find_divider.as_str(), replace_divider.as_str()),
-            (find_header.as_str(), replace_header.as_str()),
-            (find_whitespace.as_str(), replace_whitespace.as_str()),
-        ])
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, Command::new(get_bin())
-    .arg("pip")
-    .arg("list")
-    .arg("--cache-dir")
-    .arg(context.cache_dir.path())
-    .env("VIRTUAL_ENV", context.venv.as_os_str())
-    .current_dir(&context.temp_dir), @r###"
+        .arg("pip")
+        .arg("list")
+        .arg("--cache-dir")
+        .arg(context.cache_dir.path())
+        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location
-    --------------- ------- ------------------------------------------------
-    anyio           4.3.0
-    idna            3.6
-    poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/packages/poetry_editable
-    sniffio         1.3.1
+    Package Version Editable project location
+    [UNDERLINE]
+    anyio 4.3.0
+    idna 3.6
+    poetry-editable 0.1.0 [WORKSPACE]/scripts/packages/poetry_editable
+    sniffio 1.3.1
 
     ----- stderr -----
     "###
     );
-
-    Ok(())
 }
 
 #[test]
-fn list_editable_only() -> Result<()> {
+fn list_editable_only() {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir =
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?).unwrap();
-    let workspace_dir_re = regex::escape(workspace_dir.as_str());
-
-    let filters = [(workspace_dir_re.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
     // Install the editable package.
-    uv_snapshot!(filters, install_command(&context)
+    uv_snapshot!(context.filters(), install_command(&context)
         .arg("-e")
-        .arg("../../scripts/packages/poetry_editable")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -228,39 +170,15 @@ fn list_editable_only() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
 
-    // Account for difference length workspace dir
-    let prefix = if cfg!(windows) { "file:///" } else { "file://" };
-
-    let workspace_len_difference = workspace_dir.as_str().len() + 23 - 16 - prefix.len();
-    let find_divider = "-".repeat(25 + workspace_len_difference);
-    let replace_divider = "-".repeat(48);
-
-    let find_header = format!(
-        "Editable project location{0}",
-        " ".repeat(workspace_len_difference)
-    );
-    let replace_header = format!("Editable project location{0}", " ".repeat(23));
-
-    let find_whitespace = " ".repeat(25 + workspace_len_difference);
-    let replace_whitespace = " ".repeat(48);
-
-    let search_workspace = workspace_dir_re.as_str().strip_prefix(prefix).unwrap();
-    let replace_workspace = "[WORKSPACE_DIR]/";
-
-    let filters = INSTA_FILTERS
-        .iter()
-        .copied()
-        .chain(vec![
-            (search_workspace, replace_workspace),
-            (find_divider.as_str(), replace_divider.as_str()),
-            (find_header.as_str(), replace_header.as_str()),
-            (find_whitespace.as_str(), replace_whitespace.as_str()),
-        ])
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, Command::new(get_bin())
@@ -274,9 +192,9 @@ fn list_editable_only() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location
-    --------------- ------- ------------------------------------------------
-    poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/packages/poetry_editable
+    Package Version Editable project location
+    [UNDERLINE]
+    poetry-editable 0.1.0 [WORKSPACE]/scripts/packages/poetry_editable
 
     ----- stderr -----
     "###
@@ -294,9 +212,9 @@ fn list_editable_only() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     Package Version
-    ------- -------
-    anyio   4.3.0
-    idna    3.6
+    [UNDERLINE]
+    anyio 4.3.0
+    idna 3.6
     sniffio 1.3.1
 
     ----- stderr -----
@@ -319,30 +237,16 @@ fn list_editable_only() -> Result<()> {
     ----- stderr -----
     "###
     );
-
-    Ok(())
 }
 
 #[test]
-fn list_exclude() -> Result<()> {
+fn list_exclude() {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir =
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?).unwrap();
-    let workspace_dir_re = regex::escape(workspace_dir.as_str());
-
-    let filters = [(workspace_dir_re.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
     // Install the editable package.
-    uv_snapshot!(filters, install_command(&context)
+    uv_snapshot!(context.filters(), install_command(&context)
         .arg("-e")
-        .arg("../../scripts/packages/poetry_editable")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -354,39 +258,15 @@ fn list_exclude() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
 
-    // Account for difference length workspace dir
-    let prefix = if cfg!(windows) { "file:///" } else { "file://" };
-
-    let workspace_len_difference = workspace_dir.as_str().len() + 23 - 16 - prefix.len();
-    let find_divider = "-".repeat(25 + workspace_len_difference);
-    let replace_divider = "-".repeat(48);
-
-    let find_header = format!(
-        "Editable project location{0}",
-        " ".repeat(workspace_len_difference)
-    );
-    let replace_header = format!("Editable project location{0}", " ".repeat(23));
-
-    let find_whitespace = " ".repeat(25 + workspace_len_difference);
-    let replace_whitespace = " ".repeat(48);
-
-    let search_workspace = workspace_dir_re.as_str().strip_prefix(prefix).unwrap();
-    let replace_workspace = "[WORKSPACE_DIR]/";
-
-    let filters = INSTA_FILTERS
-        .iter()
-        .copied()
-        .chain(vec![
-            (search_workspace, replace_workspace),
-            (find_divider.as_str(), replace_divider.as_str()),
-            (find_header.as_str(), replace_header.as_str()),
-            (find_whitespace.as_str(), replace_whitespace.as_str()),
-        ])
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, Command::new(get_bin())
@@ -401,12 +281,12 @@ fn list_exclude() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Package         Version Editable project location
-    --------------- ------- ------------------------------------------------
-    anyio           4.3.0
-    idna            3.6
-    poetry-editable 0.1.0   [WORKSPACE_DIR]/scripts/packages/poetry_editable
-    sniffio         1.3.1
+    Package Version Editable project location
+    [UNDERLINE]
+    anyio 4.3.0
+    idna 3.6
+    poetry-editable 0.1.0 [WORKSPACE]/scripts/packages/poetry_editable
+    sniffio 1.3.1
 
     ----- stderr -----
     "###
@@ -425,9 +305,9 @@ fn list_exclude() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     Package Version
-    ------- -------
-    anyio   4.3.0
-    idna    3.6
+    [UNDERLINE]
+    anyio 4.3.0
+    idna 3.6
     sniffio 1.3.1
 
     ----- stderr -----
@@ -449,41 +329,25 @@ fn list_exclude() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     Package Version
-    ------- -------
-    anyio   4.3.0
-    idna    3.6
+    [UNDERLINE]
+    anyio 4.3.0
+    idna 3.6
     sniffio 1.3.1
 
     ----- stderr -----
     "###
     );
-
-    Ok(())
 }
 
 #[test]
 #[cfg(not(windows))]
-fn list_format_json() -> Result<()> {
+fn list_format_json() {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
-
-    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
     // Install the editable package.
-    uv_snapshot!(filters, install_command(&context)
+    uv_snapshot!(context.filters(), install_command(&context)
         .arg("-e")
-        .arg("../../scripts/packages/poetry_editable")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -495,47 +359,16 @@ fn list_format_json() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
 
-    let workspace_dir = regex::escape(
-        current_dir
-            .join("..")
-            .join("..")
-            .canonicalize()?
-            .to_str()
-            .unwrap(),
-    );
-
-    let workspace_len_difference = workspace_dir.as_str().len() + 23 - 16;
-    let find_divider = "-".repeat(25 + workspace_len_difference);
-    let replace_divider = "-".repeat(48);
-
-    let find_header = format!(
-        "Editable project location{0}",
-        " ".repeat(workspace_len_difference)
-    );
-    let replace_header = format!("Editable project location{0}", " ".repeat(23));
-
-    let find_whitespace = " ".repeat(25 + workspace_len_difference);
-    let replace_whitespace = " ".repeat(48);
-
-    let search_workspace = workspace_dir.as_str();
-    let search_workspace_escaped = search_workspace.replace('/', "\\\\");
-    let replace_workspace = "[WORKSPACE_DIR]";
-
-    let filters: Vec<_> = [
-        (search_workspace, replace_workspace),
-        (search_workspace_escaped.as_str(), replace_workspace),
-        (find_divider.as_str(), replace_divider.as_str()),
-        (find_header.as_str(), replace_header.as_str()),
-        (find_whitespace.as_str(), replace_whitespace.as_str()),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect();
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect();
 
     uv_snapshot!(filters, Command::new(get_bin())
     .arg("pip")
@@ -548,7 +381,7 @@ fn list_format_json() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/packages/poetry_editable"},{"name":"sniffio","version":"1.3.1"}]
+    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"},{"name":"sniffio","version":"1.3.1"}]
 
     ----- stderr -----
     "###
@@ -566,7 +399,7 @@ fn list_format_json() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE_DIR]/scripts/packages/poetry_editable"}]
+    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"}]
 
     ----- stderr -----
     "###
@@ -607,32 +440,16 @@ fn list_format_json() -> Result<()> {
     ----- stderr -----
     "###
     );
-
-    Ok(())
 }
 
 #[test]
-fn list_format_freeze() -> Result<()> {
+fn list_format_freeze() {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
-
-    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
     // Install the editable package.
-    uv_snapshot!(filters, install_command(&context)
+    uv_snapshot!(context.filters(), install_command(&context)
         .arg("-e")
-        .arg("../../scripts/packages/poetry_editable")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -644,39 +461,15 @@ fn list_format_freeze() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
 
-    // Account for difference length workspace dir
-    let prefix = if cfg!(windows) { "file:///" } else { "file://" };
-
-    let workspace_len_difference = workspace_dir.as_str().len() + 23 - 16 - prefix.len();
-    let find_divider = "-".repeat(25 + workspace_len_difference);
-    let replace_divider = "-".repeat(48);
-
-    let find_header = format!(
-        "Editable project location{0}",
-        " ".repeat(workspace_len_difference)
-    );
-    let replace_header = format!("Editable project location{0}", " ".repeat(23));
-
-    let find_whitespace = " ".repeat(25 + workspace_len_difference);
-    let replace_whitespace = " ".repeat(48);
-
-    let search_workspace = workspace_dir.as_str().strip_prefix(prefix).unwrap();
-    let replace_workspace = "[WORKSPACE_DIR]/";
-
-    let filters = INSTA_FILTERS
-        .iter()
-        .copied()
-        .chain(vec![
-            (search_workspace, replace_workspace),
-            (find_divider.as_str(), replace_divider.as_str()),
-            (find_header.as_str(), replace_header.as_str()),
-            (find_whitespace.as_str(), replace_whitespace.as_str()),
-        ])
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, Command::new(get_bin())
@@ -754,6 +547,4 @@ fn list_format_freeze() -> Result<()> {
     ----- stderr -----
     "###
     );
-
-    Ok(())
 }

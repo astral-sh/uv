@@ -45,6 +45,7 @@ pub struct TestContext {
     pub cache_dir: assert_fs::TempDir,
     pub venv: PathBuf,
     pub python_version: String,
+    pub workspace_root: PathBuf,
 
     // Standard filters for this test context
     filters: Vec<(String, String)>,
@@ -56,6 +57,17 @@ impl TestContext {
         let cache_dir = assert_fs::TempDir::new().expect("Failed to create cache dir");
         let venv = create_venv(&temp_dir, &cache_dir, python_version);
 
+        // The workspace root directory is not available without walking up the tree
+        // https://github.com/rust-lang/cargo/issues/3946
+        let workspace_root = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .parent()
+            .expect("CARGO_MANIFEST_DIR should be nested in workspace")
+            .parent()
+            .expect("CARGO_MANIFEST_DIR should be doubly nested in workspace")
+            .to_path_buf();
+
+        let site_packages = site_packages_path(&venv, format!("python{python_version}"));
+
         let mut filters = Vec::new();
         filters.extend(
             Self::path_patterns(&cache_dir)
@@ -63,15 +75,52 @@ impl TestContext {
                 .map(|pattern| (pattern, "[CACHE_DIR]/".to_string())),
         );
         filters.extend(
-            Self::path_patterns(&temp_dir)
+            Self::path_patterns(&site_packages)
                 .into_iter()
-                .map(|pattern| (pattern, "[TEMP_DIR]/".to_string())),
+                .map(|pattern| (pattern, "[SITE_PACKAGES]/".to_string())),
         );
         filters.extend(
             Self::path_patterns(&venv)
                 .into_iter()
                 .map(|pattern| (pattern, "[VENV]/".to_string())),
         );
+        filters.extend(
+            Self::path_patterns(&temp_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[TEMP_DIR]/".to_string())),
+        );
+        filters.extend(
+            Self::path_patterns(&workspace_root)
+                .into_iter()
+                .map(|pattern| (pattern, "[WORKSPACE]/".to_string())),
+        );
+
+        // Account for [`Simplified::user_display`] which is relative to the command working directory
+        filters.push((
+            Self::path_pattern(
+                site_packages
+                    .strip_prefix(&temp_dir)
+                    .expect("The test site-packages directory is always in the tempdir"),
+            ),
+            "[SITE_PACKAGES]/".to_string(),
+        ));
+        filters.push((
+            Self::path_pattern(
+                venv.strip_prefix(&temp_dir)
+                    .expect("The test virtual environment directory is always in the tempdir"),
+            ),
+            "[VENV]/".to_string(),
+        ));
+
+        // Filter non-deterministic temporary directory names
+        // Note we apply this _after_ all the full paths to avoid breaking their matching
+        filters.push((r"(\\|\/)\.tmp.*(\\|\/)".to_string(), "/[TMP]/".to_string()));
+
+        // Account for platform prefix differences `file://` (Unix) vs `file:///` (Windows)
+        filters.push((r"file:///".to_string(), "file://".to_string()));
+
+        // Destroy any remaining UNC prefixes (Windows only)
+        filters.push((r"\\\\\?\\".to_string(), String::new()));
 
         Self {
             temp_dir,
@@ -79,6 +128,7 @@ impl TestContext {
             venv,
             python_version: python_version.to_string(),
             filters,
+            workspace_root,
         }
     }
 
@@ -128,33 +178,35 @@ impl TestContext {
         .stdout(version);
     }
 
-    /// Generate an escaped regex pattern for the given path.
+    /// Generate various escaped regex patterns for the given path.
     fn path_patterns(path: impl AsRef<Path>) -> Vec<String> {
-        vec![
-            format!(
-                // Trim the trailing separator for cross-platform directories filters
-                r"{}\\?/?",
-                regex::escape(
-                    &path
-                        .as_ref()
-                        .canonicalize()
-                        .expect("Failed to create canonical path")
-                        // Normalize the path to match display and remove UNC prefixes on Windows
-                        .simplified()
-                        .display()
-                        .to_string(),
-                )
-                // Make seprators platform agnostic because on Windows we will display
+        let mut patterns = Vec::new();
+
+        // We can only canonicalize paths that exist already
+        if path.as_ref().exists() {
+            patterns.push(Self::path_pattern(
+                path.as_ref()
+                    .canonicalize()
+                    .expect("Failed to create canonical path"),
+            ));
+        }
+
+        // Include a non-canonicalized version
+        patterns.push(Self::path_pattern(path));
+
+        patterns
+    }
+
+    /// Generate an escaped regex pattern for the given path.
+    fn path_pattern(path: impl AsRef<Path>) -> String {
+        format!(
+            // Trim the trailing separator for cross-platform directories filters
+            r"{}\\?/?",
+            regex::escape(&path.as_ref().simplified_display().to_string())
+                // Make separators platform agnostic because on Windows we will display
                 // paths with Unix-style separators sometimes
                 .replace(r"\\", r"(\\|\/)")
-            ),
-            // Include a non-canonicalized version
-            format!(
-                r"{}\\?/?",
-                regex::escape(&path.as_ref().simplified().display().to_string())
-                    .replace(r"\\", r"(\\|\/)")
-            ),
-        ]
+        )
     }
 
     /// Standard snapshot filters _plus_ those for this test context.
@@ -176,16 +228,20 @@ impl TestContext {
 
     /// Returns the site-packages folder inside the venv.
     pub fn site_packages(&self) -> PathBuf {
-        if cfg!(unix) {
-            self.venv
-                .join("lib")
-                .join(format!("{}{}", self.python_kind(), self.python_version))
-                .join("site-packages")
-        } else if cfg!(windows) {
-            self.venv.join("Lib").join("site-packages")
-        } else {
-            unimplemented!("Only Windows and Unix are supported")
-        }
+        site_packages_path(
+            &self.venv,
+            format!("{}{}", self.python_kind(), self.python_version),
+        )
+    }
+}
+
+fn site_packages_path(venv: &Path, python: String) -> PathBuf {
+    if cfg!(unix) {
+        venv.join("lib").join(python).join("site-packages")
+    } else if cfg!(windows) {
+        venv.join("Lib").join("site-packages")
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
     }
 }
 
@@ -253,8 +309,8 @@ pub fn bootstrapped_pythons() -> Option<Vec<PathBuf>> {
 
 /// Create a virtual environment named `.venv` in a temporary directory with the given
 /// Python version. Expected format for `python` is "python<version>".
-pub fn create_venv(
-    temp_dir: &assert_fs::TempDir,
+pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path>>(
+    temp_dir: &Parent,
     cache_dir: &assert_fs::TempDir,
     python: &str,
 ) -> PathBuf {

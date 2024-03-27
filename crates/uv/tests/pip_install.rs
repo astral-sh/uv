@@ -6,11 +6,10 @@ use assert_fs::prelude::*;
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::indoc;
 use itertools::Itertools;
-use std::env::current_dir;
-use std::process::Command;
-use url::Url;
 
-use common::{uv_snapshot, TestContext, EXCLUDE_NEWER, INSTA_FILTERS};
+use std::process::Command;
+
+use common::{uv_snapshot, TestContext, EXCLUDE_NEWER};
 use uv_fs::Simplified;
 
 use crate::common::get_bin;
@@ -215,14 +214,10 @@ dependencies = ["flask==1.0.x"]
 "#,
     )?;
 
-    let filters = [
-        (r"file://.*", "[SOURCE_DIR]"),
-        (r#"File ".*[/\\]site-packages"#, "File \"[SOURCE_DIR]"),
-        ("exit status", "exit code"),
-    ]
-    .into_iter()
-    .chain(INSTA_FILTERS.to_vec())
-    .collect::<Vec<_>>();
+    let filters = [("exit status", "exit code")]
+        .into_iter()
+        .chain(context.filters())
+        .collect::<Vec<_>>();
 
     uv_snapshot!(filters, command(&context)
         .arg("-r")
@@ -232,7 +227,7 @@ dependencies = ["flask==1.0.x"]
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: [SOURCE_DIR]
+    error: Failed to build: file://[TEMP_DIR]/
       Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit code: 1
     --- stdout:
     configuration error: `project.dependencies[0]` must be pep508
@@ -254,32 +249,32 @@ dependencies = ["flask==1.0.x"]
     --- stderr:
     Traceback (most recent call last):
       File "<string>", line 14, in <module>
-      File "[SOURCE_DIR]/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+      File "[CACHE_DIR]/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
         return self._get_build_requires(config_settings, requirements=['wheel'])
                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[SOURCE_DIR]/setuptools/build_meta.py", line 295, in _get_build_requires
+      File "[CACHE_DIR]/[TMP]/build_meta.py", line 295, in _get_build_requires
         self.run_setup()
-      File "[SOURCE_DIR]/setuptools/build_meta.py", line 487, in run_setup
+      File "[CACHE_DIR]/[TMP]/build_meta.py", line 487, in run_setup
         super().run_setup(setup_script=setup_script)
-      File "[SOURCE_DIR]/setuptools/build_meta.py", line 311, in run_setup
+      File "[CACHE_DIR]/[TMP]/build_meta.py", line 311, in run_setup
         exec(code, locals())
       File "<string>", line 1, in <module>
-      File "[SOURCE_DIR]/setuptools/__init__.py", line 104, in setup
+      File "[CACHE_DIR]/[TMP]/__init__.py", line 104, in setup
         return distutils.core.setup(**attrs)
                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[SOURCE_DIR]/setuptools/_distutils/core.py", line 159, in setup
+      File "[CACHE_DIR]/[TMP]/core.py", line 159, in setup
         dist.parse_config_files()
-      File "[SOURCE_DIR]/_virtualenv.py", line 22, in parse_config_files
+      File "[CACHE_DIR]/[TMP]/_virtualenv.py", line 22, in parse_config_files
         result = old_parse_config_files(self, *args, **kwargs)
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[SOURCE_DIR]/setuptools/dist.py", line 631, in parse_config_files
+      File "[CACHE_DIR]/[TMP]/dist.py", line 631, in parse_config_files
         pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
-      File "[SOURCE_DIR]/setuptools/config/pyprojecttoml.py", line 68, in apply_configuration
+      File "[CACHE_DIR]/[TMP]/pyprojecttoml.py", line 68, in apply_configuration
         config = read_configuration(filepath, True, ignore_option_errors, dist)
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[SOURCE_DIR]/setuptools/config/pyprojecttoml.py", line 129, in read_configuration
+      File "[CACHE_DIR]/[TMP]/pyprojecttoml.py", line 129, in read_configuration
         validate(subset, filepath)
-      File "[SOURCE_DIR]/setuptools/config/pyprojecttoml.py", line 57, in validate
+      File "[CACHE_DIR]/[TMP]/pyprojecttoml.py", line 57, in validate
         raise ValueError(f"{error}/n{summary}") from None
     ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
     configuration error: `project.dependencies[0]` must be pep508
@@ -458,13 +453,13 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     let filters = if cfg!(windows) {
         // Remove the colorama count on windows
-        INSTA_FILTERS
-            .iter()
-            .copied()
+        context
+            .filters()
+            .into_iter()
             .chain([("Resolved 8 packages", "Resolved 7 packages")])
             .collect()
     } else {
-        INSTA_FILTERS.to_vec()
+        context.filters()
     };
     uv_snapshot!(filters, command(&context)
         .arg("-r")
@@ -596,7 +591,6 @@ fn reinstall_extras() -> Result<()> {
 
 /// Warn, but don't fail, when uninstalling incomplete packages.
 #[test]
-#[cfg(unix)]
 fn reinstall_incomplete() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -623,23 +617,14 @@ fn reinstall_incomplete() -> Result<()> {
     );
 
     // Manually remove the `RECORD` file.
-    fs_err::remove_file(
-        context
-            .venv
-            .join("lib/python3.12/site-packages/anyio-3.7.0.dist-info/RECORD"),
-    )?;
+    fs_err::remove_file(context.site_packages().join("anyio-3.7.0.dist-info/RECORD"))?;
 
     // Re-install anyio.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
     requirements_txt.write_str("anyio==4.0.0")?;
 
-    let filters = [(r"Failed to uninstall package at .* due to missing RECORD", "Failed to uninstall package at .venv/lib/python3.12/site-packages/anyio-3.7.0.dist-info due to missing RECORD")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -649,7 +634,7 @@ fn reinstall_incomplete() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Downloaded 1 package in [TIME]
-    warning: Failed to uninstall package at .venv/lib/python3.12/site-packages/anyio-3.7.0.dist-info due to missing RECORD file. Installation may result in an incomplete environment.
+    warning: Failed to uninstall package at [SITE_PACKAGES]/anyio-3.7.0.dist-info due to missing RECORD file. Installation may result in an incomplete environment.
     Installed 1 package in [TIME]
      - anyio==3.7.0
      + anyio==4.0.0
@@ -723,28 +708,13 @@ fn allow_incompatibilities() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "maturin")]
-fn install_editable() -> Result<()> {
+fn install_editable() {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
-
-    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
     // Install the editable package.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-e")
-        .arg("../../scripts/packages/poetry_editable")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -756,24 +726,15 @@ fn install_editable() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
 
     // Install it again (no-op).
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-e")
-        .arg("../../scripts/packages/poetry_editable")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -784,19 +745,10 @@ fn install_editable() -> Result<()> {
     );
 
     // Add another, non-editable dependency.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-e")
-        .arg("../../scripts/packages/poetry_editable")
-        .arg("black")
-        .arg("--strict")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable"))
+        .arg("black"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -812,35 +764,19 @@ fn install_editable() -> Result<()> {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-     - poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
-     + poetry-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/poetry_editable)
+     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
     "###
     );
-
-    Ok(())
 }
 
 #[test]
-fn install_editable_and_registry() -> Result<()> {
+fn install_editable_and_registry() {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
-
-    let filters: Vec<_> = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
-
     // Install the registry-based version of Black.
-    uv_snapshot!(filters, command(&context)
-        .arg("black")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("black"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -859,11 +795,9 @@ fn install_editable_and_registry() -> Result<()> {
     );
 
     // Install the editable version of Black. This should remove the registry-based version.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-e")
-        .arg("../../scripts/packages/black_editable")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(context.workspace_root.join("scripts/packages/black_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -873,17 +807,15 @@ fn install_editable_and_registry() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.3.0
-     + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
     );
 
     // Re-install the registry-based version of Black. This should be a no-op, since we have a
     // version of Black installed (the editable version) that satisfies the requirements.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("black")
-        .arg("--strict")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -893,7 +825,8 @@ fn install_editable_and_registry() -> Result<()> {
     "###
     );
 
-    let filters2: Vec<_> = filters
+    let filters: Vec<_> = context
+        .filters()
         .into_iter()
         .chain([
             // Remove colorama
@@ -902,10 +835,8 @@ fn install_editable_and_registry() -> Result<()> {
         .collect();
 
     // Re-install Black at a specific version. This should replace the editable version.
-    uv_snapshot!(filters2, command(&context)
-        .arg("black==23.10.0")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+    uv_snapshot!(filters, command(&context)
+        .arg("black==23.10.0"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -914,38 +845,22 @@ fn install_editable_and_registry() -> Result<()> {
     Resolved 6 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     - black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/black_editable)
+     - black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
      + black==23.10.0
     "###
     );
-
-    Ok(())
 }
 
 #[test]
-fn install_editable_no_binary() -> Result<()> {
+fn install_editable_no_binary() {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
-
-    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
     // Install the editable package with no-binary enabled
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-e")
-        .arg("../../scripts/packages/black_editable")
+        .arg(context.workspace_root.join("scripts/packages/black_editable"))
         .arg("--no-binary")
-        .arg(":all:")
-        .current_dir(&current_dir)
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(":all:"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -954,11 +869,9 @@ fn install_editable_no_binary() -> Result<()> {
     Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
     "###
     );
-
-    Ok(())
 }
 
 /// Install a source distribution that uses the `flit` build system, along with `flit`
@@ -1198,15 +1111,16 @@ fn install_git_private_https_pat() {
     let context = TestContext::new("3.8");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.insert(0, (&token, "***"));
+    let filters: Vec<_> = [(token.as_str(), "***")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
 
-    let mut command = command(&context);
-    command.arg(format!(
+    let package = format!(
         "uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"
-    ));
+    );
 
-    uv_snapshot!(filters, command
+    uv_snapshot!(filters, command(&context).arg(package)
         , @r###"
     success: true
     exit_code: 0
@@ -1229,8 +1143,11 @@ fn install_git_private_https_pat_at_ref() {
     let context = TestContext::new("3.8");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.insert(0, (&token, "***"));
+    let mut filters: Vec<_> = [(token.as_str(), "***")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
     filters.push((r"git\+https://", ""));
 
     // A user is _required_ on Windows
@@ -1241,10 +1158,9 @@ fn install_git_private_https_pat_at_ref() {
         ""
     };
 
-    let mut command = command(&context);
-    command.arg(format!("uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"));
-
-    uv_snapshot!(filters, command, @r###"
+    let package = format!("uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac");
+    uv_snapshot!(filters, command(&context)
+        .arg(package), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1272,13 +1188,12 @@ fn install_git_private_https_pat_and_username() {
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
     let user = "astral-test-bot";
 
-    let mut filters = INSTA_FILTERS.to_vec();
-    filters.insert(0, (&token, "***"));
+    let filters: Vec<_> = [(token.as_str(), "***")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
 
-    let mut command = command(&context);
-    command.arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"));
-
-    uv_snapshot!(filters, command
+    uv_snapshot!(filters, command(&context).arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
         , @r###"
     success: true
     exit_code: 0
@@ -1376,14 +1291,15 @@ fn reinstall_no_binary() {
     // With `--reinstall`, `--no-binary` should have an affect
     let filters = if cfg!(windows) {
         // Remove the colorama count on windows
-        INSTA_FILTERS
-            .iter()
-            .copied()
+        context
+            .filters()
+            .into_iter()
             .chain([("Resolved 8 packages", "Resolved 7 packages")])
             .collect()
     } else {
-        INSTA_FILTERS.to_vec()
+        context.filters()
     };
+
     let mut command = crate::command(&context);
     command
         .arg("anyio")
@@ -2012,34 +1928,13 @@ fn launcher_with_symlink() -> Result<()> {
 }
 
 #[test]
-#[cfg(unix)]
-fn config_settings() -> Result<()> {
+fn config_settings() {
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
-
-    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
     // Install the editable package.
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-e")
-        .arg("../../scripts/packages/setuptools_editable")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        .arg(context.workspace_root.join("scripts/packages/setuptools_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2050,45 +1945,25 @@ fn config_settings() -> Result<()> {
     Downloaded 1 package in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/setuptools_editable)
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
     "###
     );
 
     // When installed without `--editable_mode=compat`, the `finder.py` file should be present.
     let finder = context
-        .venv
-        .join("lib/python3.12/site-packages")
+        .site_packages()
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
 
     // Install the editable package with `--editable_mode=compat`.
     let context = TestContext::new("3.12");
 
-    let current_dir = std::env::current_dir()?;
-    let workspace_dir = regex::escape(
-        Url::from_directory_path(current_dir.join("..").join("..").canonicalize()?)
-            .unwrap()
-            .as_str(),
-    );
-
-    let filters = [(workspace_dir.as_str(), "file://[WORKSPACE_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, Command::new(get_bin())
-        .arg("pip")
-        .arg("install")
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-e")
-        .arg("../../scripts/packages/setuptools_editable")
+        .arg(context.workspace_root.join("scripts/packages/setuptools_editable"))
         .arg("-C")
         .arg("editable_mode=compat")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("CARGO_TARGET_DIR", "../../../target/target_install_editable"), @r###"
+        , @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2099,23 +1974,19 @@ fn config_settings() -> Result<()> {
     Downloaded 1 package in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE_DIR]/scripts/packages/setuptools_editable)
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
     "###
     );
 
     // When installed without `--editable_mode=compat`, the `finder.py` file should _not_ be present.
     let finder = context
-        .venv
-        .join("lib/python3.12/site-packages")
+        .site_packages()
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(!finder.exists());
-
-    Ok(())
 }
 
 /// Reinstall a duplicate package in a virtual environment.
 #[test]
-#[cfg(unix)]
 fn reinstall_duplicate() -> Result<()> {
     use crate::common::copy_dir_all;
 
@@ -2153,12 +2024,8 @@ fn reinstall_duplicate() -> Result<()> {
 
     // Copy the virtual environment to a new location.
     copy_dir_all(
-        context2
-            .venv
-            .join("lib/python3.12/site-packages/pip-22.1.1.dist-info"),
-        context1
-            .venv
-            .join("lib/python3.12/site-packages/pip-22.1.1.dist-info"),
+        context2.site_packages().join("pip-22.1.1.dist-info"),
+        context1.site_packages().join("pip-22.1.1.dist-info"),
     )?;
 
     // Run `pip install`.
@@ -2223,7 +2090,8 @@ fn invalidate_editable_on_change() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package.
-    let editable_dir = assert_fs::TempDir::new()?;
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -2236,12 +2104,7 @@ requires-python = ">=3.8"
 "#,
     )?;
 
-    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
     success: true
@@ -2254,14 +2117,14 @@ requires-python = ">=3.8"
     Downloaded 3 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
-     + example==0.0.0 (from [WORKSPACE_DIR])
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
      + idna==3.6
      + sniffio==1.3.1
     "###
     );
 
     // Re-installing should be a no-op.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
     success: true
@@ -2286,7 +2149,7 @@ requires-python = ">=3.8"
     )?;
 
     // Re-installing should update the package.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
     success: true
@@ -2300,8 +2163,8 @@ requires-python = ">=3.8"
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
-     - example==0.0.0 (from [WORKSPACE_DIR])
-     + example==0.0.0 (from [WORKSPACE_DIR])
+     - example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );
 
@@ -2313,7 +2176,8 @@ fn invalidate_editable_dynamic() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package with dynamic metadata
-    let editable_dir = assert_fs::TempDir::new()?;
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -2331,12 +2195,7 @@ dependencies = {file = ["requirements.txt"]}
     let requirements_txt = editable_dir.child("requirements.txt");
     requirements_txt.write_str("anyio==4.0.0")?;
 
-    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
     success: true
@@ -2349,14 +2208,14 @@ dependencies = {file = ["requirements.txt"]}
     Downloaded 3 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
-     + example==0.1.0 (from [WORKSPACE_DIR])
+     + example==0.1.0 (from file://[TEMP_DIR]/editable)
      + idna==3.6
      + sniffio==1.3.1
     "###
     );
 
     // Re-installing should re-install.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
     success: true
@@ -2367,8 +2226,8 @@ dependencies = {file = ["requirements.txt"]}
     Built 1 editable in [TIME]
     Resolved 4 packages in [TIME]
     Installed 1 package in [TIME]
-     - example==0.1.0 (from [WORKSPACE_DIR])
-     + example==0.1.0 (from [WORKSPACE_DIR])
+     - example==0.1.0 (from file://[TEMP_DIR]/editable)
+     + example==0.1.0 (from file://[TEMP_DIR]/editable)
     "###
     );
 
@@ -2376,7 +2235,7 @@ dependencies = {file = ["requirements.txt"]}
     requirements_txt.write_str("anyio==3.7.1")?;
 
     // Re-installing should update the package.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
     success: true
@@ -2390,8 +2249,8 @@ dependencies = {file = ["requirements.txt"]}
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
-     - example==0.1.0 (from [WORKSPACE_DIR])
-     + example==0.1.0 (from [WORKSPACE_DIR])
+     - example==0.1.0 (from file://[TEMP_DIR]/editable)
+     + example==0.1.0 (from file://[TEMP_DIR]/editable)
     "###
     );
 
@@ -2403,7 +2262,8 @@ fn invalidate_path_on_change() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create a local package.
-    let editable_dir = assert_fs::TempDir::new()?;
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -2416,12 +2276,7 @@ requires-python = ">=3.8"
 "#,
     )?;
 
-    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"
     success: true
@@ -2433,14 +2288,14 @@ requires-python = ">=3.8"
     Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
-     + example==0.0.0 (from [WORKSPACE_DIR])
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
      + idna==3.6
      + sniffio==1.3.1
     "###
     );
 
     // Re-installing should be a no-op.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"
     success: true
@@ -2465,7 +2320,7 @@ requires-python = ">=3.8"
     )?;
 
     // Re-installing should update the package.
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("example @ .")
         .current_dir(editable_dir.path()), @r###"
     success: true
@@ -2478,8 +2333,8 @@ requires-python = ">=3.8"
     Installed 2 packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
-     - example==0.0.0 (from [WORKSPACE_DIR])
-     + example==0.0.0 (from [WORKSPACE_DIR])
+     - example==0.0.0 (from file://[TEMP_DIR]/editable)
+     + example==0.0.0 (from file://[TEMP_DIR]/editable)
     "###
     );
 
@@ -2491,7 +2346,8 @@ requires-python = ">=3.8"
 fn editable_url_with_marker() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let editable_dir = assert_fs::TempDir::new()?;
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -2506,12 +2362,7 @@ requires-python = ">=3.11,<3.13"
 "#,
     )?;
 
-    let filters = [(r"\(from file://.*\)", "(from [WORKSPACE_DIR])")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("--editable")
         .arg(editable_dir.path()), @r###"
     success: true
@@ -2524,7 +2375,7 @@ requires-python = ">=3.11,<3.13"
     Downloaded 3 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.0.0
-     + example==0.1.0 (from [WORKSPACE_DIR])
+     + example==0.1.0 (from file://[TEMP_DIR]/editable)
      + idna==3.6
      + sniffio==1.3.1
     "###
@@ -2539,7 +2390,8 @@ fn requires_python_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package with a `Requires-Python` constraint that is not met.
-    let editable_dir = assert_fs::TempDir::new()?;
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -2576,7 +2428,7 @@ fn no_build_isolation() -> Result<()> {
 
     // We expect the build to fail, because `setuptools` is not installed.
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(INSTA_FILTERS.to_vec())
+        .chain(context.filters())
         .collect::<Vec<_>>();
     uv_snapshot!(filters, command(&context)
         .arg("-r")
@@ -2987,7 +2839,8 @@ fn requires_python_direct_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create an editable package with a `Requires-Python` constraint that is not met.
-    let editable_dir = assert_fs::TempDir::new()?;
+    let editable_dir = context.temp_dir.child("editable");
+    editable_dir.create_dir_all()?;
     let pyproject_toml = editable_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -3149,32 +3002,15 @@ fn install_site_packages_mtime_updated() -> Result<()> {
 /// entry (because we want to ignore the entire cache from outside), ignoring all python source
 /// files.
 #[test]
-fn deptry_gitignore() -> Result<()> {
+fn deptry_gitignore() {
     let context = TestContext::new("3.12");
 
-    let project_root = current_dir()?
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf();
-    let source_dist_dir = project_root
-        .join("scripts")
-        .join("packages")
-        .join("deptry_reproducer");
-    let filter_path = regex::escape(
-        Url::from_directory_path(source_dist_dir.simplified_display().to_string())
-            .unwrap()
-            .to_string()
-            .trim_end_matches('/'),
-    );
-    let filters: Vec<_> = [(filter_path.as_str(), "[SOURCE_DIST_DIR]")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let source_dist_dir = context
+        .workspace_root
+        .join("scripts/packages/deptry_reproducer");
 
-    uv_snapshot!(filters, command(&context)
-        .arg(format!("deptry_reproducer @ {}/deptry_reproducer-0.1.0.tar.gz", source_dist_dir.simplified_display()))
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(format!("deptry_reproducer @ {}", source_dist_dir.join("deptry_reproducer-0.1.0.tar.gz").simplified_display()))
         .arg("--strict")
         .current_dir(source_dist_dir), @r###"
     success: true
@@ -3186,7 +3022,7 @@ fn deptry_gitignore() -> Result<()> {
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + cffi==1.16.0
-     + deptry-reproducer==0.1.0 (from [SOURCE_DIST_DIR]/deptry_reproducer-0.1.0.tar.gz)
+     + deptry-reproducer==0.1.0 (from file://[WORKSPACE]/scripts/packages/deptry_reproducer/deptry_reproducer-0.1.0.tar.gz)
      + pycparser==2.21
     "###
     );
@@ -3195,6 +3031,4 @@ fn deptry_gitignore() -> Result<()> {
     context
         .assert_command("import deptry_reproducer.foo")
         .success();
-
-    Ok(())
 }
