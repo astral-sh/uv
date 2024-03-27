@@ -4750,6 +4750,8 @@ dependencies = [
  "rustc-hash",
  "serde",
  "thiserror",
+ "tokio",
+ "tokio-stream",
  "toml",
  "tracing",
  "url",

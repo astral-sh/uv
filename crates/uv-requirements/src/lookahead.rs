@@ -1,7 +1,9 @@
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use futures::{StreamExt, TryStreamExt};
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 
 use distribution_types::{BuildableSource, Dist, RequestedRequirements};
 use pep508_rs::{Requirement, VersionOrUrl};
@@ -52,18 +54,44 @@ impl<'a> LookaheadResolver<'a> {
         context: &T,
         client: &RegistryClient,
     ) -> Result<Vec<RequestedRequirements>> {
-        let requirements: Vec<_> = futures::stream::iter(self.requirements.iter())
-            .map(|requirement| async { self.lookahead(requirement, context, client).await })
-            .buffered(50)
-            .try_collect()
-            .await?;
-        Ok(requirements.into_iter().flatten().collect())
+        // Develop a (very) basic model of dependency resolution:
+        // - All requirements (and requirements of editables) are required.
+        // - Apply any URL-based constraints.
+        // - Apply any URL-based overrides.
+        // It's not exactly correct to include all constraints and overrides here... If a constraint
+        // or override were _excluded_ from the resolution (e.g., you have a constraint, but the
+        // dependency doesn't appear in the requirements, so it's never enforced), then we'd be
+        // incorrectly including it here. But it's a start.
+        //
+        // Actually, we should omit constraints and overrides (except for those that affect requirements).
+        // Because we can't know that they'll be included.
+        let mut queue = VecDeque::from(self.requirements.to_vec());
+        let mut results = Vec::new();
+        let mut futures = FuturesUnordered::new();
+
+        while !queue.is_empty() || !futures.is_empty() {
+            while let Some(requirement) = queue.pop_front() {
+                let future = self.lookahead(requirement, context, client);
+                futures.push(future);
+            }
+
+            while let Some(result) = futures.next().await {
+                if let Some(lookahead) = result? {
+                    for requirement in lookahead.requirements() {
+                        queue.push_back(requirement.clone());
+                    }
+                    results.push(lookahead);
+                }
+            }
+        }
+
+        Ok(results)
     }
 
     /// Infer the package name for a given "unnamed" requirement.
     async fn lookahead<T: BuildContext>(
         &self,
-        requirement: &Requirement,
+        requirement: Requirement,
         context: &T,
         client: &RegistryClient,
     ) -> Result<Option<RequestedRequirements>> {
@@ -75,13 +103,10 @@ impl<'a> LookaheadResolver<'a> {
         // Convert to a buildable distribution.
         let dist = Dist::from_url(requirement.name.clone(), url.clone())?;
 
-        // Only support source trees (and not, e.g., wheels).
+        // Only support source distributions (and not, e.g., wheels).
         let Dist::Source(source_dist) = &dist else {
             return Ok(None);
         };
-        if !source_dist.as_path().is_some_and(std::path::Path::is_dir) {
-            return Ok(None);
-        }
 
         // Run the PEP 517 build process to extract metadata from the source distribution.
         let builder = if let Some(reporter) = self.reporter.clone() {
