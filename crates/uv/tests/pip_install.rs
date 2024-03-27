@@ -3036,16 +3036,10 @@ fn deptry_gitignore() {
 #[test]
 fn dependent_editable_previously_installed() -> Result<()> {
     let context = TestContext::new("3.12");
-    let root_path = current_dir()?.join("../../scripts/packages/dependent_editables");
-
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let root_path = context.workspace_root.join("scripts/packages/dependent_editables");
 
     // Install the first editable
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-e")
         .arg(root_path.join("first_editable")), @r###"
     success: true
@@ -3056,13 +3050,13 @@ fn dependent_editable_previously_installed() -> Result<()> {
     Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + first-editable==0.0.1 (from file://[TEMP_DIR]/first_editable)
+     + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
     "###
     );
 
     // The second editable depends on the first editable, which is only available
     // locally and should not be fetched from an index
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-e")
         .arg(root_path.join("second_editable")), @r###"
     success: true
@@ -3073,7 +3067,7 @@ fn dependent_editable_previously_installed() -> Result<()> {
     Built 1 editable in [TIME]
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
-     + second-editable==0.0.1 (from file://[TEMP_DIR]/second_editable)
+     + second-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/second_editable)
     "###
     );
 
@@ -3085,16 +3079,10 @@ fn dependent_editable_previously_installed() -> Result<()> {
 #[test]
 fn dependent_editable_previously_installed_reinstall() -> Result<()> {
     let context = TestContext::new("3.12");
-    let root_path = current_dir()?.join("../../scripts/packages/dependent_editables");
-
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let root_path = context.workspace_root.join("scripts/packages/dependent_editables");
 
     // Install the first editable
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-e")
         .arg(root_path.join("first_editable")), @r###"
     success: true
@@ -3105,13 +3093,13 @@ fn dependent_editable_previously_installed_reinstall() -> Result<()> {
     Built 1 editable in [TIME]
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     + first-editable==0.0.1 (from file://[TEMP_DIR]/first_editable)
+     + first-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/dependent_editables/first_editable)
     "###
     );
 
     // The second editable depends on the first editable, which is only available
     // locally and should not be fetched from an index
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("-e")
         .arg(root_path.join("second_editable"))
         .arg("--reinstall-package")
@@ -3239,13 +3227,7 @@ fn reinstall_no_index() -> Result<()> {
 #[test]
 fn dependent_local_previously_installed() -> Result<()> {
     let context = TestContext::new("3.12");
-    let root_path = current_dir()?.join("../../scripts/packages/dependent_locals");
-
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let root_path = context.workspace_root.join("scripts/packages/dependent_locals");
 
     // Install the first local
     uv_snapshot!(command(&context)
@@ -3264,7 +3246,7 @@ fn dependent_local_previously_installed() -> Result<()> {
 
     // The second local depends on the first local, which is only available
     // locally and should not be fetched from an index
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg(root_path.join("second_local")), @r###"
     success: true
     exit_code: 0
@@ -3274,7 +3256,7 @@ fn dependent_local_previously_installed() -> Result<()> {
     Resolved 2 packages in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + second-local==0.1.0 (from file://[TEMP_DIR]/second_local)
+     + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
     "###
     );
 
@@ -3286,16 +3268,10 @@ fn dependent_local_previously_installed() -> Result<()> {
 #[test]
 fn dependent_local_previously_installed_reinstall() -> Result<()> {
     let context = TestContext::new("3.12");
-    let root_path = current_dir()?.join("../../scripts/packages/dependent_locals");
-
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let root_path = context.workspace_root.join("scripts/packages/dependent_locals");
 
     // Install the first editable
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg(root_path.join("first_local")), @r###"
     success: true
     exit_code: 0
@@ -3305,13 +3281,13 @@ fn dependent_local_previously_installed_reinstall() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + first-local==0.1.0 (from file://[TEMP_DIR]/first_local)
+     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
 
     // The second package depends on the first package, which is only available
     // locally and should not be fetched from an index
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg(root_path.join("second_local"))
         .arg("--reinstall-package")
         .arg("first-local"), @r###"
@@ -3336,13 +3312,7 @@ fn dependent_local_previously_installed_reinstall() -> Result<()> {
 #[test]
 fn local_version_for_remote_package() -> Result<()> {
     let context = TestContext::new("3.12");
-    let root_path = current_dir()?.join("../../scripts/packages");
-
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"file://.*/", "file://[TEMP_DIR]/")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
+    let root_path = context.workspace_root.join("scripts/packages");
 
     // Install the local anyio first
     uv_snapshot!(command(&context)
@@ -3360,7 +3330,7 @@ fn local_version_for_remote_package() -> Result<()> {
     );
 
     // Install again without specifying a local path — this should not pull from the index
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("anyio"), @r###"
     success: true
     exit_code: 0
@@ -3372,7 +3342,7 @@ fn local_version_for_remote_package() -> Result<()> {
     );
 
     // Request reinstallation with the local version segment — this should not pull from the index
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("anyio==4.3.0+foo")
         .arg("--reinstall"), @r###"
     success: false
@@ -3388,7 +3358,7 @@ fn local_version_for_remote_package() -> Result<()> {
     );
 
     // Request reinstallation — this should not pull from the index
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("anyio")
         .arg("--reinstall"), @r###"
     success: true
@@ -3399,7 +3369,7 @@ fn local_version_for_remote_package() -> Result<()> {
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
-     - anyio==4.3.0+foo (from file://[TEMP_DIR]/anyio_local)
+     - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1

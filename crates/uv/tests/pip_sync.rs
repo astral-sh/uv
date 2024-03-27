@@ -14,7 +14,7 @@ use predicates::Predicate;
 use url::Url;
 
 use common::{
-    create_bin_with_executables, create_venv, uv_snapshot, venv_to_interpreter, INSTA_FILTERS,
+    create_bin_with_executables, create_venv, uv_snapshot, venv_to_interpreter,
 };
 use uv_fs::Simplified;
 
@@ -3009,13 +3009,8 @@ requires-python = "<=3.5"
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("example @ {}", editable_dir.path().display()))?;
 
-    // In addition to the standard filters, remove the temporary directory from the snapshot.
-    let filters: Vec<_> = [(r"\(from file://.*\)", "(from file://[TEMP_DIR])")]
-        .into_iter()
-        .chain(INSTA_FILTERS.to_vec())
-        .collect();
 
-    uv_snapshot!(filters, command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
