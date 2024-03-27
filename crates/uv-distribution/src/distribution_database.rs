@@ -11,19 +11,17 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, BuiltDist, DirectGitUrl, Dist, FileLocation, IndexLocations, LocalEditable,
-    Name, SourceDist,
+    BuildableSource, BuiltDist, Dist, FileLocation, IndexLocations, LocalEditable, Name,
 };
 use platform_tags::Tags;
 use pypi_types::Metadata23;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
-use uv_git::GitSource;
 use uv_types::{BuildContext, NoBinary, NoBuild};
 
 use crate::download::{BuiltWheel, UnzippedWheel};
+use crate::git::resolve_precise;
 use crate::locks::Locks;
-use crate::reporter::Facade;
 use crate::{DiskWheel, Error, LocalWheel, Reporter, SourceDistCachedBuilder};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
@@ -356,7 +354,12 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 let _guard = lock.lock().await;
 
                 // Insert the `precise` URL, if it exists.
-                let precise = self.precise(source_dist).await?;
+                let precise = resolve_precise(
+                    source_dist,
+                    self.build_context.cache(),
+                    self.reporter.as_ref(),
+                )
+                .await?;
 
                 let source_dist = match precise.as_ref() {
                     Some(url) => Cow::Owned(source_dist.clone().with_url(url.clone())),
@@ -391,44 +394,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             target: editable_wheel_dir.join(cache_key::digest(&editable.path)),
         };
         Ok((LocalWheel::Built(built_wheel), metadata))
-    }
-
-    /// Given a remote source distribution, return a precise variant, if possible.
-    ///
-    /// For example, given a Git dependency with a reference to a branch or tag, return a URL
-    /// with a precise reference to the current commit of that branch or tag.
-    ///
-    /// This method takes into account various normalizations that are independent from the Git
-    /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
-    /// prefix kinds.
-    async fn precise(&self, dist: &SourceDist) -> Result<Option<Url>, Error> {
-        let SourceDist::Git(source_dist) = dist else {
-            return Ok(None);
-        };
-        let git_dir = self.build_context.cache().bucket(CacheBucket::Git);
-
-        let DirectGitUrl { url, subdirectory } =
-            DirectGitUrl::try_from(source_dist.url.raw()).map_err(Error::Git)?;
-
-        // If the commit already contains a complete SHA, short-circuit.
-        if url.precise().is_some() {
-            return Ok(None);
-        }
-
-        // Fetch the precise SHA of the Git reference (which could be a branch, a tag, a partial
-        // commit, etc.).
-        let source = if let Some(reporter) = self.reporter.clone() {
-            GitSource::new(url, git_dir).with_reporter(Facade::from(reporter))
-        } else {
-            GitSource::new(url, git_dir)
-        };
-        let precise = tokio::task::spawn_blocking(move || source.fetch())
-            .await?
-            .map_err(Error::Git)?;
-        let url = precise.into_git();
-
-        // Re-encode as a URL.
-        Ok(Some(Url::from(DirectGitUrl { url, subdirectory })))
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.

@@ -12,7 +12,7 @@ mod source;
 mod util;
 
 /// A URL reference to a Git repository.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GitUrl {
     /// The URL of the Git repository, with any query parameters and fragments removed.
     repository: Url,

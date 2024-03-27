@@ -20,6 +20,7 @@ install-wheel-rs = { workspace = true }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
+pypi-types = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-extract = { workspace = true }
@@ -27,12 +28,12 @@ uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true, features = ["vendored-openssl"] }
 uv-normalize = { workspace = true }
 uv-types = { workspace = true }
-pypi-types = { workspace = true }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 nanoid = { workspace = true }
+once_cell = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
@@ -45,3 +46,4 @@ tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true }
+
