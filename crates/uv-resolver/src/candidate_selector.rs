@@ -76,14 +76,34 @@ impl CandidateSelector {
         // and the preference satisfies the current range, use that.
         if let Some(version) = preferences.version(package_name) {
             if range.contains(version) {
+                // Check for a locally installed distribution that satisfies the preferred version
+                // Prefer these over remote distributions
+                if !exclusions.contains(package_name) {
+                    for dist in installed_packages.get_packages(package_name) {
+                        if dist.version() == version {
+                            debug!("Found installed version of {dist} that satisfies preference in {range}");
+
+                            return Some(Candidate {
+                                name: package_name,
+                                version,
+                                dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
+                                    dist,
+                                )),
+                            });
+                        }
+                    }
+                }
+
+                // Check for a remote distribution that satisfies the preferred version
                 if let Some(file) = version_map.get(version) {
-                    return Some(Candidate::new(package_name, version, file));
+                    return Some(Candidate::new(package_name, version, &file));
                 }
             }
         }
 
+        // Check for a locally installed distribution that satisfies the range
+        // Prefer these over remote distributions
         if !exclusions.contains(package_name) {
-            // Allow locally installed distributions to be candidates
             for dist in installed_packages.get_packages(package_name) {
                 let version = dist.version();
                 if range.contains(version) {
