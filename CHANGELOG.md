@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.26
+
+### Bug fixes
+
+- Bump simple cache version ([#2712](https://github.com/astral-sh/uv/pull/2712))
+
 ## 0.1.25
 
 ### Breaking changes
