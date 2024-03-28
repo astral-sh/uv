@@ -11,7 +11,7 @@
 - Accept `setup.py` and `setup.cfg` files in compile ([#2634](https://github.com/astral-sh/uv/pull/2634))
 - Add `--no-binary` and `--only-binary` support to `requirements.txt` ([#2680](https://github.com/astral-sh/uv/pull/2680))
 - Allow prereleases, locals, and URLs in non-editable path requirements ([#2671](https://github.com/astral-sh/uv/pull/2671))
-- Use PEP 517 to extract non-static `pyproject.toml` metadata ([#2633](https://github.com/astral-sh/uv/pull/2633))
+- Use PEP 517 to extract dynamic `pyproject.toml` metadata ([#2633](https://github.com/astral-sh/uv/pull/2633))
 - Add `Editable project location` and `Required-by` to `pip show` ([#2589](https://github.com/astral-sh/uv/pull/2589))
 - Avoid `prepare_metadata_for_build_wheel` calls for Hatch packages with dynamic dependencies ([#2645](https://github.com/astral-sh/uv/pull/2645))
 - Fall back to PEP 517 hooks for non-compliant PEP 621 metadata ([#2662](https://github.com/astral-sh/uv/pull/2662))
@@ -20,15 +20,15 @@
 
 ### CLI
 
-- Disallow `pyproject.toml` from `pip uninstall` ([#2663](https://github.com/astral-sh/uv/pull/2663))
+- Disallow `pyproject.toml` from `pip uninstall -r` ([#2663](https://github.com/astral-sh/uv/pull/2663))
 - Unhide `--emit-index-url` and `--emit-find-links` ([#2691](https://github.com/astral-sh/uv/pull/2691))
 - Use dense formatting for requirement version specifiers in diagnostics ([#2601](https://github.com/astral-sh/uv/pull/2601))
 
 ### Performance
 
 - Add an in-memory cache for Git references ([#2682](https://github.com/astral-sh/uv/pull/2682))
-- Do not force recompile `.pyc` files ([#2642](https://github.com/astral-sh/uv/pull/2642))
-- Read package metadata from `pyproject.toml` when statically defined ([#2676](https://github.com/astral-sh/uv/pull/2676))
+- Do not force-recompile `.pyc` files ([#2642](https://github.com/astral-sh/uv/pull/2642))
+- Read package metadata from `pyproject.toml` when it is statically defined ([#2676](https://github.com/astral-sh/uv/pull/2676))
 
 ### Bug fixes
 
