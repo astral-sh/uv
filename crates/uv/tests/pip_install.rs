@@ -1083,6 +1083,12 @@ fn install_git_public_https_missing_commit() {
     filters.push(("`git fetch .*`", "`git fetch [...]`"));
     filters.push(("exit status", "exit code"));
 
+    // There are flakes on Windows where this irrelevant error is appended
+    filters.push((
+        "fatal: unable to write response end packet: Broken pipe\n",
+        "",
+    ));
+
     uv_snapshot!(filters, command(&context)
         // 2.0.0 does not exist
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b")
