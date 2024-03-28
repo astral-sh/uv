@@ -61,21 +61,7 @@ impl PreReleaseStrategy {
             PreReleaseMode::IfNecessary => Self::IfNecessary,
             PreReleaseMode::Explicit => Self::Explicit(
                 manifest
-                    .requirements
-                    .iter()
-                    .chain(manifest.constraints.iter())
-                    .chain(manifest.overrides.iter())
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[]))
-                    .chain(manifest.lookaheads.iter().flat_map(|lookahead| {
-                        lookahead.requirements().iter().filter(|requirement| {
-                            requirement.evaluate_markers(markers, lookahead.extras())
-                        })
-                    }))
-                    .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
-                        metadata.requires_dist.iter().filter(|requirement| {
-                            requirement.evaluate_markers(markers, &editable.extras)
-                        })
-                    }))
+                    .requirements(markers)
                     .filter(|requirement| {
                         let Some(version_or_url) = &requirement.version_or_url else {
                             return false;
@@ -95,21 +81,7 @@ impl PreReleaseStrategy {
             ),
             PreReleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(
                 manifest
-                    .requirements
-                    .iter()
-                    .chain(manifest.constraints.iter())
-                    .chain(manifest.overrides.iter())
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[]))
-                    .chain(manifest.lookaheads.iter().flat_map(|lookahead| {
-                        lookahead.requirements().iter().filter(|requirement| {
-                            requirement.evaluate_markers(markers, lookahead.extras())
-                        })
-                    }))
-                    .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
-                        metadata.requires_dist.iter().filter(|requirement| {
-                            requirement.evaluate_markers(markers, &editable.extras)
-                        })
-                    }))
+                    .requirements(markers)
                     .filter(|requirement| {
                         let Some(version_or_url) = &requirement.version_or_url else {
                             return false;

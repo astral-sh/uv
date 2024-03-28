@@ -23,25 +23,8 @@ impl Locals {
         let mut required: FxHashMap<PackageName, Version> = FxHashMap::default();
 
         // Add all direct requirements and constraints. There's no need to look for conflicts,
-        // since conflicting versions will be tracked upstream.
-        for requirement in
-            manifest
-                .requirements
-                .iter()
-                .chain(manifest.constraints.iter())
-                .chain(manifest.overrides.iter())
-                .filter(|requirement| requirement.evaluate_markers(markers, &[]))
-                .chain(manifest.lookaheads.iter().flat_map(|lookahead| {
-                    lookahead.requirements().iter().filter(|requirement| {
-                        requirement.evaluate_markers(markers, lookahead.extras())
-                    })
-                }))
-                .chain(manifest.editables.iter().flat_map(|(editable, metadata)| {
-                    metadata.requires_dist.iter().filter(|requirement| {
-                        requirement.evaluate_markers(markers, &editable.extras)
-                    })
-                }))
-        {
+        // since conflicts will be enforced by the solver.
+        for requirement in manifest.requirements(markers) {
             if let Some(version_or_url) = requirement.version_or_url.as_ref() {
                 for local in iter_locals(version_or_url) {
                     required.insert(requirement.name.clone(), local);
