@@ -225,6 +225,55 @@ jobs:
           path: ./target/debug/uv.exe
           retention-days: 1
 
+  cache-test-ubuntu:
+    needs: build-binary-linux
+    name: "check cache | ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Download binary for last version"
+        run: curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz" | tar -xvz
+
+      - name: "Check cache compatibility"
+        run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-x86_64-unknown-linux-gnu/uv
+
+  cache-test-macos-aarch64:
+    needs: build-binary-macos-aarch64
+    name: "check cache | macos aarch64"
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: brew install python@3.8
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-macos-aarch64-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Download binary for last version"
+        run: curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-apple-darwin.tar.gz" | tar -xvz
+
+      - name: "Check cache compatibility"
+        run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-aarch64-apple-darwin/uv
+
   system-test-debian:
     needs: build-binary-linux
     name: "check system | python on debian"
