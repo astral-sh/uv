@@ -52,26 +52,22 @@ impl VenvTestContext {
 
     fn filters(&self) -> Vec<(String, String)> {
         // For mac, otherwise it shows some /var/folders/ path.
-        let venv_full = regex::escape(
-            &self
-                .venv
-                .path()
-                .fs_err_canonicalize()
-                .unwrap()
-                .simplified_display()
-                .to_string(),
-        );
-        vec![
-            (venv_full, ".venv".to_string()),
-            (
-                r"Using Python 3\.\d+\.\d+ interpreter at: .+".to_string(),
-                "Using Python [VERSION] interpreter at: [PATH]".to_string(),
-            ),
-            (
-                r"Activate with: (?:.*)\\Scripts\\activate".to_string(),
-                "Activate with: source .venv/bin/activate".to_string(),
-            ),
-        ]
+        let mut filters = if let Ok(canonicalized) = self.venv.path().fs_err_canonicalize() {
+            let venv_full = regex::escape(&canonicalized.simplified_display().to_string());
+            vec![(venv_full, ".venv".to_string())]
+        } else {
+            Vec::new()
+        };
+
+        filters.push((
+            r"Using Python 3\.\d+\.\d+ interpreter at: .+".to_string(),
+            "Using Python [VERSION] interpreter at: [PATH]".to_string(),
+        ));
+        filters.push((
+            r"Activate with: (?:.*)\\Scripts\\activate".to_string(),
+            "Activate with: source .venv/bin/activate".to_string(),
+        ));
+        filters
     }
 }
 
