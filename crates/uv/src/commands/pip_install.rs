@@ -16,7 +16,7 @@ use distribution_types::{
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
-use pypi_types::Yanked;
+use pypi_types::{Metadata23, Yanked};
 use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
@@ -524,7 +524,7 @@ async fn resolve(
         .collect();
 
     // Map the editables to their metadata.
-    let editables = editables
+    let editables: Vec<(LocalEditable, Metadata23)> = editables
         .iter()
         .map(|built_editable| {
             (
@@ -535,10 +535,22 @@ async fn resolve(
         .collect();
 
     // Determine any lookahead requirements.
-    let lookaheads = LookaheadResolver::new(&requirements)
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve(build_dispatch, client)
-        .await?;
+    let lookaheads = LookaheadResolver::new(
+        requirements
+            .iter()
+            .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+            .chain(editables.iter().flat_map(|(editable, metadata)| {
+                metadata
+                    .requires_dist
+                    .iter()
+                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
+            }))
+            .cloned()
+            .collect(),
+    )
+    .with_reporter(ResolverReporter::from(printer))
+    .resolve(build_dispatch, markers, client)
+    .await?;
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(
