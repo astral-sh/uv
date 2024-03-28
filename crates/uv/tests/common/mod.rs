@@ -23,6 +23,7 @@ use uv_interpreter::find_requested_python;
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
+#[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir [^\s]+", "--cache-dir [CACHE_DIR]"),
     // Operation times
@@ -386,9 +387,9 @@ pub fn create_bin_with_executables(
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
-pub fn run_and_format<'a>(
+pub fn run_and_format<T: AsRef<str>>(
     mut command: impl BorrowMut<std::process::Command>,
-    filters: impl AsRef<[(&'a str, &'a str)]>,
+    filters: impl AsRef<[(T, T)]>,
     windows_filters: bool,
 ) -> (String, Output) {
     let program = command
@@ -411,9 +412,9 @@ pub fn run_and_format<'a>(
 
     for (matcher, replacement) in filters.as_ref() {
         // TODO(konstin): Cache regex compilation
-        let re = Regex::new(matcher).expect("Do you need to regex::escape your filter?");
+        let re = Regex::new(matcher.as_ref()).expect("Do you need to regex::escape your filter?");
         if re.is_match(&snapshot) {
-            snapshot = re.replace_all(&snapshot, *replacement).to_string();
+            snapshot = re.replace_all(&snapshot, replacement.as_ref()).to_string();
         }
     }
 
