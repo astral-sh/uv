@@ -70,7 +70,7 @@ impl<'a> Planner<'a> {
         let mut cached = vec![];
         let mut remote = vec![];
         let mut reinstalls = vec![];
-        let mut local = vec![];
+        let mut installed = vec![];
         let mut extraneous = vec![];
         let mut seen = FxHashMap::with_capacity_and_hasher(
             self.requirements.len(),
@@ -166,20 +166,20 @@ impl<'a> Planner<'a> {
             };
 
             if reinstall {
-                let installed = site_packages.remove_packages(&requirement.name);
-                reinstalls.extend(installed);
+                let installed_dists = site_packages.remove_packages(&requirement.name);
+                reinstalls.extend(installed_dists);
             } else {
-                let installed = site_packages.remove_packages(&requirement.name);
-                match installed.as_slice() {
+                let installed_dists = site_packages.remove_packages(&requirement.name);
+                match installed_dists.as_slice() {
                     [] => {}
                     [distribution] => {
                         if installed_satisfies_requirement(distribution, requirement)? {
-                            local.push(distribution.clone());
+                            installed.push(distribution.clone());
                             continue;
                         }
                         reinstalls.push(distribution.clone());
                     }
-                    _ => reinstalls.extend(installed),
+                    _ => reinstalls.extend(installed_dists),
                 }
             }
 
@@ -377,7 +377,7 @@ impl<'a> Planner<'a> {
 
         Ok(Plan {
             cached,
-            local,
+            installed,
             remote,
             reinstalls,
             extraneous,
@@ -401,7 +401,7 @@ pub struct Plan {
 
     /// Any distributions that are already installed in the current environment, and can be used
     /// to satisfy the requirements.
-    pub local: Vec<InstalledDist>,
+    pub installed: Vec<InstalledDist>,
 
     /// The distributions that are not already installed in the current environment, and are
     /// not available in the local cache.

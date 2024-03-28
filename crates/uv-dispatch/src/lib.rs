@@ -189,7 +189,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             let Plan {
                 cached,
                 remote,
-                local: _,
+                installed: _,
                 reinstalls,
                 extraneous: _,
             } = Planner::with_requirements(&resolution.requirements()).build(

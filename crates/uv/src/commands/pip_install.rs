@@ -636,7 +636,7 @@ async fn install(
         cached,
         remote,
         reinstalls,
-        local: _,
+        installed: _,
         extraneous: _,
     } = plan;
 
@@ -800,7 +800,7 @@ async fn install(
             cached,
             remote,
             reinstalls,
-            local: _,
+            installed: _,
             extraneous: _,
         } = plan;
 
