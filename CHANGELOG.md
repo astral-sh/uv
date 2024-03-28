@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.1.25
+
+### Breaking changes
+
+- Limit overrides and constraints to `requirements.txt` format ([#2632](https://github.com/astral-sh/uv/pull/2632))
+
+### Enhancements
+
+- Accept `setup.py` and `setup.cfg` files in compile ([#2634](https://github.com/astral-sh/uv/pull/2634))
+- Add `--no-binary` and `--only-binary` support to `requirements.txt` ([#2680](https://github.com/astral-sh/uv/pull/2680))
+- Allow prereleases, locals, and URLs in non-editable path requirements ([#2671](https://github.com/astral-sh/uv/pull/2671))
+- Use PEP 517 to extract non-static `pyproject.toml` metadata ([#2633](https://github.com/astral-sh/uv/pull/2633))
+- `Editable project location` and `Required-by` for `pip show` ([#2589](https://github.com/astral-sh/uv/pull/2589))
+
+### Enhancements
+
+- Avoid `prepare_metadata_for_build_wheel` calls for Hatch packages with dynamic dependencies ([#2645](https://github.com/astral-sh/uv/pull/2645))
+- Fall back to PEP 517 hooks for non-compliant PEP 621 metadata ([#2662](https://github.com/astral-sh/uv/pull/2662))
+- Support `file://localhost/` schemes ([#2657](https://github.com/astral-sh/uv/pull/2657))
+
+### CLI
+
+- Disallow `pyproject.toml` from `pip uninstall` ([#2663](https://github.com/astral-sh/uv/pull/2663))
+- Unhide `--emit-index-url` and `--emit-find-links` ([#2691](https://github.com/astral-sh/uv/pull/2691))
+- Use dense formatting for requirement version specifiers in diagnostics ([#2601](https://github.com/astral-sh/uv/pull/2601))
+
+### Performance
+
+- Add an in-memory cache for Git references ([#2682](https://github.com/astral-sh/uv/pull/2682))
+- Do not force recompile pyc files ([#2642](https://github.com/astral-sh/uv/pull/2642))
+- Read package metadata from `pyproject.toml` when statically defined ([#2676](https://github.com/astral-sh/uv/pull/2676))
+
+### Bug fixes
+
+- Don't error on multiple matching index URLs ([#2627](https://github.com/astral-sh/uv/pull/2627))
+- Extract local versions from direct URL requirements ([#2624](https://github.com/astral-sh/uv/pull/2624))
+- Respect `--no-index` with `--find-links` in `pip sync` ([#2692](https://github.com/astral-sh/uv/pull/2692))
+- Use Scripts folder for virtualenv activation prompt ([#2690](https://github.com/astral-sh/uv/pull/2690))
+
+### Other changes
+
+- Switch from dependabot to renovate ([#2653](https://github.com/astral-sh/uv/pull/2653))
+- Use `Resolver` in `pip sync` ([#2696](https://github.com/astral-sh/uv/pull/2696))
+- bump EXCLUDE_NEWER to more recent datetime ([#2650](https://github.com/astral-sh/uv/pull/2650))
+
 ## 0.1.24
 
 ### Breaking changes
