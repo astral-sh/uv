@@ -375,7 +375,7 @@ fn non_empty_dir_exists() -> Result<()> {
 #[test]
 #[cfg(windows)]
 fn windows_shims() -> Result<()> {
-    let context = VenvTestContext::new(&["3.9"]);
+    let context = VenvTestContext::new(&["3.9", "3.8"]);
     let shim_path = context.temp_dir.child("shim");
 
     let py38 = std::env::split_paths(&context.bin)
