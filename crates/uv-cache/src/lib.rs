@@ -594,7 +594,7 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            Self::BuiltWheels => "built-wheels-v1",
+            Self::BuiltWheels => "built-wheels-v2",
             Self::FlatIndex => "flat-index-v0",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v0",
