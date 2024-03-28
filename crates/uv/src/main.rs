@@ -1083,6 +1083,10 @@ struct PipListArgs {
     #[clap(long)]
     strict: bool,
 
+    /// Only include outdated projects.
+    #[clap(short, long)]
+    outdated: bool,
+
     /// Only include editable projects.
     #[clap(short, long)]
     editable: bool,
@@ -1755,17 +1759,21 @@ async fn run() -> Result<ExitStatus> {
         ),
         Commands::Pip(PipNamespace {
             command: PipCommand::List(args),
-        }) => commands::pip_list(
-            args.strict,
-            args.editable,
-            args.exclude_editable,
-            &args.exclude,
-            &args.format,
-            args.python.as_deref(),
-            args.system,
-            &cache,
-            printer,
-        ),
+        }) => {
+            commands::pip_list(
+                args.strict,
+                args.outdated,
+                args.editable,
+                args.exclude_editable,
+                &args.exclude,
+                &args.format,
+                args.python.as_deref(),
+                args.system,
+                &cache,
+                printer,
+            )
+            .await
+        }
         Commands::Pip(PipNamespace {
             command: PipCommand::Show(args),
         }) => commands::pip_show(
