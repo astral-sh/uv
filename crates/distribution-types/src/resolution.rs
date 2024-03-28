@@ -3,21 +3,32 @@ use rustc_hash::FxHashMap;
 use pep508_rs::Requirement;
 use uv_normalize::PackageName;
 
-use crate::{BuiltDist, Dist, PathSourceDist, SourceDist};
+use crate::{BuiltDist, Dist, InstalledDist, Name, ResolvedDist, SourceDist};
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]
-pub struct Resolution(FxHashMap<PackageName, Dist>);
+pub struct Resolution(FxHashMap<PackageName, ResolvedDist>);
 
 impl Resolution {
     /// Create a new resolution from the given pinned packages.
-    pub fn new(packages: FxHashMap<PackageName, Dist>) -> Self {
+    pub fn new(packages: FxHashMap<PackageName, ResolvedDist>) -> Self {
         Self(packages)
     }
 
     /// Return the distribution for the given package name, if it exists.
-    pub fn get(&self, package_name: &PackageName) -> Option<&Dist> {
+    pub fn get(&self, package_name: &PackageName) -> Option<&ResolvedDist> {
         self.0.get(package_name)
+    }
+
+    /// Return the remote distribution for the given package name, if it exists.
+    pub fn get_remote(&self, package_name: &PackageName) -> Option<&Dist> {
+        match self.0.get(package_name) {
+            Some(dist) => match dist {
+                ResolvedDist::Installable(dist) => Some(dist),
+                ResolvedDist::Installed(_) => None,
+            },
+            None => None,
+        }
     }
 
     /// Iterate over the [`PackageName`] entities in this resolution.
@@ -25,13 +36,13 @@ impl Resolution {
         self.0.keys()
     }
 
-    /// Iterate over the [`Dist`] entities in this resolution.
-    pub fn distributions(&self) -> impl Iterator<Item = &Dist> {
+    /// Iterate over the [`ResolvedDist`] entities in this resolution.
+    pub fn distributions(&self) -> impl Iterator<Item = &ResolvedDist> {
         self.0.values()
     }
 
-    /// Iterate over the [`Dist`] entities in this resolution.
-    pub fn into_distributions(self) -> impl Iterator<Item = Dist> {
+    /// Iterate over the [`ResolvedDist`] entities in this resolution.
+    pub fn into_distributions(self) -> impl Iterator<Item = ResolvedDist> {
         self.0.into_values()
     }
 
@@ -51,10 +62,9 @@ impl Resolution {
         let mut requirements = self
             .0
             .values()
-            .filter_map(|dist| match dist {
-                Dist::Source(SourceDist::Path(PathSourceDist { editable: true, .. })) => None,
-                dist => Some(Requirement::from(dist.clone())),
-            })
+            // Remove editable requirements
+            .filter(|dist| !dist.is_editable())
+            .map(|dist| Requirement::from(dist.clone()))
             .collect::<Vec<_>>();
         requirements.sort_unstable_by(|a, b| a.name.cmp(&b.name));
         requirements
@@ -74,6 +84,7 @@ impl From<Dist> for Requirement {
                 )),
                 marker: None,
             },
+
             Dist::Built(BuiltDist::DirectUrl(wheel)) => Self {
                 name: wheel.filename.name,
                 extras: vec![],
@@ -114,6 +125,30 @@ impl From<Dist> for Requirement {
                 version_or_url: Some(pep508_rs::VersionOrUrl::Url(sdist.url)),
                 marker: None,
             },
+        }
+    }
+}
+
+impl From<InstalledDist> for Requirement {
+    fn from(dist: InstalledDist) -> Self {
+        Self {
+            name: dist.name().clone(),
+            extras: vec![],
+            version_or_url: Some(pep508_rs::VersionOrUrl::VersionSpecifier(
+                pep440_rs::VersionSpecifiers::from(pep440_rs::VersionSpecifier::equals_version(
+                    dist.version().clone(),
+                )),
+            )),
+            marker: None,
+        }
+    }
+}
+
+impl From<ResolvedDist> for Requirement {
+    fn from(dist: ResolvedDist) -> Self {
+        match dist {
+            ResolvedDist::Installable(dist) => dist.into(),
+            ResolvedDist::Installed(dist) => dist.into(),
         }
     }
 }

@@ -14,6 +14,7 @@ use requirements_txt::EditableRequirement;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
+use uv_types::InstalledPackagesProvider;
 
 use crate::is_dynamic;
 
@@ -575,5 +576,15 @@ impl Diagnostic {
             } => name == package || &requirement.name == name,
             Self::DuplicatePackage { package, .. } => name == package,
         }
+    }
+}
+
+impl InstalledPackagesProvider for SitePackages<'_> {
+    fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
+        self.iter()
+    }
+
+    fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
+        self.get_packages(name)
     }
 }

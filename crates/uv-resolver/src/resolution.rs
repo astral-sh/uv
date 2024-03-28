@@ -15,7 +15,8 @@ use url::Url;
 
 use crate::dependency_provider::UvDependencyProvider;
 use distribution_types::{
-    Dist, DistributionMetadata, LocalEditable, Name, PackageId, Verbatim, VersionOrUrl,
+    Dist, DistributionMetadata, LocalEditable, Name, PackageId, ResolvedDist, Verbatim,
+    VersionOrUrl,
 };
 use once_map::OnceMap;
 use pep440_rs::Version;
@@ -48,7 +49,7 @@ pub enum AnnotationStyle {
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    petgraph: petgraph::graph::Graph<Dist, Range<Version>, petgraph::Directed>,
+    petgraph: petgraph::graph::Graph<ResolvedDist, Range<Version>, petgraph::Directed>,
     /// The metadata for every distribution in this resolution.
     hashes: FxHashMap<PackageName, Vec<Hashes>>,
     /// The enabled extras for every distribution in this resolution.
@@ -88,7 +89,7 @@ impl ResolutionGraph {
                 PubGrubPackage::Package(package_name, None, None) => {
                     // Create the distribution.
                     let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
-                        Dist::from_editable(package_name.clone(), editable.clone())?
+                        Dist::from_editable(package_name.clone(), editable.clone())?.into()
                     } else {
                         pins.get(package_name, version)
                             .expect("Every package should be pinned")
@@ -140,7 +141,7 @@ impl ResolutionGraph {
                     }
 
                     // Add the distribution to the graph.
-                    let index = petgraph.add_node(pinned_package);
+                    let index = petgraph.add_node(pinned_package.into());
                     inverse.insert(package_name, index);
                 }
                 PubGrubPackage::Package(package_name, Some(extra), None) => {
@@ -158,7 +159,7 @@ impl ResolutionGraph {
                                 Dist::from_editable(package_name.clone(), editable.clone())?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package,
+                                dist: pinned_package.into(),
                                 extra: extra.clone(),
                             });
                         }
@@ -205,7 +206,7 @@ impl ResolutionGraph {
                                 Dist::from_editable(package_name.clone(), editable.clone())?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package,
+                                dist: pinned_package.into(),
                                 extra: extra.clone(),
                             });
                         }
@@ -230,7 +231,7 @@ impl ResolutionGraph {
                             let pinned_package = Dist::from_url(package_name.clone(), url)?;
 
                             diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package,
+                                dist: pinned_package.into(),
                                 extra: extra.clone(),
                             });
                         }
@@ -310,8 +311,8 @@ impl ResolutionGraph {
             .any(|index| self.petgraph[index].name() == name)
     }
 
-    /// Iterate over the [`Dist`] entities in this resolution.
-    pub fn into_distributions(self) -> impl Iterator<Item = Dist> {
+    /// Iterate over the [`ResolvedDist`] entities in this resolution.
+    pub fn into_distributions(self) -> impl Iterator<Item = ResolvedDist> {
         self.petgraph
             .into_nodes_edges()
             .0
@@ -325,7 +326,9 @@ impl ResolutionGraph {
     }
 
     /// Return the underlying graph.
-    pub fn petgraph(&self) -> &petgraph::graph::Graph<Dist, Range<Version>, petgraph::Directed> {
+    pub fn petgraph(
+        &self,
+    ) -> &petgraph::graph::Graph<ResolvedDist, Range<Version>, petgraph::Directed> {
         &self.petgraph
     }
 
@@ -523,7 +526,7 @@ enum Node<'a> {
     /// A node linked to an editable distribution.
     Editable(&'a PackageName, &'a LocalEditable),
     /// A node linked to a non-editable distribution.
-    Distribution(&'a PackageName, &'a Dist, &'a [ExtraName]),
+    Distribution(&'a PackageName, &'a ResolvedDist, &'a [ExtraName]),
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -718,7 +721,7 @@ pub enum Diagnostic {
     MissingExtra {
         /// The distribution that was requested with an non-existent extra. For example,
         /// `black==23.10.0`.
-        dist: Dist,
+        dist: ResolvedDist,
         /// The extra that was requested. For example, `colorama` in `black[colorama]`.
         extra: ExtraName,
     },

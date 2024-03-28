@@ -17,11 +17,12 @@ use pep508_rs::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::{FlatIndex, RegistryClient};
-use uv_installer::{Downloader, Installer, NoBinary, Plan, Planner, Reinstall, SitePackages};
+use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
 use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy,
+    BuildContext, BuildIsolation, BuildKind, ConfigSettings, EmptyInstalledPackages, InFlight,
+    NoBinary, NoBuild, Reinstall, SetupPyStrategy,
 };
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
@@ -145,6 +146,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.flat_index,
             self.index,
             self,
+            &EmptyInstalledPackages,
         )?;
         let graph = resolver.resolve().await.with_context(|| {
             format!(
@@ -185,8 +187,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             let site_packages = SitePackages::from_executable(venv)?;
 
             let Plan {
-                local,
+                cached,
                 remote,
+                installed: _,
                 reinstalls,
                 extraneous: _,
             } = Planner::with_requirements(&resolution.requirements()).build(
@@ -200,7 +203,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             )?;
 
             // Nothing to do.
-            if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
+            if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
                 debug!("No build requirements to install for build");
                 return Ok(());
             }
@@ -210,7 +213,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .iter()
                 .map(|dist| {
                     resolution
-                        .get(&dist.name)
+                        .get_remote(&dist.name)
                         .cloned()
                         .expect("Resolution should contain all packages")
                 })
@@ -252,7 +255,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             }
 
             // Install the resolved distributions.
-            let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
+            let wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
             if !wheels.is_empty() {
                 debug!(
                     "Installing build requirement{}: {}",

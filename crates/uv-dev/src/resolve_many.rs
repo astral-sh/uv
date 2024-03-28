@@ -16,10 +16,10 @@ use pep508_rs::{Requirement, VersionOrUrl};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, OwnedArchive, RegistryClient, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
-use uv_installer::NoBinary;
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_resolver::InMemoryIndex;
+use uv_types::NoBinary;
 use uv_types::{BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]

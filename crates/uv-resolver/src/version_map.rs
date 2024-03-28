@@ -199,6 +199,15 @@ impl VersionMap {
     }
 }
 
+impl Default for VersionMap {
+    /// Create an empty version map.
+    fn default() -> Self {
+        Self {
+            inner: VersionMapInner::Eager(BTreeMap::default()),
+        }
+    }
+}
+
 impl From<FlatDistributions> for VersionMap {
     fn from(flat_index: FlatDistributions) -> Self {
         Self {

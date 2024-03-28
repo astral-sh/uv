@@ -10,7 +10,7 @@ use pep440_rs::Version;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
-use crate::{InstalledMetadata, InstalledVersion, Name};
+use crate::{DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrl};
 
 /// A built distribution (wheel) that is installed in a virtual environment.
 #[derive(Debug, Clone)]
@@ -114,6 +114,7 @@ impl InstalledDist {
     pub fn metadata(&self) -> Result<pypi_types::Metadata23> {
         let path = self.path().join("METADATA");
         let contents = fs::read(&path)?;
+        // TODO(zanieb): Update this to use thiserror so we can unpack parse errors downstream
         pypi_types::Metadata23::parse_metadata(&contents)
             .with_context(|| format!("Failed to parse METADATA file at: {}", path.user_display()))
     }
@@ -142,6 +143,12 @@ impl InstalledDist {
             Self::Registry(_) => None,
             Self::Url(dist) => dist.editable.then_some(&dist.url),
         }
+    }
+}
+
+impl DistributionMetadata for InstalledDist {
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Version(self.version())
     }
 }
 

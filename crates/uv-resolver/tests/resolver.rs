@@ -17,11 +17,12 @@ use uv_cache::Cache;
 use uv_client::{FlatIndex, RegistryClientBuilder};
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_resolver::{
-    DisplayResolutionGraph, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
-    Preference, ResolutionGraph, ResolutionMode, Resolver,
+    DisplayResolutionGraph, Exclusions, InMemoryIndex, Manifest, Options, OptionsBuilder,
+    PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, NoBinary, NoBuild, SetupPyStrategy, SourceBuildTrait,
+    BuildContext, BuildIsolation, BuildKind, EmptyInstalledPackages, NoBinary, NoBuild,
+    SetupPyStrategy, SourceBuildTrait,
 };
 
 // Exclude any packages uploaded after this date.
@@ -124,6 +125,7 @@ async fn resolve(
         find_default_python(&Cache::temp().unwrap()).expect("Expected a python to be installed");
     let interpreter = Interpreter::artificial(real_interpreter.platform().clone(), markers.clone());
     let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
+    let installed_packages = EmptyInstalledPackages;
     let resolver = Resolver::new(
         manifest,
         options,
@@ -134,6 +136,7 @@ async fn resolve(
         &flat_index,
         &index,
         &build_context,
+        &installed_packages,
     )?;
     Ok(resolver.resolve().await?)
 }
@@ -271,6 +274,7 @@ async fn black_mypy_extensions() -> Result<()> {
         vec![],
         None,
         vec![],
+        Exclusions::default(),
         vec![],
     );
     let options = OptionsBuilder::new()
@@ -307,6 +311,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         vec![],
         None,
         vec![],
+        Exclusions::default(),
         vec![],
     );
     let options = OptionsBuilder::new()
@@ -343,6 +348,7 @@ async fn black_flake8() -> Result<()> {
         vec![],
         None,
         vec![],
+        Exclusions::default(),
         vec![],
     );
     let options = OptionsBuilder::new()
@@ -433,8 +439,10 @@ async fn black_respect_preference() -> Result<()> {
         )?)],
         None,
         vec![],
+        Exclusions::default(),
         vec![],
     );
+
     let options = OptionsBuilder::new()
         .exclude_newer(Some(*EXCLUDE_NEWER))
         .build();
@@ -469,6 +477,7 @@ async fn black_ignore_preference() -> Result<()> {
         )?)],
         None,
         vec![],
+        Exclusions::default(),
         vec![],
     );
     let options = OptionsBuilder::new()

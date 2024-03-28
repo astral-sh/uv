@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::{IndexLocations, Resolution, SourceDist};
+use distribution_types::{IndexLocations, InstalledDist, Resolution, SourceDist};
 
-use pep508_rs::Requirement;
+use pep508_rs::{PackageName, Requirement};
 use uv_cache::Cache;
 use uv_interpreter::{Interpreter, PythonEnvironment};
 
@@ -126,4 +126,23 @@ pub trait SourceBuildTrait {
     /// Returns the filename of the built wheel inside the given `wheel_dir`.
     fn wheel<'a>(&'a self, wheel_dir: &'a Path)
         -> impl Future<Output = Result<String>> + Send + 'a;
+}
+
+/// A wrapper for [`uv_installer::SitePackages`]
+pub trait InstalledPackagesProvider {
+    fn iter(&self) -> impl Iterator<Item = &InstalledDist>;
+    fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist>;
+}
+
+/// An [`InstalledPackagesProvider`] with no packages in it.
+pub struct EmptyInstalledPackages;
+
+impl InstalledPackagesProvider for EmptyInstalledPackages {
+    fn get_packages(&self, _name: &pep508_rs::PackageName) -> Vec<&InstalledDist> {
+        Vec::new()
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
+        std::iter::empty()
+    }
 }

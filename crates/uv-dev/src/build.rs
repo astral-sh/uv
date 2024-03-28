@@ -11,9 +11,9 @@ use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, RegistryClientBuilder};
 use uv_dispatch::BuildDispatch;
-use uv_installer::NoBinary;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::InMemoryIndex;
+use uv_types::NoBinary;
 use uv_types::{
     BuildContext, BuildIsolation, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy,
 };

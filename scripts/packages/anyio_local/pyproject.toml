@@ -1,0 +1,16 @@
+[project]
+name = "anyio"
+description = 'A dummy package shadowing `anyio`.'
+requires-python = ">=3.7"
+license = {text = "MIT"}
+keywords = []
+authors = [
+  { name = "Astral Software Inc.", email = "hey@astral.sh" },
+]
+classifiers = []
+dependencies = []
+version = "4.3.0+foo"
+
+[build-system]
+requires = ["flit_core>=3.4,<4"]
+build-backend = "flit_core.buildapi"

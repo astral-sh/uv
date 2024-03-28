@@ -5,7 +5,9 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name};
+use distribution_types::{
+    IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name, ResolvedDist,
+};
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use pypi_types::Yanked;
@@ -18,16 +20,17 @@ use uv_client::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_installer::{
-    is_dynamic, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
-};
+use uv_installer::{is_dynamic, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
 use uv_resolver::{DependencyMode, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
-use uv_types::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_types::{
+    BuildIsolation, ConfigSettings, EmptyInstalledPackages, InFlight, NoBinary, NoBuild, Reinstall,
+    SetupPyStrategy,
+};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
@@ -169,6 +172,9 @@ pub(crate) async fn pip_sync(
     let no_binary = no_binary.combine(specified_no_binary);
     let no_build = no_build.combine(specified_no_build);
 
+    // Determine the set of installed packages.
+    let site_packages = SitePackages::from_executable(&venv)?;
+
     // Prep the build context.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -206,9 +212,6 @@ pub(crate) async fn pip_sync(
         requirements
     };
 
-    // Determine the set of installed packages.
-    let site_packages = SitePackages::from_executable(&venv)?;
-
     // Resolve any editables.
     let resolved_editables = resolve_editables(
         editables,
@@ -223,12 +226,13 @@ pub(crate) async fn pip_sync(
     )
     .await?;
 
-    // Partition into those that should be linked from the cache (`local`), those that need to be
+    // Partition into those that should be linked from the cache (`cached`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
     let Plan {
-        local,
+        cached,
         remote,
         reinstalls,
+        installed: _,
         extraneous,
     } = Planner::with_requirements(&requirements)
         .with_editable_requirements(&resolved_editables.editables)
@@ -244,7 +248,7 @@ pub(crate) async fn pip_sync(
         .context("Failed to determine installation plan")?;
 
     // Nothing to do.
-    if remote.is_empty() && local.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
+    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
         let s = if num_requirements == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
@@ -290,6 +294,8 @@ pub(crate) async fn pip_sync(
             &flat_index,
             &index,
             &build_dispatch,
+            // TODO(zanieb): We should consier support for installed packages in pip sync
+            &EmptyInstalledPackages,
         )?
         .with_reporter(reporter);
         let resolution = resolver.resolve().await?;
@@ -306,7 +312,13 @@ pub(crate) async fn pip_sync(
             .dimmed()
         )?;
 
-        resolution.into_distributions().collect::<Vec<_>>()
+        resolution
+            .into_distributions()
+            .filter_map(|dist| match dist {
+                ResolvedDist::Installable(dist) => Some(dist),
+                ResolvedDist::Installed(_) => None,
+            })
+            .collect::<Vec<_>>()
     };
 
     // Download, build, and unzip any missing distributions.
@@ -384,7 +396,7 @@ pub(crate) async fn pip_sync(
     }
 
     // Install the resolved distributions.
-    let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
+    let wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
         uv_installer::Installer::new(&venv)

@@ -4,7 +4,7 @@ use pypi_types::Metadata23;
 use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
 
-use crate::preferences::Preference;
+use crate::{preferences::Preference, Exclusions};
 
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Clone, Debug)]
@@ -34,6 +34,12 @@ pub struct Manifest {
     /// direct requirements in their own right.
     pub(crate) editables: Vec<(LocalEditable, Metadata23)>,
 
+    /// The installed packages to exclude from consideration during resolution.
+    ///
+    /// These typically represent packages that are being upgraded or reinstalled
+    /// and should be pulled from a remote source like a package index.
+    pub(crate) exclusions: Exclusions,
+
     /// The lookahead requirements for the project.
     ///
     /// These represent transitive dependencies that should be incorporated when making
@@ -43,6 +49,7 @@ pub struct Manifest {
 }
 
 impl Manifest {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
@@ -50,6 +57,7 @@ impl Manifest {
         preferences: Vec<Preference>,
         project: Option<PackageName>,
         editables: Vec<(LocalEditable, Metadata23)>,
+        exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
         Self {
@@ -59,6 +67,7 @@ impl Manifest {
             preferences,
             project,
             editables,
+            exclusions,
             lookaheads,
         }
     }
@@ -71,6 +80,7 @@ impl Manifest {
             preferences: Vec::new(),
             project: None,
             editables: Vec::new(),
+            exclusions: Exclusions::default(),
             lookaheads: Vec::new(),
         }
     }

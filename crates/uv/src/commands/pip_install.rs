@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fmt::Write;
 use std::path::Path;
 
@@ -27,9 +26,7 @@ use uv_client::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_installer::{
-    BuiltEditable, Downloader, NoBinary, Plan, Planner, Reinstall, ResolvedEditable, SitePackages,
-};
+use uv_installer::{BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_normalize::PackageName;
 use uv_requirements::{
@@ -37,10 +34,13 @@ use uv_requirements::{
     RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    DependencyMode, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode, Preference,
-    ResolutionGraph, ResolutionMode, Resolver,
+    DependencyMode, Exclusions, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
+    Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_types::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy, Upgrade};
+use uv_types::{
+    BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
+    Upgrade,
+};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
@@ -62,7 +62,7 @@ pub(crate) async fn pip_install(
     upgrade: Upgrade,
     index_locations: IndexLocations,
     keyring_provider: KeyringProvider,
-    reinstall: &Reinstall,
+    reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
     setup_py: SetupPyStrategy,
@@ -298,7 +298,7 @@ pub(crate) async fn pip_install(
         project,
         &editables,
         &site_packages,
-        reinstall,
+        &reinstall,
         &upgrade,
         &interpreter,
         tags,
@@ -352,7 +352,7 @@ pub(crate) async fn pip_install(
         &resolution,
         editables,
         site_packages,
-        reinstall,
+        &reinstall,
         &no_binary,
         link_mode,
         compile,
@@ -513,27 +513,15 @@ async fn resolve(
 ) -> Result<ResolutionGraph, Error> {
     let start = std::time::Instant::now();
 
-    let preferences = if upgrade.is_all() || reinstall.is_all() {
-        vec![]
-    } else {
-        // Combine upgrade and reinstall lists
-        let mut exclusions: HashSet<&PackageName> = if let Reinstall::Packages(packages) = reinstall
-        {
-            HashSet::from_iter(packages)
-        } else {
-            HashSet::default()
-        };
-        if let Upgrade::Packages(packages) = upgrade {
-            exclusions.extend(packages);
-        };
+    // TODO(zanieb): Consider consuming these instead of cloning
+    let exclusions = Exclusions::new(reinstall.clone(), upgrade.clone());
 
-        // Prefer current site packages, unless in the upgrade or reinstall lists
-        site_packages
-            .requirements()
-            .map(Preference::from_requirement)
-            .filter(|preference| !exclusions.contains(preference.name()))
-            .collect()
-    };
+    // Prefer current site packages; filter out packages that are marked for reinstall or upgrade
+    let preferences = site_packages
+        .requirements()
+        .filter(|requirement| !exclusions.contains(&requirement.name))
+        .map(Preference::from_requirement)
+        .collect();
 
     // Map the editables to their metadata.
     let editables = editables
@@ -560,6 +548,7 @@ async fn resolve(
         preferences,
         project,
         editables,
+        exclusions,
         lookaheads,
     );
 
@@ -574,6 +563,7 @@ async fn resolve(
         flat_index,
         index,
         build_dispatch,
+        site_packages,
     )?
     .with_reporter(ResolverReporter::from(printer));
     let resolution = resolver.resolve().await?;
@@ -643,14 +633,15 @@ async fn install(
     }
 
     let Plan {
-        local,
+        cached,
         remote,
         reinstalls,
+        installed: _,
         extraneous: _,
     } = plan;
 
     // Nothing to do.
-    if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
+    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
@@ -670,7 +661,7 @@ async fn install(
         .iter()
         .map(|dist| {
             resolution
-                .get(&dist.name)
+                .get_remote(&dist.name)
                 .cloned()
                 .expect("Resolution should contain all packages")
         })
@@ -733,7 +724,7 @@ async fn install(
     }
 
     // Install the resolved distributions.
-    let wheels = wheels.into_iter().chain(local).collect::<Vec<_>>();
+    let wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !wheels.is_empty() {
         let start = std::time::Instant::now();
         uv_installer::Installer::new(venv)
@@ -806,14 +797,15 @@ async fn install(
         printer: Printer,
     ) -> Result<(), Error> {
         let Plan {
-            local,
+            cached,
             remote,
             reinstalls,
+            installed: _,
             extraneous: _,
         } = plan;
 
         // Nothing to do.
-        if remote.is_empty() && local.is_empty() && reinstalls.is_empty() {
+        if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
             let s = if resolution.len() == 1 { "" } else { "s" };
             writeln!(
                 printer.stderr(),
@@ -834,7 +826,7 @@ async fn install(
             .iter()
             .map(|dist| {
                 resolution
-                    .get(&dist.name)
+                    .get_remote(&dist.name)
                     .cloned()
                     .expect("Resolution should contain all packages")
             })
@@ -872,7 +864,7 @@ async fn install(
         }
 
         // Install the resolved distributions.
-        let installs = wheels.len() + local.len();
+        let installs = wheels.len() + cached.len();
 
         if installs > 0 {
             let s = if installs == 1 { "" } else { "s" };
@@ -895,7 +887,7 @@ async fn install(
                 version: distribution.version_or_url().to_string(),
                 kind: ChangeEventKind::Added,
             }))
-            .chain(local.into_iter().map(|distribution| DryRunEvent {
+            .chain(cached.into_iter().map(|distribution| DryRunEvent {
                 name: distribution.name().clone(),
                 version: distribution.installed_version().to_string(),
                 kind: ChangeEventKind::Added,

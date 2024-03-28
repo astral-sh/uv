@@ -56,6 +56,7 @@ pub use crate::index_url::*;
 pub use crate::installed::*;
 pub use crate::prioritized_distribution::*;
 pub use crate::resolution::*;
+pub use crate::resolved::*;
 pub use crate::traits::*;
 
 mod any;
@@ -70,6 +71,7 @@ mod index_url;
 mod installed;
 mod prioritized_distribution;
 mod resolution;
+mod resolved;
 mod traits;
 
 #[derive(Debug, Clone)]
@@ -361,6 +363,14 @@ impl Dist {
         })))
     }
 
+    /// Return true if the distribution is editable.
+    pub fn is_editable(&self) -> bool {
+        match self {
+            Self::Source(dist) => dist.is_editable(),
+            Self::Built(_) => false,
+        }
+    }
+
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
     pub fn file(&self) -> Option<&File> {
         match self {
@@ -423,6 +433,14 @@ impl SourceDist {
                 ..dist
             }),
             dist => dist,
+        }
+    }
+
+    /// Return true if the distribution is editable.
+    pub fn is_editable(&self) -> bool {
+        match self {
+            Self::Path(PathSourceDist { editable, .. }) => *editable,
+            _ => false,
         }
     }
 
@@ -949,6 +967,16 @@ impl Identifier for BuiltDist {
             Self::DirectUrl(dist) => dist.resource_id(),
             Self::Path(dist) => dist.resource_id(),
         }
+    }
+}
+
+impl Identifier for InstalledDist {
+    fn distribution_id(&self) -> DistributionId {
+        self.path().distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.path().resource_id()
     }
 }
 

@@ -24,7 +24,7 @@ use uv_client::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_installer::{Downloader, NoBinary};
+use uv_installer::Downloader;
 use uv_interpreter::{find_best_python, PythonEnvironment, PythonVersion};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
@@ -32,10 +32,13 @@ use uv_requirements::{
     RequirementsSource, RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, DisplayResolutionGraph, InMemoryIndex, Manifest,
+    AnnotationStyle, DependencyMode, DisplayResolutionGraph, Exclusions, InMemoryIndex, Manifest,
     OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
-use uv_types::{BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy, Upgrade};
+use uv_types::{
+    BuildIsolation, ConfigSettings, EmptyInstalledPackages, InFlight, NoBinary, NoBuild,
+    SetupPyStrategy, Upgrade,
+};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
@@ -344,6 +347,8 @@ pub(crate) async fn pip_compile(
         preferences,
         project,
         editable_metadata,
+        // Do not consider any installed packages during compilation
+        Exclusions::All,
         lookaheads,
     );
 
@@ -365,6 +370,7 @@ pub(crate) async fn pip_compile(
         &flat_index,
         &top_level_index,
         &build_dispatch,
+        &EmptyInstalledPackages,
     )?
     .with_reporter(ResolverReporter::from(printer));
 

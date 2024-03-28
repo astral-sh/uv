@@ -16,8 +16,7 @@ use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, WheelCache};
 use uv_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
-use uv_normalize::PackageName;
-use uv_types::NoBinary;
+use uv_types::{NoBinary, Reinstall};
 
 use crate::{ResolvedEditable, SitePackages};
 
@@ -68,9 +67,10 @@ impl<'a> Planner<'a> {
         // Index all the already-downloaded wheels in the cache.
         let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations);
 
-        let mut local = vec![];
+        let mut cached = vec![];
         let mut remote = vec![];
         let mut reinstalls = vec![];
+        let mut installed = vec![];
         let mut extraneous = vec![];
         let mut seen = FxHashMap::with_capacity_and_hasher(
             self.requirements.len(),
@@ -122,7 +122,7 @@ impl<'a> Planner<'a> {
                     let existing = site_packages.remove_packages(built.name());
                     reinstalls.extend(existing);
 
-                    local.push(built.wheel.clone());
+                    cached.push(built.wheel.clone());
                 }
             }
         }
@@ -166,53 +166,20 @@ impl<'a> Planner<'a> {
             };
 
             if reinstall {
-                let installed = site_packages.remove_packages(&requirement.name);
-                reinstalls.extend(installed);
+                let installed_dists = site_packages.remove_packages(&requirement.name);
+                reinstalls.extend(installed_dists);
             } else {
-                let installed = site_packages.remove_packages(&requirement.name);
-                match installed.as_slice() {
+                let installed_dists = site_packages.remove_packages(&requirement.name);
+                match installed_dists.as_slice() {
                     [] => {}
                     [distribution] => {
-                        // Filter out already-installed packages.
-                        match requirement.version_or_url.as_ref() {
-                            // Accept any version of the package.
-                            None => continue,
-
-                            // If the requirement comes from a registry, check by name.
-                            Some(VersionOrUrl::VersionSpecifier(version_specifier)) => {
-                                if version_specifier.contains(distribution.version()) {
-                                    debug!("Requirement already satisfied: {distribution}");
-                                    continue;
-                                }
-                            }
-
-                            // If the requirement comes from a direct URL, check by URL.
-                            Some(VersionOrUrl::Url(url)) => {
-                                if let InstalledDist::Url(installed) = &distribution {
-                                    if &installed.url == url.raw() {
-                                        // If the requirement came from a local path, check freshness.
-                                        if let Ok(archive) = url.to_file_path() {
-                                            if ArchiveTimestamp::up_to_date_with(
-                                                &archive,
-                                                ArchiveTarget::Install(distribution),
-                                            )? {
-                                                debug!("Requirement already satisfied (and up-to-date): {installed}");
-                                                continue;
-                                            }
-                                            debug!("Requirement already satisfied (but not up-to-date): {installed}");
-                                        } else {
-                                            // Otherwise, assume the requirement is up-to-date.
-                                            debug!("Requirement already satisfied (assumed up-to-date): {installed}");
-                                            continue;
-                                        }
-                                    }
-                                }
-                            }
+                        if installed_satisfies_requirement(distribution, requirement)? {
+                            installed.push(distribution.clone());
+                            continue;
                         }
-
                         reinstalls.push(distribution.clone());
                     }
-                    _ => reinstalls.extend(installed),
+                    _ => reinstalls.extend(installed_dists),
                 }
             }
 
@@ -222,14 +189,14 @@ impl<'a> Planner<'a> {
                 continue;
             }
 
-            // Identify any locally-available distributions that satisfy the requirement.
+            // Identify any cached distributions that satisfy the requirement.
             match requirement.version_or_url.as_ref() {
                 None => {
                     if let Some((_version, distribution)) =
                         registry_index.get(&requirement.name).next()
                     {
                         debug!("Requirement already cached: {distribution}");
-                        local.push(CachedDist::Registry(distribution.clone()));
+                        cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
                 }
@@ -246,7 +213,7 @@ impl<'a> Planner<'a> {
                             })
                     {
                         debug!("Requirement already cached: {distribution}");
-                        local.push(CachedDist::Registry(distribution.clone()));
+                        cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
                 }
@@ -291,7 +258,7 @@ impl<'a> Planner<'a> {
                                     );
 
                                     debug!("URL wheel requirement already cached: {cached_dist}");
-                                    local.push(CachedDist::Url(cached_dist));
+                                    cached.push(CachedDist::Url(cached_dist));
                                     continue;
                                 }
                                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
@@ -339,7 +306,7 @@ impl<'a> Planner<'a> {
                                         debug!(
                                             "URL wheel requirement already cached: {cached_dist}"
                                         );
-                                        local.push(CachedDist::Url(cached_dist));
+                                        cached.push(CachedDist::Url(cached_dist));
                                         continue;
                                     }
                                 }
@@ -355,7 +322,7 @@ impl<'a> Planner<'a> {
                             if let Some(wheel) = BuiltWheelIndex::url(&sdist, cache, tags)? {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("URL source requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist));
+                                cached.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
                         }
@@ -365,7 +332,7 @@ impl<'a> Planner<'a> {
                             if let Some(wheel) = BuiltWheelIndex::path(&sdist, cache, tags)? {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("Path source requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist));
+                                cached.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
                         }
@@ -375,7 +342,7 @@ impl<'a> Planner<'a> {
                             if let Some(wheel) = BuiltWheelIndex::git(&sdist, cache, tags) {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("Git source requirement already cached: {cached_dist}");
-                                local.push(CachedDist::Url(cached_dist));
+                                cached.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
                         }
@@ -409,7 +376,8 @@ impl<'a> Planner<'a> {
         }
 
         Ok(Plan {
-            local,
+            cached,
+            installed,
             remote,
             reinstalls,
             extraneous,
@@ -429,7 +397,11 @@ enum Specifier<'a> {
 pub struct Plan {
     /// The distributions that are not already installed in the current environment, but are
     /// available in the local cache.
-    pub local: Vec<CachedDist>,
+    pub cached: Vec<CachedDist>,
+
+    /// Any distributions that are already installed in the current environment, and can be used
+    /// to satisfy the requirements.
+    pub installed: Vec<InstalledDist>,
 
     /// The distributions that are not already installed in the current environment, and are
     /// not available in the local cache.
@@ -444,37 +416,49 @@ pub struct Plan {
     pub extraneous: Vec<InstalledDist>,
 }
 
-#[derive(Debug, Clone)]
-pub enum Reinstall {
-    /// Don't reinstall any packages; respect the existing installation.
-    None,
+/// Returns true if a requirement is satisfied by an installed distribution.
+///
+/// Returns an error if IO fails during a freshness check for a local path.
+fn installed_satisfies_requirement(
+    distribution: &InstalledDist,
+    requirement: &Requirement,
+) -> Result<bool> {
+    // Filter out already-installed packages.
+    match requirement.version_or_url.as_ref() {
+        // Accept any version of the package.
+        None => return Ok(true),
 
-    /// Reinstall all packages in the plan.
-    All,
+        // If the requirement comes from a registry, check by name.
+        Some(VersionOrUrl::VersionSpecifier(version_specifier)) => {
+            if version_specifier.contains(distribution.version()) {
+                debug!("Requirement already satisfied: {distribution}");
+                return Ok(true);
+            }
+        }
 
-    /// Reinstall only the specified packages.
-    Packages(Vec<PackageName>),
-}
-
-impl Reinstall {
-    /// Determine the reinstall strategy to use.
-    pub fn from_args(reinstall: bool, reinstall_package: Vec<PackageName>) -> Self {
-        if reinstall {
-            Self::All
-        } else if !reinstall_package.is_empty() {
-            Self::Packages(reinstall_package)
-        } else {
-            Self::None
+        // If the requirement comes from a direct URL, check by URL.
+        Some(VersionOrUrl::Url(url)) => {
+            if let InstalledDist::Url(installed) = &distribution {
+                if &installed.url == url.raw() {
+                    // If the requirement came from a local path, check freshness.
+                    if let Ok(archive) = url.to_file_path() {
+                        if ArchiveTimestamp::up_to_date_with(
+                            &archive,
+                            ArchiveTarget::Install(distribution),
+                        )? {
+                            debug!("Requirement already satisfied (and up-to-date): {installed}");
+                            return Ok(true);
+                        }
+                        debug!("Requirement already satisfied (but not up-to-date): {installed}");
+                    } else {
+                        // Otherwise, assume the requirement is up-to-date.
+                        debug!("Requirement already satisfied (assumed up-to-date): {installed}");
+                        return Ok(true);
+                    }
+                }
+            }
         }
     }
 
-    /// Returns `true` if no packages should be reinstalled.
-    pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
-    }
-
-    /// Returns `true` if all packages should be reinstalled.
-    pub fn is_all(&self) -> bool {
-        matches!(self, Self::All)
-    }
+    Ok(false)
 }
