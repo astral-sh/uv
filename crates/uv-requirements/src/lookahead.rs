@@ -1,10 +1,12 @@
+use std::collections::VecDeque;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
-use futures::{StreamExt, TryStreamExt};
+use anyhow::Result;
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 
 use distribution_types::{BuildableSource, Dist};
-use pep508_rs::{Requirement, VersionOrUrl};
+use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use uv_client::RegistryClient;
 use uv_distribution::{Reporter, SourceDistCachedBuilder};
 use uv_types::{BuildContext, RequestedRequirements};
@@ -20,16 +22,16 @@ use uv_types::{BuildContext, RequestedRequirements};
 ///
 /// The lookahead resolver resolves requirements for local dependencies, so that the resolver can
 /// treat them as first-party dependencies for the purpose of analyzing their specifiers.
-pub struct LookaheadResolver<'a> {
+pub struct LookaheadResolver {
     /// The requirements for the project.
-    requirements: &'a [Requirement],
+    requirements: Vec<Requirement>,
     /// The reporter to use when building source distributions.
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl<'a> LookaheadResolver<'a> {
-    /// Instantiate a new [`LookaheadResolver`] for a given set of `source_trees`.
-    pub fn new(requirements: &'a [Requirement]) -> Self {
+impl LookaheadResolver {
+    /// Instantiate a new [`LookaheadResolver`] for a given set of requirements.
+    pub fn new(requirements: Vec<Requirement>) -> Self {
         Self {
             requirements,
             reporter: None,
@@ -50,20 +52,37 @@ impl<'a> LookaheadResolver<'a> {
     pub async fn resolve<T: BuildContext>(
         self,
         context: &T,
+        markers: &MarkerEnvironment,
         client: &RegistryClient,
     ) -> Result<Vec<RequestedRequirements>> {
-        let requirements: Vec<_> = futures::stream::iter(self.requirements.iter())
-            .map(|requirement| async { self.lookahead(requirement, context, client).await })
-            .buffered(50)
-            .try_collect()
-            .await?;
-        Ok(requirements.into_iter().flatten().collect())
+        let mut queue = VecDeque::from(self.requirements.clone());
+        let mut results = Vec::new();
+        let mut futures = FuturesUnordered::new();
+
+        while !queue.is_empty() || !futures.is_empty() {
+            while let Some(requirement) = queue.pop_front() {
+                futures.push(self.lookahead(requirement, context, client));
+            }
+
+            while let Some(result) = futures.next().await {
+                if let Some(lookahead) = result? {
+                    for requirement in lookahead.requirements() {
+                        if requirement.evaluate_markers(markers, lookahead.extras()) {
+                            queue.push_back(requirement.clone());
+                        }
+                    }
+                    results.push(lookahead);
+                }
+            }
+        }
+
+        Ok(results)
     }
 
     /// Infer the package name for a given "unnamed" requirement.
     async fn lookahead<T: BuildContext>(
         &self,
-        requirement: &Requirement,
+        requirement: Requirement,
         context: &T,
         client: &RegistryClient,
     ) -> Result<Option<RequestedRequirements>> {
@@ -73,7 +92,7 @@ impl<'a> LookaheadResolver<'a> {
         };
 
         // Convert to a buildable distribution.
-        let dist = Dist::from_url(requirement.name.clone(), url.clone())?;
+        let dist = Dist::from_url(requirement.name, url.clone())?;
 
         // Only support source trees (and not, e.g., wheels).
         let Dist::Source(source_dist) = &dist else {
@@ -92,12 +111,11 @@ impl<'a> LookaheadResolver<'a> {
 
         let metadata = builder
             .download_and_build_metadata(&BuildableSource::Dist(source_dist))
-            .await
-            .context("Failed to build source distribution")?;
+            .await?;
 
         // Return the requirements from the metadata.
         Ok(Some(RequestedRequirements::new(
-            requirement.extras.clone(),
+            requirement.extras,
             metadata.requires_dist,
         )))
     }
