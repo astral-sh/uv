@@ -514,6 +514,84 @@ fn non_empty_dir_exists() -> Result<()> {
 }
 
 #[test]
+fn non_empty_dir_exists_force() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let cache_dir = assert_fs::TempDir::new()?;
+    let bin = create_bin_with_executables(&temp_dir, &["3.12"]).expect("Failed to create bin dir");
+    let venv = temp_dir.child(".venv");
+
+    // Create a non-empty directory at `.venv`. Creating a virtualenv at the same path should
+    // succeed when `--force` is specified.
+    venv.create_dir_all()?;
+    venv.child("file").touch()?;
+
+    let filter_venv = regex::escape(&venv.simplified_display().to_string());
+    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
+    let filters = &[
+        (
+            r"Using Python 3\.\d+\.\d+ interpreter at: .+",
+            "Using Python [VERSION] interpreter at: [PATH]",
+        ),
+        (&filter_venv, "/home/ferris/project/.venv"),
+        (
+            filter_prompt,
+            "Activate with: source /home/ferris/project/.venv/bin/activate",
+        ),
+    ];
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--force")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", bin.clone())
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python [VERSION] interpreter at: [PATH]
+    Creating virtualenv at: /home/ferris/project/.venv
+    Activate with: source /home/ferris/project/.venv/bin/activate
+    "###
+    );
+
+    // Running again should _also_ succeed, overwriting existing symlinks and respecting existing
+    // directories.
+    uv_snapshot!(filters, Command::new(get_bin())
+        .arg("venv")
+        .arg(venv.as_os_str())
+        .arg("--force")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--cache-dir")
+        .arg(cache_dir.path())
+        .arg("--exclude-newer")
+        .arg(EXCLUDE_NEWER)
+        .env("UV_NO_WRAP", "1")
+        .env("UV_TEST_PYTHON_PATH", bin.clone())
+        .current_dir(&temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python [VERSION] interpreter at: [PATH]
+    Creating virtualenv at: /home/ferris/project/.venv
+    Activate with: source /home/ferris/project/.venv/bin/activate
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 #[cfg(windows)]
 fn windows_shims() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;

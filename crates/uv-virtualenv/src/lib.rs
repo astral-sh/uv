@@ -52,6 +52,7 @@ pub fn create_venv(
     prompt: Prompt,
     system_site_packages: bool,
     extra_cfg: Vec<(String, String)>,
+    force: bool,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
     let virtualenv = create_bare_venv(
@@ -60,6 +61,7 @@ pub fn create_venv(
         prompt,
         system_site_packages,
         extra_cfg,
+        force,
     )?;
 
     // Create the corresponding `PythonEnvironment`.

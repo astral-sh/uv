@@ -48,6 +48,7 @@ pub fn create_bare_venv(
     prompt: Prompt,
     system_site_packages: bool,
     extra_cfg: Vec<(String, String)>,
+    force: bool,
 ) -> Result<Virtualenv, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment. This is typically the Python executable
@@ -89,7 +90,9 @@ pub fn create_bare_venv(
                     format!("File exists at `{}`", location.user_display()),
                 )));
             } else if metadata.is_dir() {
-                if location.join("pyvenv.cfg").is_file() {
+                if force {
+                    info!("Overwriting existing directory");
+                } else if location.join("pyvenv.cfg").is_file() {
                     info!("Removing existing directory");
                     fs::remove_dir_all(location)?;
                     fs::create_dir_all(location)?;
@@ -140,19 +143,17 @@ pub fn create_bare_venv(
     fs::write(location.join(".gitignore"), "*")?;
 
     // Different names for the python interpreter
-    fs::create_dir(&scripts)?;
+    fs::create_dir_all(&scripts)?;
     let executable = scripts.join(format!("python{EXE_SUFFIX}"));
 
     #[cfg(unix)]
     {
-        use fs_err::os::unix::fs::symlink;
-
-        symlink(&base_python, &executable)?;
-        symlink(
+        uv_fs::replace_symlink(&base_python, &executable)?;
+        uv_fs::replace_symlink(
             "python",
             scripts.join(format!("python{}", interpreter.python_major())),
         )?;
-        symlink(
+        uv_fs::replace_symlink(
             "python",
             scripts.join(format!(
                 "python{}.{}",
