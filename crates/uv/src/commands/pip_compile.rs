@@ -274,14 +274,8 @@ pub(crate) async fn pip_compile(
         requirements
     };
 
-    // Determine any lookahead requirements.
-    let lookaheads = LookaheadResolver::new(&requirements)
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve(&build_dispatch, &client)
-        .await?;
-
     // Build the editables and add their requirements
-    let editable_metadata = if editables.is_empty() {
+    let editables = if editables.is_empty() {
         Vec::new()
     } else {
         let start = std::time::Instant::now();
@@ -336,6 +330,24 @@ pub(crate) async fn pip_compile(
         editables
     };
 
+    // Determine any lookahead requirements.
+    let lookaheads = LookaheadResolver::new(
+        requirements
+            .iter()
+            .filter(|requirement| requirement.evaluate_markers(&markers, &[]))
+            .chain(editables.iter().flat_map(|(editable, metadata)| {
+                metadata
+                    .requires_dist
+                    .iter()
+                    .filter(|requirement| requirement.evaluate_markers(&markers, &editable.extras))
+            }))
+            .cloned()
+            .collect(),
+    )
+    .with_reporter(ResolverReporter::from(printer))
+    .resolve(&build_dispatch, &markers, &client)
+    .await?;
+
     // Create a manifest of the requirements.
     let manifest = Manifest::new(
         requirements,
@@ -343,7 +355,7 @@ pub(crate) async fn pip_compile(
         overrides,
         preferences,
         project,
-        editable_metadata,
+        editables,
         lookaheads,
     );
 
