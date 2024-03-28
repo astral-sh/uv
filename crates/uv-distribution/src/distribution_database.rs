@@ -86,7 +86,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     ///
     /// If `no_remote_wheel` is set, the wheel will be built from a source distribution
     /// even if compatible pre-built wheels are available.
-    #[instrument(skip(self))]
+    #[instrument(skip_all, fields(%dist))]
     pub async fn get_or_build_wheel(&self, dist: &Dist, tags: &Tags) -> Result<LocalWheel, Error> {
         match dist {
             Dist::Built(built) => self.get_wheel(built).await,
