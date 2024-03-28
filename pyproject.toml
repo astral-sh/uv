@@ -42,6 +42,7 @@ module-name = "uv"
 python-source = "python"
 strip = true
 include = ["rust-toolchain.toml"]
+features = ["self-update"]
 
 [tool.rooster]
 major_labels = []  # We do not use the major version number
