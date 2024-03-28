@@ -439,8 +439,10 @@ uv accepts the following command-line arguments as environment variables:
   directory for caching instead of the default cache directory.
 - `UV_NO_CACHE`: Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
   cache for any operations.
-- `UV_PRERELEASE`: Equivalent to the `--prerelease` command-line argument. If set to `allow`, uv
-  will allow pre-release versions for all dependencies.
+- `UV_RESOLUTION`: Equivalent to the `--resolution` command-line argument. For example, if set to
+  `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
+- `UV_PRERELEASE`: Equivalent to the `--prerelease` command-line argument. For example, if set to
+  `allow`, uv will allow pre-release versions for all dependencies.
 - `UV_SYSTEM_PYTHON`:  Equivalent to the `--system` command-line argument. If set to `true`, uv
   will use the first Python interpreter found in the system `PATH`.
   WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI) environments and
