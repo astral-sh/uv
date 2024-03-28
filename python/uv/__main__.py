@@ -31,6 +31,9 @@ def _run() -> None:
     if venv:
         env.setdefault("VIRTUAL_ENV", venv)
 
+    # When running with `python -m uv`, use this `python` as default.
+    env.setdefault("UV_DEFAULT_PYTHON", sys.executable)
+
     if sys.platform == "win32":
         import subprocess
 
