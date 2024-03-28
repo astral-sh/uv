@@ -1,3 +1,4 @@
+#[cfg(not(test))]
 use std::process::Command;
 
 use thiserror::Error;
@@ -37,28 +38,41 @@ pub enum Error {
 ///
 /// See `pip`'s KeyringCLIProvider
 /// <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L102>
-pub fn get_keyring_subprocess_auth(url: &Url) -> Result<Option<Credential>, Error> {
+pub fn get_keyring_subprocess_auth(
+    url: &Url,
+    stored_auth: Option<&Credential>,
+) -> Result<Option<Credential>, Error> {
     let host = url.host_str();
     if host.is_none() {
         return Err(Error::NotKeyringTarget(
             "Should only use keyring for urls with host".to_string(),
         ));
     }
-    if url.password().is_some() {
-        return Err(Error::NotKeyringTarget(
-            "Url already contains password - keyring not required".to_string(),
-        ));
-    }
-    let username = match url.username() {
-        u if !u.is_empty() => u,
-        // this is the username keyring.get_credentials returns as username for GCP registry
-        _ => "oauth2accesstoken",
+    let username = if let Some(Credential::UrlEncoded(auth)) = stored_auth {
+        if auth.password.is_some() {
+            return Err(Error::NotKeyringTarget(
+                "Stored auth already contains password - keyring not required".to_string(),
+            ));
+        }
+        &auth.username
+    } else {
+        if url.password().is_some() {
+            return Err(Error::NotKeyringTarget(
+                "Url already contains password - keyring not required".to_string(),
+            ));
+        }
+        match url.username() {
+            u if !u.is_empty() => u,
+            // this is the username keyring.get_credentials returns as username for GCP registry
+            _ => "oauth2accesstoken",
+        }
     };
     debug!(
         "Running `keyring get` for `{}` with username `{}`",
         url.to_string(),
         username
     );
+    #[cfg(not(test))]
     let output = match Command::new("keyring")
         .arg("get")
         .arg(url.to_string())
@@ -74,6 +88,8 @@ pub fn get_keyring_subprocess_auth(url: &Url) -> Result<Option<Credential>, Erro
         Ok(_) => Ok(None),
         Err(e) => Err(Error::CliFailure(e)),
     };
+    #[cfg(test)]
+    let output = Ok(Some("mypassword".to_string()));
 
     output.map(|password| {
         password.map(|password| {
@@ -87,12 +103,14 @@ pub fn get_keyring_subprocess_auth(url: &Url) -> Result<Option<Credential>, Erro
 
 #[cfg(test)]
 mod test {
+    use crate::store::UrlAuthData;
+
     use super::*;
 
     #[test]
     fn hostless_url_should_err() {
         let url = Url::parse("file:/etc/bin/").unwrap();
-        let res = get_keyring_subprocess_auth(&url);
+        let res = get_keyring_subprocess_auth(&url, None);
         assert!(res.is_err());
         assert!(matches!(res.unwrap_err(),
                 Error::NotKeyringTarget(s) if s == "Should only use keyring for urls with host"));
@@ -101,9 +119,37 @@ mod test {
     #[test]
     fn passworded_url_should_err() {
         let url = Url::parse("https://u:p@example.com").unwrap();
-        let res = get_keyring_subprocess_auth(&url);
+        let res = get_keyring_subprocess_auth(&url, None);
         assert!(res.is_err());
         assert!(matches!(res.unwrap_err(),
                 Error::NotKeyringTarget(s) if s == "Url already contains password - keyring not required"));
+
+        // test same when passed stored_auth
+        let url = Url::parse("https://example.com").unwrap();
+        let res = get_keyring_subprocess_auth(
+            &url,
+            Some(&Credential::UrlEncoded(UrlAuthData {
+                username: "u".to_string(),
+                password: Some("p".to_string()),
+            })),
+        );
+        assert!(res.is_err());
+        assert!(matches!(res.unwrap_err(),
+                Error::NotKeyringTarget(s) if s == "Stored auth already contains password - keyring not required"));
+    }
+
+    #[test]
+    fn happy_path_should_get_output() {
+        let url = Url::parse("https://u@example.com").unwrap();
+        let res = get_keyring_subprocess_auth(&url, None);
+        assert!(res.is_ok());
+        assert!(matches!(res.unwrap(),
+        Some(Credential::Basic(BasicAuthData { username, password })) if username == "u" && password.as_deref() == Some("mypassword")));
+
+        let url = Url::parse("https://example.com").unwrap();
+        let res = get_keyring_subprocess_auth(&url, None);
+        assert!(res.is_ok());
+        assert!(matches!(res.unwrap(),
+        Some(Credential::Basic(BasicAuthData { username, password })) if username == "oauth2accesstoken" && password.as_deref() == Some("mypassword")));
     }
 }
