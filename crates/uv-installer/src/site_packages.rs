@@ -47,12 +47,7 @@ impl<'a> SitePackages<'a> {
             let site_packages = match fs::read_dir(site_packages) {
                 Ok(site_packages) => site_packages,
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    return Ok(Self {
-                        venv,
-                        distributions,
-                        by_name,
-                        by_url,
-                    });
+                    continue;
                 }
                 Err(err) => return Err(err).context("Failed to read site-packages directory"),
             };
@@ -72,7 +67,6 @@ impl<'a> SitePackages<'a> {
                     };
 
                     let idx = distributions.len();
-
                     // Index the distribution by name.
                     by_name
                         .entry(dist_info.name().clone())
