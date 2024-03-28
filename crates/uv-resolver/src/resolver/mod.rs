@@ -1011,8 +1011,9 @@ impl<
             }
 
             Request::Installed(dist) => {
-                // TODO(zanieb): Forward the error from `metadata`
-                let metadata = dist.metadata().unwrap();
+                let metadata = dist
+                    .metadata()
+                    .map_err(|err| ResolveError::ReadInstalled(Box::new(dist.clone()), err))?;
                 Ok(Some(Response::Installed { dist, metadata }))
             }
 
@@ -1099,8 +1100,9 @@ impl<
                             }
                         }
                         ResolvedDist::Installed(dist) => {
-                            // TODO(zanieb): Forward the error from `metadata`
-                            let metadata = dist.metadata().unwrap();
+                            let metadata = dist.metadata().map_err(|err| {
+                                ResolveError::ReadInstalled(Box::new(dist.clone()), err)
+                            })?;
                             Response::Installed { dist, metadata }
                         }
                     };
