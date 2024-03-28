@@ -306,7 +306,7 @@ struct PipCompileArgs {
     #[clap(long)]
     no_deps: bool,
 
-    #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
+    #[clap(long, value_enum, default_value_t = ResolutionMode::default(), env = "UV_RESOLUTION")]
     resolution: ResolutionMode,
 
     #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre", env = "UV_PRERELEASE")]
@@ -781,7 +781,7 @@ struct PipInstallArgs {
     #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
     link_mode: install_wheel_rs::linker::LinkMode,
 
-    #[clap(long, value_enum, default_value_t = ResolutionMode::default())]
+    #[clap(long, value_enum, default_value_t = ResolutionMode::default(), env = "UV_RESOLUTION")]
     resolution: ResolutionMode,
 
     #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre", env = "UV_PRERELEASE")]
