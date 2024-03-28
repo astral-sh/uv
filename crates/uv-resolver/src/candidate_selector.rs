@@ -63,6 +63,10 @@ enum AllowPreRelease {
 
 impl CandidateSelector {
     /// Select a [`Candidate`] from a set of candidate versions and files.
+    ///
+    /// Unless present in the provided [`Exclusions`], local distributions from the
+    /// [`InstalledPackagesProvider`] are preferred over remote distributions in
+    /// the [`VersionMap`].
     pub(crate) fn select<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
         package_name: &'a PackageName,
@@ -76,8 +80,7 @@ impl CandidateSelector {
         // and the preference satisfies the current range, use that.
         if let Some(version) = preferences.version(package_name) {
             if range.contains(version) {
-                // Check for a locally installed distribution that satisfies the preferred version
-                // Prefer these over remote distributions
+                // Check for a locally installed distribution that matches the preferred version
                 if !exclusions.contains(package_name) {
                     for dist in installed_packages.get_packages(package_name) {
                         if dist.version() == version {
@@ -94,15 +97,14 @@ impl CandidateSelector {
                     }
                 }
 
-                // Check for a remote distribution that satisfies the preferred version
+                // Check for a remote distribution that matches the preferred version
                 if let Some(file) = version_map.get(version) {
-                    return Some(Candidate::new(package_name, version, &file));
+                    return Some(Candidate::new(package_name, version, file));
                 }
             }
         }
 
         // Check for a locally installed distribution that satisfies the range
-        // Prefer these over remote distributions
         if !exclusions.contains(package_name) {
             for dist in installed_packages.get_packages(package_name) {
                 let version = dist.version();
