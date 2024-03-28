@@ -136,10 +136,10 @@ impl VersionMap {
     /// stored in this map. For example, the versions `1.2.0` and `1.2` are
     /// semantically equivalent, but when converted to strings, they are
     /// distinct.
-    pub(crate) fn get_with_version<'a>(
-        &'a self,
+    pub(crate) fn get_with_version(
+        &self,
         version: &Version,
-    ) -> Option<(&'a Version, &'a PrioritizedDist)> {
+    ) -> Option<(&Version, &PrioritizedDist)> {
         match self.inner {
             VersionMapInner::Eager(ref map) => map.get_key_value(version),
             VersionMapInner::Lazy(ref lazy) => lazy.get_with_version(version),

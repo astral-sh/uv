@@ -1,5 +1,5 @@
 use distribution_types::LocalEditable;
-use pep508_rs::Requirement;
+use pep508_rs::{MarkerEnvironment, Requirement};
 use pypi_types::Metadata23;
 use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
@@ -73,5 +73,79 @@ impl Manifest {
             editables: Vec::new(),
             lookaheads: Vec::new(),
         }
+    }
+
+    /// Return an iterator over all requirements, constraints, and overrides, in priority order,
+    /// such that requirements come first, followed by constraints, followed by overrides.
+    ///
+    /// At time of writing, this is used for:
+    /// - Determining which requirements should allow yanked versions.
+    /// - Determining which requirements should allow pre-release versions (e.g., `torch>=2.2.0a1`).
+    /// - Determining which requirements should allow direct URLs (e.g., `torch @ https://...`).
+    /// - Determining which requirements should allow local version specifiers (e.g., `torch==2.2.0+cpu`).
+    pub fn requirements<'a>(
+        &'a self,
+        markers: &'a MarkerEnvironment,
+    ) -> impl Iterator<Item = &Requirement> {
+        self.lookaheads
+            .iter()
+            .flat_map(|lookahead| {
+                lookahead
+                    .requirements()
+                    .iter()
+                    .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
+            })
+            .chain(self.editables.iter().flat_map(|(editable, metadata)| {
+                metadata
+                    .requires_dist
+                    .iter()
+                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
+            }))
+            .chain(
+                self.requirements
+                    .iter()
+                    .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+            )
+            .chain(
+                self.constraints
+                    .iter()
+                    .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+            )
+            .chain(
+                self.overrides
+                    .iter()
+                    .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+            )
+    }
+
+    /// Return an iterator over the names of all direct dependency requirements.
+    ///
+    /// At time of writing, this is used for:
+    /// - Determining which packages should use the "lowest-compatible version" of a package, when
+    ///   the `lowest-direct` strategy is in use.
+    pub fn direct_dependencies<'a>(
+        &'a self,
+        markers: &'a MarkerEnvironment,
+    ) -> impl Iterator<Item = &PackageName> {
+        self.lookaheads
+            .iter()
+            .flat_map(|lookahead| {
+                lookahead
+                    .requirements()
+                    .iter()
+                    .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
+            })
+            .chain(self.editables.iter().flat_map(|(editable, metadata)| {
+                metadata
+                    .requires_dist
+                    .iter()
+                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
+            }))
+            .chain(
+                self.requirements
+                    .iter()
+                    .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+            )
+            .map(|requirement| &requirement.name)
     }
 }
