@@ -101,6 +101,7 @@ impl PythonEnvironment {
         );
         site_packages.sort();
         site_packages.dedup();
+        println!("site_packages: {:?}", site_packages);
         site_packages.into_iter()
     }
 
