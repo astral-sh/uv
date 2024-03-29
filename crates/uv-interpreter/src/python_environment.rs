@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -99,9 +100,10 @@ impl PythonEnvironment {
                 .iter()
                 .filter(|path| path.ends_with("site-packages") || path.ends_with("dist-packages")),
         );
-        site_packages.sort();
-        site_packages.dedup();
-        println!("site_packages: {:?}", site_packages);
+
+        // de-duplicate while preserving order
+        let mut dedup_set = HashSet::new();
+        site_packages.retain(|path| dedup_set.insert(path.to_str()));
         site_packages.into_iter()
     }
 
