@@ -94,6 +94,7 @@ impl PythonEnvironment {
         let mut site_packages = Vec::new();
         site_packages.push(self.interpreter.purelib());
         site_packages.push(self.interpreter.platlib());
+        debug!("sys_path: {:?}", self.interpreter.sys_path());
         site_packages.extend(
             self.interpreter
                 .sys_path()
@@ -101,6 +102,13 @@ impl PythonEnvironment {
                 .filter(|path| path.ends_with("site-packages") || path.ends_with("dist-packages")),
         );
 
+        debug!(
+            "Site packages before dedup: {:?}",
+            site_packages
+                .iter()
+                .map(|p| p.simplified_display())
+                .collect::<Vec<_>>()
+        );
         // de-duplicate while preserving order
         let mut dedup_set = HashSet::new();
         site_packages.retain(|path| dedup_set.insert(fs_err::canonicalize(path).is_ok()));
