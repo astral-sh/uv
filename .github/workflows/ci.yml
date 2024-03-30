@@ -81,11 +81,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: "Install pipx"
-        run: pip install pipx
-
       - name: "Install required Python versions"
-        run: pipx run scripts/bootstrap/install.py
+        run: |
+          python -m pip install "zstandard==0.22.0"
+          python scripts/bootstrap/install.py
 
       - name: "Install Rust toolchain"
         run: rustup show
