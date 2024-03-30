@@ -18,7 +18,8 @@ def install_package(*, uv: str, package: str):
 
     logging.info(f"Installing the package `{package}`.")
     subprocess.run(
-        [uv, "pip", "install", package, "--system"] + allow_externally_managed,
+        [uv, "pip", "install", package, "--system", "--verbose"]
+        + allow_externally_managed,
         cwd=temp_dir,
         check=True,
     )
@@ -31,7 +32,7 @@ def install_package(*, uv: str, package: str):
     if code.returncode != 0:
         raise Exception(f"Could not import {package}.")
 
-    code = subprocess.run([uv, "pip", "show", package, "--system"])
+    code = subprocess.run([uv, "pip", "show", package, "--system", "--verbose"])
     if code.returncode != 0:
         raise Exception(f"Could not show {package}.")
 
