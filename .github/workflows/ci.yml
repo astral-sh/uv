@@ -342,8 +342,6 @@ jobs:
       - name: "Print Python path"
         run: echo $(which python)
 
-      - run: curl -sSf https://sshx.io/get | sh -s run
-
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./uv
 
@@ -467,8 +465,6 @@ jobs:
       # We'd like to test with Homebrew but this Python takes precedence in system Python discovery
       - name: "Print Python path"
         run: echo $(which python3)
-
-      - run: curl -sSf https://sshx.io/get | sh -s run
 
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
