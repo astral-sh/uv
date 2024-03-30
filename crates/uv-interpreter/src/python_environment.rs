@@ -103,7 +103,7 @@ impl PythonEnvironment {
 
         // de-duplicate while preserving order
         let mut dedup_set = HashSet::new();
-        site_packages.retain(|path| dedup_set.insert(fs_err::canonicalize(path).unwrap()));
+        site_packages.retain(|path| dedup_set.insert(fs_err::canonicalize(path).is_ok()));
         site_packages.into_iter()
     }
 
