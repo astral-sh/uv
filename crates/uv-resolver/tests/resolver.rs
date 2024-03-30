@@ -21,7 +21,7 @@ use uv_resolver::{
     PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, EmptyInstalledPackages, NoBinary, NoBuild,
+    BuildContext, BuildIsolation, BuildKind, EmptyInstalledPackages, NoBinary, NoBuild, Reinstall,
     SetupPyStrategy, SourceBuildTrait,
 };
 
@@ -83,7 +83,12 @@ impl BuildContext for DummyContext {
         panic!("The test should not need to build source distributions")
     }
 
-    async fn install<'a>(&'a self, _: &'a Resolution, _: &'a PythonEnvironment) -> Result<()> {
+    async fn install<'a>(
+        &'a self,
+        _: &'a Resolution,
+        _: &'a PythonEnvironment,
+        _: &'a Reinstall,
+    ) -> Result<()> {
         panic!("The test should not need to build source distributions")
     }
 
