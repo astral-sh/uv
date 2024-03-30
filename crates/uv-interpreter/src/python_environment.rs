@@ -94,32 +94,27 @@ impl PythonEnvironment {
         let mut site_packages = Vec::new();
         site_packages.push(self.interpreter.purelib());
         site_packages.push(self.interpreter.platlib());
-        debug!("sys_path: {:?}", self.interpreter.sys_path());
         site_packages.extend(
             self.interpreter
                 .sys_path()
                 .iter()
                 .filter(|path| path.ends_with("site-packages") || path.ends_with("dist-packages")),
         );
-
-        debug!(
-            "Site packages before dedup: {:?}",
-            site_packages
-                .iter()
-                .map(|p| p.simplified_display())
-                .collect::<Vec<_>>()
-        );
         // de-duplicate while preserving order
         let mut dedup_set = HashSet::new();
-        site_packages.retain(|path| dedup_set.insert(fs_err::canonicalize(path).is_ok()));
+        let mut valid_site_packages = site_packages
+            .into_iter()
+            .filter(|path| fs_err::canonicalize(path).is_ok())
+            .collect::<Vec<_>>();
+        valid_site_packages.retain(|path| dedup_set.insert(fs_err::canonicalize(path).unwrap()));
         debug!(
             "Site packages: {:?}",
-            site_packages
+            valid_site_packages
                 .iter()
                 .map(|p| p.simplified_display())
                 .collect::<Vec<_>>()
         );
-        site_packages.into_iter()
+        valid_site_packages.into_iter()
     }
 
     /// Returns the path to the `bin` directory inside a virtual environment.
