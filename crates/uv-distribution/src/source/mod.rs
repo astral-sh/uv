@@ -956,7 +956,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         debug!("Preparing metadata for: {source}");
 
         // Attempt to read static metadata from the `PKG-INFO` file.
-        match read_pkg_info(source_root).await {
+        match read_pkg_info(source_root, subdirectory).await {
             Ok(metadata) => {
                 debug!("Found static `PKG-INFO` for: {source}");
 
@@ -979,7 +979,7 @@ impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
         }
 
         // Attempt to read static metadata from the `pyproject.toml`.
-        match read_pyproject_toml(source_root).await {
+        match read_pyproject_toml(source_root, subdirectory).await {
             Ok(metadata) => {
                 debug!("Found static `pyproject.toml` for: {source}");
 
@@ -1112,9 +1112,16 @@ impl ExtractedSource {
 /// Read the [`Metadata23`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
 /// or later _and_ none of the required fields (`Requires-Python`, `Requires-Dist`, and
 /// `Provides-Extra`) are marked as dynamic.
-pub(crate) async fn read_pkg_info(source_tree: &Path) -> Result<Metadata23, Error> {
+pub(crate) async fn read_pkg_info(
+    source_tree: &Path,
+    subdirectory: Option<&Path>,
+) -> Result<Metadata23, Error> {
     // Read the `PKG-INFO` file.
-    let content = match fs::read(source_tree.join("PKG-INFO")).await {
+    let pkg_info = match subdirectory {
+        Some(subdirectory) => source_tree.join(subdirectory).join("PKG-INFO"),
+        None => source_tree.join("PKG-INFO"),
+    };
+    let content = match fs::read(pkg_info).await {
         Ok(content) => content,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             return Err(Error::MissingPkgInfo);
@@ -1130,9 +1137,16 @@ pub(crate) async fn read_pkg_info(source_tree: &Path) -> Result<Metadata23, Erro
 
 /// Read the [`Metadata23`] from a source distribution's `pyproject.tom` file, if it defines static
 /// metadata consistent with PEP 621.
-pub(crate) async fn read_pyproject_toml(source_tree: &Path) -> Result<Metadata23, Error> {
+pub(crate) async fn read_pyproject_toml(
+    source_tree: &Path,
+    subdirectory: Option<&Path>,
+) -> Result<Metadata23, Error> {
     // Read the `pyproject.toml` file.
-    let content = match fs::read_to_string(source_tree.join("pyproject.toml")).await {
+    let pyproject_toml = match subdirectory {
+        Some(subdirectory) => source_tree.join(subdirectory).join("pyproject.toml"),
+        None => source_tree.join("pyproject.toml"),
+    };
+    let content = match fs::read_to_string(pyproject_toml).await {
         Ok(content) => content,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             return Err(Error::MissingPyprojectToml);
