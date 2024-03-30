@@ -155,7 +155,7 @@ if __name__ == "__main__":
         # Ensure that the package (`pylint`) is installed in the virtual environment.
         logging.info("Checking that `pylint` is installed.")
         code = subprocess.run(
-            [executable, "-m", "pip", "show", "pylint", "--verbose"],
+            [executable, "-m", "pip", "show", "pylint"],
             cwd=temp_dir,
         )
         if code.returncode != 0:
