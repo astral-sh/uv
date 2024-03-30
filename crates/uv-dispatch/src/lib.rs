@@ -159,16 +159,18 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     #[allow(clippy::manual_async_fn)] // TODO(konstin): rustc 1.75 gets into a type inference cycle with async fn
     #[instrument(
-        skip(self, resolution, venv),
+        skip(self, resolution, venv, reinstall),
         fields(
             resolution = resolution.distributions().map(ToString::to_string).join(", "),
-            venv = ?venv.root()
+            venv = ?venv.root(),
+            reinstall = ?reinstall
         )
     )]
     fn install<'data>(
         &'data self,
         resolution: &'data Resolution,
         venv: &'data PythonEnvironment,
+        reinstall: &'data Reinstall,
     ) -> impl Future<Output = Result<()>> + Send + 'data {
         async move {
             debug!(
@@ -194,7 +196,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 extraneous: _,
             } = Planner::with_requirements(&resolution.requirements()).build(
                 site_packages,
-                &Reinstall::None,
+                reinstall,
                 &NoBinary::None,
                 self.index_locations,
                 self.cache(),

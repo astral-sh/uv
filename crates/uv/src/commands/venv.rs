@@ -21,7 +21,8 @@ use uv_fs::Simplified;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{InMemoryIndex, OptionsBuilder};
 use uv_types::{
-    BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, SetupPyStrategy,
+    BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, Reinstall,
+    SetupPyStrategy,
 };
 
 use crate::commands::ExitStatus;
@@ -208,7 +209,7 @@ async fn venv_impl(
 
         // Install into the environment.
         build_dispatch
-            .install(&resolution, &venv)
+            .install(&resolution, &venv, &Reinstall::All)
             .await
             .map_err(VenvError::Seed)?;
 

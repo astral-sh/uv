@@ -9,7 +9,7 @@ use pep508_rs::{PackageName, Requirement};
 use uv_cache::Cache;
 use uv_interpreter::{Interpreter, PythonEnvironment};
 
-use crate::{BuildIsolation, BuildKind, NoBinary, NoBuild, SetupPyStrategy};
+use crate::{BuildIsolation, BuildKind, NoBinary, NoBuild, Reinstall, SetupPyStrategy};
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -87,6 +87,7 @@ pub trait BuildContext: Sync {
         &'a self,
         resolution: &'a Resolution,
         venv: &'a PythonEnvironment,
+        reinstall: &'a Reinstall,
     ) -> impl Future<Output = Result<()>> + Send + 'a;
 
     /// Setup a source distribution build by installing the required dependencies. A wrapper for

@@ -31,7 +31,8 @@ use pep508_rs::{PackageName, Requirement};
 use uv_fs::{PythonExt, Simplified};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, ConfigSettings, SetupPyStrategy, SourceBuildTrait,
+    BuildContext, BuildIsolation, BuildKind, ConfigSettings, Reinstall, SetupPyStrategy,
+    SourceBuildTrait,
 };
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
@@ -432,7 +433,7 @@ impl SourceBuild {
             .await?;
 
             build_context
-                .install(&resolved_requirements, &venv)
+                .install(&resolved_requirements, &venv, &Reinstall::None)
                 .await
                 .map_err(|err| {
                     Error::RequirementsInstall("build-system.requires (install)", err)
@@ -975,7 +976,7 @@ async fn create_pep517_build_environment(
             .map_err(|err| Error::RequirementsInstall("build-system.requires (resolve)", err))?;
 
         build_context
-            .install(&resolution, venv)
+            .install(&resolution, venv, &Reinstall::None)
             .await
             .map_err(|err| Error::RequirementsInstall("build-system.requires (install)", err))?;
     }
