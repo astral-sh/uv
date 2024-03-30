@@ -271,7 +271,7 @@ jobs:
         run: curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-apple-darwin.tar.gz" | tar -xvz
 
       - name: "Check cache compatibility"
-        run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-aarch64-apple-darwin/uv
+        run: python3.8 scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-aarch64-apple-darwin/uv
 
   system-test-debian:
     needs: build-binary-linux
