@@ -656,7 +656,7 @@ jobs:
           yum install tar gzip which -y
       - uses: actions/checkout@v4
       - name: "Install Python"
-        run: yum install python3 python3-pip -y
+        run: yum install python3 -y && python3 -m ensurepip
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -669,6 +669,5 @@ jobs:
       - name: "Print Python path"
         run: echo $(which python3)
 
-      - run: curl -sSf https://sshx.io/get | sh -s run
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv
