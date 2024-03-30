@@ -104,6 +104,13 @@ impl PythonEnvironment {
         // de-duplicate while preserving order
         let mut dedup_set = HashSet::new();
         site_packages.retain(|path| dedup_set.insert(fs_err::canonicalize(path).is_ok()));
+        debug!(
+            "Site packages: {:?}",
+            site_packages
+                .iter()
+                .map(|p| p.simplified_display())
+                .collect::<Vec<_>>()
+        );
         site_packages.into_iter()
     }
 
