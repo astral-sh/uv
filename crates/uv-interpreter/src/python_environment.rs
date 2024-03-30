@@ -1,6 +1,6 @@
 use std::collections::HashSet;
+use std::env;
 use std::path::{Path, PathBuf};
-use std::{env, fs};
 
 use tracing::{debug, info};
 
@@ -103,7 +103,7 @@ impl PythonEnvironment {
 
         // de-duplicate while preserving order
         let mut dedup_set = HashSet::new();
-        site_packages.retain(|path| dedup_set.insert(fs::canonicalize(path).unwrap()));
+        site_packages.retain(|path| dedup_set.insert(fs_err::canonicalize(path).unwrap()));
         site_packages.into_iter()
     }
 
