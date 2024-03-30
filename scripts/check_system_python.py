@@ -153,6 +153,15 @@ if __name__ == "__main__":
                 "The package `pylint` is installed globally (but shouldn't be)."
             )
 
+        # Install pip to the virtual environment.
+        logging.info("Checking that `pylint` is installed.")
+        code = subprocess.run(
+            [executable, "-m", "ensurepip"],
+            cwd=temp_dir,
+        )
+        if code.returncode != 0:
+            raise Exception("Failed to install `pip` into the virtual environment.")
+
         # Ensure that the package (`pylint`) is installed in the virtual environment.
         logging.info("Checking that `pylint` is installed.")
         code = subprocess.run(
