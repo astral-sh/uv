@@ -256,9 +256,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: "Install Python"
-        run: brew install python@3.8
-
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
@@ -456,9 +453,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: "Install Python"
-        run: brew install python@3.8
-
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
@@ -467,11 +461,13 @@ jobs:
       - name: "Prepare binary"
         run: chmod +x ./uv
 
+      # This should be the macOS system Python
+      # We'd like to test with Homebrew but this Python takes precedence in system Python discovery
       - name: "Print Python path"
         run: echo $(which python3)
 
       - name: "Validate global Python install"
-        run: python3 scripts/check_system_python.py --uv ./uv
+        run: python3 scripts/check_system_python.py --uv ./uv --externally-managed
 
   system-test-macos-x86_64:
     needs: build-binary-macos-x86_64
