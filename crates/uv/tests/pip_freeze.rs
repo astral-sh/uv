@@ -156,3 +156,55 @@ fn freeze_url() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn freeze_with_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "anyio\n-e {}",
+        context
+            .workspace_root
+            .join("scripts/packages/poetry_editable")
+            .display()
+    ))?;
+
+    // Run `pip sync`.
+    sync_command(&context)
+        .arg(requirements_txt.path())
+        .assert()
+        .success();
+
+    // Run `pip freeze`.
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio==4.3.0
+    -e file://[WORKSPACE]/scripts/packages/poetry_editable
+
+    ----- stderr -----
+    warning: The package `anyio` requires `idna>=2.8`, but it's not installed.
+    warning: The package `anyio` requires `sniffio>=1.1`, but it's not installed.
+    "###
+    );
+
+    // Exclude editable package.
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("--exclude-editable")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio==4.3.0
+
+    ----- stderr -----
+    warning: The package `anyio` requires `idna>=2.8`, but it's not installed.
+    warning: The package `anyio` requires `sniffio>=1.1`, but it's not installed.
+    "###
+    );
+
+    Ok(())
+}

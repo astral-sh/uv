@@ -1038,6 +1038,10 @@ struct PipFreezeArgs {
     #[clap(long)]
     strict: bool,
 
+    /// Exclude any editable packages from output.
+    #[clap(long)]
+    exclude_editable: bool,
+
     /// The Python interpreter for which packages should be listed.
     ///
     /// By default, `uv` lists packages in the currently activated virtual environment, or a virtual
@@ -1749,6 +1753,7 @@ async fn run() -> Result<ExitStatus> {
             command: PipCommand::Freeze(args),
         }) => commands::pip_freeze(
             args.strict,
+            args.exclude_editable,
             args.python.as_deref(),
             args.system,
             &cache,
