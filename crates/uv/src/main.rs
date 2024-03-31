@@ -1033,6 +1033,10 @@ struct PipUninstallArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 struct PipFreezeArgs {
+    /// Exclude any editable packages from output.
+    #[clap(long)]
+    exclude_editable: bool,
+
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
     #[clap(long)]
@@ -1079,11 +1083,6 @@ struct PipFreezeArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 struct PipListArgs {
-    /// Validate the virtual environment, to detect packages with missing dependencies or other
-    /// issues.
-    #[clap(long)]
-    strict: bool,
-
     /// Only include editable projects.
     #[clap(short, long)]
     editable: bool,
@@ -1099,6 +1098,11 @@ struct PipListArgs {
     /// Select the output format between: `columns` (default), `freeze`, or `json`.
     #[clap(long, value_enum, default_value_t = ListFormat::default())]
     format: ListFormat,
+
+    /// Validate the virtual environment, to detect packages with missing dependencies or other
+    /// issues.
+    #[clap(long)]
+    strict: bool,
 
     /// The Python interpreter for which packages should be listed.
     ///
@@ -1748,6 +1752,7 @@ async fn run() -> Result<ExitStatus> {
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),
         }) => commands::pip_freeze(
+            args.exclude_editable,
             args.strict,
             args.python.as_deref(),
             args.system,
@@ -1757,11 +1762,11 @@ async fn run() -> Result<ExitStatus> {
         Commands::Pip(PipNamespace {
             command: PipCommand::List(args),
         }) => commands::pip_list(
-            args.strict,
             args.editable,
             args.exclude_editable,
             &args.exclude,
             &args.format,
+            args.strict,
             args.python.as_deref(),
             args.system,
             &cache,
