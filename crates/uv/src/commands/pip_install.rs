@@ -38,8 +38,8 @@ use uv_resolver::{
     Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{
-    BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
-    Upgrade,
+    BuildIsolation, ConfigSettings, Constraints, InFlight, NoBinary, NoBuild, Overrides, Reinstall,
+    SetupPyStrategy, Upgrade,
 };
 use uv_warnings::warn_user;
 
@@ -523,6 +523,10 @@ async fn resolve(
         .map(Preference::from_requirement)
         .collect();
 
+    // Collect constraints and overrides.
+    let constraints = Constraints::from_requirements(constraints);
+    let overrides = Overrides::from_requirements(overrides);
+
     // Map the editables to their metadata.
     let editables: Vec<(LocalEditable, Metadata23)> = editables
         .iter()
@@ -535,22 +539,10 @@ async fn resolve(
         .collect();
 
     // Determine any lookahead requirements.
-    let lookaheads = LookaheadResolver::new(
-        requirements
-            .iter()
-            .filter(|requirement| requirement.evaluate_markers(markers, &[]))
-            .chain(editables.iter().flat_map(|(editable, metadata)| {
-                metadata
-                    .requires_dist
-                    .iter()
-                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
-            }))
-            .cloned()
-            .collect(),
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve(build_dispatch, markers, client)
-    .await?;
+    let lookaheads = LookaheadResolver::new(&requirements, &constraints, &overrides, &editables)
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve(build_dispatch, markers, client)
+        .await?;
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(

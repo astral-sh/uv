@@ -5,11 +5,12 @@ use anyhow::Result;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 
-use distribution_types::{BuildableSource, Dist};
+use distribution_types::{BuildableSource, Dist, LocalEditable};
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use pypi_types::Metadata23;
 use uv_client::RegistryClient;
 use uv_distribution::{Reporter, SourceDistCachedBuilder};
-use uv_types::{BuildContext, RequestedRequirements};
+use uv_types::{BuildContext, Constraints, Overrides, RequestedRequirements};
 
 /// A resolver for resolving lookahead requirements from local dependencies.
 ///
@@ -22,18 +23,32 @@ use uv_types::{BuildContext, RequestedRequirements};
 ///
 /// The lookahead resolver resolves requirements for local dependencies, so that the resolver can
 /// treat them as first-party dependencies for the purpose of analyzing their specifiers.
-pub struct LookaheadResolver {
-    /// The requirements for the project.
-    requirements: Vec<Requirement>,
+pub struct LookaheadResolver<'a> {
+    /// The direct requirements for the project.
+    requirements: &'a [Requirement],
+    /// The constraints for the project.
+    constraints: &'a Constraints,
+    /// The overrides for the project.
+    overrides: &'a Overrides,
+    /// The editable requirements for the project.
+    editables: &'a [(LocalEditable, Metadata23)],
     /// The reporter to use when building source distributions.
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl LookaheadResolver {
+impl<'a> LookaheadResolver<'a> {
     /// Instantiate a new [`LookaheadResolver`] for a given set of requirements.
-    pub fn new(requirements: Vec<Requirement>) -> Self {
+    pub fn new(
+        requirements: &'a [Requirement],
+        constraints: &'a Constraints,
+        overrides: &'a Overrides,
+        editables: &'a [(LocalEditable, Metadata23)],
+    ) -> Self {
         Self {
             requirements,
+            constraints,
+            overrides,
+            editables,
             reporter: None,
         }
     }
@@ -55,9 +70,21 @@ impl LookaheadResolver {
         markers: &MarkerEnvironment,
         client: &RegistryClient,
     ) -> Result<Vec<RequestedRequirements>> {
-        let mut queue = VecDeque::from(self.requirements.clone());
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
+
+        // Queue up the initial requirements.
+        let mut queue: VecDeque<Requirement> = self
+            .constraints
+            .apply(self.overrides.apply(self.requirements))
+            .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+            .chain(self.editables.iter().flat_map(|(editable, metadata)| {
+                self.constraints
+                    .apply(self.overrides.apply(&metadata.requires_dist))
+                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
+            }))
+            .cloned()
+            .collect();
 
         while !queue.is_empty() || !futures.is_empty() {
             while let Some(requirement) = queue.pop_front() {
@@ -66,7 +93,10 @@ impl LookaheadResolver {
 
             while let Some(result) = futures.next().await {
                 if let Some(lookahead) = result? {
-                    for requirement in lookahead.requirements() {
+                    for requirement in self
+                        .constraints
+                        .apply(self.overrides.apply(lookahead.requirements()))
+                    {
                         if requirement.evaluate_markers(markers, lookahead.extras()) {
                             queue.push_back(requirement.clone());
                         }

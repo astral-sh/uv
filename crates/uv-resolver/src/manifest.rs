@@ -2,7 +2,7 @@ use distribution_types::LocalEditable;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use pypi_types::Metadata23;
 use uv_normalize::PackageName;
-use uv_types::RequestedRequirements;
+use uv_types::{Constraints, Overrides, RequestedRequirements};
 
 use crate::{preferences::Preference, Exclusions};
 
@@ -13,10 +13,10 @@ pub struct Manifest {
     pub(crate) requirements: Vec<Requirement>,
 
     /// The constraints for the project.
-    pub(crate) constraints: Vec<Requirement>,
+    pub(crate) constraints: Constraints,
 
     /// The overrides for the project.
-    pub(crate) overrides: Vec<Requirement>,
+    pub(crate) overrides: Overrides,
 
     /// The preferences for the project.
     ///
@@ -52,8 +52,8 @@ impl Manifest {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         requirements: Vec<Requirement>,
-        constraints: Vec<Requirement>,
-        overrides: Vec<Requirement>,
+        constraints: Constraints,
+        overrides: Overrides,
         preferences: Vec<Preference>,
         project: Option<PackageName>,
         editables: Vec<(LocalEditable, Metadata23)>,
@@ -75,8 +75,8 @@ impl Manifest {
     pub fn simple(requirements: Vec<Requirement>) -> Self {
         Self {
             requirements,
-            constraints: Vec::new(),
-            overrides: Vec::new(),
+            constraints: Constraints::default(),
+            overrides: Overrides::default(),
             preferences: Vec::new(),
             project: None,
             editables: Vec::new(),
@@ -100,30 +100,28 @@ impl Manifest {
         self.lookaheads
             .iter()
             .flat_map(|lookahead| {
-                lookahead
-                    .requirements()
-                    .iter()
+                self.overrides
+                    .apply(lookahead.requirements())
                     .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
             })
             .chain(self.editables.iter().flat_map(|(editable, metadata)| {
-                metadata
-                    .requires_dist
-                    .iter()
+                self.overrides
+                    .apply(&metadata.requires_dist)
                     .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
             }))
             .chain(
-                self.requirements
-                    .iter()
+                self.overrides
+                    .apply(&self.requirements)
                     .filter(|requirement| requirement.evaluate_markers(markers, &[])),
             )
             .chain(
                 self.constraints
-                    .iter()
+                    .requirements()
                     .filter(|requirement| requirement.evaluate_markers(markers, &[])),
             )
             .chain(
                 self.overrides
-                    .iter()
+                    .requirements()
                     .filter(|requirement| requirement.evaluate_markers(markers, &[])),
             )
     }
@@ -140,22 +138,31 @@ impl Manifest {
         self.lookaheads
             .iter()
             .flat_map(|lookahead| {
-                lookahead
-                    .requirements()
-                    .iter()
+                self.overrides
+                    .apply(lookahead.requirements())
                     .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
             })
             .chain(self.editables.iter().flat_map(|(editable, metadata)| {
-                metadata
-                    .requires_dist
-                    .iter()
+                self.overrides
+                    .apply(&metadata.requires_dist)
                     .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
             }))
             .chain(
-                self.requirements
-                    .iter()
+                self.overrides
+                    .apply(&self.requirements)
                     .filter(|requirement| requirement.evaluate_markers(markers, &[])),
             )
             .map(|requirement| &requirement.name)
+    }
+
+    /// Apply the overrides and constraints to a set of requirements.
+    ///
+    /// Constraints are always applied _on top_ of overrides, such that constraints are applied
+    /// even if a requirement is overridden.
+    pub fn apply<'a>(
+        &'a self,
+        requirements: impl IntoIterator<Item = &'a Requirement>,
+    ) -> impl Iterator<Item = &Requirement> {
+        self.constraints.apply(self.overrides.apply(requirements))
     }
 }

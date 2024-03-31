@@ -31,14 +31,13 @@ use uv_client::{FlatIndex, RegistryClient};
 use uv_distribution::DistributionDatabase;
 use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
-use uv_types::{BuildContext, InstalledPackagesProvider};
+use uv_types::{BuildContext, Constraints, InstalledPackagesProvider, Overrides};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
-use crate::constraints::Constraints;
+
 use crate::editables::Editables;
 use crate::error::ResolveError;
 use crate::manifest::Manifest;
-use crate::overrides::Overrides;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
@@ -188,8 +187,8 @@ impl<
             locals: Locals::from_manifest(&manifest, markers),
             project: manifest.project,
             requirements: manifest.requirements,
-            constraints: Constraints::from_requirements(manifest.constraints),
-            overrides: Overrides::from_requirements(manifest.overrides),
+            constraints: manifest.constraints,
+            overrides: manifest.overrides,
             preferences: Preferences::from_iter(manifest.preferences, markers),
             exclusions: manifest.exclusions,
             editables: Editables::from_requirements(manifest.editables),

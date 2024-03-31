@@ -21,8 +21,8 @@ use uv_resolver::{
     PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, EmptyInstalledPackages, NoBinary, NoBuild, Reinstall,
-    SetupPyStrategy, SourceBuildTrait,
+    BuildContext, BuildIsolation, BuildKind, Constraints, EmptyInstalledPackages, NoBinary,
+    NoBuild, Overrides, Reinstall, SetupPyStrategy, SourceBuildTrait,
 };
 
 // Exclude any packages uploaded after this date.
@@ -274,8 +274,10 @@ async fn black_python_310() -> Result<()> {
 async fn black_mypy_extensions() -> Result<()> {
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
-        vec![Requirement::from_str("mypy-extensions<0.4.4").unwrap()],
-        vec![],
+        Constraints::from_requirements(vec![
+            Requirement::from_str("mypy-extensions<0.4.4").unwrap()
+        ]),
+        Overrides::default(),
         vec![],
         None,
         vec![],
@@ -311,8 +313,10 @@ async fn black_mypy_extensions() -> Result<()> {
 async fn black_mypy_extensions_extra() -> Result<()> {
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
-        vec![Requirement::from_str("mypy-extensions[extra]<0.4.4").unwrap()],
-        vec![],
+        Constraints::from_requirements(vec![
+            Requirement::from_str("mypy-extensions[extra]<0.4.4").unwrap()
+        ]),
+        Overrides::default(),
         vec![],
         None,
         vec![],
@@ -348,8 +352,8 @@ async fn black_mypy_extensions_extra() -> Result<()> {
 async fn black_flake8() -> Result<()> {
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1").unwrap()],
-        vec![Requirement::from_str("flake8<1").unwrap()],
-        vec![],
+        Constraints::from_requirements(vec![Requirement::from_str("flake8<1").unwrap()]),
+        Overrides::default(),
         vec![],
         None,
         vec![],
@@ -437,8 +441,8 @@ async fn black_lowest_direct() -> Result<()> {
 async fn black_respect_preference() -> Result<()> {
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1")?],
-        vec![],
-        vec![],
+        Constraints::default(),
+        Overrides::default(),
         vec![Preference::from_requirement(Requirement::from_str(
             "black==23.9.0",
         )?)],
@@ -475,8 +479,8 @@ async fn black_respect_preference() -> Result<()> {
 async fn black_ignore_preference() -> Result<()> {
     let manifest = Manifest::new(
         vec![Requirement::from_str("black<=23.9.1")?],
-        vec![],
-        vec![],
+        Constraints::default(),
+        Overrides::default(),
         vec![Preference::from_requirement(Requirement::from_str(
             "black==23.9.2",
         )?)],

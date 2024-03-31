@@ -421,19 +421,22 @@ impl ResolutionGraph {
                 .distributions
                 .get(&package_id)
                 .expect("every package in resolution graph has metadata");
-            for req in &md.requires_dist {
+            for req in manifest.apply(&md.requires_dist) {
                 let Some(ref marker_tree) = req.marker else {
                     continue;
                 };
                 add_marker_params_from_tree(marker_tree, &mut seen_marker_values);
             }
         }
-        let direct_reqs = manifest
-            .requirements
-            .iter()
-            .chain(&manifest.constraints)
-            .chain(&manifest.overrides);
-        for direct_req in direct_reqs {
+
+        // Ensure that we consider markers from direct dependencies.
+        let direct_reqs = manifest.requirements.iter().chain(
+            manifest
+                .editables
+                .iter()
+                .flat_map(|(_, metadata)| &metadata.requires_dist),
+        );
+        for direct_req in manifest.apply(direct_reqs) {
             let Some(ref marker_tree) = direct_req.marker else {
                 continue;
             };

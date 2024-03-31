@@ -16,6 +16,7 @@ use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
 pub(crate) fn pip_freeze(
+    exclude_editable: bool,
     strict: bool,
     python: Option<&str>,
     system: bool,
@@ -47,6 +48,7 @@ pub(crate) fn pip_freeze(
     let site_packages = SitePackages::from_executable(&venv)?;
     for dist in site_packages
         .iter()
+        .filter(|dist| !(exclude_editable && dist.is_editable()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
     {
         match dist {

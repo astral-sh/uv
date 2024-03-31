@@ -36,8 +36,8 @@ use uv_resolver::{
     OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
 use uv_types::{
-    BuildIsolation, ConfigSettings, EmptyInstalledPackages, InFlight, NoBinary, NoBuild,
-    SetupPyStrategy, Upgrade,
+    BuildIsolation, ConfigSettings, Constraints, EmptyInstalledPackages, InFlight, NoBinary,
+    NoBuild, Overrides, SetupPyStrategy, Upgrade,
 };
 use uv_warnings::warn_user;
 
@@ -218,6 +218,10 @@ pub(crate) async fn pip_compile(
     // Read the lockfile, if present.
     let preferences = read_lockfile(output_file, upgrade).await?;
 
+    // Collect constraints and overrides.
+    let constraints = Constraints::from_requirements(constraints);
+    let overrides = Overrides::from_requirements(overrides);
+
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
@@ -334,22 +338,10 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine any lookahead requirements.
-    let lookaheads = LookaheadResolver::new(
-        requirements
-            .iter()
-            .filter(|requirement| requirement.evaluate_markers(&markers, &[]))
-            .chain(editables.iter().flat_map(|(editable, metadata)| {
-                metadata
-                    .requires_dist
-                    .iter()
-                    .filter(|requirement| requirement.evaluate_markers(&markers, &editable.extras))
-            }))
-            .cloned()
-            .collect(),
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve(&build_dispatch, &markers, &client)
-    .await?;
+    let lookaheads = LookaheadResolver::new(&requirements, &constraints, &overrides, &editables)
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve(&build_dispatch, &markers, &client)
+        .await?;
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(

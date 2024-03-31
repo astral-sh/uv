@@ -8,11 +8,11 @@ use uv_normalize::PackageName;
 
 /// A set of overrides for a set of requirements.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct Overrides(FxHashMap<PackageName, Vec<Requirement>>);
+pub struct Overrides(FxHashMap<PackageName, Vec<Requirement>>);
 
 impl Overrides {
     /// Create a new set of overrides from a set of requirements.
-    pub(crate) fn from_requirements(requirements: Vec<Requirement>) -> Self {
+    pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
         let mut overrides: FxHashMap<PackageName, Vec<Requirement>> =
             FxHashMap::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
         for requirement in requirements {
@@ -24,17 +24,22 @@ impl Overrides {
         Self(overrides)
     }
 
+    /// Return an iterator over all [`Requirement`]s in the override set.
+    pub fn requirements(&self) -> impl Iterator<Item = &Requirement> {
+        self.0.values().flat_map(|requirements| requirements.iter())
+    }
+
     /// Get the overrides for a package.
-    pub(crate) fn get(&self, name: &PackageName) -> Option<&Vec<Requirement>> {
+    pub fn get(&self, name: &PackageName) -> Option<&Vec<Requirement>> {
         self.0.get(name)
     }
 
     /// Apply the overrides to a set of requirements.
-    pub(crate) fn apply<'a>(
+    pub fn apply<'a>(
         &'a self,
-        requirements: &'a [Requirement],
+        requirements: impl IntoIterator<Item = &'a Requirement>,
     ) -> impl Iterator<Item = &Requirement> {
-        requirements.iter().flat_map(|requirement| {
+        requirements.into_iter().flat_map(|requirement| {
             if let Some(overrides) = self.get(&requirement.name) {
                 Either::Left(overrides.iter())
             } else {
