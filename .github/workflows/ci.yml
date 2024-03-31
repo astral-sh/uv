@@ -246,6 +246,8 @@ jobs:
       - name: "Download binary for last version"
         run: curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz" | tar -xvz
 
+      - run: curl -sSf https://sshx.io/get | sh -s run
+
       - name: "Check cache compatibility"
         run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-x86_64-unknown-linux-gnu/uv
 
