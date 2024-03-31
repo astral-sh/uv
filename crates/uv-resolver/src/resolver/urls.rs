@@ -23,61 +23,7 @@ impl Urls {
         let mut required: FxHashMap<PackageName, VerbatimUrl> = FxHashMap::default();
         let mut allowed: FxHashMap<VerbatimUrl, VerbatimUrl> = FxHashMap::default();
 
-        // Add any lookahead requirements. If there are any conflicts, return an error.
-        for lookahead in &manifest.lookaheads {
-            for requirement in lookahead
-                .requirements()
-                .iter()
-                .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
-            {
-                if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
-                    if let Some(previous) = required.insert(requirement.name.clone(), url.clone()) {
-                        if !is_equal(&previous, url) {
-                            if is_precise(&previous, url) {
-                                debug!("Assuming {url} is a precise variant of {previous}");
-                                allowed.insert(url.clone(), previous);
-                            } else {
-                                return Err(ResolveError::ConflictingUrlsDirect(
-                                    requirement.name.clone(),
-                                    previous.verbatim().to_string(),
-                                    url.verbatim().to_string(),
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Add all direct requirements and constraints. If there are any conflicts, return an error.
-        for requirement in manifest
-            .requirements
-            .iter()
-            .chain(manifest.constraints.requirements())
-            .filter(|requirement| requirement.evaluate_markers(markers, &[]))
-        {
-            if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
-                if let Some(previous) = required.insert(requirement.name.clone(), url.clone()) {
-                    if is_equal(&previous, url) {
-                        continue;
-                    }
-
-                    if is_precise(&previous, url) {
-                        debug!("Assuming {url} is a precise variant of {previous}");
-                        allowed.insert(url.clone(), previous);
-                        continue;
-                    }
-
-                    return Err(ResolveError::ConflictingUrlsDirect(
-                        requirement.name.clone(),
-                        previous.verbatim().to_string(),
-                        url.verbatim().to_string(),
-                    ));
-                }
-            }
-        }
-
-        // Add any editable requirements. If there are any conflicts, return an error.
+        // Add the themselves to the list of required URLs.
         for (editable, metadata) in &manifest.editables {
             if let Some(previous) = required.insert(metadata.name.clone(), editable.url.clone()) {
                 if !is_equal(&previous, &editable.url) {
@@ -96,40 +42,28 @@ impl Urls {
                     }
                 }
             }
-
-            for requirement in metadata
-                .requires_dist
-                .iter()
-                .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
-            {
-                if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
-                    if let Some(previous) = required.insert(requirement.name.clone(), url.clone()) {
-                        if !is_equal(&previous, url) {
-                            if is_precise(&previous, url) {
-                                debug!("Assuming {url} is a precise variant of {previous}");
-                                allowed.insert(url.clone(), previous);
-                            } else {
-                                return Err(ResolveError::ConflictingUrlsDirect(
-                                    requirement.name.clone(),
-                                    previous.verbatim().to_string(),
-                                    url.verbatim().to_string(),
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
         }
 
-        // Add any overrides. Conflicts here are fine, as the overrides are meant to be
-        // authoritative.
-        for requirement in manifest
-            .overrides
-            .requirements()
-            .filter(|requirement| requirement.evaluate_markers(markers, &[]))
-        {
+        // Add all direct requirements and constraints. If there are any conflicts, return an error.
+        for requirement in manifest.requirements(markers) {
             if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
-                required.insert(requirement.name.clone(), url.clone());
+                if let Some(previous) = required.insert(requirement.name.clone(), url.clone()) {
+                    if is_equal(&previous, url) {
+                        continue;
+                    }
+
+                    if is_precise(&previous, url) {
+                        debug!("Assuming {url} is a precise variant of {previous}");
+                        allowed.insert(url.clone(), previous);
+                        continue;
+                    }
+
+                    return Err(ResolveError::ConflictingUrlsDirect(
+                        requirement.name.clone(),
+                        previous.verbatim().to_string(),
+                        url.verbatim().to_string(),
+                    ));
+                }
             }
         }
 

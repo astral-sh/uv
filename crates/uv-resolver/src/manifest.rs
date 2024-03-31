@@ -100,20 +100,18 @@ impl Manifest {
         self.lookaheads
             .iter()
             .flat_map(|lookahead| {
-                lookahead
-                    .requirements()
-                    .iter()
+                self.overrides
+                    .apply(lookahead.requirements())
                     .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
             })
             .chain(self.editables.iter().flat_map(|(editable, metadata)| {
-                metadata
-                    .requires_dist
-                    .iter()
+                self.overrides
+                    .apply(&metadata.requires_dist)
                     .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
             }))
             .chain(
-                self.requirements
-                    .iter()
+                self.overrides
+                    .apply(&self.requirements)
                     .filter(|requirement| requirement.evaluate_markers(markers, &[])),
             )
             .chain(
@@ -140,22 +138,31 @@ impl Manifest {
         self.lookaheads
             .iter()
             .flat_map(|lookahead| {
-                lookahead
-                    .requirements()
-                    .iter()
+                self.overrides
+                    .apply(lookahead.requirements())
                     .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
             })
             .chain(self.editables.iter().flat_map(|(editable, metadata)| {
-                metadata
-                    .requires_dist
-                    .iter()
+                self.overrides
+                    .apply(&metadata.requires_dist)
                     .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
             }))
             .chain(
-                self.requirements
-                    .iter()
+                self.overrides
+                    .apply(&self.requirements)
                     .filter(|requirement| requirement.evaluate_markers(markers, &[])),
             )
             .map(|requirement| &requirement.name)
+    }
+
+    /// Apply the overrides and constraints to a set of requirements.
+    ///
+    /// Constraints are always applied _on top_ of overrides, such that constraints are applied
+    /// even if a requirement is overridden.
+    pub fn apply<'a>(
+        &'a self,
+        requirements: impl IntoIterator<Item = &'a Requirement>,
+    ) -> impl Iterator<Item = &Requirement> {
+        self.constraints.apply(self.overrides.apply(requirements))
     }
 }

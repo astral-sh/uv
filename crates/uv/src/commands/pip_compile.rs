@@ -338,22 +338,10 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine any lookahead requirements.
-    let lookaheads = LookaheadResolver::new(
-        requirements
-            .iter()
-            .filter(|requirement| requirement.evaluate_markers(&markers, &[]))
-            .chain(editables.iter().flat_map(|(editable, metadata)| {
-                metadata
-                    .requires_dist
-                    .iter()
-                    .filter(|requirement| requirement.evaluate_markers(&markers, &editable.extras))
-            }))
-            .cloned()
-            .collect(),
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve(&build_dispatch, &markers, &client)
-    .await?;
+    let lookaheads = LookaheadResolver::new(&requirements, &constraints, &overrides, &editables)
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve(&build_dispatch, &markers, &client)
+        .await?;
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(

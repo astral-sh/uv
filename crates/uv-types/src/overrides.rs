@@ -37,9 +37,9 @@ impl Overrides {
     /// Apply the overrides to a set of requirements.
     pub fn apply<'a>(
         &'a self,
-        requirements: &'a [Requirement],
+        requirements: impl IntoIterator<Item = &'a Requirement>,
     ) -> impl Iterator<Item = &Requirement> {
-        requirements.iter().flat_map(|requirement| {
+        requirements.into_iter().flat_map(|requirement| {
             if let Some(overrides) = self.get(&requirement.name) {
                 Either::Left(overrides.iter())
             } else {
