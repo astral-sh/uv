@@ -38,8 +38,8 @@ use uv_resolver::{
     Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{
-    BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
-    Upgrade,
+    BuildIsolation, ConfigSettings, Constraints, InFlight, NoBinary, NoBuild, Overrides, Reinstall,
+    SetupPyStrategy, Upgrade,
 };
 use uv_warnings::warn_user;
 
@@ -522,6 +522,10 @@ async fn resolve(
         .filter(|requirement| !exclusions.contains(&requirement.name))
         .map(Preference::from_requirement)
         .collect();
+
+    // Collect constraints and overrides.
+    let constraints = Constraints::from_requirements(constraints);
+    let overrides = Overrides::from_requirements(overrides);
 
     // Map the editables to their metadata.
     let editables: Vec<(LocalEditable, Metadata23)> = editables

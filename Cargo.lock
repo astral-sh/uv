@@ -4786,6 +4786,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "distribution-types",
+ "itertools 0.12.1",
  "once-map",
  "pep508_rs",
  "rustc-hash",

@@ -14,6 +14,7 @@ pub struct AllowedYanks(FxHashMap<PackageName, FxHashSet<Version>>);
 impl AllowedYanks {
     pub fn from_manifest(manifest: &Manifest, markers: &MarkerEnvironment) -> Self {
         let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();
+
         for requirement in manifest
             .requirements(markers)
             .chain(manifest.preferences.iter().map(Preference::requirement))

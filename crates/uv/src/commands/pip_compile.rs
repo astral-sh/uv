@@ -36,8 +36,8 @@ use uv_resolver::{
     OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
 use uv_types::{
-    BuildIsolation, ConfigSettings, EmptyInstalledPackages, InFlight, NoBinary, NoBuild,
-    SetupPyStrategy, Upgrade,
+    BuildIsolation, ConfigSettings, Constraints, EmptyInstalledPackages, InFlight, NoBinary,
+    NoBuild, Overrides, SetupPyStrategy, Upgrade,
 };
 use uv_warnings::warn_user;
 
@@ -217,6 +217,10 @@ pub(crate) async fn pip_compile(
 
     // Read the lockfile, if present.
     let preferences = read_lockfile(output_file, upgrade).await?;
+
+    // Collect constraints and overrides.
+    let constraints = Constraints::from_requirements(constraints);
+    let overrides = Overrides::from_requirements(overrides);
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
