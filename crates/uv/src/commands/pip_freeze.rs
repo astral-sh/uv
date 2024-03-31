@@ -16,8 +16,8 @@ use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
 pub(crate) fn pip_freeze(
-    strict: bool,
     exclude_editable: bool,
+    strict: bool,
     python: Option<&str>,
     system: bool,
     cache: &Cache,

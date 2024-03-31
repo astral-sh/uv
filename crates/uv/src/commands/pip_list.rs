@@ -23,11 +23,11 @@ use super::ListFormat;
 /// Enumerate the installed packages in the current environment.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) fn pip_list(
-    strict: bool,
     editable: bool,
     exclude_editable: bool,
     exclude: &[PackageName],
     format: &ListFormat,
+    strict: bool,
     python: Option<&str>,
     system: bool,
     cache: &Cache,
