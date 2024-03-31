@@ -431,8 +431,8 @@ impl ResolutionGraph {
         let direct_reqs = manifest
             .requirements
             .iter()
-            .chain(&manifest.constraints)
-            .chain(&manifest.overrides);
+            .chain(manifest.constraints.requirements())
+            .chain(manifest.overrides.requirements());
         for direct_req in direct_reqs {
             let Some(ref marker_tree) = direct_req.marker else {
                 continue;

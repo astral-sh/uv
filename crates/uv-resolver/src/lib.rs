@@ -18,7 +18,7 @@ pub use yanks::AllowedYanks;
 
 mod bare;
 mod candidate_selector;
-mod constraints;
+
 mod dependency_mode;
 mod dependency_provider;
 mod editables;
@@ -26,7 +26,6 @@ mod error;
 mod exclusions;
 mod manifest;
 mod options;
-mod overrides;
 mod pins;
 mod preferences;
 mod prerelease_mode;

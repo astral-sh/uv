@@ -53,7 +53,7 @@ impl Urls {
         for requirement in manifest
             .requirements
             .iter()
-            .chain(manifest.constraints.iter())
+            .chain(manifest.constraints.requirements())
             .filter(|requirement| requirement.evaluate_markers(markers, &[]))
         {
             if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
@@ -125,7 +125,7 @@ impl Urls {
         // authoritative.
         for requirement in manifest
             .overrides
-            .iter()
+            .requirements()
             .filter(|requirement| requirement.evaluate_markers(markers, &[]))
         {
             if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {

@@ -2,7 +2,7 @@ use distribution_types::LocalEditable;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use pypi_types::Metadata23;
 use uv_normalize::PackageName;
-use uv_types::RequestedRequirements;
+use uv_types::{Constraints, Overrides, RequestedRequirements};
 
 use crate::{preferences::Preference, Exclusions};
 
@@ -13,10 +13,10 @@ pub struct Manifest {
     pub(crate) requirements: Vec<Requirement>,
 
     /// The constraints for the project.
-    pub(crate) constraints: Vec<Requirement>,
+    pub(crate) constraints: Constraints,
 
     /// The overrides for the project.
-    pub(crate) overrides: Vec<Requirement>,
+    pub(crate) overrides: Overrides,
 
     /// The preferences for the project.
     ///
@@ -52,8 +52,8 @@ impl Manifest {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         requirements: Vec<Requirement>,
-        constraints: Vec<Requirement>,
-        overrides: Vec<Requirement>,
+        constraints: Constraints,
+        overrides: Overrides,
         preferences: Vec<Preference>,
         project: Option<PackageName>,
         editables: Vec<(LocalEditable, Metadata23)>,
@@ -75,8 +75,8 @@ impl Manifest {
     pub fn simple(requirements: Vec<Requirement>) -> Self {
         Self {
             requirements,
-            constraints: Vec::new(),
-            overrides: Vec::new(),
+            constraints: Constraints::default(),
+            overrides: Overrides::default(),
             preferences: Vec::new(),
             project: None,
             editables: Vec::new(),
@@ -118,12 +118,12 @@ impl Manifest {
             )
             .chain(
                 self.constraints
-                    .iter()
+                    .requirements()
                     .filter(|requirement| requirement.evaluate_markers(markers, &[])),
             )
             .chain(
                 self.overrides
-                    .iter()
+                    .requirements()
                     .filter(|requirement| requirement.evaluate_markers(markers, &[])),
             )
     }
