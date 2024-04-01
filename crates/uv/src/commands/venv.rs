@@ -23,6 +23,7 @@ use uv_resolver::{InMemoryIndex, OptionsBuilder};
 use uv_types::{
     BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, SetupPyStrategy,
 };
+use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -112,6 +113,13 @@ async fn venv_impl(
     } else {
         find_default_python(cache).into_diagnostic()?
     };
+
+    if interpreter.python_tuple() < (3, 8) {
+        warn_user!(
+            "uv is only compatible with Python 3.8+, found Python {}.",
+            interpreter.python_version()
+        );
+    }
 
     writeln!(
         printer.stderr(),
