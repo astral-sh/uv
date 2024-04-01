@@ -9,7 +9,7 @@ use distribution_types::{BuildableSource, Dist, LocalEditable};
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use pypi_types::Metadata23;
 use uv_client::RegistryClient;
-use uv_distribution::{Reporter, SourceDistCachedBuilder};
+use uv_distribution::{Reporter, SourceDistributionBuilder};
 use uv_types::{BuildContext, Constraints, Overrides, RequestedRequirements};
 
 /// A resolver for resolving lookahead requirements from local dependencies.
@@ -134,9 +134,9 @@ impl<'a> LookaheadResolver<'a> {
 
         // Run the PEP 517 build process to extract metadata from the source distribution.
         let builder = if let Some(reporter) = self.reporter.clone() {
-            SourceDistCachedBuilder::new(context, client).with_reporter(reporter)
+            SourceDistributionBuilder::new(client, context).with_reporter(reporter)
         } else {
-            SourceDistCachedBuilder::new(context, client)
+            SourceDistributionBuilder::new(client, context)
         };
 
         let metadata = builder

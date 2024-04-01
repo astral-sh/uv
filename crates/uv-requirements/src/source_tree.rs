@@ -9,7 +9,7 @@ use url::Url;
 use distribution_types::{BuildableSource, PathSourceUrl, SourceUrl};
 use pep508_rs::Requirement;
 use uv_client::RegistryClient;
-use uv_distribution::{Reporter, SourceDistCachedBuilder};
+use uv_distribution::{Reporter, SourceDistributionBuilder};
 use uv_types::BuildContext;
 
 use crate::ExtrasSpecification;
@@ -87,9 +87,9 @@ impl<'a> SourceTreeResolver<'a> {
 
         // Run the PEP 517 build process to extract metadata from the source distribution.
         let builder = if let Some(reporter) = self.reporter.clone() {
-            SourceDistCachedBuilder::new(context, client).with_reporter(reporter)
+            SourceDistributionBuilder::new(client, context).with_reporter(reporter)
         } else {
-            SourceDistCachedBuilder::new(context, client)
+            SourceDistributionBuilder::new(client, context)
         };
 
         let metadata = builder.download_and_build_metadata(&source).await?;

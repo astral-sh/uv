@@ -22,7 +22,7 @@ use uv_types::{BuildContext, NoBinary, NoBuild};
 use crate::download::{BuiltWheel, UnzippedWheel};
 use crate::git::resolve_precise;
 use crate::locks::Locks;
-use crate::{DiskWheel, Error, LocalWheel, Reporter, SourceDistCachedBuilder};
+use crate::{DiskWheel, Error, LocalWheel, Reporter, SourceDistributionBuilder};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -39,7 +39,7 @@ use crate::{DiskWheel, Error, LocalWheel, Reporter, SourceDistCachedBuilder};
 pub struct DistributionDatabase<'a, Context: BuildContext + Send + Sync> {
     client: &'a RegistryClient,
     build_context: &'a Context,
-    builder: SourceDistCachedBuilder<'a, Context>,
+    builder: SourceDistributionBuilder<'a, Context>,
     locks: Arc<Locks>,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -49,7 +49,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         Self {
             client,
             build_context,
-            builder: SourceDistCachedBuilder::new(build_context, client),
+            builder: SourceDistributionBuilder::new(client, build_context),
             locks: Arc::new(Locks::default()),
             reporter: None,
         }

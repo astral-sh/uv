@@ -18,7 +18,7 @@ use pep508_rs::{
 };
 use pypi_types::Metadata10;
 use uv_client::RegistryClient;
-use uv_distribution::{Reporter, SourceDistCachedBuilder};
+use uv_distribution::{Reporter, SourceDistributionBuilder};
 use uv_normalize::PackageName;
 use uv_types::BuildContext;
 
@@ -233,9 +233,9 @@ impl NamedRequirementsResolver {
 
         // Run the PEP 517 build process to extract metadata from the source distribution.
         let builder = if let Some(reporter) = reporter {
-            SourceDistCachedBuilder::new(context, client).with_reporter(reporter)
+            SourceDistributionBuilder::new(client, context).with_reporter(reporter)
         } else {
-            SourceDistCachedBuilder::new(context, client)
+            SourceDistributionBuilder::new(client, context)
         };
 
         let metadata = builder
