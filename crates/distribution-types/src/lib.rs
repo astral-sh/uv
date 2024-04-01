@@ -424,10 +424,6 @@ impl SourceDist {
     #[must_use]
     pub fn with_url(self, url: Url) -> Self {
         match self {
-            Self::DirectUrl(dist) => Self::DirectUrl(DirectUrlSourceDist {
-                url: VerbatimUrl::unknown(url),
-                ..dist
-            }),
             Self::Git(dist) => Self::Git(GitSourceDist {
                 url: VerbatimUrl::unknown(url),
                 ..dist
@@ -992,6 +988,70 @@ impl Identifier for Dist {
         match self {
             Self::Built(dist) => dist.resource_id(),
             Self::Source(dist) => dist.resource_id(),
+        }
+    }
+}
+
+impl Identifier for DirectSourceUrl<'_> {
+    fn distribution_id(&self) -> DistributionId {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.url.resource_id()
+    }
+}
+
+impl Identifier for GitSourceUrl<'_> {
+    fn distribution_id(&self) -> DistributionId {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.url.resource_id()
+    }
+}
+
+impl Identifier for PathSourceUrl<'_> {
+    fn distribution_id(&self) -> DistributionId {
+        self.url.distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.url.resource_id()
+    }
+}
+
+impl Identifier for SourceUrl<'_> {
+    fn distribution_id(&self) -> DistributionId {
+        match self {
+            Self::Direct(url) => url.distribution_id(),
+            Self::Git(url) => url.distribution_id(),
+            Self::Path(url) => url.distribution_id(),
+        }
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        match self {
+            Self::Direct(url) => url.resource_id(),
+            Self::Git(url) => url.resource_id(),
+            Self::Path(url) => url.resource_id(),
+        }
+    }
+}
+
+impl Identifier for BuildableSource<'_> {
+    fn distribution_id(&self) -> DistributionId {
+        match self {
+            BuildableSource::Dist(source) => source.distribution_id(),
+            BuildableSource::Url(source) => source.distribution_id(),
+        }
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        match self {
+            BuildableSource::Dist(source) => source.resource_id(),
+            BuildableSource::Url(source) => source.resource_id(),
         }
     }
 }

@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -11,8 +10,10 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, IndexLocations, LocalEditable, Name, SourceDist,
+    BuildableSource, BuiltDist, Dist, FileLocation, GitSourceDist, GitSourceUrl, IndexLocations,
+    LocalEditable, Name, SourceDist, SourceUrl,
 };
+use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use pypi_types::Metadata23;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, CacheBucket, CacheEntry, WheelCache};
@@ -104,54 +105,13 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         dist: &Dist,
     ) -> Result<(Metadata23, Option<Url>), Error> {
         match dist {
-            Dist::Built(built_dist) => {
-                match self.client.wheel_metadata(built_dist).boxed().await {
-                    Ok(metadata) => Ok((metadata, None)),
-                    Err(err) if err.is_http_streaming_unsupported() => {
-                        warn!("Streaming unsupported when fetching metadata for {built_dist}; downloading wheel directly ({err})");
-
-                        // If the request failed due to an error that could be resolved by
-                        // downloading the wheel directly, try that.
-                        let wheel = self.get_wheel(built_dist).await?;
-                        Ok((wheel.metadata()?, None))
-                    }
-                    Err(err) => Err(err.into()),
-                }
-            }
-            Dist::Source(source_dist) => {
-                let no_build = match self.build_context.no_build() {
-                    NoBuild::All => true,
-                    NoBuild::None => false,
-                    NoBuild::Packages(packages) => packages.contains(source_dist.name()),
-                };
-
-                // Optimization: Skip source dist download when we must not build them anyway.
-                if no_build {
-                    return Err(Error::NoBuild);
-                }
-
-                let lock = self.locks.acquire(dist).await;
-                let _guard = lock.lock().await;
-
-                // Insert the `precise` URL, if it exists.
-                let precise = resolve_precise(
-                    source_dist,
-                    self.build_context.cache(),
-                    self.reporter.as_ref(),
-                )
-                .await?;
-
-                let source_dist = match precise.as_ref() {
-                    Some(url) => Cow::Owned(source_dist.clone().with_url(url.clone())),
-                    None => Cow::Borrowed(source_dist),
-                };
-
-                let metadata = self
-                    .builder
-                    .download_and_build_metadata(&BuildableSource::Dist(&source_dist))
-                    .boxed()
-                    .await?;
-                Ok((metadata, precise))
+            Dist::Built(built) => self
+                .get_wheel_metadata(built)
+                .await
+                .map(|metadata| (metadata, None)),
+            Dist::Source(source) => {
+                self.build_wheel_metadata(&BuildableSource::Dist(source))
+                    .await
             }
         }
     }
@@ -383,6 +343,93 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             }
             Err(err) => Err(Error::CacheRead(err)),
         }
+    }
+
+    /// Fetch the wheel metadata from the index, or from the cache if possible.
+    pub async fn get_wheel_metadata(&self, dist: &BuiltDist) -> Result<Metadata23, Error> {
+        match self.client.wheel_metadata(dist).boxed().await {
+            Ok(metadata) => Ok(metadata),
+            Err(err) if err.is_http_streaming_unsupported() => {
+                warn!("Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})");
+
+                // If the request failed due to an error that could be resolved by
+                // downloading the wheel directly, try that.
+                let wheel = self.get_wheel(dist).await?;
+                Ok(wheel.metadata()?)
+            }
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    /// Build the wheel metadata for a source distribution, or fetch it from the cache if possible.
+    pub async fn build_wheel_metadata(
+        &self,
+        source: &BuildableSource<'_>,
+    ) -> Result<(Metadata23, Option<Url>), Error> {
+        let no_build = match self.build_context.no_build() {
+            NoBuild::All => true,
+            NoBuild::None => false,
+            NoBuild::Packages(packages) => {
+                source.name().is_some_and(|name| packages.contains(name))
+            }
+        };
+
+        // Optimization: Skip source dist download when we must not build them anyway.
+        if no_build {
+            return Err(Error::NoBuild);
+        }
+
+        let lock = self.locks.acquire(source).await;
+        let _guard = lock.lock().await;
+
+        // Insert the `precise` URL, if it exists.
+        if let BuildableSource::Dist(SourceDist::Git(source)) = source {
+            if let Some(precise) = resolve_precise(
+                &source.url,
+                self.build_context.cache(),
+                self.reporter.as_ref(),
+            )
+            .await?
+            {
+                let source = SourceDist::Git(GitSourceDist {
+                    url: VerbatimUrl::unknown(precise.clone()),
+                    ..source.clone()
+                });
+                let source = BuildableSource::Dist(&source);
+                let metadata = self
+                    .builder
+                    .download_and_build_metadata(&source)
+                    .boxed()
+                    .await?;
+                return Ok((metadata, Some(precise)));
+            }
+        }
+
+        if let BuildableSource::Url(SourceUrl::Git(source)) = source {
+            if let Some(precise) = resolve_precise(
+                source.url,
+                self.build_context.cache(),
+                self.reporter.as_ref(),
+            )
+            .await?
+            {
+                let source = SourceUrl::Git(GitSourceUrl { url: &precise });
+                let source = BuildableSource::Url(source);
+                let metadata = self
+                    .builder
+                    .download_and_build_metadata(&source)
+                    .boxed()
+                    .await?;
+                return Ok((metadata, Some(precise)));
+            }
+        }
+
+        let metadata = self
+            .builder
+            .download_and_build_metadata(source)
+            .boxed()
+            .await?;
+        Ok((metadata, None))
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.

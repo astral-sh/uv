@@ -8,7 +8,7 @@ use rustc_hash::FxHashMap;
 use tracing::debug;
 use url::Url;
 
-use distribution_types::{DirectGitUrl, SourceDist};
+use distribution_types::DirectGitUrl;
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::LockedFile;
 use uv_git::{Fetch, GitSource, GitUrl};
@@ -87,17 +87,13 @@ pub(crate) async fn fetch_git_archive(
 /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
 /// prefix kinds.
 pub(crate) async fn resolve_precise(
-    dist: &SourceDist,
+    url: &Url,
     cache: &Cache,
     reporter: Option<&Arc<dyn Reporter>>,
 ) -> Result<Option<Url>, Error> {
-    let SourceDist::Git(source_dist) = dist else {
-        return Ok(None);
-    };
     let git_dir = cache.bucket(CacheBucket::Git);
 
-    let DirectGitUrl { url, subdirectory } =
-        DirectGitUrl::try_from(source_dist.url.raw()).map_err(Error::Git)?;
+    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Error::Git)?;
 
     // If the Git reference already contains a complete SHA, short-circuit.
     if url.precise().is_some() {
