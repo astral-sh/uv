@@ -23,6 +23,7 @@ use uv_interpreter::find_requested_python;
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
+#[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir [^\s]+", "--cache-dir [CACHE_DIR]"),
     // Operation times
@@ -155,6 +156,38 @@ impl TestContext {
         }
 
         cmd
+    }
+
+    /// Create a `pip install` command with options shared across scenarios.
+    pub fn install(&self) -> std::process::Command {
+        let mut command = self.install_without_exclude_newer();
+        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
+        command
+    }
+
+    /// Create a `pip install` command with no `--exclude-newer` option.
+    ///
+    /// One should avoid using this in tests to the extent possible because
+    /// it can result in tests failing when the index state changes. Therefore,
+    /// if you use this, there should be some other kind of mitigation in place.
+    /// For example, pinning package versions.
+    pub fn install_without_exclude_newer(&self) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command
+            .arg("pip")
+            .arg("install")
+            .arg("--cache-dir")
+            .arg(self.cache_dir.path())
+            .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .current_dir(&self.temp_dir);
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+        }
+
+        command
     }
 
     /// Run the given python code and check whether it succeeds.
@@ -386,9 +419,9 @@ pub fn create_bin_with_executables(
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
-pub fn run_and_format<'a>(
+pub fn run_and_format<T: AsRef<str>>(
     mut command: impl BorrowMut<std::process::Command>,
-    filters: impl AsRef<[(&'a str, &'a str)]>,
+    filters: impl AsRef<[(T, T)]>,
     windows_filters: bool,
 ) -> (String, Output) {
     let program = command
@@ -411,9 +444,9 @@ pub fn run_and_format<'a>(
 
     for (matcher, replacement) in filters.as_ref() {
         // TODO(konstin): Cache regex compilation
-        let re = Regex::new(matcher).expect("Do you need to regex::escape your filter?");
+        let re = Regex::new(matcher.as_ref()).expect("Do you need to regex::escape your filter?");
         if re.is_match(&snapshot) {
-            snapshot = re.replace_all(&snapshot, *replacement).to_string();
+            snapshot = re.replace_all(&snapshot, replacement.as_ref()).to_string();
         }
     }
 
