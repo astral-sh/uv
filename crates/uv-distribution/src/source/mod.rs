@@ -44,9 +44,9 @@ mod built_wheel_metadata;
 mod manifest;
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
-pub struct SourceDistCachedBuilder<'a, T: BuildContext> {
-    build_context: &'a T,
+pub struct SourceDistributionBuilder<'a, T: BuildContext> {
     client: &'a RegistryClient,
+    build_context: &'a T,
     reporter: Option<Arc<dyn Reporter>>,
 }
 
@@ -56,13 +56,13 @@ pub(crate) const MANIFEST: &str = "manifest.msgpack";
 /// The name of the file that contains the cached distribution metadata, encoded via `MsgPack`.
 pub(crate) const METADATA: &str = "metadata.msgpack";
 
-impl<'a, T: BuildContext> SourceDistCachedBuilder<'a, T> {
-    /// Initialize a [`SourceDistCachedBuilder`] from a [`BuildContext`].
-    pub fn new(build_context: &'a T, client: &'a RegistryClient) -> Self {
+impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
+    /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].
+    pub fn new(client: &'a RegistryClient, build_context: &'a T) -> Self {
         Self {
+            client,
             build_context,
             reporter: None,
-            client,
         }
     }
 
