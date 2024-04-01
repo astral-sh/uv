@@ -140,7 +140,7 @@ impl<
     ) -> Result<Self, ResolveError> {
         let provider = DefaultResolverProvider::new(
             client,
-            DistributionDatabase::new(build_context.cache(), client, build_context),
+            DistributionDatabase::new(client, build_context),
             flat_index,
             tags,
             PythonRequirement::new(interpreter, markers),

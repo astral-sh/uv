@@ -54,7 +54,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         Self {
             tags,
             cache,
-            database: DistributionDatabase::new(cache, client, build_context),
+            database: DistributionDatabase::new(client, build_context),
             reporter: None,
         }
     }

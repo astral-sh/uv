@@ -15,7 +15,7 @@ use distribution_types::{
 };
 use platform_tags::Tags;
 use pypi_types::Metadata23;
-use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, CacheEntry, WheelCache};
+use uv_cache::{ArchiveTarget, ArchiveTimestamp, CacheBucket, CacheEntry, WheelCache};
 use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
 use uv_types::{BuildContext, NoBinary, NoBuild};
 
@@ -37,23 +37,21 @@ use crate::{DiskWheel, Error, LocalWheel, Reporter, SourceDistCachedBuilder};
 /// This struct also has the task of acquiring locks around source dist builds in general and git
 /// operation especially.
 pub struct DistributionDatabase<'a, Context: BuildContext + Send + Sync> {
-    cache: &'a Cache,
-    reporter: Option<Arc<dyn Reporter>>,
-    locks: Arc<Locks>,
     client: &'a RegistryClient,
     build_context: &'a Context,
     builder: SourceDistCachedBuilder<'a, Context>,
+    locks: Arc<Locks>,
+    reporter: Option<Arc<dyn Reporter>>,
 }
 
 impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> {
-    pub fn new(cache: &'a Cache, client: &'a RegistryClient, build_context: &'a Context) -> Self {
+    pub fn new(client: &'a RegistryClient, build_context: &'a Context) -> Self {
         Self {
-            cache,
-            reporter: None,
-            locks: Arc::new(Locks::default()),
             client,
             build_context,
             builder: SourceDistCachedBuilder::new(build_context, client),
+            locks: Arc::new(Locks::default()),
+            reporter: None,
         }
     }
 
@@ -200,7 +198,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     }
                     FileLocation::Path(path) => {
                         let url = Url::from_file_path(path).expect("path is absolute");
-                        let cache_entry = self.cache.entry(
+                        let cache_entry = self.build_context.cache().entry(
                             CacheBucket::Wheels,
                             WheelCache::Url(&url).wheel_dir(wheel.name().as_ref()),
                             wheel.filename.stem(),
@@ -238,7 +236,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 };
 
                 // Create a cache entry for the wheel.
-                let wheel_entry = self.cache.entry(
+                let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
                     WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.stem(),
@@ -276,7 +274,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
             BuiltDist::DirectUrl(wheel) => {
                 // Create a cache entry for the wheel.
-                let wheel_entry = self.cache.entry(
+                let wheel_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.stem(),
@@ -318,7 +316,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             }
 
             BuiltDist::Path(wheel) => {
-                let cache_entry = self.cache.entry(
+                let cache_entry = self.build_context.cache().entry(
                     CacheBucket::Wheels,
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.stem(),
@@ -406,13 +404,14 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .into_async_read();
 
                 // Download and unzip the wheel to a temporary directory.
-                let temp_dir =
-                    tempfile::tempdir_in(self.cache.root()).map_err(Error::CacheWrite)?;
+                let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
+                    .map_err(Error::CacheWrite)?;
                 uv_extract::stream::unzip(reader.compat(), temp_dir.path()).await?;
 
                 // Persist the temporary directory to the directory store.
                 let archive = self
-                    .cache
+                    .build_context
+                    .cache()
                     .persist(temp_dir.into_path(), wheel_entry.path())
                     .await
                     .map_err(Error::CacheRead)?;
@@ -435,7 +434,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             .build()?;
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(
-                self.cache
+                self.build_context
+                    .cache()
                     .freshness(&http_entry, Some(&filename.name))
                     .map_err(Error::CacheRead)?,
             ),
@@ -474,16 +474,16 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .into_async_read();
 
                 // Download the wheel to a temporary file.
-                let temp_file =
-                    tempfile::tempfile_in(self.cache.root()).map_err(Error::CacheWrite)?;
+                let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
+                    .map_err(Error::CacheWrite)?;
                 let mut writer = tokio::io::BufWriter::new(tokio::fs::File::from_std(temp_file));
                 tokio::io::copy(&mut reader.compat(), &mut writer)
                     .await
                     .map_err(Error::CacheWrite)?;
 
                 // Unzip the wheel to a temporary directory.
-                let temp_dir =
-                    tempfile::tempdir_in(self.cache.root()).map_err(Error::CacheWrite)?;
+                let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
+                    .map_err(Error::CacheWrite)?;
                 let mut file = writer.into_inner();
                 file.seek(io::SeekFrom::Start(0))
                     .await
@@ -493,7 +493,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
                 // Persist the temporary directory to the directory store.
                 let archive = self
-                    .cache
+                    .build_context
+                    .cache()
                     .persist(temp_dir.into_path(), wheel_entry.path())
                     .await
                     .map_err(Error::CacheRead)?;
@@ -516,7 +517,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             .build()?;
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(
-                self.cache
+                self.build_context
+                    .cache()
                     .freshness(&http_entry, Some(&filename.name))
                     .map_err(Error::CacheRead)?,
             ),
