@@ -1093,7 +1093,7 @@ fn install_git_private_https_pat() {
         "uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"
     );
 
-    uv_snapshot!(filters, context.arg(package).install()
+    uv_snapshot!(filters, context.install().arg(package)
         , @r###"
     success: true
     exit_code: 0
