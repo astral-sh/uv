@@ -1584,8 +1584,8 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask==3.0.0 depends on werkzeug>=3.0.0 and only werkzeug<3.0.0
-          is available, we can conclude that flask==3.0.0 cannot be used.
+      ╰─▶ Because only werkzeug<3.0.0 is available and flask==3.0.0 depends on
+          werkzeug>=3.0.0, we can conclude that flask==3.0.0 cannot be used.
           And because you require flask==3.0.0, we can conclude that the
           requirements are unsatisfiable.
     "###

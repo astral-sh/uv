@@ -546,6 +546,7 @@ async fn resolve(
         &editables,
         build_dispatch,
         client,
+        index,
     )
     .with_reporter(ResolverReporter::from(printer))
     .resolve(markers)

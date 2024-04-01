@@ -345,6 +345,7 @@ pub(crate) async fn pip_compile(
         &editables,
         &build_dispatch,
         &client,
+        &top_level_index,
     )
     .with_reporter(ResolverReporter::from(printer))
     .resolve(&markers)
