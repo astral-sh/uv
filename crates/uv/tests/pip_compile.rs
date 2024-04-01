@@ -6444,21 +6444,8 @@ fn local_version_of_remote_package() -> Result<()> {
     "###);
 
     // Actually install the local dependency
-    // TODO(zanieb): We should have an `install` utility on the context instead of doing this
-    let mut command = Command::new(get_bin());
-    command
-        .arg("pip")
-        .arg("install")
-        .arg(root_path.join("anyio_local"))
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
-        .arg("--exclude-newer")
-        .arg(EXCLUDE_NEWER)
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .current_dir(context.temp_dir.path());
-    if cfg!(all(windows, debug_assertions)) {
-        command.env("UV_STACK_SIZE", (8 * 1024 * 1024).to_string());
-    }
+    let mut command = context.install();
+    command.arg(root_path.join("anyio_local"));
     uv_snapshot!(
         context.filters(),
         command, @r###"

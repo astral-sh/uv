@@ -51,17 +51,20 @@ impl VenvTestContext {
     }
 
     fn filters(&self) -> Vec<(String, String)> {
+        // On windows, a directory can have multiple names (https://superuser.com/a/1666770), e.g.
+        // `C:\Users\KONSTA~1` and `C:\Users\Konstantin` are the same.
+        let venv_full = regex::escape(&self.venv.display().to_string());
+        let mut filters = vec![(venv_full, ".venv".to_string())];
+
         // For mac, otherwise it shows some /var/folders/ path.
-        let mut filters = if let Ok(canonicalized) = self.venv.path().fs_err_canonicalize() {
+        if let Ok(canonicalized) = self.venv.path().fs_err_canonicalize() {
             let venv_full = regex::escape(&canonicalized.simplified_display().to_string());
-            vec![(venv_full, ".venv".to_string())]
-        } else {
-            Vec::new()
-        };
+            filters.push((venv_full, ".venv".to_string()));
+        }
 
         filters.push((
-            r"Using Python 3\.\d+\.\d+ interpreter at: .+".to_string(),
-            "Using Python [VERSION] interpreter at: [PATH]".to_string(),
+            r"interpreter at: .+".to_string(),
+            "interpreter at: [PATH]".to_string(),
         ));
         filters.push((
             r"Activate with: (?:.*)\\Scripts\\activate".to_string(),
@@ -85,7 +88,7 @@ fn create_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at: [PATH]
+    Using Python 3.12.1 interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -104,7 +107,7 @@ fn create_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at: [PATH]
+    Using Python 3.12.1 interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -125,7 +128,7 @@ fn create_venv_defaults_to_cwd() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at: [PATH]
+    Using Python 3.12.1 interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -148,7 +151,7 @@ fn seed() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at: [PATH]
+    Using Python 3.12.1 interpreter at: [PATH]
     Creating virtualenv at: .venv
      + pip==24.0
     Activate with: source .venv/bin/activate
@@ -172,7 +175,7 @@ fn seed_older_python_version() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at: [PATH]
+    Using Python 3.10.13 interpreter at: [PATH]
     Creating virtualenv at: .venv
      + pip==24.0
      + setuptools==69.2.0
@@ -254,12 +257,7 @@ fn create_venv_unknown_python_patch() {
 fn create_venv_python_patch() {
     let context = VenvTestContext::new(&["3.12.1"]);
 
-    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
-    let filters = &[
-        (r"interpreter at: .+", "interpreter at: [PATH]"),
-        (filter_prompt, "Activate with: source .venv/bin/activate"),
-    ];
-    uv_snapshot!(filters, context.venv_command()
+    uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12.1")
@@ -285,11 +283,7 @@ fn file_exists() -> Result<()> {
     // Create a file at `.venv`. Creating a virtualenv at the same path should fail.
     context.venv.touch()?;
 
-    let filters = &[(
-        r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-        "Using Python [VERSION] interpreter at: [PATH]",
-    )];
-    uv_snapshot!(filters, context.venv_command()
+    uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12")
@@ -299,7 +293,7 @@ fn file_exists() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at: [PATH]
+    Using Python 3.12.1 interpreter at: [PATH]
     Creating virtualenv at: .venv
     uv::venv::creation
 
@@ -327,7 +321,7 @@ fn empty_dir_exists() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at: [PATH]
+    Using Python 3.12.1 interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -346,11 +340,7 @@ fn non_empty_dir_exists() -> Result<()> {
     context.venv.create_dir_all()?;
     context.venv.child("file").touch()?;
 
-    let filters = &[(
-        r"Using Python 3\.\d+\.\d+ interpreter at: .+",
-        "Using Python [VERSION] interpreter at: [PATH]",
-    )];
-    uv_snapshot!(filters, context.venv_command()
+    uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12")
@@ -360,7 +350,7 @@ fn non_empty_dir_exists() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python [VERSION] interpreter at: [PATH]
+    Using Python 3.12.1 interpreter at: [PATH]
     Creating virtualenv at: .venv
     uv::venv::creation
 
@@ -395,15 +385,7 @@ fn windows_shims() -> Result<()> {
     )?;
 
     // Create a virtual environment at `.venv`, passing the redundant `--clear` flag.
-    let filter_prompt = r"Activate with: (?:.*)\\Scripts\\activate";
-    let filters = &[
-        (
-            r"Using Python 3\.8.\d+ interpreter at: .+",
-            "Using Python 3.8.x interpreter at: [PATH]",
-        ),
-        (&filter_prompt, "Activate with: source .venv/bin/activate"),
-    ];
-    uv_snapshot!(filters, context.venv_command()
+    uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
         .arg("--clear")
         .env("UV_TEST_PYTHON_PATH", format!("{};{}", shim_path.display(), context.bin.simplified_display())), @r###"
@@ -413,7 +395,7 @@ fn windows_shims() -> Result<()> {
 
     ----- stderr -----
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
-    Using Python 3.8.x interpreter at: [PATH]
+    Using Python 3.8.12 interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -440,7 +422,7 @@ fn virtualenv_compatibility() {
 
     ----- stderr -----
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
-    Using Python [VERSION] interpreter at: [PATH]
+    Using Python 3.12.1 interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###

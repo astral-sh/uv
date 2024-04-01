@@ -158,6 +158,38 @@ impl TestContext {
         cmd
     }
 
+    /// Create a `pip install` command with options shared across scenarios.
+    pub fn install(&self) -> std::process::Command {
+        let mut command = self.install_without_exclude_newer();
+        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
+        command
+    }
+
+    /// Create a `pip install` command with no `--exclude-newer` option.
+    ///
+    /// One should avoid using this in tests to the extent possible because
+    /// it can result in tests failing when the index state changes. Therefore,
+    /// if you use this, there should be some other kind of mitigation in place.
+    /// For example, pinning package versions.
+    pub fn install_without_exclude_newer(&self) -> std::process::Command {
+        let mut command = std::process::Command::new(get_bin());
+        command
+            .arg("pip")
+            .arg("install")
+            .arg("--cache-dir")
+            .arg(self.cache_dir.path())
+            .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .current_dir(&self.temp_dir);
+
+        if cfg!(all(windows, debug_assertions)) {
+            // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+            // default windows stack of 1MB
+            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+        }
+
+        command
+    }
+
     /// Run the given python code and check whether it succeeds.
     pub fn assert_command(&self, command: &str) -> Assert {
         std::process::Command::new(venv_to_interpreter(&self.venv))
