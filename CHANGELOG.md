@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.27
+
+### Enhancements
+
+- Add `--exclude-editable` support to `pip-freeze` ([#2740](https://github.com/astral-sh/uv/pull/2740))
+- Add `pyproject.toml` et al to list of prompted packages ([#2746](https://github.com/astral-sh/uv/pull/2746))
+- Consider installed packages during resolution ([#2596](https://github.com/astral-sh/uv/pull/2596))
+- Recursively allow URL requirements for local dependencies ([#2702](https://github.com/astral-sh/uv/pull/2702))
+
+### Configuration
+
+- Add `UV_RESOLUTION` environment variable for `--resolution` ([#2720](https://github.com/astral-sh/uv/pull/2720))
+
+### Bug fixes
+
+- Respect overrides in all direct-dependency iterators ([#2742](https://github.com/astral-sh/uv/pull/2742))
+- Respect subdirectories when reading static metadata ([#2728](https://github.com/astral-sh/uv/pull/2728))
+
 ## 0.1.26
 
 ### Bug fixes
