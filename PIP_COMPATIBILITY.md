@@ -38,41 +38,6 @@ Instead, uv supports its own environment variables, like `UV_INDEX_URL`. In the 
 also support persistent configuration in its own configuration file format (e.g., `pyproject.toml`
 or `uv.toml` or similar). For more, see [#651](https://github.com/astral-sh/uv/issues/651).
 
-## Transitive direct URL dependencies
-
-While uv does support direct URL dependencies (e.g., `black @ https://...`), it does not support
-nested (or "transitive") direct URL dependencies, instead requiring that any direct URL dependencies
-are declared upfront.
-
-For example, if `black @ https://...` itself had a dependency on `toml @ https://...`, uv would
-reject the transitive direct URL dependency on `toml` and require that `toml` be declared as a
-dependency in the `pyproject.toml` file, like:
-
-```toml
-# pyproject.toml
-dependencies = [
-    "black @ https://...",
-    "toml @ https://...",
-]
-```
-
-This is a deliberate choice to avoid the correctness and security issues associated with allowing
-transitive dependencies to introduce arbitrary URLs into the dependency graph.
-
-For example:
-
-- Your package depends on `package_a==1.0.0`.
-- Your package depends on `package_b==1.0.0`.
-- `package_b==1.0.0` depends on `package_a @ https://...`.
-
-If `package_a @ https://...` happens to resolve to version `1.0.0`, `pip` would install `package_a`
-from the direct URL. This is a security issue, since the direct URL could be controlled by an
-attacker, and a correctness issue, since the direct URL could resolve to an entirely different
-package with the same name and version.
-
-In the future, uv may allow transitive URL dependencies in some form (e.g., with user opt-in).
-For more, see [#1808](https://github.com/astral-sh/uv/issues/1808).
-
 ## Pre-release compatibility
 
 By default, uv will accept pre-release versions during dependency resolution in two cases:
@@ -166,6 +131,23 @@ from December 2022.
 In the future, uv will support pinning packages to dedicated indexes (see: [#171](https://github.com/astral-sh/uv/issues/171)).
 Additionally, [PEP 708](https://peps.python.org/pep-0708/) is a provisional standard that aims to
 address the "dependency confusion" issue across package registries and installers.
+
+## Transitive direct URL dependencies for constraints and overrides
+
+While uv does support URL dependencies (e.g., `black @ https://...`), it does not support
+_transitive_ (i.e., "nested") direct URL dependencies for constraints and overrides.
+
+Specifically, if a constraint or override is defined using a direct URL dependency, and the
+constrained package has a direct URL dependency of its own, uv _may_ reject that transitive direct
+URL dependency during resolution.
+
+uv also makes the assumption that non-URL dependencies won't introduce URL dependencies (i.e., that
+dependencies fetched from a registry will not themselves have direct URL dependencies). If a non-URL
+dependency _does_ introduce a URL dependency, uv will reject the URL dependency during resolution.
+
+If uv rejects a transitive URL dependency in either case, the best course of action is to provide
+the URL dependency as a direct dependency in the `requirements.in` file, rather than as a
+constraint, override, or transitive dependency.
 
 ## Virtual environments by default
 

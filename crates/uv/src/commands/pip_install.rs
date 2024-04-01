@@ -539,10 +539,17 @@ async fn resolve(
         .collect();
 
     // Determine any lookahead requirements.
-    let lookaheads = LookaheadResolver::new(&requirements, &constraints, &overrides, &editables)
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve(build_dispatch, markers, client)
-        .await?;
+    let lookaheads = LookaheadResolver::new(
+        &requirements,
+        &constraints,
+        &overrides,
+        &editables,
+        build_dispatch,
+        client,
+    )
+    .with_reporter(ResolverReporter::from(printer))
+    .resolve(markers)
+    .await?;
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(

@@ -137,6 +137,7 @@ impl Manifest {
     ) -> impl Iterator<Item = &PackageName> {
         self.lookaheads
             .iter()
+            .filter(|lookahead| lookahead.direct())
             .flat_map(|lookahead| {
                 self.overrides
                     .apply(lookahead.requirements())
