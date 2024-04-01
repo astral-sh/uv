@@ -1,3 +1,4 @@
+use cache_key::CanonicalUrl;
 use dashmap::DashMap;
 use url::Url;
 
@@ -21,5 +22,5 @@ pub struct InMemoryIndex {
     /// A map from source URL to precise URL. For example, the source URL
     /// `git+https://github.com/pallets/flask.git` could be redirected to
     /// `git+https://github.com/pallets/flask.git@c2f65dd1cfff0672b902fd5b30815f0b4137214c`.
-    pub(crate) redirects: DashMap<Url, Url>,
+    pub(crate) redirects: DashMap<CanonicalUrl, Url>,
 }

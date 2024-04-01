@@ -6,6 +6,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use anyhow::Result;
+use cache_key::CanonicalUrl;
 use dashmap::{DashMap, DashSet};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
@@ -949,13 +950,19 @@ impl<
                     if let Some(precise) = precise {
                         match distribution {
                             SourceDist::DirectUrl(sdist) => {
-                                self.index.redirects.insert(sdist.url.to_url(), precise);
+                                self.index
+                                    .redirects
+                                    .insert(CanonicalUrl::new(&sdist.url), precise);
                             }
                             SourceDist::Git(sdist) => {
-                                self.index.redirects.insert(sdist.url.to_url(), precise);
+                                self.index
+                                    .redirects
+                                    .insert(CanonicalUrl::new(&sdist.url), precise);
                             }
                             SourceDist::Path(sdist) => {
-                                self.index.redirects.insert(sdist.url.to_url(), precise);
+                                self.index
+                                    .redirects
+                                    .insert(CanonicalUrl::new(&sdist.url), precise);
                             }
                             SourceDist::Registry(_) => {}
                         }
