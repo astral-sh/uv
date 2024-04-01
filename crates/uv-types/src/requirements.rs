@@ -12,14 +12,17 @@ pub struct RequestedRequirements {
     extras: Vec<ExtraName>,
     /// The set of requirements that were requested by the originating requirement.
     requirements: Vec<Requirement>,
+    /// Whether the dependencies were direct or transitive.
+    direct: bool,
 }
 
 impl RequestedRequirements {
     /// Instantiate a [`RequestedRequirements`] with the given `extras` and `requirements`.
-    pub fn new(extras: Vec<ExtraName>, requirements: Vec<Requirement>) -> Self {
+    pub fn new(extras: Vec<ExtraName>, requirements: Vec<Requirement>, direct: bool) -> Self {
         Self {
             extras,
             requirements,
+            direct,
         }
     }
 
@@ -31,5 +34,10 @@ impl RequestedRequirements {
     /// Return the requirements that were included on the originating requirement.
     pub fn requirements(&self) -> &[Requirement] {
         &self.requirements
+    }
+
+    /// Return whether the dependencies were direct or transitive.
+    pub fn direct(&self) -> bool {
+        self.direct
     }
 }

@@ -66,8 +66,10 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         Self {
             tags: self.tags,
             cache: self.cache,
-            database: self.database.with_reporter(Facade::from(reporter.clone())),
-            reporter: Some(reporter.clone()),
+            database: self
+                .database
+                .with_reporter(Arc::new(Facade::from(reporter.clone()))),
+            reporter: Some(reporter),
         }
     }
 

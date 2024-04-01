@@ -1,15 +1,16 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use rustc_hash::FxHashSet;
 
-use distribution_types::{BuildableSource, Dist, LocalEditable};
+use distribution_types::{Dist, LocalEditable};
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use pypi_types::Metadata23;
 use uv_client::RegistryClient;
-use uv_distribution::{Reporter, SourceDistributionBuilder};
+use uv_distribution::{DistributionDatabase, Reporter};
 use uv_types::{BuildContext, Constraints, Overrides, RequestedRequirements};
 
 /// A resolver for resolving lookahead requirements from local dependencies.
@@ -64,7 +65,7 @@ impl<'a> LookaheadResolver<'a> {
     }
 
     /// Resolve the requirements from the provided source trees.
-    pub async fn resolve<T: BuildContext>(
+    pub async fn resolve<T: BuildContext + Send + Sync>(
         self,
         context: &T,
         markers: &MarkerEnvironment,
@@ -72,6 +73,7 @@ impl<'a> LookaheadResolver<'a> {
     ) -> Result<Vec<RequestedRequirements>> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
+        let mut seen = FxHashSet::default();
 
         // Queue up the initial requirements.
         let mut queue: VecDeque<Requirement> = self
@@ -88,7 +90,12 @@ impl<'a> LookaheadResolver<'a> {
 
         while !queue.is_empty() || !futures.is_empty() {
             while let Some(requirement) = queue.pop_front() {
-                futures.push(self.lookahead(requirement, context, client));
+                // Ignore duplicates. If we have conflicting URLs, we'll catch that later.
+                if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                    if seen.insert(requirement.name.clone()) {
+                        futures.push(self.lookahead(requirement, context, client));
+                    }
+                }
             }
 
             while let Some(result) = futures.next().await {
@@ -110,7 +117,7 @@ impl<'a> LookaheadResolver<'a> {
     }
 
     /// Infer the package name for a given "unnamed" requirement.
-    async fn lookahead<T: BuildContext>(
+    async fn lookahead<T: BuildContext + Send + Sync>(
         &self,
         requirement: Requirement,
         context: &T,
@@ -124,29 +131,33 @@ impl<'a> LookaheadResolver<'a> {
         // Convert to a buildable distribution.
         let dist = Dist::from_url(requirement.name, url.clone())?;
 
-        // Only support source trees (and not, e.g., wheels).
-        let Dist::Source(source_dist) = &dist else {
-            return Ok(None);
+        // Consider the dependencies to be "direct" if the requirement is a local source tree.
+        let direct = if let Dist::Source(source_dist) = &dist {
+            source_dist.as_path().is_some_and(std::path::Path::is_dir)
+        } else {
+            false
         };
-        if !source_dist.as_path().is_some_and(std::path::Path::is_dir) {
-            return Ok(None);
-        }
 
         // Run the PEP 517 build process to extract metadata from the source distribution.
-        let builder = if let Some(reporter) = self.reporter.clone() {
-            SourceDistributionBuilder::new(client, context).with_reporter(reporter)
+        let database = if let Some(reporter) = self.reporter.clone() {
+            DistributionDatabase::new(client, context).with_reporter(reporter)
         } else {
-            SourceDistributionBuilder::new(client, context)
+            DistributionDatabase::new(client, context)
         };
 
-        let metadata = builder
-            .download_and_build_metadata(&BuildableSource::Dist(source_dist))
-            .await?;
+        let (metadata, _precise) = database
+            .get_or_build_wheel_metadata(&dist)
+            .await
+            .with_context(|| match dist {
+                Dist::Built(built) => format!("Failed to download: {built}"),
+                Dist::Source(source) => format!("Failed to download and build: {source}"),
+            })?;
 
         // Return the requirements from the metadata.
         Ok(Some(RequestedRequirements::new(
             requirement.extras,
             metadata.requires_dist,
+            direct,
         )))
     }
 }
