@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::hash::BuildHasherDefault;
 
 use anyhow::Result;
+use cache_key::CanonicalUrl;
 use dashmap::DashMap;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -68,7 +69,7 @@ impl ResolutionGraph {
         pins: &FilePins,
         packages: &OnceMap<PackageName, VersionsResponse>,
         distributions: &OnceMap<PackageId, Metadata23>,
-        redirects: &DashMap<Url, Url>,
+        redirects: &DashMap<CanonicalUrl, Url>,
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
         editables: Editables,
@@ -119,7 +120,7 @@ impl ResolutionGraph {
                     let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
                         Dist::from_editable(package_name.clone(), editable.clone())?
                     } else {
-                        let url = redirects.get(url).map_or_else(
+                        let url = redirects.get(&CanonicalUrl::new(url)).map_or_else(
                             || url.clone(),
                             |precise| apply_redirect(url, precise.value()),
                         );
@@ -224,7 +225,7 @@ impl ResolutionGraph {
                                 .or_insert_with(Vec::new)
                                 .push(extra.clone());
                         } else {
-                            let url = redirects.get(url).map_or_else(
+                            let url = redirects.get(&CanonicalUrl::new(url)).map_or_else(
                                 || url.clone(),
                                 |precise| apply_redirect(url, precise.value()),
                             );
