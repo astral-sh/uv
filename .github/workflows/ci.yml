@@ -477,12 +477,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: "Install Python"
-        run: |
-          brew install python@3.8
-
-          # The system provides `python3` and brew only adds `python3.8` to the path so
-          # we need to link it to take precedence over the the default system python
-          ln -s "/opt/homebrew/bin/python3.8" "/opt/homebrew/bin/python3.3"
+        run: brew install python3
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
