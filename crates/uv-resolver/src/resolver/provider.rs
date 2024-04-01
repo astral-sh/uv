@@ -1,5 +1,4 @@
 use std::future::Future;
-use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -167,7 +166,6 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
     /// Set the [`uv_distribution::Reporter`] to use for this installer.
     #[must_use]
     fn with_reporter(self, reporter: impl uv_distribution::Reporter + 'static) -> Self {
-        let reporter = Arc::new(reporter);
         Self {
             fetcher: self.fetcher.with_reporter(reporter),
             ..self

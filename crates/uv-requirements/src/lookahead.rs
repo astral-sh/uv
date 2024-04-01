@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::stream::FuturesUnordered;
@@ -13,18 +12,23 @@ use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_types::{BuildContext, Constraints, Overrides, RequestedRequirements};
 
-/// A resolver for resolving lookahead requirements from local dependencies.
+/// A resolver for resolving lookahead requirements from direct URLs.
 ///
 /// The resolver extends certain privileges to "first-party" requirements. For example, first-party
 /// requirements are allowed to contain direct URL references, local version specifiers, and more.
 ///
-/// We make an exception for transitive requirements of _local_ dependencies. For example,
-/// `pip install .` should treat the dependencies of `.` as if they were first-party dependencies.
-/// This matches our treatment of editable installs (`pip install -e .`).
+/// The lookahead resolver resolves requirements recursively for direct URLs, so that the resolver
+/// can treat them as first-party dependencies for the purpose of analyzing their specifiers.
+/// Namely, this enables transitive direct URL dependencies, since we can tell the resolver all of
+/// the known URLs upfront.
 ///
-/// The lookahead resolver resolves requirements for local dependencies, so that the resolver can
-/// treat them as first-party dependencies for the purpose of analyzing their specifiers.
-pub struct LookaheadResolver<'a> {
+/// This strategy relies on the assumption that direct URLs are only introduced by other direct
+/// URLs, and not by PyPI dependencies. (If a direct URL _is_ introduced by a PyPI dependency, then
+/// the resolver will (correctly) reject it later on with a conflict error.) Further, it's only
+/// possible because a direct URL points to a _specific_ version of a package, and so we know that
+/// any correct resolution will _have_ to include it (unlike with PyPI dependencies, which may
+/// require a range of versions and backtracking).
+pub struct LookaheadResolver<'a, Context: BuildContext + Send + Sync> {
     /// The direct requirements for the project.
     requirements: &'a [Requirement],
     /// The constraints for the project.
@@ -33,44 +37,40 @@ pub struct LookaheadResolver<'a> {
     overrides: &'a Overrides,
     /// The editable requirements for the project.
     editables: &'a [(LocalEditable, Metadata23)],
-    /// The reporter to use when building source distributions.
-    reporter: Option<Arc<dyn Reporter>>,
+    /// The database for fetching and building distributions.
+    database: DistributionDatabase<'a, Context>,
 }
 
-impl<'a> LookaheadResolver<'a> {
+impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
     /// Instantiate a new [`LookaheadResolver`] for a given set of requirements.
     pub fn new(
         requirements: &'a [Requirement],
         constraints: &'a Constraints,
         overrides: &'a Overrides,
         editables: &'a [(LocalEditable, Metadata23)],
+        context: &'a Context,
+        client: &'a RegistryClient,
     ) -> Self {
         Self {
             requirements,
             constraints,
             overrides,
             editables,
-            reporter: None,
+            database: DistributionDatabase::new(client, context),
         }
     }
 
     /// Set the [`Reporter`] to use for this resolver.
     #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
-        let reporter: Arc<dyn Reporter> = Arc::new(reporter);
         Self {
-            reporter: Some(reporter),
+            database: self.database.with_reporter(reporter),
             ..self
         }
     }
 
     /// Resolve the requirements from the provided source trees.
-    pub async fn resolve<T: BuildContext + Send + Sync>(
-        self,
-        context: &T,
-        markers: &MarkerEnvironment,
-        client: &RegistryClient,
-    ) -> Result<Vec<RequestedRequirements>> {
+    pub async fn resolve(self, markers: &MarkerEnvironment) -> Result<Vec<RequestedRequirements>> {
         let mut results = Vec::new();
         let mut futures = FuturesUnordered::new();
         let mut seen = FxHashSet::default();
@@ -93,7 +93,7 @@ impl<'a> LookaheadResolver<'a> {
                 // Ignore duplicates. If we have conflicting URLs, we'll catch that later.
                 if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                     if seen.insert(requirement.name.clone()) {
-                        futures.push(self.lookahead(requirement, context, client));
+                        futures.push(self.lookahead(requirement));
                     }
                 }
             }
@@ -117,12 +117,7 @@ impl<'a> LookaheadResolver<'a> {
     }
 
     /// Infer the package name for a given "unnamed" requirement.
-    async fn lookahead<T: BuildContext + Send + Sync>(
-        &self,
-        requirement: Requirement,
-        context: &T,
-        client: &RegistryClient,
-    ) -> Result<Option<RequestedRequirements>> {
+    async fn lookahead(&self, requirement: Requirement) -> Result<Option<RequestedRequirements>> {
         // Determine whether the requirement represents a local distribution.
         let Some(VersionOrUrl::Url(url)) = requirement.version_or_url.as_ref() else {
             return Ok(None);
@@ -131,27 +126,22 @@ impl<'a> LookaheadResolver<'a> {
         // Convert to a buildable distribution.
         let dist = Dist::from_url(requirement.name, url.clone())?;
 
+        // Run the PEP 517 build process to extract metadata from the source distribution.
+        let (metadata, _precise) = self
+            .database
+            .get_or_build_wheel_metadata(&dist)
+            .await
+            .with_context(|| match &dist {
+                Dist::Built(built) => format!("Failed to download: {built}"),
+                Dist::Source(source) => format!("Failed to download and build: {source}"),
+            })?;
+
         // Consider the dependencies to be "direct" if the requirement is a local source tree.
         let direct = if let Dist::Source(source_dist) = &dist {
             source_dist.as_path().is_some_and(std::path::Path::is_dir)
         } else {
             false
         };
-
-        // Run the PEP 517 build process to extract metadata from the source distribution.
-        let database = if let Some(reporter) = self.reporter.clone() {
-            DistributionDatabase::new(client, context).with_reporter(reporter)
-        } else {
-            DistributionDatabase::new(client, context)
-        };
-
-        let (metadata, _precise) = database
-            .get_or_build_wheel_metadata(&dist)
-            .await
-            .with_context(|| match dist {
-                Dist::Built(built) => format!("Failed to download: {built}"),
-                Dist::Source(source) => format!("Failed to download and build: {source}"),
-            })?;
 
         // Return the requirements from the metadata.
         Ok(Some(RequestedRequirements::new(

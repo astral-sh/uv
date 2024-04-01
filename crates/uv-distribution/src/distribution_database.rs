@@ -57,7 +57,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
     /// Set the [`Reporter`] to use for this source distribution fetcher.
     #[must_use]
-    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
+    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        let reporter = Arc::new(reporter);
         Self {
             reporter: Some(reporter.clone()),
             builder: self.builder.with_reporter(reporter),
