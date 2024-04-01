@@ -1,5 +1,6 @@
 use cache_key::CanonicalUrl;
 use dashmap::DashMap;
+use std::sync::Arc;
 use url::Url;
 
 use distribution_types::PackageId;
@@ -23,4 +24,31 @@ pub struct InMemoryIndex {
     /// `git+https://github.com/pallets/flask.git` could be redirected to
     /// `git+https://github.com/pallets/flask.git@c2f65dd1cfff0672b902fd5b30815f0b4137214c`.
     pub(crate) redirects: DashMap<CanonicalUrl, Url>,
+}
+
+impl InMemoryIndex {
+    /// Insert a [`VersionsResponse`] into the index.
+    pub fn insert_package(&self, package_name: PackageName, metadata: VersionsResponse) {
+        self.packages.done(package_name, metadata);
+    }
+
+    /// Insert a [`Metadata23`] into the index.
+    pub fn insert_metadata(&self, package_id: PackageId, metadata: Metadata23) {
+        self.distributions.done(package_id, metadata);
+    }
+
+    /// Insert a redirect from a source URL to a target URL.
+    pub fn insert_redirect(&self, source: CanonicalUrl, target: Url) {
+        self.redirects.insert(source, target);
+    }
+
+    /// Get the [`VersionsResponse`] for a given package name, without waiting.
+    pub fn get_package(&self, package_name: &PackageName) -> Option<Arc<VersionsResponse>> {
+        self.packages.get(package_name)
+    }
+
+    /// Get the [`Metadata23`] for a given package ID, without waiting.
+    pub fn get_metadata(&self, package_id: &PackageId) -> Option<Arc<Metadata23>> {
+        self.distributions.get(package_id)
+    }
 }

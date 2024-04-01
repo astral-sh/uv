@@ -1,15 +1,17 @@
 use std::collections::VecDeque;
 
 use anyhow::{Context, Result};
+use cache_key::CanonicalUrl;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 
-use distribution_types::{Dist, LocalEditable};
+use distribution_types::{Dist, DistributionMetadata, LocalEditable};
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use pypi_types::Metadata23;
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
+use uv_resolver::InMemoryIndex;
 use uv_types::{BuildContext, Constraints, Overrides, RequestedRequirements};
 
 /// A resolver for resolving lookahead requirements from direct URLs.
@@ -37,6 +39,8 @@ pub struct LookaheadResolver<'a, Context: BuildContext + Send + Sync> {
     overrides: &'a Overrides,
     /// The editable requirements for the project.
     editables: &'a [(LocalEditable, Metadata23)],
+    /// The in-memory index for resolving dependencies.
+    index: &'a InMemoryIndex,
     /// The database for fetching and building distributions.
     database: DistributionDatabase<'a, Context>,
 }
@@ -50,12 +54,14 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
         editables: &'a [(LocalEditable, Metadata23)],
         context: &'a Context,
         client: &'a RegistryClient,
+        index: &'a InMemoryIndex,
     ) -> Self {
         Self {
             requirements,
             constraints,
             overrides,
             editables,
+            index,
             database: DistributionDatabase::new(client, context),
         }
     }
@@ -126,15 +132,34 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
         // Convert to a buildable distribution.
         let dist = Dist::from_url(requirement.name, url.clone())?;
 
-        // Run the PEP 517 build process to extract metadata from the source distribution.
-        let (metadata, _precise) = self
-            .database
-            .get_or_build_wheel_metadata(&dist)
-            .await
-            .with_context(|| match &dist {
-                Dist::Built(built) => format!("Failed to download: {built}"),
-                Dist::Source(source) => format!("Failed to download and build: {source}"),
-            })?;
+        // Fetch the metadata for the distribution.
+        let requires_dist = {
+            // If the metadata is already in the index, return it.
+            if let Some(metadata) = self.index.get_metadata(&dist.package_id()) {
+                metadata.requires_dist.clone()
+            } else {
+                // Run the PEP 517 build process to extract metadata from the source distribution.
+                let (metadata, precise) = self
+                    .database
+                    .get_or_build_wheel_metadata(&dist)
+                    .await
+                    .with_context(|| match &dist {
+                        Dist::Built(built) => format!("Failed to download: {built}"),
+                        Dist::Source(source) => format!("Failed to download and build: {source}"),
+                    })?;
+
+                // Insert the metadata into the index.
+                self.index
+                    .insert_metadata(dist.package_id(), metadata.clone());
+
+                // Insert the redirect into the index.
+                if let Some(precise) = precise {
+                    self.index.insert_redirect(CanonicalUrl::new(url), precise);
+                }
+
+                metadata.requires_dist
+            }
+        };
 
         // Consider the dependencies to be "direct" if the requirement is a local source tree.
         let direct = if let Dist::Source(source_dist) = &dist {
@@ -146,7 +171,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
         // Return the requirements from the metadata.
         Ok(Some(RequestedRequirements::new(
             requirement.extras,
-            metadata.requires_dist,
+            requires_dist,
             direct,
         )))
     }
