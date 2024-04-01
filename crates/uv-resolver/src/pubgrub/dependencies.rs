@@ -34,7 +34,10 @@ impl PubGrubDependencies {
         // Iterate over all declared requirements.
         for requirement in overrides.apply(requirements) {
             // If the requirement isn't relevant for the current platform, skip it.
-            if !requirement.evaluate_markers(env, source_extra.map_or(&[], std::slice::from_ref)) {
+            if false
+                && !requirement
+                    .evaluate_markers(env, source_extra.map_or(&[], std::slice::from_ref))
+            {
                 continue;
             }
 
@@ -64,8 +67,9 @@ impl PubGrubDependencies {
                 // If the requirement was constrained, add those constraints.
                 for constraint in constraints.get(&requirement.name).into_iter().flatten() {
                     // If the requirement isn't relevant for the current platform, skip it.
-                    if !requirement
-                        .evaluate_markers(env, source_extra.map_or(&[], std::slice::from_ref))
+                    if false
+                        && !requirement
+                            .evaluate_markers(env, source_extra.map_or(&[], std::slice::from_ref))
                     {
                         continue;
                     }

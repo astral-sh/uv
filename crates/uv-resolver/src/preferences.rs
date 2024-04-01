@@ -88,7 +88,7 @@ impl Preferences {
                     } = preference;
 
                     // Search for, e.g., `flask==1.2.3` entries that match the current environment.
-                    if !requirement.evaluate_markers(markers, &[]) {
+                    if false && !requirement.evaluate_markers(markers, &[]) {
                         trace!(
                             "Excluding {requirement} from preferences due to unmatched markers."
                         );

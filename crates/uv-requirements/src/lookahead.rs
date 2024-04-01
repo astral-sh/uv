@@ -77,11 +77,13 @@ impl<'a> LookaheadResolver<'a> {
         let mut queue: VecDeque<Requirement> = self
             .constraints
             .apply(self.overrides.apply(self.requirements))
-            .filter(|requirement| requirement.evaluate_markers(markers, &[]))
+            .filter(|requirement| true || requirement.evaluate_markers(markers, &[]))
             .chain(self.editables.iter().flat_map(|(editable, metadata)| {
                 self.constraints
                     .apply(self.overrides.apply(&metadata.requires_dist))
-                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
+                    .filter(|requirement| {
+                        true || requirement.evaluate_markers(markers, &editable.extras)
+                    })
             }))
             .cloned()
             .collect();
@@ -97,7 +99,7 @@ impl<'a> LookaheadResolver<'a> {
                         .constraints
                         .apply(self.overrides.apply(lookahead.requirements()))
                     {
-                        if requirement.evaluate_markers(markers, lookahead.extras()) {
+                        if true || requirement.evaluate_markers(markers, lookahead.extras()) {
                             queue.push_back(requirement.clone());
                         }
                     }

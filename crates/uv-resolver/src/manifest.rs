@@ -102,27 +102,31 @@ impl Manifest {
             .flat_map(|lookahead| {
                 self.overrides
                     .apply(lookahead.requirements())
-                    .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
+                    .filter(|requirement| {
+                        true || requirement.evaluate_markers(markers, lookahead.extras())
+                    })
             })
             .chain(self.editables.iter().flat_map(|(editable, metadata)| {
                 self.overrides
                     .apply(&metadata.requires_dist)
-                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
+                    .filter(|requirement| {
+                        true || requirement.evaluate_markers(markers, &editable.extras)
+                    })
             }))
             .chain(
                 self.overrides
                     .apply(&self.requirements)
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+                    .filter(|requirement| true || requirement.evaluate_markers(markers, &[])),
             )
             .chain(
                 self.constraints
                     .requirements()
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+                    .filter(|requirement| true || requirement.evaluate_markers(markers, &[])),
             )
             .chain(
                 self.overrides
                     .requirements()
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+                    .filter(|requirement| true || requirement.evaluate_markers(markers, &[])),
             )
     }
 
@@ -140,17 +144,21 @@ impl Manifest {
             .flat_map(|lookahead| {
                 self.overrides
                     .apply(lookahead.requirements())
-                    .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
+                    .filter(|requirement| {
+                        true || requirement.evaluate_markers(markers, lookahead.extras())
+                    })
             })
             .chain(self.editables.iter().flat_map(|(editable, metadata)| {
                 self.overrides
                     .apply(&metadata.requires_dist)
-                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
+                    .filter(|requirement| {
+                        true || requirement.evaluate_markers(markers, &editable.extras)
+                    })
             }))
             .chain(
                 self.overrides
                     .apply(&self.requirements)
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+                    .filter(|requirement| true || requirement.evaluate_markers(markers, &[])),
             )
             .map(|requirement| &requirement.name)
     }
