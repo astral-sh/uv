@@ -93,11 +93,28 @@ impl RequirementsSource {
             let term = Term::stderr();
             if term.is_term() {
                 let prompt = format!(
-                    "`{name}` looks like a requirements file but was passed as a package name. Did you mean `-r {name}`?"
+                    "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `-r {name}`?"
                 );
                 let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
                 if confirmation {
-                    return Self::RequirementsTxt(name.into());
+                    return Self::from_requirements_file(name.into());
+                }
+            }
+        }
+
+        // Similarly, if the user provided a `pyproject.toml` file without `-r` (as in
+        // `uv pip install pyproject.toml`), prompt them to correct it.
+        if (name == "pyproject.toml" || name == "setup.py" || name == "setup.cfg")
+            && Path::new(&name).is_file()
+        {
+            let term = Term::stderr();
+            if term.is_term() {
+                let prompt = format!(
+                    "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `-r {name}`?"
+                );
+                let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
+                if confirmation {
+                    return Self::from_requirements_file(name.into());
                 }
             }
         }
