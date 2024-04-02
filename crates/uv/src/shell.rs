@@ -33,6 +33,12 @@ impl Shell {
     pub(crate) fn from_env() -> Option<Shell> {
         if std::env::var_os("NU_VERSION").is_some() {
             Some(Shell::Nushell)
+        } else if std::env::var_os("FISH_VERSION").is_some() {
+            Some(Shell::Fish)
+        } else if std::env::var_os("BASH_VERSION").is_some() {
+            Some(Shell::Bash)
+        } else if std::env::var_os("ZSH_VERSION").is_some() {
+            Some(Shell::Zsh)
         } else if let Some(env_shell) = std::env::var_os("SHELL") {
             Shell::from_shell_path(env_shell)
         } else if cfg!(windows) {
