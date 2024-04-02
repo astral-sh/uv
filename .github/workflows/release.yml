@@ -1,4 +1,4 @@
-# Copyright 2022-2023, axodotdev
+# Copyright 2022-2024, axodotdev
 # SPDX-License-Identifier: MIT or Apache-2.0
 #
 # CI that:
@@ -6,9 +6,9 @@
 # * checks for a Git Tag that looks like a release
 # * builds artifacts with cargo-dist (archives, installers, hashes)
 # * uploads those artifacts to temporary workflow zip
-# * on success, uploads the artifacts to a Github Release
+# * on success, uploads the artifacts to a GitHub Release
 #
-# Note that the Github Release will be created with a generated
+# Note that the GitHub Release will be created with a generated
 # title/body based on your changelogs.
 
 name: Release
@@ -31,7 +31,7 @@ permissions:
 # packages versioned/released in lockstep).
 #
 # If you push multiple tags at once, separate instances of this workflow will
-# spin up, creating an independent announcement for each one. However Github
+# spin up, creating an independent announcement for each one. However, GitHub
 # will hard limit this to 3 tags per commit, as it will assume more tags is a
 # mistake.
 #
@@ -65,7 +65,7 @@ jobs:
         # we specify bash to get pipefail; it guards against the `curl` command
         # failing. otherwise `sh` won't catch that `curl` returned non-0
         shell: bash
-        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.11.1/cargo-dist-installer.sh | sh"
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.13.0-prerelease.3/cargo-dist-installer.sh | sh"
       # sure would be cool if github gave us proper conditionals...
       # so here's a doubly-nested ternary-via-truthiness to try to provide the best possible
       # functionality based on whether this is a pull_request, and whether it's from a fork.
@@ -107,7 +107,7 @@ jobs:
           submodules: recursive
       - name: Install cargo-dist
         shell: bash
-        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.11.1/cargo-dist-installer.sh | sh"
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.13.0-prerelease.3/cargo-dist-installer.sh | sh"
       # Get all the local artifacts for the global tasks to use (for e.g. checksums)
       - name: Fetch local artifacts
         uses: actions/download-artifact@v4
@@ -123,7 +123,7 @@ jobs:
 
           # Parse out what we just built and upload it to scratch storage
           echo "paths<<EOF" >> "$GITHUB_OUTPUT"
-          jq --raw-output ".artifacts[]?.path | select( . != null )" dist-manifest.json >> "$GITHUB_OUTPUT"
+          jq --raw-output ".upload_files[]" dist-manifest.json >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
@@ -151,7 +151,7 @@ jobs:
         with:
           submodules: recursive
       - name: Install cargo-dist
-        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.11.1/cargo-dist-installer.sh | sh"
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.13.0-prerelease.3/cargo-dist-installer.sh | sh"
       # Fetch artifacts from scratch-storage
       - name: Fetch artifacts
         uses: actions/download-artifact@v4
@@ -159,7 +159,7 @@ jobs:
           pattern: artifacts-*
           path: target/distrib/
           merge-multiple: true
-      # This is a harmless no-op for Github Releases, hosting for that happens in "announce"
+      # This is a harmless no-op for GitHub Releases, hosting for that happens in "announce"
       - id: host
         shell: bash
         run: |
@@ -188,7 +188,7 @@ jobs:
       id-token: write
       packages: write
 
-  # Create a Github Release while uploading all files to it
+  # Create a GitHub Release while uploading all files to it
   announce:
     needs:
       - plan
@@ -205,7 +205,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: "Download Github Artifacts"
+      - name: "Download GitHub Artifacts"
         uses: actions/download-artifact@v4
         with:
           pattern: artifacts-*
@@ -215,7 +215,7 @@ jobs:
         run: |
           # Remove the granular manifests
           rm -f artifacts/*-dist-manifest.json
-      - name: Create Github Release
+      - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ needs.plan.outputs.tag }}
