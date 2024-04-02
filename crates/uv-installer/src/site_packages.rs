@@ -1,6 +1,6 @@
-use std::hash::BuildHasherDefault;
 use std::iter::Flatten;
 use std::path::PathBuf;
+use std::{collections::BTreeSet, hash::BuildHasherDefault};
 
 use anyhow::{Context, Result};
 use fs_err as fs;
@@ -47,11 +47,17 @@ impl<'a> SitePackages<'a> {
             // Read the site-packages directory.
             let site_packages = match fs::read_dir(site_packages) {
                 Ok(site_packages) => {
-                    let mut entries = site_packages.collect::<Result<Vec<_>, std::io::Error>>()?;
-                    // TODO(zanieb): Consider filtering to just directories to reduce the size of the sort
-                    // Sort for determinism, `read_dir` is different per-platform
-                    entries.sort_by_key(fs_err::DirEntry::path);
-                    entries
+                    // Collect sorted directory paths; `read_dir` is not stable across platforms
+                    let directories: BTreeSet<_> = site_packages
+                        .filter_map(|read_dir| match read_dir {
+                            Ok(entry) => match entry.file_type() {
+                                Ok(file_type) => file_type.is_dir().then_some(Ok(entry.path())),
+                                Err(err) => Some(Err(err)),
+                            },
+                            Err(err) => Some(Err(err)),
+                        })
+                        .collect::<Result<_, std::io::Error>>()?;
+                    directories
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                     return Ok(Self {
@@ -65,37 +71,31 @@ impl<'a> SitePackages<'a> {
             };
 
             // Index all installed packages by name.
-            for entry in site_packages {
-                if entry.file_type()?.is_dir() {
-                    let path = entry.path();
+            for path in site_packages {
+                let Some(dist_info) = InstalledDist::try_from_path(&path)
+                    .with_context(|| format!("Failed to read metadata: from {}", path.display()))?
+                else {
+                    continue;
+                };
 
-                    let Some(dist_info) =
-                        InstalledDist::try_from_path(&path).with_context(|| {
-                            format!("Failed to read metadata: from {}", path.display())
-                        })?
-                    else {
-                        continue;
-                    };
+                let idx = distributions.len();
 
-                    let idx = distributions.len();
+                // Index the distribution by name.
+                by_name
+                    .entry(dist_info.name().clone())
+                    .or_insert_with(Vec::new)
+                    .push(idx);
 
-                    // Index the distribution by name.
-                    by_name
-                        .entry(dist_info.name().clone())
+                // Index the distribution by URL.
+                if let InstalledDist::Url(dist) = &dist_info {
+                    by_url
+                        .entry(dist.url.clone())
                         .or_insert_with(Vec::new)
                         .push(idx);
-
-                    // Index the distribution by URL.
-                    if let InstalledDist::Url(dist) = &dist_info {
-                        by_url
-                            .entry(dist.url.clone())
-                            .or_insert_with(Vec::new)
-                            .push(idx);
-                    }
-
-                    // Add the distribution to the database.
-                    distributions.push(Some(dist_info));
                 }
+
+                // Add the distribution to the database.
+                distributions.push(Some(dist_info));
             }
         }
 
