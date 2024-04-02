@@ -441,6 +441,9 @@ impl Requirement {
         }
     }
 
+    // BREADCRUMBS: Add a new evaluation function here that has the same signature as the one
+    // above, but effectively does what `evaluate_extras_and_python_version` does.
+
     /// Returns whether the requirement would be satisfied, independent of environment markers, i.e.
     /// if there is potentially an environment that could activate this requirement.
     ///

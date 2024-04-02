@@ -88,6 +88,7 @@ impl Metadata23 {
     /// Parse the [`Metadata23`] from a `METADATA` file, as included in a built distribution (wheel).
     pub fn parse_metadata(content: &[u8]) -> Result<Self, Error> {
         let headers = Headers::parse(content)?;
+        // dbg!(&headers);
 
         let name = PackageName::new(
             headers
@@ -102,6 +103,7 @@ impl Metadata23 {
         .map_err(Error::Pep440VersionError)?;
         let requires_dist = headers
             .get_all_values("Requires-Dist")
+            .filter(|v| !v.contains("extra"))
             .map(|requires_dist| {
                 LenientRequirement::from_str(&requires_dist).map(Requirement::from)
             })
@@ -112,23 +114,23 @@ impl Metadata23 {
                 LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from)
             })
             .transpose()?;
-        let provides_extras = headers
-            .get_all_values("Provides-Extra")
-            .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
-                Ok(extra_name) => Some(extra_name),
-                Err(err) => {
-                    warn!("Ignoring invalid extra: {err}");
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
+        // let provides_extras = headers
+        // .get_all_values("Provides-Extra")
+        // .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
+        // Ok(extra_name) => Some(extra_name),
+        // Err(err) => {
+        // warn!("Ignoring invalid extra: {err}");
+        // None
+        // }
+        // })
+        // .collect::<Vec<_>>();
 
         Ok(Self {
             name,
             version,
             requires_dist,
             requires_python,
-            provides_extras,
+            provides_extras: vec![],
         })
     }
 
@@ -187,23 +189,23 @@ impl Metadata23 {
                 LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from)
             })
             .transpose()?;
-        let provides_extras = headers
-            .get_all_values("Provides-Extra")
-            .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
-                Ok(extra_name) => Some(extra_name),
-                Err(err) => {
-                    warn!("Ignoring invalid extra: {err}");
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
+        // let provides_extras = headers
+        // .get_all_values("Provides-Extra")
+        // .filter_map(|provides_extra| match ExtraName::new(provides_extra) {
+        // Ok(extra_name) => Some(extra_name),
+        // Err(err) => {
+        // warn!("Ignoring invalid extra: {err}");
+        // None
+        // }
+        // })
+        // .collect::<Vec<_>>();
 
         Ok(Self {
             name,
             version,
             requires_dist,
             requires_python,
-            provides_extras,
+            provides_extras: vec![],
         })
     }
 
@@ -234,7 +236,7 @@ impl Metadata23 {
         let requires_python = project.requires_python.map(VersionSpecifiers::from);
 
         // Extract the requirements.
-        let mut requires_dist = project
+        let requires_dist = project
             .dependencies
             .unwrap_or_default()
             .into_iter()
@@ -242,24 +244,24 @@ impl Metadata23 {
             .collect::<Vec<_>>();
 
         // Extract the optional dependencies.
-        let mut provides_extras: Vec<ExtraName> = Vec::new();
-        for (extra, requirements) in project.optional_dependencies.unwrap_or_default() {
-            requires_dist.extend(
-                requirements
-                    .into_iter()
-                    .map(Requirement::from)
-                    .map(|requirement| requirement.with_extra_marker(&extra))
-                    .collect::<Vec<_>>(),
-            );
-            provides_extras.push(extra);
-        }
+        // let mut provides_extras: Vec<ExtraName> = Vec::new();
+        // for (extra, requirements) in project.optional_dependencies.unwrap_or_default() {
+        // requires_dist.extend(
+        // requirements
+        // .into_iter()
+        // .map(Requirement::from)
+        // .map(|requirement| requirement.with_extra_marker(&extra))
+        // .collect::<Vec<_>>(),
+        // );
+        // provides_extras.push(extra);
+        // }
 
         Ok(Self {
             name,
             version,
             requires_dist,
             requires_python,
-            provides_extras,
+            provides_extras: vec![],
         })
     }
 }
