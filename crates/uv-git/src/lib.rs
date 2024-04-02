@@ -47,6 +47,11 @@ impl GitUrl {
         }
     }
 
+    /// Returns `true` if the reference is a full commit.
+    pub fn is_full_commit(&self) -> bool {
+        matches!(self.reference, GitReference::FullCommit(_))
+    }
+
     /// Return the precise commit, if known.
     pub fn precise(&self) -> Option<GitSha> {
         self.precise

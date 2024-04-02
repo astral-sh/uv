@@ -96,9 +96,8 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
 
         while !queue.is_empty() || !futures.is_empty() {
             while let Some(requirement) = queue.pop_front() {
-                // Ignore duplicates. If we have conflicting URLs, we'll catch that later.
                 if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                    if seen.insert(requirement.name.clone()) {
+                    if seen.insert(requirement.clone()) {
                         futures.push(self.lookahead(requirement));
                     }
                 }

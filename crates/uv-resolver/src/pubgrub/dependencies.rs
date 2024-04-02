@@ -177,7 +177,7 @@ fn to_pubgrub(
                 ));
             };
 
-            if !urls.is_allowed(expected, url) {
+            if !Urls::is_allowed(expected, url) {
                 return Err(ResolveError::ConflictingUrlsTransitive(
                     requirement.name.clone(),
                     expected.verbatim().to_string(),
