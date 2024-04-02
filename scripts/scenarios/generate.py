@@ -4,7 +4,7 @@ Generates and updates snapshot test cases from packse scenarios.
 
 Important:
 
-    This script is the backend called by `./scripts/scenarios/sync.sh`, consider using that
+    This script is the backend called by `./scripts/sync_scenarios.sh`, consider using that
     if not developing scenarios.
 
 Requirements:
@@ -170,7 +170,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
         data["generated_from"] = (
             f"https://github.com/zanieb/packse/tree/{ref}/scenarios"
         )
-        data["generated_with"] = "./scripts/scenarios/sync.sh"
+        data["generated_with"] = "./scripts/sync_scenarios.sh"
         data["vendor_links"] = (
             f"https://raw.githubusercontent.com/zanieb/packse/{ref}/vendor/links.html"
         )
