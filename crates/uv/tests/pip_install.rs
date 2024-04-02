@@ -3554,8 +3554,43 @@ fn already_installed_multiple_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    INFO Found a virtualenv through VIRTUAL_ENV at: [VENV]/
+    DEBUG Cached interpreter info for Python 3.12.1, skipping probing: [VENV]/bin/python
+    DEBUG Using Python 3.12.1 environment at [36m[VENV]/bin/python[39m
+    DEBUG Using registry request timeout of [TIME]
+    DEBUG Solving with target Python version 3.12.1
+    DEBUG Adding direct dependency: anyio==4.0.0
+    DEBUG Found fresh response for: https://pypi.org/simple/anyio/
+    DEBUG Ignoring installed versions of anyio: multiple distributions found
+    DEBUG Searching for a compatible version of anyio (==4.0.0)
+    DEBUG Ignoring installed versions of anyio: multiple distributions found
+    DEBUG Selecting: anyio==4.0.0 (anyio-4.0.0-py3-none-any.whl)
+    DEBUG No cache entry for: https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl.metadata
+    DEBUG No credentials found for: https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl.metadata
+    DEBUG Adding transitive dependency: idna>=2.8
+    DEBUG Adding transitive dependency: sniffio>=1.1
+    DEBUG Found fresh response for: https://pypi.org/simple/idna/
+    DEBUG Found fresh response for: https://pypi.org/simple/sniffio/
+    DEBUG Found installed version of idna==3.6 that satisfies preference in >=2.8
+    DEBUG Found installed version of sniffio==1.3.1 that satisfies preference in >=1.1
+    DEBUG Searching for a compatible version of idna (>=2.8)
+    DEBUG Found installed version of idna==3.6 that satisfies preference in >=2.8
+    DEBUG Selecting: idna==3.6 (installed)
+    DEBUG Searching for a compatible version of sniffio (>=1.1)
+    DEBUG Found installed version of sniffio==1.3.1 that satisfies preference in >=1.1
+    DEBUG Selecting: sniffio==1.3.1 (installed)
     Resolved 3 packages in [TIME]
+    DEBUG Identified uncached requirement: anyio==4.0.0
+    DEBUG Requirement already satisfied: idna==3.6
+    DEBUG Requirement already installed: idna==3.6
+    DEBUG Requirement already satisfied: sniffio==1.3.1
+    DEBUG Requirement already installed: sniffio==1.3.1
+    DEBUG No cache entry for: https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+    DEBUG No credentials found for already-seen URL: https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+    DEBUG No credentials found for: https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
     Downloaded 1 package in [TIME]
+    DEBUG Uninstalled anyio (45 files, 4 directories)
+    DEBUG Uninstalled anyio (9 files, 3 directories)
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - anyio==4.0.0
@@ -3574,7 +3609,38 @@ fn already_installed_multiple_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    INFO Found a virtualenv through VIRTUAL_ENV at: [VENV]/
+    DEBUG Cached interpreter info for Python 3.12.1, skipping probing: [VENV]/bin/python
+    DEBUG Using Python 3.12.1 environment at [36m[VENV]/bin/python[39m
+    DEBUG Using registry request timeout of [TIME]
+    DEBUG Solving with target Python version 3.12.1
+    DEBUG Adding direct dependency: anyio*
+    DEBUG Found fresh response for: https://pypi.org/simple/anyio/
+    DEBUG Ignoring installed versions of anyio: multiple distributions found
+    DEBUG Searching for a compatible version of anyio (*)
+    DEBUG Ignoring installed versions of anyio: multiple distributions found
+    DEBUG Selecting: anyio==3.7.0 (anyio-3.7.0-py3-none-any.whl)
+    DEBUG Found fresh response for: https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl.metadata
+    DEBUG Adding transitive dependency: idna>=2.8
+    DEBUG Adding transitive dependency: sniffio>=1.1
+    DEBUG Found fresh response for: https://pypi.org/simple/idna/
+    DEBUG Found fresh response for: https://pypi.org/simple/sniffio/
+    DEBUG Found installed version of idna==3.6 that satisfies preference in >=2.8
+    DEBUG Found installed version of sniffio==1.3.1 that satisfies preference in >=1.1
+    DEBUG Searching for a compatible version of idna (>=2.8)
+    DEBUG Found installed version of idna==3.6 that satisfies preference in >=2.8
+    DEBUG Selecting: idna==3.6 (installed)
+    DEBUG Searching for a compatible version of sniffio (>=1.1)
+    DEBUG Found installed version of sniffio==1.3.1 that satisfies preference in >=1.1
+    DEBUG Selecting: sniffio==1.3.1 (installed)
     Resolved 3 packages in [TIME]
+    DEBUG Requirement already cached: anyio==3.7.0
+    DEBUG Requirement already satisfied: idna==3.6
+    DEBUG Requirement already installed: idna==3.6
+    DEBUG Requirement already satisfied: sniffio==1.3.1
+    DEBUG Requirement already installed: sniffio==1.3.1
+    DEBUG Uninstalled anyio (45 files, 4 directories)
+    DEBUG Uninstalled anyio (9 files, 3 directories)
     Installed 1 package in [TIME]
      - anyio==3.7.0
      - anyio==4.0.0
