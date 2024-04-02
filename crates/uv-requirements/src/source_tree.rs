@@ -11,6 +11,7 @@ use distribution_types::{BuildableSource, PackageId, PathSourceUrl, SourceUrl};
 use pep508_rs::Requirement;
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
+use uv_fs::Simplified;
 use uv_resolver::InMemoryIndex;
 use uv_types::BuildContext;
 
@@ -73,7 +74,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
         let path = fs_err::canonicalize(source_tree).with_context(|| {
             format!(
                 "Failed to canonicalize path to source tree: {}",
-                source_tree.display()
+                source_tree.user_display()
             )
         })?;
         let Ok(url) = Url::from_directory_path(&path) else {
