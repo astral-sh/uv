@@ -3517,11 +3517,9 @@ fn already_installed_local_version_of_remote_package() {
 #[test]
 #[cfg(unix)]
 fn already_installed_multiple_versions() -> Result<()> {
-    use crate::common::copy_dir_all;
-
-    let context = TestContext::new("3.12");
-
     fn prepare(context: &TestContext) -> Result<()> {
+        use crate::common::copy_dir_all;
+
         // Install into the base environment
         context.install().arg("anyio==3.7.0").assert().success();
 
@@ -3543,6 +3541,8 @@ fn already_installed_multiple_versions() -> Result<()> {
 
         Ok(())
     }
+
+    let context = TestContext::new("3.12");
 
     prepare(&context)?;
 
