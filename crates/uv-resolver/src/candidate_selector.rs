@@ -101,7 +101,7 @@ impl CandidateSelector {
                         // We do not consider installed distributions with multiple versions because
                         // during installation these must be reinstalled from the remote
                         _ => {
-                            debug!("Ignoring installed versions of {package_name}: multiple distributions found")
+                            debug!("Ignoring installed versions of {package_name}: multiple distributions found");
                         }
                     }
                 }
@@ -133,7 +133,7 @@ impl CandidateSelector {
                 // We do not consider installed distributions with multiple versions because
                 // during installation these must be reinstalled from the remote
                 _ => {
-                    debug!("Ignoring installed versions of {package_name}: multiple distributions found")
+                    debug!("Ignoring installed versions of {package_name}: multiple distributions found");
                 }
             }
         }

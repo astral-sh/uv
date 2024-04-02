@@ -50,7 +50,7 @@ impl<'a> SitePackages<'a> {
                     let mut entries = site_packages.collect::<Result<Vec<_>, std::io::Error>>()?;
                     // TODO(zanieb): Consider filtering to just directories to reduce the size of the sort
                     // Sort for determinism, `read_dir` is different per-platform
-                    entries.sort_by_key(|entry| entry.path());
+                    entries.sort_by_key(fs_err::DirEntry::path);
                     entries
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
