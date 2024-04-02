@@ -3548,7 +3548,7 @@ fn already_installed_multiple_versions() -> Result<()> {
 
     // Request the second anyio version again
     // Should remove both previous versions and reinstall the second one
-    uv_snapshot!(context.filters(), context.install().arg("anyio==4.0.0"), @r###"
+    uv_snapshot!(context.filters(), context.install().arg("anyio==4.0.0").arg("-v"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3568,7 +3568,7 @@ fn already_installed_multiple_versions() -> Result<()> {
 
     // Request the anyio without a version specifier
     // Should remove both previous versions and reinstall
-    uv_snapshot!(context.filters(), context.install().arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.install().arg("anyio").arg("-v"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
