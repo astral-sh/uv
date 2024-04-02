@@ -475,6 +475,32 @@ jobs:
       - name: "Validate global Python install"
         run: py -3.10 ./scripts/check_system_python.py --uv ./uv.exe
 
+  system-test-windows-x86-python-310:
+    needs: build-binary-windows
+    name: "check system | python3.10 on windows x86"
+    runs-on: windows-latest
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          architecture: "x86"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+
+      - name: "Print Python path"
+        run: echo $(which python)
+
+      - name: "Validate global Python install"
+        run: py -3.10 ./scripts/check_system_python.py --uv ./uv.exe
+
   system-test-windows-python-313:
     needs: build-binary-windows
     name: "check system | python3.13 on windows"
