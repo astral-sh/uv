@@ -244,17 +244,18 @@ pub(crate) async fn pip_install(
     // Resolve the requirements from the provided sources.
     let requirements = {
         // Convert from unnamed to named requirements.
-        let mut requirements = NamedRequirementsResolver::new(requirements)
-            .with_reporter(ResolverReporter::from(printer))
-            .resolve(&resolve_dispatch, &client)
-            .await?;
+        let mut requirements =
+            NamedRequirementsResolver::new(requirements, &resolve_dispatch, &client, &index)
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?;
 
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
             requirements.extend(
-                SourceTreeResolver::new(source_trees, extras)
+                SourceTreeResolver::new(source_trees, extras, &resolve_dispatch, &client, &index)
                     .with_reporter(ResolverReporter::from(printer))
-                    .resolve(&resolve_dispatch, &client)
+                    .resolve()
                     .await?,
             );
         }

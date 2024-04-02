@@ -194,18 +194,25 @@ pub(crate) async fn pip_sync(
     // Convert from unnamed to named requirements.
     let requirements = {
         // Convert from unnamed to named requirements.
-        let mut requirements = NamedRequirementsResolver::new(requirements)
-            .with_reporter(ResolverReporter::from(printer))
-            .resolve(&build_dispatch, &client)
-            .await?;
+        let mut requirements =
+            NamedRequirementsResolver::new(requirements, &build_dispatch, &client, &index)
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?;
 
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
             requirements.extend(
-                SourceTreeResolver::new(source_trees, &ExtrasSpecification::None)
-                    .with_reporter(ResolverReporter::from(printer))
-                    .resolve(&build_dispatch, &client)
-                    .await?,
+                SourceTreeResolver::new(
+                    source_trees,
+                    &ExtrasSpecification::None,
+                    &build_dispatch,
+                    &client,
+                    &index,
+                )
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?,
             );
         }
 
