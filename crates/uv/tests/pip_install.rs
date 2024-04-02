@@ -3564,15 +3564,17 @@ fn already_installed_multiple_versions() -> Result<()> {
     // Request the second anyio version again
     // Should remove both previous versions and reinstall the second one
     uv_snapshot!(context1.filters(), context1.install().arg("anyio==4.0.0"), @r###"
-    success: false
-    exit_code: 101
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    thread 'main' panicked at crates/uv/src/commands/pip_install.rs:679:18:
-    Resolution should contain all packages
-    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==3.7.0
+     - anyio==4.0.0
+     + anyio==4.0.0
     "###
     );
 
