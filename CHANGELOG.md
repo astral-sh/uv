@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.28
+
+### Enhancements
+
+- Recursively resolve direct URL references upfront ([#2684](https://github.com/astral-sh/uv/pull/2684))
+
+### Performance
+
+- Populate the in-memory index when resolving lookahead URLs ([#2761](https://github.com/astral-sh/uv/pull/2761))
+
+### Bug fixes
+
+- Detect Fish via `FISH_VERSION` ([#2781](https://github.com/astral-sh/uv/pull/2781))
+- Exclude installed distributions with multiple versions from consideration in the resolver ([#2779](https://github.com/astral-sh/uv/pull/2779))
+- Resolve non-determistic behavior in preferences due to site-packages ordering ([#2780](https://github.com/astral-sh/uv/pull/2780))
+- Use canonical URL to key redirect map ([#2764](https://github.com/astral-sh/uv/pull/2764))
+- Use distribution database and index for all pre-resolution phases ([#2766](https://github.com/astral-sh/uv/pull/2766))
+- Fix `uv self update` on Linux ([#2783](https://github.com/astral-sh/uv/pull/2783))
+
 ## 0.1.27
 
 ### Enhancements
