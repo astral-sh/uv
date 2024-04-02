@@ -1,6 +1,6 @@
 //! DO NOT EDIT
 //!
-//! Generated with ./scripts/scenarios/sync.sh
+//! Generated with ./scripts/sync_scenarios.sh
 //! Scenarios from <https://github.com/zanieb/packse/tree/0.3.12/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
@@ -13,7 +13,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use predicates::prelude::predicate;
 
-use common::{create_bin_with_executables, get_bin, uv_snapshot, TestContext};
+use common::{create_bin_with_executables, get_bin, uv_snapshot, TestContext, INSTA_FILTERS};
 
 mod common;
 
