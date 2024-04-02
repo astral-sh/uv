@@ -120,7 +120,7 @@ Releases can only be performed by Astral team members.
 Changelog entries and version bumps are automated. First, run:
 
 ```
-./scripts/release/bump.sh
+./scripts/release.sh
 ```
 
 Then, editorialize the `CHANGELOG.md` file to ensure entries are consistently styled.

@@ -2,12 +2,14 @@
 # Prepare for a release
 #
 # All additional options are passed to `rooster`
+#
+# See `scripts/release` for
 set -eu
 
 script_root="$(realpath "$(dirname "$0")")"
-project_root="$(dirname "$(dirname "$script_root")")"
+project_root="$(dirname "$script_root")"
 
-cd "$script_root"
+cd "$script_root/release"
 echo "Setting up a temporary environment..."
 uv venv
 
