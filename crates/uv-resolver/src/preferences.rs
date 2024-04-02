@@ -79,6 +79,9 @@ impl Preferences {
         markers: &MarkerEnvironment,
     ) -> Self {
         Self(
+            // TODO(zanieb): We should explicitly ensure that when a package name is seen multiple times
+            // that the newest or oldest version is preferred dependning on the resolution strategy;
+            // right now, the order is dependent on the given iterator.
             preferences
                 .into_iter()
                 .filter_map(|preference| {

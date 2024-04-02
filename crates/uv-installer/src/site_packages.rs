@@ -46,7 +46,13 @@ impl<'a> SitePackages<'a> {
         for site_packages in venv.site_packages() {
             // Read the site-packages directory.
             let site_packages = match fs::read_dir(site_packages) {
-                Ok(site_packages) => site_packages,
+                Ok(site_packages) => {
+                    let mut entries = site_packages.collect::<Result<Vec<_>, std::io::Error>>()?;
+                    // TODO(zanieb): Consider filtering to just directories to reduce the size of the sort
+                    // Sort for determinism, `read_dir` is different per-platform
+                    entries.sort_by_key(fs_err::DirEntry::path);
+                    entries
+                }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                     return Ok(Self {
                         venv,
@@ -60,7 +66,6 @@ impl<'a> SitePackages<'a> {
 
             // Index all installed packages by name.
             for entry in site_packages {
-                let entry = entry?;
                 if entry.file_type()?.is_dir() {
                     let path = entry.path();
 
