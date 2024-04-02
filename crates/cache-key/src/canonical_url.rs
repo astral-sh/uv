@@ -91,6 +91,12 @@ impl Hash for CanonicalUrl {
     }
 }
 
+impl From<CanonicalUrl> for Url {
+    fn from(value: CanonicalUrl) -> Self {
+        value.0
+    }
+}
+
 impl std::fmt::Display for CanonicalUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&self.0, f)
