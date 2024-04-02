@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
@@ -290,10 +291,22 @@ impl LockedFile {
                     resource,
                     path.user_display(),
                 );
-                file.file().lock_exclusive()?;
+                file.file().lock_exclusive().map_err(|err| {
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("Could not lock {}: {}", path.as_ref().user_display(), err),
+                    )
+                })?;
                 Ok(Self(file))
             }
-            Err(err) => Err(err),
+            Err(err) => Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "Could not try lock {}: {}",
+                    path.as_ref().user_display(),
+                    err
+                ),
+            )),
         }
     }
 }
