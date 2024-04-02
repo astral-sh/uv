@@ -13,7 +13,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use predicates::prelude::predicate;
 
-use common::{create_bin_with_executables, get_bin, uv_snapshot, TestContext, INSTA_FILTERS};
+use common::{create_bin_with_executables, get_bin, uv_snapshot, TestContext};
 
 mod common;
 
