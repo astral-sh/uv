@@ -3519,51 +3519,36 @@ fn already_installed_local_version_of_remote_package() {
 fn already_installed_multiple_versions() -> Result<()> {
     use crate::common::copy_dir_all;
 
-    // Install a version
-    let context1 = TestContext::new("3.12");
-    uv_snapshot!(context1.filters(), context1.install()
-        .arg("anyio==3.7.0"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+    let context = TestContext::new("3.12");
 
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==3.7.0
-     + idna==3.6
-     + sniffio==1.3.1
-    "###
-    );
+    fn prepare(context: &TestContext) -> Result<()> {
+        // Install into the base environment
+        context.install().arg("anyio==3.7.0").assert().success();
 
-    // Install another version
-    let context2 = TestContext::new("3.12");
-    uv_snapshot!(context2.filters(), context2.install()
-        .arg("anyio==4.0.0"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+        // Install another version into another environment
+        let context_duplicate = TestContext::new("3.12");
+        context_duplicate
+            .install()
+            .arg("anyio==4.0.0")
+            .assert()
+            .success();
 
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.6
-     + sniffio==1.3.1
-    "###
-    );
+        // Copy the second version into the first environment
+        copy_dir_all(
+            context_duplicate
+                .site_packages()
+                .join("anyio-4.0.0.dist-info"),
+            context.site_packages().join("anyio-4.0.0.dist-info"),
+        )?;
 
-    // Copy the second version into the first environment
-    copy_dir_all(
-        context2.site_packages().join("anyio-4.0.0.dist-info"),
-        context1.site_packages().join("anyio-4.0.0.dist-info"),
-    )?;
+        Ok(())
+    }
+
+    prepare(&context)?;
 
     // Request the second anyio version again
     // Should remove both previous versions and reinstall the second one
-    uv_snapshot!(context1.filters(), context1.install().arg("anyio==4.0.0"), @r###"
+    uv_snapshot!(context.filters(), context.install().arg("anyio==4.0.0"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3575,6 +3560,25 @@ fn already_installed_multiple_versions() -> Result<()> {
      - anyio==3.7.0
      - anyio==4.0.0
      + anyio==4.0.0
+    "###
+    );
+
+    // Reset the test context
+    prepare(&context)?;
+
+    // Request the anyio without a version specifier
+    // Should remove both previous versions and reinstall
+    uv_snapshot!(context.filters(), context.install().arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==3.7.0
+     - anyio==4.0.0
+     + anyio==3.7.0
     "###
     );
 
