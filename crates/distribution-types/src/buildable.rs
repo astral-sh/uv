@@ -54,6 +54,17 @@ pub enum SourceUrl<'a> {
     Path(PathSourceUrl<'a>),
 }
 
+impl<'a> SourceUrl<'a> {
+    /// Return the [`Url`] of the source.
+    pub fn url(&self) -> &Url {
+        match self {
+            Self::Direct(dist) => dist.url,
+            Self::Git(dist) => dist.url,
+            Self::Path(dist) => dist.url,
+        }
+    }
+}
+
 impl std::fmt::Display for SourceUrl<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

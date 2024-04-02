@@ -263,18 +263,29 @@ pub(crate) async fn pip_compile(
     // Resolve the requirements from the provided sources.
     let requirements = {
         // Convert from unnamed to named requirements.
-        let mut requirements = NamedRequirementsResolver::new(requirements)
-            .with_reporter(ResolverReporter::from(printer))
-            .resolve(&build_dispatch, &client)
-            .await?;
+        let mut requirements = NamedRequirementsResolver::new(
+            requirements,
+            &build_dispatch,
+            &client,
+            &top_level_index,
+        )
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve()
+        .await?;
 
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
             requirements.extend(
-                SourceTreeResolver::new(source_trees, &extras)
-                    .with_reporter(ResolverReporter::from(printer))
-                    .resolve(&build_dispatch, &client)
-                    .await?,
+                SourceTreeResolver::new(
+                    source_trees,
+                    &extras,
+                    &build_dispatch,
+                    &client,
+                    &top_level_index,
+                )
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?,
             );
         }
 

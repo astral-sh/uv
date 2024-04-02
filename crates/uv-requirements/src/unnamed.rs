@@ -1,72 +1,76 @@
 use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use configparser::ini::Ini;
 use futures::{StreamExt, TryStreamExt};
 use serde::Deserialize;
 use tracing::debug;
 
+use cache_key::CanonicalUrl;
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuildableSource, DirectSourceUrl, GitSourceUrl, PathSourceUrl, RemoteSource, SourceUrl,
+    BuildableSource, DirectSourceUrl, GitSourceUrl, PackageId, PathSourceUrl, RemoteSource,
+    SourceUrl,
 };
 use pep508_rs::{
     Requirement, RequirementsTxtRequirement, Scheme, UnnamedRequirement, VersionOrUrl,
 };
 use pypi_types::Metadata10;
 use uv_client::RegistryClient;
-use uv_distribution::{Reporter, SourceDistributionBuilder};
+use uv_distribution::{DistributionDatabase, Reporter};
 use uv_normalize::PackageName;
+use uv_resolver::InMemoryIndex;
 use uv_types::BuildContext;
 
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
-pub struct NamedRequirementsResolver {
+pub struct NamedRequirementsResolver<'a, Context: BuildContext + Send + Sync> {
     /// The requirements for the project.
     requirements: Vec<RequirementsTxtRequirement>,
-    /// The reporter to use when building source distributions.
-    reporter: Option<Arc<dyn Reporter>>,
+    /// The in-memory index for resolving dependencies.
+    index: &'a InMemoryIndex,
+    /// The database for fetching and building distributions.
+    database: DistributionDatabase<'a, Context>,
 }
 
-impl NamedRequirementsResolver {
+impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Context> {
     /// Instantiate a new [`NamedRequirementsResolver`] for a given set of requirements.
-    pub fn new(requirements: Vec<RequirementsTxtRequirement>) -> Self {
+    pub fn new(
+        requirements: Vec<RequirementsTxtRequirement>,
+        context: &'a Context,
+        client: &'a RegistryClient,
+        index: &'a InMemoryIndex,
+    ) -> Self {
         Self {
             requirements,
-            reporter: None,
+            index,
+            database: DistributionDatabase::new(client, context),
         }
     }
 
     /// Set the [`Reporter`] to use for this resolver.
     #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
-        let reporter: Arc<dyn Reporter> = Arc::new(reporter);
         Self {
-            reporter: Some(reporter),
+            database: self.database.with_reporter(reporter),
             ..self
         }
     }
 
     /// Resolve any unnamed requirements in the specification.
-    pub async fn resolve<T: BuildContext>(
-        self,
-        context: &T,
-        client: &RegistryClient,
-    ) -> Result<Vec<Requirement>> {
-        futures::stream::iter(self.requirements)
+    pub async fn resolve(self) -> Result<Vec<Requirement>> {
+        let Self {
+            requirements,
+            index,
+            database,
+        } = self;
+        futures::stream::iter(requirements)
             .map(|requirement| async {
                 match requirement {
                     RequirementsTxtRequirement::Pep508(requirement) => Ok(requirement),
                     RequirementsTxtRequirement::Unnamed(requirement) => {
-                        Self::resolve_requirement(
-                            requirement,
-                            context,
-                            client,
-                            self.reporter.clone(),
-                        )
-                        .await
+                        Self::resolve_requirement(requirement, index, &database).await
                     }
                 }
             })
@@ -76,11 +80,10 @@ impl NamedRequirementsResolver {
     }
 
     /// Infer the package name for a given "unnamed" requirement.
-    async fn resolve_requirement<T: BuildContext>(
+    async fn resolve_requirement(
         requirement: UnnamedRequirement,
-        context: &T,
-        client: &RegistryClient,
-        reporter: Option<Arc<dyn Reporter>>,
+        index: &InMemoryIndex,
+        database: &DistributionDatabase<'a, Context>,
     ) -> Result<Requirement> {
         // If the requirement is a wheel, extract the package name from the wheel filename.
         //
@@ -231,20 +234,33 @@ impl NamedRequirementsResolver {
             }
         };
 
-        // Run the PEP 517 build process to extract metadata from the source distribution.
-        let builder = if let Some(reporter) = reporter {
-            SourceDistributionBuilder::new(client, context).with_reporter(reporter)
-        } else {
-            SourceDistributionBuilder::new(client, context)
+        // Fetch the metadata for the distribution.
+        let name = {
+            let id = PackageId::from_url(source.url());
+            if let Some(metadata) = index.get_metadata(&id) {
+                // If the metadata is already in the index, return it.
+                metadata.name.clone()
+            } else {
+                // Run the PEP 517 build process to extract metadata from the source distribution.
+                let source = BuildableSource::Url(source);
+                let (metadata, precise) = database.build_wheel_metadata(&source).await?;
+
+                let name = metadata.name.clone();
+
+                // Insert the metadata into the index.
+                index.insert_metadata(id, metadata);
+
+                // Insert the redirect into the index.
+                if let Some(precise) = precise {
+                    index.insert_redirect(CanonicalUrl::new(&requirement.url), precise);
+                }
+
+                name
+            }
         };
 
-        let metadata = builder
-            .download_and_build_metadata(&BuildableSource::Url(source))
-            .await
-            .context("Failed to build source distribution")?;
-
         Ok(Requirement {
-            name: metadata.name,
+            name,
             extras: requirement.extras,
             version_or_url: Some(VersionOrUrl::Url(requirement.url)),
             marker: requirement.marker,

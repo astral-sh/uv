@@ -1,15 +1,17 @@
 use std::borrow::Cow;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::{StreamExt, TryStreamExt};
 use url::Url;
 
-use distribution_types::{BuildableSource, PathSourceUrl, SourceUrl};
+use cache_key::CanonicalUrl;
+use distribution_types::{BuildableSource, PackageId, PathSourceUrl, SourceUrl};
 use pep508_rs::Requirement;
 use uv_client::RegistryClient;
-use uv_distribution::{Reporter, SourceDistributionBuilder};
+use uv_distribution::{DistributionDatabase, Reporter};
+use uv_resolver::InMemoryIndex;
 use uv_types::BuildContext;
 
 use crate::ExtrasSpecification;
@@ -18,45 +20,47 @@ use crate::ExtrasSpecification;
 ///
 /// Used, e.g., to determine the the input requirements when a user specifies a `pyproject.toml`
 /// file, which may require running PEP 517 build hooks to extract metadata.
-pub struct SourceTreeResolver<'a> {
+pub struct SourceTreeResolver<'a, Context: BuildContext + Send + Sync> {
     /// The requirements for the project.
     source_trees: Vec<PathBuf>,
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification<'a>,
-    /// The reporter to use when building source distributions.
-    reporter: Option<Arc<dyn Reporter>>,
+    /// The in-memory index for resolving dependencies.
+    index: &'a InMemoryIndex,
+    /// The database for fetching and building distributions.
+    database: DistributionDatabase<'a, Context>,
 }
 
-impl<'a> SourceTreeResolver<'a> {
+impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
     /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
-    pub fn new(source_trees: Vec<PathBuf>, extras: &'a ExtrasSpecification<'a>) -> Self {
+    pub fn new(
+        source_trees: Vec<PathBuf>,
+        extras: &'a ExtrasSpecification<'a>,
+        context: &'a Context,
+        client: &'a RegistryClient,
+        index: &'a InMemoryIndex,
+    ) -> Self {
         Self {
             source_trees,
             extras,
-            reporter: None,
+            index,
+            database: DistributionDatabase::new(client, context),
         }
     }
 
     /// Set the [`Reporter`] to use for this resolver.
     #[must_use]
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
-        let reporter: Arc<dyn Reporter> = Arc::new(reporter);
         Self {
-            reporter: Some(reporter),
+            database: self.database.with_reporter(reporter),
             ..self
         }
     }
 
     /// Resolve the requirements from the provided source trees.
-    pub async fn resolve<T: BuildContext>(
-        self,
-        context: &T,
-        client: &RegistryClient,
-    ) -> Result<Vec<Requirement>> {
+    pub async fn resolve(self) -> Result<Vec<Requirement>> {
         let requirements: Vec<_> = futures::stream::iter(self.source_trees.iter())
-            .map(|source_tree| async {
-                self.resolve_source_tree(source_tree, context, client).await
-            })
+            .map(|source_tree| async { self.resolve_source_tree(source_tree).await })
             .buffered(50)
             .try_collect()
             .await?;
@@ -64,12 +68,7 @@ impl<'a> SourceTreeResolver<'a> {
     }
 
     /// Infer the package name for a given "unnamed" requirement.
-    async fn resolve_source_tree<T: BuildContext>(
-        &self,
-        source_tree: &Path,
-        context: &T,
-        client: &RegistryClient,
-    ) -> Result<Vec<Requirement>> {
+    async fn resolve_source_tree(&self, source_tree: &Path) -> Result<Vec<Requirement>> {
         // Convert to a buildable source.
         let path = fs_err::canonicalize(source_tree).with_context(|| {
             format!(
@@ -80,19 +79,33 @@ impl<'a> SourceTreeResolver<'a> {
         let Ok(url) = Url::from_directory_path(&path) else {
             return Err(anyhow::anyhow!("Failed to convert path to URL"));
         };
-        let source = BuildableSource::Url(SourceUrl::Path(PathSourceUrl {
+        let source = SourceUrl::Path(PathSourceUrl {
             url: &url,
             path: Cow::Owned(path),
-        }));
+        });
 
-        // Run the PEP 517 build process to extract metadata from the source distribution.
-        let builder = if let Some(reporter) = self.reporter.clone() {
-            SourceDistributionBuilder::new(client, context).with_reporter(reporter)
-        } else {
-            SourceDistributionBuilder::new(client, context)
+        // Fetch the metadata for the distribution.
+        let metadata = {
+            let id = PackageId::from_url(source.url());
+            if let Some(metadata) = self.index.get_metadata(&id) {
+                // If the metadata is already in the index, return it.
+                metadata.deref().clone()
+            } else {
+                // Run the PEP 517 build process to extract metadata from the source distribution.
+                let source = BuildableSource::Url(source);
+                let (metadata, precise) = self.database.build_wheel_metadata(&source).await?;
+
+                // Insert the metadata into the index.
+                self.index.insert_metadata(id, metadata.clone());
+
+                // Insert the redirect into the index.
+                if let Some(precise) = precise {
+                    self.index.insert_redirect(CanonicalUrl::new(&url), precise);
+                }
+
+                metadata
+            }
         };
-
-        let metadata = builder.download_and_build_metadata(&source).await?;
 
         // Determine the appropriate requirements to return based on the extras. This involves
         // evaluating the `extras` expression in any markers, but preserving the remaining marker
