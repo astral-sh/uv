@@ -19,7 +19,7 @@ cd "$project_root"
 rooster release "$@"
 
 echo "Updating lockfile..."
-cargo check
+cargo update -p uv
 
 echo "Generating contributors list..."
 echo ""
