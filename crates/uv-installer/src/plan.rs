@@ -174,11 +174,15 @@ impl<'a> Planner<'a> {
                     [] => {}
                     [distribution] => {
                         if installed_satisfies_requirement(distribution, requirement)? {
+                            debug!("Requirement already installed: {distribution}");
                             installed.push(distribution.clone());
                             continue;
                         }
                         reinstalls.push(distribution.clone());
                     }
+                    // We reinstall installed distributions with multiple versions because
+                    // we do not want to keep multiple incompatible versions but removing
+                    // one version is likely to break another.
                     _ => reinstalls.extend(installed_dists),
                 }
             }

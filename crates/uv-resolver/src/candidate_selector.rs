@@ -82,18 +82,25 @@ impl CandidateSelector {
             if range.contains(version) {
                 // Check for a locally installed distribution that matches the preferred version
                 if !exclusions.contains(package_name) {
-                    for dist in installed_packages.get_packages(package_name) {
-                        if dist.version() == version {
-                            debug!("Found installed version of {dist} that satisfies preference in {range}");
+                    let installed_dists = installed_packages.get_packages(package_name);
+                    match installed_dists.as_slice() {
+                        [] => {}
+                        [dist] => {
+                            if dist.version() == version {
+                                debug!("Found installed version of {dist} that satisfies preference in {range}");
 
-                            return Some(Candidate {
-                                name: package_name,
-                                version,
-                                dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
-                                    dist,
-                                )),
-                            });
+                                return Some(Candidate {
+                                    name: package_name,
+                                    version,
+                                    dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
+                                        dist,
+                                    )),
+                                });
+                            }
                         }
+                        // We do not consider installed distributions with multiple versions because
+                        // during installation these must be reinstalled from the remote
+                        _ => {}
                     }
                 }
 
@@ -106,17 +113,24 @@ impl CandidateSelector {
 
         // Check for a locally installed distribution that satisfies the range
         if !exclusions.contains(package_name) {
-            for dist in installed_packages.get_packages(package_name) {
-                let version = dist.version();
-                if range.contains(version) {
-                    debug!("Found installed version of {dist} that satisfies {range}");
+            let installed_dists = installed_packages.get_packages(package_name);
+            match installed_dists.as_slice() {
+                [] => {}
+                [dist] => {
+                    let version = dist.version();
+                    if range.contains(version) {
+                        debug!("Found installed version of {dist} that satisfies {range}");
 
-                    return Some(Candidate {
-                        name: package_name,
-                        version,
-                        dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
-                    });
+                        return Some(Candidate {
+                            name: package_name,
+                            version,
+                            dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
+                        });
+                    }
                 }
+                // We do not consider installed distributions with multiple versions because
+                // during installation these must be reinstalled from the remote
+                _ => {}
             }
         }
 
