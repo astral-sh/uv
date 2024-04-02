@@ -3513,6 +3513,72 @@ fn already_installed_local_version_of_remote_package() {
     );
 }
 
+/// Install a package with multiple installed distributions in a virtual environment.
+#[test]
+#[cfg(unix)]
+fn already_installed_multiple_versions() -> Result<()> {
+    use crate::common::copy_dir_all;
+
+    // Install a version
+    let context1 = TestContext::new("3.12");
+    uv_snapshot!(context1.filters(), context1.install()
+        .arg("anyio==3.7.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Install another version
+    let context2 = TestContext::new("3.12");
+    uv_snapshot!(context2.filters(), context2.install()
+        .arg("anyio==4.0.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    // Copy the second version into the first environment
+    copy_dir_all(
+        context2.site_packages().join("anyio-4.0.0.dist-info"),
+        context1.site_packages().join("anyio-4.0.0.dist-info"),
+    )?;
+
+    // Request the second anyio version again
+    // Should remove both previous versions and reinstall the second one
+    uv_snapshot!(context1.filters(), context1.install().arg("anyio==4.0.0"), @r###"
+    success: false
+    exit_code: 101
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    thread 'main' panicked at crates/uv/src/commands/pip_install.rs:679:18:
+    Resolution should contain all packages
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    "###
+    );
+
+    Ok(())
+}
+
 /// Install a package from a remote URL
 #[test]
 #[cfg(feature = "git")]
