@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use fs2::FileExt;
 use fs_err as fs;
 use tempfile::NamedTempFile;
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 use uv_warnings::warn_user;
 
@@ -282,18 +282,26 @@ pub struct LockedFile(fs_err::File);
 impl LockedFile {
     pub fn acquire(path: impl AsRef<Path>, resource: impl Display) -> Result<Self, std::io::Error> {
         let file = fs_err::File::create(path.as_ref())?;
+        debug!("Trying to lock if free: {}", path.as_ref().user_display());
         match file.file().try_lock_exclusive() {
             Ok(()) => Ok(Self(file)),
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+            Err(err) => {
+                // Log error code and enum kind to help debugging more exotic failures
+                debug!("Try lock error, waiting for exclusive lock: {:?}", err);
                 warn_user!(
                     "Waiting to acquire lock for {} (lockfile: {})",
                     resource,
                     path.user_display(),
                 );
-                file.file().lock_exclusive()?;
+                file.file().lock_exclusive().map_err(|err| {
+                    // Not an fs_err method, we need to build our own path context
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Could not lock {}: {}", path.as_ref().user_display(), err),
+                    )
+                })?;
                 Ok(Self(file))
             }
-            Err(err) => Err(err),
         }
     }
 }
