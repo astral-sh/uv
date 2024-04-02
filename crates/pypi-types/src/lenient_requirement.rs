@@ -25,7 +25,9 @@ static GREATER_THAN_DEV: Lazy<Regex> = Lazy::new(|| Regex::new(r">dev").unwrap()
 static TRAILING_ZERO: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(\d+(\.\d)*(a|b|rc|post|dev)\d+)\.0").unwrap());
 /// Ex) `>= '2.7'`, `>=3.6'`
-static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new(r#"['"]([*\d])|([*\d])['"]"#).unwrap());
+static STRAY_QUOTES: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(['"]\d+[\.\d+]{0,2}[\.\*]{0.2}['"])|['"]([*\d])|([*\d])['"]"#).unwrap()
+});
 
 /// Regex to match the invalid specifier, replacement to fix it and message about was wrong and
 /// fixed
@@ -53,7 +55,7 @@ static FIXUPS: &[(&Lazy<Regex>, &str, &str)] = &[
     // Given `>=9.0.0a1.0`, rewrite to `>=9.0.0a1`
     (&TRAILING_ZERO, r"${1}", "removing trailing zero"),
     // Given `>= 2.7'`, rewrite to `>= 2.7`
-    (&STRAY_QUOTES, r"$1$2", "removing stray quotes"),
+    (&STRAY_QUOTES, r"$1$2$3", "removing stray quotes"),
 ];
 
 fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -> Result<T, Err> {
