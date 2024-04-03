@@ -536,7 +536,7 @@ def main() -> None:
         "platform": get_operating_system_and_architecture(),
         # The `t` abiflag for freethreading python
         # https://peps.python.org/pep-0703/#build-configuration-changes
-        "gil_disabled": bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
+        "gil_disabled": bool(sysconfig.get_config_var("Py_GIL_DISABLED")),
     }
     print(json.dumps(interpreter_info))
 
