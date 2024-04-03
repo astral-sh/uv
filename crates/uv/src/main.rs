@@ -677,6 +677,10 @@ struct PipSyncArgs {
     #[clap(long)]
     compile: bool,
 
+    /// Don't compile Python files to bytecode.
+    #[clap(long, hide = true, conflicts_with = "compile")]
+    no_compile: bool,
+
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[clap(long, short = 'C', alias = "config-settings")]
     config_setting: Vec<ConfigSettingEntry>,
@@ -937,6 +941,10 @@ struct PipInstallArgs {
     /// (like pip) ignore all errors.
     #[clap(long)]
     compile: bool,
+
+    /// Don't compile Python files to bytecode.
+    #[clap(long, hide = true, conflicts_with = "compile")]
+    no_compile: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[clap(long, short = 'C', alias = "config-settings")]
