@@ -569,7 +569,7 @@ fn install_git_tag() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.touch()?;
-    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0")?;
+    requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/WerkZeug.git@2.0.0")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
@@ -582,7 +582,7 @@ fn install_git_tag() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + werkzeug==2.0.0 (from git+https://github.com/pallets/werkzeug@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
+     + werkzeug==2.0.0 (from git+https://github.com/pallets/WerkZeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74)
     "###
     );
 

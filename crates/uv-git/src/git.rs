@@ -24,7 +24,7 @@ const CHECKOUT_READY_LOCK: &str = ".ok";
 
 /// A reference to commit or commit-ish.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) enum GitReference {
+pub enum GitReference {
     /// From a branch.
     #[allow(unused)]
     Branch(String),
@@ -66,8 +66,29 @@ impl GitReference {
         }
     }
 
-    /// Views the short ID as a `str`.
-    pub(crate) fn as_str(&self) -> &str {
+    pub fn precise(&self) -> Option<&str> {
+        match self {
+            Self::FullCommit(rev) => Some(rev),
+            Self::ShortCommit(rev) => Some(rev),
+            _ => None,
+        }
+    }
+
+    /// Converts the [`GitReference`] to a `str`.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::Branch(rev) => Some(rev),
+            Self::Tag(rev) => Some(rev),
+            Self::BranchOrTag(rev) => Some(rev),
+            Self::FullCommit(rev) => Some(rev),
+            Self::ShortCommit(rev) => Some(rev),
+            Self::Ref(rev) => Some(rev),
+            Self::DefaultBranch => None,
+        }
+    }
+
+    /// Converts the [`GitReference`] to a `str` that can be used as a revision.
+    pub(crate) fn as_rev(&self) -> &str {
         match self {
             Self::Branch(rev)
             | Self::Tag(rev)
@@ -79,6 +100,7 @@ impl GitReference {
         }
     }
 
+    /// Returns the kind of this reference.
     pub(crate) fn kind_str(&self) -> &str {
         match self {
             Self::Branch(_) => "branch",
@@ -1034,7 +1056,7 @@ pub(crate) fn fetch(
                     format!(
                         "failed to fetch {} `{}`",
                         reference.kind_str(),
-                        reference.as_str()
+                        reference.as_rev()
                     )
                 }),
             }

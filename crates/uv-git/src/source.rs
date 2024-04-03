@@ -70,7 +70,7 @@ impl GitSource {
 
                 // Report the checkout operation to the reporter.
                 let task = self.reporter.as_ref().map(|reporter| {
-                    reporter.on_checkout_start(remote.url(), self.git.reference.as_str())
+                    reporter.on_checkout_start(remote.url(), self.git.reference.as_rev())
                 });
 
                 let (db, actual_rev) = remote.checkout(
