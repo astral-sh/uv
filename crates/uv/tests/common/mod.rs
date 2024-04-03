@@ -304,19 +304,19 @@ pub fn bootstrapped_pythons() -> Option<Vec<PathBuf>> {
         .parent()
         .unwrap()
         .to_path_buf();
-    let boostrap_dir = if let Some(boostrap_dir) = env::var_os("UV_BOOTSTRAP_DIR") {
-        let boostrap_dir = PathBuf::from(boostrap_dir);
-        if boostrap_dir.is_absolute() {
-            boostrap_dir
+    let bootstrap_dir = if let Some(bootstrap_dir) = env::var_os("UV_BOOTSTRAP_DIR") {
+        let bootstrap_dir = PathBuf::from(bootstrap_dir);
+        if bootstrap_dir.is_absolute() {
+            bootstrap_dir
         } else {
             // cargo test changes directory to the test crate, but doesn't tell us from where the user is running the
             // tests. We'll assume that it's the project root.
-            project_root.join(boostrap_dir)
+            project_root.join(bootstrap_dir)
         }
     } else {
         project_root.join("bin")
     };
-    let bootstrapped_pythons = boostrap_dir.join("versions");
+    let bootstrapped_pythons = bootstrap_dir.join("versions");
     let Ok(bootstrapped_pythons) = fs_err::read_dir(bootstrapped_pythons) else {
         return None;
     };

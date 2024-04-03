@@ -301,7 +301,7 @@ pub(crate) async fn pip_sync(
             &flat_index,
             &index,
             &build_dispatch,
-            // TODO(zanieb): We should consier support for installed packages in pip sync
+            // TODO(zanieb): We should consider support for installed packages in pip sync
             &EmptyInstalledPackages,
         )?
         .with_reporter(reporter);
