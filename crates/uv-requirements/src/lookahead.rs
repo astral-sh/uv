@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use anyhow::{Context, Result};
-use cache_key::CanonicalUrl;
+
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
@@ -139,7 +139,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
                 metadata.requires_dist.clone()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
-                let (metadata, precise) = self
+                let metadata = self
                     .database
                     .get_or_build_wheel_metadata(&dist)
                     .await
@@ -152,11 +152,6 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
 
                 // Insert the metadata into the index.
                 self.index.insert_metadata(id, metadata);
-
-                // Insert the redirect into the index.
-                if let Some(precise) = precise {
-                    self.index.insert_redirect(CanonicalUrl::new(url), precise);
-                }
 
                 requires_dist
             }

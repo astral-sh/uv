@@ -6,7 +6,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use anyhow::Result;
-use cache_key::CanonicalUrl;
+
 use dashmap::{DashMap, DashSet};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
@@ -16,7 +16,6 @@ use pubgrub::solver::{Incompatibility, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info_span, instrument, trace, Instrument};
-use url::Url;
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
@@ -300,7 +299,6 @@ impl<
                     &pins,
                     &self.index.packages,
                     &self.index.distributions,
-                    &self.index.redirects,
                     &state,
                     &self.preferences,
                     self.editables.clone(),
@@ -933,7 +931,6 @@ impl<
                 Some(Response::Dist {
                     dist: Dist::Built(dist),
                     metadata,
-                    precise: _,
                 }) => {
                     trace!("Received built distribution metadata for: {dist}");
                     self.index.distributions.done(dist.package_id(), metadata);
@@ -941,32 +938,11 @@ impl<
                 Some(Response::Dist {
                     dist: Dist::Source(distribution),
                     metadata,
-                    precise,
                 }) => {
                     trace!("Received source distribution metadata for: {distribution}");
                     self.index
                         .distributions
                         .done(distribution.package_id(), metadata);
-                    if let Some(precise) = precise {
-                        match distribution {
-                            SourceDist::DirectUrl(sdist) => {
-                                self.index
-                                    .redirects
-                                    .insert(CanonicalUrl::new(&sdist.url), precise);
-                            }
-                            SourceDist::Git(sdist) => {
-                                self.index
-                                    .redirects
-                                    .insert(CanonicalUrl::new(&sdist.url), precise);
-                            }
-                            SourceDist::Path(sdist) => {
-                                self.index
-                                    .redirects
-                                    .insert(CanonicalUrl::new(&sdist.url), precise);
-                            }
-                            SourceDist::Registry(_) => {}
-                        }
-                    }
                 }
                 None => {}
             }
@@ -992,7 +968,7 @@ impl<
 
             // Fetch distribution metadata from the distribution database.
             Request::Dist(dist) => {
-                let (metadata, precise) = self
+                let metadata = self
                     .provider
                     .get_or_build_wheel_metadata(&dist)
                     .boxed()
@@ -1009,11 +985,7 @@ impl<
                             ResolveError::FetchAndBuild(Box::new(source_dist), err)
                         }
                     })?;
-                Ok(Some(Response::Dist {
-                    dist,
-                    metadata,
-                    precise,
-                }))
+                Ok(Some(Response::Dist { dist, metadata }))
             }
 
             Request::Installed(dist) => {
@@ -1080,7 +1052,7 @@ impl<
 
                     let response = match dist {
                         ResolvedDist::Installable(dist) => {
-                            let (metadata, precise) = self
+                            let metadata = self
                                 .provider
                                 .get_or_build_wheel_metadata(&dist)
                                 .boxed()
@@ -1099,11 +1071,7 @@ impl<
                                         ResolveError::FetchAndBuild(Box::new(source_dist), err)
                                     }
                                 })?;
-                            Response::Dist {
-                                dist,
-                                metadata,
-                                precise,
-                            }
+                            Response::Dist { dist, metadata }
                         }
                         ResolvedDist::Installed(dist) => {
                             let metadata = dist.metadata().map_err(|err| {
@@ -1182,11 +1150,7 @@ enum Response {
     /// The returned metadata for a package hosted on a registry.
     Package(PackageName, VersionsResponse),
     /// The returned metadata for a distribution.
-    Dist {
-        dist: Dist,
-        metadata: Metadata23,
-        precise: Option<Url>,
-    },
+    Dist { dist: Dist, metadata: Metadata23 },
     /// The returned metadata for an already-installed distribution.
     Installed {
         dist: InstalledDist,

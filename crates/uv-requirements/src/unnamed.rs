@@ -8,7 +8,6 @@ use futures::{StreamExt, TryStreamExt};
 use serde::Deserialize;
 use tracing::debug;
 
-use cache_key::CanonicalUrl;
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
     BuildableSource, DirectSourceUrl, GitSourceUrl, PackageId, PathSourceUrl, RemoteSource,
@@ -243,17 +242,12 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
-                let (metadata, precise) = database.build_wheel_metadata(&source).await?;
+                let metadata = database.build_wheel_metadata(&source).await?;
 
                 let name = metadata.name.clone();
 
                 // Insert the metadata into the index.
                 index.insert_metadata(id, metadata);
-
-                // Insert the redirect into the index.
-                if let Some(precise) = precise {
-                    index.insert_redirect(CanonicalUrl::new(&requirement.url), precise);
-                }
 
                 name
             }
