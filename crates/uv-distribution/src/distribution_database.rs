@@ -10,10 +10,8 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, GitSourceDist, GitSourceUrl, IndexLocations,
-    LocalEditable, Name, SourceDist, SourceUrl,
+    BuildableSource, BuiltDist, Dist, FileLocation, IndexLocations, LocalEditable, Name, SourceDist,
 };
-use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use pypi_types::Metadata23;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, CacheBucket, CacheEntry, WheelCache};
@@ -21,7 +19,6 @@ use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
 use uv_types::{BuildContext, NoBinary, NoBuild};
 
 use crate::download::{BuiltWheel, UnzippedWheel};
-use crate::git::resolve_precise;
 use crate::locks::Locks;
 use crate::{DiskWheel, Error, LocalWheel, Reporter, SourceDistributionBuilder};
 
@@ -42,7 +39,6 @@ pub struct DistributionDatabase<'a, Context: BuildContext + Send + Sync> {
     build_context: &'a Context,
     builder: SourceDistributionBuilder<'a, Context>,
     locks: Arc<Locks>,
-    reporter: Option<Arc<dyn Reporter>>,
 }
 
 impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> {
@@ -52,7 +48,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             build_context,
             builder: SourceDistributionBuilder::new(client, build_context),
             locks: Arc::new(Locks::default()),
-            reporter: None,
         }
     }
 
@@ -61,7 +56,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         let reporter = Arc::new(reporter);
         Self {
-            reporter: Some(reporter.clone()),
             builder: self.builder.with_reporter(reporter),
             ..self
         }
@@ -375,48 +369,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
         let lock = self.locks.acquire(source).await;
         let _guard = lock.lock().await;
-
-        // Insert the `precise` URL, if it exists.
-        if let BuildableSource::Dist(SourceDist::Git(source)) = source {
-            if let Some(precise) = resolve_precise(
-                &source.url,
-                self.build_context.cache(),
-                self.reporter.as_ref(),
-            )
-            .await?
-            {
-                let source = SourceDist::Git(GitSourceDist {
-                    url: VerbatimUrl::unknown(precise.clone()),
-                    ..source.clone()
-                });
-                let source = BuildableSource::Dist(&source);
-                let metadata = self
-                    .builder
-                    .download_and_build_metadata(&source)
-                    .boxed()
-                    .await?;
-                return Ok(metadata);
-            }
-        }
-
-        if let BuildableSource::Url(SourceUrl::Git(source)) = source {
-            if let Some(precise) = resolve_precise(
-                source.url,
-                self.build_context.cache(),
-                self.reporter.as_ref(),
-            )
-            .await?
-            {
-                let source = SourceUrl::Git(GitSourceUrl { url: &precise });
-                let source = BuildableSource::Url(source);
-                let metadata = self
-                    .builder
-                    .download_and_build_metadata(&source)
-                    .boxed()
-                    .await?;
-                return Ok(metadata);
-            }
-        }
 
         let metadata = self
             .builder

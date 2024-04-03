@@ -713,17 +713,27 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &GitSourceUrl<'_>,
         tags: &Tags,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let (fetch, subdirectory) = fetch_git_archive(
+        // Resolve to a precise Git SHA.
+        let url = if let Some(url) = resolve_precise(
             resource.url,
             self.build_context.cache(),
             self.reporter.as_ref(),
         )
-        .await?;
+        .await?
+        {
+            Cow::Owned(url)
+        } else {
+            Cow::Borrowed(resource.url)
+        };
+
+        // Fetch the Git repository.
+        let (fetch, subdirectory) =
+            fetch_git_archive(&url, self.build_context.cache(), self.reporter.as_ref()).await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(&url, &git_sha.to_short_string()).root(),
         );
 
         // If the cache contains a compatible wheel, return it.
@@ -770,27 +780,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<Metadata23, Error> {
         // Resolve to a precise Git SHA.
         let url = if let Some(url) = resolve_precise(
-                resource.url,
-                self.build_context.cache(),
-                self.reporter.as_ref(),
-            )
-            .await? {
+            resource.url,
+            self.build_context.cache(),
+            self.reporter.as_ref(),
+        )
+        .await?
+        {
             Cow::Owned(url)
         } else {
             Cow::Borrowed(resource.url)
         };
 
-        let (fetch, subdirectory) = fetch_git_archive(
-            resource.url,
-            self.build_context.cache(),
-            self.reporter.as_ref(),
-        )
-        .await?;
+        // Fetch the Git repository.
+        let (fetch, subdirectory) =
+            fetch_git_archive(&url, self.build_context.cache(), self.reporter.as_ref()).await?;
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
-            WheelCache::Git(resource.url, &git_sha.to_short_string()).root(),
+            WheelCache::Git(&url, &git_sha.to_short_string()).root(),
         );
 
         // If the cache contains compatible metadata, return it.

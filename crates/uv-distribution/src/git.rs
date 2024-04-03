@@ -45,6 +45,8 @@ impl RepositoryReference {
 }
 
 /// Download a source distribution from a Git repository.
+///
+/// Assumes that the URL is a precise Git URL, with a full commit hash.
 pub(crate) async fn fetch_git_archive(
     url: &Url,
     cache: &Cache,
@@ -67,17 +69,6 @@ pub(crate) async fn fetch_git_archive(
 
     let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Error::Git)?;
 
-    // Extract the resolved URL from the in-memory cache, to save a look-up in the fetch.
-    let url = {
-        let resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
-        let reference = RepositoryReference::new(&url);
-        if let Some(resolved) = resolved_git_refs.get(&reference) {
-            url.with_precise(*resolved)
-        } else {
-            url
-        }
-    };
-
     // Fetch the Git repository.
     let source = if let Some(reporter) = reporter {
         GitSource::new(url.clone(), git_dir).with_reporter(Facade::from(reporter.clone()))
@@ -87,15 +78,6 @@ pub(crate) async fn fetch_git_archive(
     let fetch = tokio::task::spawn_blocking(move || source.fetch())
         .await?
         .map_err(Error::Git)?;
-
-    // Insert the resolved URL into the in-memory cache.
-    if url.precise().is_none() {
-        if let Some(precise) = fetch.git().precise() {
-            let mut resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
-            let reference = RepositoryReference::new(&url);
-            resolved_git_refs.insert(reference, precise);
-        }
-    }
 
     Ok((fetch, subdirectory))
 }
