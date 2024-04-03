@@ -31,7 +31,7 @@ jobs:
         run: cargo fmt --all --check
 
       - name: "Prettier"
-        run: npx prettier --check "**/*.{yaml,yml}"
+        run: npx prettier --check "**/*.{json5,yaml,yml}"
 
       - name: "Ruff format"
         run: pipx run ruff format --diff .
