@@ -51,7 +51,10 @@ impl<'a> SitePackages<'a> {
                     let directories: BTreeSet<_> = site_packages
                         .filter_map(|read_dir| match read_dir {
                             Ok(entry) => match entry.file_type() {
-                                Ok(file_type) => file_type.is_dir().then_some(Ok(entry.path())),
+                                Ok(file_type) => file_type.is_dir().then_some(
+                                    // We follow symbolic links to deduplicate linked packages e.g. in `lib` / `lib64`
+                                    entry.path().canonicalize(),
+                                ),
                                 Err(err) => Some(Err(err)),
                             },
                             Err(err) => Some(Err(err)),
