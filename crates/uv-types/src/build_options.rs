@@ -211,6 +211,29 @@ impl NoBuild {
     }
 }
 
+#[derive(Debug, Default, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+pub enum IndexStrategy {
+    /// Only use results from the first index that returns a match for a given package name.
+    ///
+    /// While this differs from pip's behavior, it's the default index strategy as it's the most
+    /// secure.
+    #[default]
+    FirstMatch,
+    /// Search for every package name across all indexes, exhausting the versions from the first
+    /// index before moving on to the next.
+    ///
+    /// In this strategy, we look for every package across all indexes. When resolving, we attempt
+    /// to use versions from the indexes in order, such that we exhaust all available versions from
+    /// the first index before moving on to the next. Further, if a version is found to be
+    /// incompatible in the first index, we do not reconsider that version in subsequent indexes,
+    /// even if the secondary index might contain compatible versions (e.g., variants of the same
+    /// versions with different ABI tags or Python version constraints).
+    ///
+    /// See: https://peps.python.org/pep-0708/
+    UnsafeAnyMatch,
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

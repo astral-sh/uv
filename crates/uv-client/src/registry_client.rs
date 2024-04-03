@@ -23,6 +23,7 @@ use pypi_types::{Metadata23, SimpleJson};
 use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_normalize::PackageName;
+use uv_types::IndexStrategy;
 
 use crate::base_client::{BaseClient, BaseClientBuilder};
 use crate::cached_client::CacheControl;
@@ -35,6 +36,7 @@ use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
+    index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
     native_tls: bool,
     retries: u32,
@@ -49,6 +51,7 @@ impl RegistryClientBuilder<'_> {
     pub fn new(cache: Cache) -> Self {
         Self {
             index_urls: IndexUrls::default(),
+            index_strategy: IndexStrategy::default(),
             keyring_provider: KeyringProvider::default(),
             native_tls: false,
             cache,
@@ -65,6 +68,12 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
         self.index_urls = index_urls;
+        self
+    }
+
+    #[must_use]
+    pub fn index_strategy(mut self, index_strategy: IndexStrategy) -> Self {
+        self.index_strategy = index_strategy;
         self
     }
 
@@ -147,6 +156,7 @@ impl<'a> RegistryClientBuilder<'a> {
 
         RegistryClient {
             index_urls: self.index_urls,
+            index_strategy: self.index_strategy,
             cache: self.cache,
             connectivity,
             client,
@@ -160,6 +170,8 @@ impl<'a> RegistryClientBuilder<'a> {
 pub struct RegistryClient {
     /// The index URLs to use for fetching packages.
     index_urls: IndexUrls,
+    /// The strategy to use when fetching across multiple indexes.
+    index_strategy: IndexStrategy,
     /// The underlying HTTP client.
     client: CachedClient,
     /// Used for the remote wheel METADATA cache.
@@ -206,17 +218,23 @@ impl RegistryClient {
     pub async fn simple(
         &self,
         package_name: &PackageName,
-    ) -> Result<(IndexUrl, OwnedArchive<SimpleMetadata>), Error> {
+    ) -> Result<Vec<(IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
         let mut it = self.index_urls.indexes().peekable();
         if it.peek().is_none() {
             return Err(ErrorKind::NoIndex(package_name.as_ref().to_string()).into());
         }
 
+        let mut results = Vec::new();
         for index in it {
-            let result = self.simple_single_index(package_name, index).await?;
+            match self.simple_single_index(package_name, index).await? {
+                Ok(metadata) => {
+                    results.push((index.clone(), metadata));
 
-            return match result {
-                Ok(metadata) => Ok((index.clone(), metadata)),
+                    // If we're only using the first match, we can stop here.
+                    if self.index_strategy == IndexStrategy::FirstMatch {
+                        break;
+                    }
+                }
                 Err(CachedClientError::Client(err)) => match err.into_kind() {
                     ErrorKind::Offline(_) => continue,
                     ErrorKind::ReqwestError(err) => {
@@ -225,20 +243,24 @@ impl RegistryClient {
                         {
                             continue;
                         }
-                        Err(ErrorKind::from(err).into())
+                        return Err(ErrorKind::from(err).into());
                     }
-                    other => Err(other.into()),
+                    other => return Err(other.into()),
                 },
-                Err(CachedClientError::Callback(err)) => Err(err),
+                Err(CachedClientError::Callback(err)) => return Err(err),
             };
         }
 
-        match self.connectivity {
-            Connectivity::Online => {
-                Err(ErrorKind::PackageNotFound(package_name.to_string()).into())
-            }
-            Connectivity::Offline => Err(ErrorKind::Offline(package_name.to_string()).into()),
+        if results.is_empty() {
+            return match self.connectivity {
+                Connectivity::Online => {
+                    Err(ErrorKind::PackageNotFound(package_name.to_string()).into())
+                }
+                Connectivity::Offline => Err(ErrorKind::Offline(package_name.to_string()).into()),
+            };
         }
+
+        Ok(results)
     }
 
     async fn simple_single_index(

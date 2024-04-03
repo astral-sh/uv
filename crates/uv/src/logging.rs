@@ -124,7 +124,7 @@ pub(crate) fn setup_logging(
         }
         Level::Verbose | Level::ExtraVerbose => {
             // Show `DEBUG` messages from the CLI crate, but allow `RUST_LOG` to override.
-            Directive::from_str("uv=debug").unwrap()
+            Directive::from_str("uv=trace").unwrap()
         }
     };
 

@@ -209,14 +209,15 @@ impl NoSolutionError {
                     // we represent the state of the resolver at the time of failure.
                     if visited.contains(name) {
                         if let Some(response) = package_versions.get(name) {
-                            if let VersionsResponse::Found(ref version_map) = *response {
-                                available_versions.insert(
-                                    package.clone(),
-                                    version_map
-                                        .iter()
-                                        .map(|(version, _)| version.clone())
-                                        .collect(),
-                                );
+                            if let VersionsResponse::Found(ref version_maps) = *response {
+                                for version_map in version_maps {
+                                    available_versions
+                                        .entry(package.clone())
+                                        .or_insert_with(BTreeSet::new)
+                                        .extend(
+                                            version_map.iter().map(|(version, _)| version.clone()),
+                                        );
+                                }
                             }
                         }
                     }

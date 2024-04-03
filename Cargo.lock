@@ -4464,6 +4464,7 @@ dependencies = [
  "uv-cache",
  "uv-fs",
  "uv-normalize",
+ "uv-types",
  "uv-version",
  "uv-warnings",
  "webpki-roots",
@@ -4785,6 +4786,7 @@ name = "uv-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "clap",
  "distribution-types",
  "itertools 0.12.1",
  "once-map",

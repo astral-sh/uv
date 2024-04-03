@@ -38,8 +38,8 @@ use uv_resolver::{
     Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{
-    BuildIsolation, ConfigSettings, Constraints, InFlight, NoBinary, NoBuild, Overrides, Reinstall,
-    SetupPyStrategy, Upgrade,
+    BuildIsolation, ConfigSettings, Constraints, InFlight, IndexStrategy, NoBinary, NoBuild,
+    Overrides, Reinstall, SetupPyStrategy, Upgrade,
 };
 use uv_warnings::warn_user;
 
@@ -61,6 +61,7 @@ pub(crate) async fn pip_install(
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
+    index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
     reinstall: Reinstall,
     link_mode: LinkMode,
@@ -195,6 +196,7 @@ pub(crate) async fn pip_install(
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .index_strategy(index_strategy)
         .keyring_provider(keyring_provider)
         .markers(markers)
         .platform(interpreter.platform())

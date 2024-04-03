@@ -21,6 +21,7 @@ uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 
 anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"], optional = true }
 itertools = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, optional = true }
