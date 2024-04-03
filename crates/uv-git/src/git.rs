@@ -25,12 +25,6 @@ const CHECKOUT_READY_LOCK: &str = ".ok";
 /// A reference to commit or commit-ish.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GitReference {
-    /// From a branch.
-    #[allow(unused)]
-    Branch(String),
-    /// From a tag.
-    #[allow(unused)]
-    Tag(String),
     /// From a reference that's ambiguously a branch or tag.
     BranchOrTag(String),
     /// From a specific revision, using a full 40-character commit hash.
@@ -77,8 +71,6 @@ impl GitReference {
     /// Converts the [`GitReference`] to a `str`.
     pub fn as_str(&self) -> Option<&str> {
         match self {
-            Self::Branch(rev) => Some(rev),
-            Self::Tag(rev) => Some(rev),
             Self::BranchOrTag(rev) => Some(rev),
             Self::FullCommit(rev) => Some(rev),
             Self::ShortCommit(rev) => Some(rev),
@@ -90,9 +82,7 @@ impl GitReference {
     /// Converts the [`GitReference`] to a `str` that can be used as a revision.
     pub(crate) fn as_rev(&self) -> &str {
         match self {
-            Self::Branch(rev)
-            | Self::Tag(rev)
-            | Self::BranchOrTag(rev)
+            Self::BranchOrTag(rev)
             | Self::FullCommit(rev)
             | Self::ShortCommit(rev)
             | Self::Ref(rev) => rev,
@@ -103,8 +93,6 @@ impl GitReference {
     /// Returns the kind of this reference.
     pub(crate) fn kind_str(&self) -> &str {
         match self {
-            Self::Branch(_) => "branch",
-            Self::Tag(_) => "tag",
             Self::BranchOrTag(_) => "branch or tag",
             Self::FullCommit(_) => "commit",
             Self::ShortCommit(_) => "short commit",
@@ -281,37 +269,18 @@ impl GitReference {
     pub(crate) fn resolve(&self, repo: &git2::Repository) -> Result<git2::Oid> {
         let refkind = self.kind_str();
         let id = match self {
-            // Note that we resolve the named tag here in sync with where it's
-            // fetched into via `fetch` below.
-            Self::Tag(s) => (|| -> Result<git2::Oid> {
-                let refname = format!("refs/remotes/origin/tags/{s}");
-                let id = repo.refname_to_id(&refname)?;
-                let obj = repo.find_object(id, None)?;
-                let obj = obj.peel(ObjectType::Commit)?;
-                Ok(obj.id())
-            })()
-            .with_context(|| format!("failed to find {refkind} `{s}`"))?,
-
-            // Resolve the remote name since that's all we're configuring in
-            // `fetch` below.
-            Self::Branch(s) => {
-                let name = format!("origin/{s}");
-                let b = repo
-                    .find_branch(&name, git2::BranchType::Remote)
-                    .with_context(|| format!("failed to find {refkind} `{s}`"))?;
-                b.get()
-                    .target()
-                    .ok_or_else(|| anyhow::format_err!("{refkind} `{s}` did not have a target"))?
-            }
-
             // Attempt to resolve the branch, then the tag.
             Self::BranchOrTag(s) => {
                 let name = format!("origin/{s}");
 
+                // Resolve the remote name since that's all we're configuring in
+                // `fetch` below.
                 repo.find_branch(&name, git2::BranchType::Remote)
                     .ok()
                     .and_then(|b| b.get().target())
                     .or_else(|| {
+                        // Note that we resolve the named tag here in sync with where it's
+                        // fetched into via `fetch` below.
                         let refname = format!("refs/remotes/origin/tags/{s}");
                         let id = repo.refname_to_id(&refname).ok()?;
                         let obj = repo.find_object(id, None).ok()?;
@@ -958,14 +927,6 @@ pub(crate) fn fetch(
     match reference {
         // For branches and tags we can fetch simply one reference and copy it
         // locally, no need to fetch other branches/tags.
-        GitReference::Branch(branch) => {
-            refspecs.push(format!("+refs/heads/{branch}:refs/remotes/origin/{branch}"));
-        }
-
-        GitReference::Tag(tag) => {
-            refspecs.push(format!("+refs/tags/{tag}:refs/remotes/origin/tags/{tag}"));
-        }
-
         GitReference::BranchOrTag(branch_or_tag) => {
             refspecs.push(format!(
                 "+refs/heads/{branch_or_tag}:refs/remotes/origin/{branch_or_tag}"
@@ -1335,8 +1296,6 @@ fn github_fast_path(
 
     let local_object = reference.resolve(repo).ok();
     let github_branch_name = match reference {
-        GitReference::Branch(branch) => branch,
-        GitReference::Tag(tag) => tag,
         GitReference::BranchOrTag(branch_or_tag) => branch_or_tag,
         GitReference::DefaultBranch => "HEAD",
         GitReference::Ref(rev) => rev,
