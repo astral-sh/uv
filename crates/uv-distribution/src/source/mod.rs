@@ -1293,7 +1293,7 @@ async fn extract_archive(path: &Path, cache: &Cache) -> Result<ExtractedSource, 
         let reader = fs_err::tokio::File::open(&path)
             .await
             .map_err(Error::CacheRead)?;
-        uv_extract::seek::archive(tokio::io::BufReader::new(reader), path, &temp_dir.path())
+        uv_extract::seek::archive(reader, path, &temp_dir.path())
             .await?;
 
         // Extract the top-level directory from the archive.

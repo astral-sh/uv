@@ -9,7 +9,7 @@ use crate::Error;
 /// Unzip a `.zip` archive into the target directory, requiring `Seek`.
 ///
 /// This is useful for unzipping files asynchronously that already exist on disk.
-pub async fn unzip<R: tokio::io::AsyncBufRead + tokio::io::AsyncSeek + Unpin>(
+pub async fn unzip<R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
@@ -81,7 +81,7 @@ pub async fn unzip<R: tokio::io::AsyncBufRead + tokio::io::AsyncSeek + Unpin>(
 }
 
 /// Unzip a `.zip` or `.tar.gz` archive into the target directory, requiring `Seek`.
-pub async fn archive<R: tokio::io::AsyncBufRead + tokio::io::AsyncSeek + Unpin>(
+pub async fn archive<R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin>(
     reader: R,
     source: impl AsRef<Path>,
     target: impl AsRef<Path>,
