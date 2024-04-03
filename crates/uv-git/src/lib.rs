@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use url::Url;
 
-use crate::git::GitReference;
+pub use crate::git::GitReference;
 pub use crate::sha::GitSha;
 pub use crate::source::{Fetch, GitSource, Reporter};
 
@@ -24,7 +24,7 @@ pub struct GitUrl {
 
 impl GitUrl {
     #[must_use]
-    pub(crate) fn with_precise(mut self, precise: GitSha) -> Self {
+    pub fn with_precise(mut self, precise: GitSha) -> Self {
         self.precise = Some(precise);
         self
     }
@@ -35,16 +35,8 @@ impl GitUrl {
     }
 
     /// Return the reference to the commit to use, which could be a branch, tag or revision.
-    pub fn reference(&self) -> Option<&str> {
-        match &self.reference {
-            GitReference::Branch(rev)
-            | GitReference::Tag(rev)
-            | GitReference::BranchOrTag(rev)
-            | GitReference::Ref(rev)
-            | GitReference::FullCommit(rev)
-            | GitReference::ShortCommit(rev) => Some(rev),
-            GitReference::DefaultBranch => None,
-        }
+    pub fn reference(&self) -> &GitReference {
+        &self.reference
     }
 
     /// Returns `true` if the reference is a full commit.

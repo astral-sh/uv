@@ -164,7 +164,7 @@ impl TryFrom<&DirectGitUrl> for pypi_types::DirectUrl {
             vcs_info: pypi_types::VcsInfo {
                 vcs: pypi_types::VcsKind::Git,
                 commit_id: value.url.precise().as_ref().map(ToString::to_string),
-                requested_revision: value.url.reference().map(ToString::to_string),
+                requested_revision: value.url.reference().as_str().map(ToString::to_string),
             },
             subdirectory: value.subdirectory.clone(),
         })

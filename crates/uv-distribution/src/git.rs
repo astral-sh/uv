@@ -8,11 +8,11 @@ use rustc_hash::FxHashMap;
 use tracing::debug;
 use url::Url;
 
-use cache_key::CanonicalUrl;
+use cache_key::{CanonicalUrl, RepositoryUrl};
 use distribution_types::DirectGitUrl;
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::LockedFile;
-use uv_git::{Fetch, GitSource, GitUrl};
+use uv_git::{Fetch, GitReference, GitSha, GitSource, GitUrl};
 
 use crate::error::Error;
 use crate::reporter::Facade;
@@ -24,7 +24,25 @@ use crate::Reporter;
 /// consistent across all invocations. (For example: if a Git URL refers to a branch, like `main`,
 /// then the resolved URL should always refer to the same commit across the lifetime of the
 /// process.)
-static RESOLVED_GIT_REFS: Lazy<Mutex<FxHashMap<GitUrl, GitUrl>>> = Lazy::new(Mutex::default);
+static RESOLVED_GIT_REFS: Lazy<Mutex<FxHashMap<RepositoryReference, GitSha>>> =
+    Lazy::new(Mutex::default);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct RepositoryReference {
+    /// The URL of the Git repository, with any query parameters and fragments removed.
+    url: RepositoryUrl,
+    /// The reference to the commit to use, which could be a branch, tag or revision.
+    reference: GitReference,
+}
+
+impl RepositoryReference {
+    fn new(git: &GitUrl) -> Self {
+        Self {
+            url: RepositoryUrl::new(git.repository()),
+            reference: git.reference().clone(),
+        }
+    }
+}
 
 /// Download a source distribution from a Git repository.
 pub(crate) async fn fetch_git_archive(
@@ -40,10 +58,10 @@ pub(crate) async fn fetch_git_archive(
     fs::create_dir_all(&lock_dir)
         .await
         .map_err(Error::CacheWrite)?;
-    let canonical_url = CanonicalUrl::new(url);
+    let repository_url = RepositoryUrl::new(url);
     let _lock = LockedFile::acquire(
-        lock_dir.join(cache_key::digest(&canonical_url)),
-        &canonical_url,
+        lock_dir.join(cache_key::digest(&repository_url)),
+        &repository_url,
     )
     .map_err(Error::CacheWrite)?;
 
@@ -52,8 +70,9 @@ pub(crate) async fn fetch_git_archive(
     // Extract the resolved URL from the in-memory cache, to save a look-up in the fetch.
     let url = {
         let resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
-        if let Some(resolved) = resolved_git_refs.get(&url) {
-            resolved.clone()
+        let reference = RepositoryReference::new(&url);
+        if let Some(resolved) = resolved_git_refs.get(&reference) {
+            url.with_precise(*resolved)
         } else {
             url
         }
@@ -70,10 +89,12 @@ pub(crate) async fn fetch_git_archive(
         .map_err(Error::Git)?;
 
     // Insert the resolved URL into the in-memory cache.
-    {
-        let mut resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
-        let precise = fetch.git().clone();
-        resolved_git_refs.insert(url, precise);
+    if url.precise().is_none() {
+        if let Some(precise) = fetch.git().precise() {
+            let mut resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
+            let reference = RepositoryReference::new(&url);
+            resolved_git_refs.insert(reference, precise);
+        }
     }
 
     Ok((fetch, subdirectory))
@@ -92,8 +113,7 @@ pub(crate) async fn resolve_precise(
     cache: &Cache,
     reporter: Option<&Arc<dyn Reporter>>,
 ) -> Result<Option<Url>, Error> {
-    let url = Url::from(CanonicalUrl::new(url));
-    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(&url).map_err(Error::Git)?;
+    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Error::Git)?;
 
     // If the Git reference already contains a complete SHA, short-circuit.
     if url.precise().is_some() {
@@ -103,9 +123,10 @@ pub(crate) async fn resolve_precise(
     // If the Git reference is in the in-memory cache, return it.
     {
         let resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
-        if let Some(precise) = resolved_git_refs.get(&url) {
+        let reference = RepositoryReference::new(&url);
+        if let Some(precise) = resolved_git_refs.get(&reference) {
             return Ok(Some(Url::from(DirectGitUrl {
-                url: precise.clone(),
+                url: url.with_precise(*precise),
                 subdirectory,
             })));
         }
@@ -123,17 +144,18 @@ pub(crate) async fn resolve_precise(
     let fetch = tokio::task::spawn_blocking(move || source.fetch())
         .await?
         .map_err(Error::Git)?;
-    let precise = fetch.into_git();
+    let git = fetch.into_git();
 
     // Insert the resolved URL into the in-memory cache.
-    {
+    if let Some(precise) = git.precise() {
         let mut resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
-        resolved_git_refs.insert(url.clone(), precise.clone());
+        let reference = RepositoryReference::new(&url);
+        resolved_git_refs.insert(reference, precise);
     }
 
     // Re-encode as a URL.
     Ok(Some(Url::from(DirectGitUrl {
-        url: precise,
+        url: git,
         subdirectory,
     })))
 }
@@ -153,7 +175,7 @@ pub fn is_same_reference<'a>(a: &'a Url, b: &'a Url) -> bool {
 fn is_same_reference_impl<'a>(
     a: &'a Url,
     b: &'a Url,
-    resolved_refs: &FxHashMap<GitUrl, GitUrl>,
+    resolved_refs: &FxHashMap<RepositoryReference, GitSha>,
 ) -> bool {
     // Convert `a` to a Git URL, if possible.
     let Ok(a_git) = DirectGitUrl::try_from(&Url::from(CanonicalUrl::new(a))) else {
@@ -170,13 +192,19 @@ fn is_same_reference_impl<'a>(
         return false;
     }
 
+    // Convert `a` to a repository URL.
+    let a_ref = RepositoryReference::new(&a_git.url);
+
+    // Convert `b` to a repository URL.
+    let b_ref = RepositoryReference::new(&b_git.url);
+
     // The URLs must refer to the same repository.
-    if a_git.url.repository() != b_git.url.repository() {
+    if a_ref.url != b_ref.url {
         return false;
     }
 
     // If the URLs have the same tag, they refer to the same commit.
-    if a_git.url.reference() == b_git.url.reference() {
+    if a_ref.reference == b_ref.reference {
         return true;
     }
 
@@ -184,7 +212,7 @@ fn is_same_reference_impl<'a>(
     let Some(a_precise) = a_git
         .url
         .precise()
-        .or_else(|| resolved_refs.get(&a_git.url).and_then(GitUrl::precise))
+        .or_else(|| resolved_refs.get(&a_ref).copied())
     else {
         return false;
     };
@@ -192,7 +220,7 @@ fn is_same_reference_impl<'a>(
     let Some(b_precise) = b_git
         .url
         .precise()
-        .or_else(|| resolved_refs.get(&b_git.url).and_then(GitUrl::precise))
+        .or_else(|| resolved_refs.get(&b_ref).copied())
     else {
         return false;
     };
@@ -204,9 +232,11 @@ fn is_same_reference_impl<'a>(
 mod tests {
     use anyhow::Result;
     use rustc_hash::FxHashMap;
+    use std::str::FromStr;
     use url::Url;
 
-    use uv_git::GitUrl;
+    use crate::git::RepositoryReference;
+    use uv_git::{GitSha, GitUrl};
 
     #[test]
     fn same_reference() -> Result<()> {
@@ -244,10 +274,10 @@ mod tests {
         )?;
         let mut resolved_refs = FxHashMap::default();
         resolved_refs.insert(
-            GitUrl::try_from(Url::parse("https://example.com/MyProject@main")?)?,
-            GitUrl::try_from(Url::parse(
-                "https://example.com/MyProject@164a8735b081663fede48c5041667b194da15d25",
-            )?)?,
+            RepositoryReference::new(&GitUrl::try_from(Url::parse(
+                "https://example.com/MyProject@main",
+            )?)?),
+            GitSha::from_str("164a8735b081663fede48c5041667b194da15d25")?,
         );
         assert!(super::is_same_reference_impl(&a, &b, &resolved_refs));
 
@@ -258,10 +288,10 @@ mod tests {
         )?;
         let mut resolved_refs = FxHashMap::default();
         resolved_refs.insert(
-            GitUrl::try_from(Url::parse("https://example.com/MyProject@main")?)?,
-            GitUrl::try_from(Url::parse(
-                "https://example.com/MyProject@f2c9e88f3ec9526bbcec68d150b176d96a750aba",
-            )?)?,
+            RepositoryReference::new(&GitUrl::try_from(Url::parse(
+                "https://example.com/MyProject@main",
+            )?)?),
+            GitSha::from_str("f2c9e88f3ec9526bbcec68d150b176d96a750aba")?,
         );
         assert!(!super::is_same_reference_impl(&a, &b, &resolved_refs));
 

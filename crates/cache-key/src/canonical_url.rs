@@ -165,6 +165,12 @@ impl Deref for RepositoryUrl {
     }
 }
 
+impl std::fmt::Display for RepositoryUrl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
