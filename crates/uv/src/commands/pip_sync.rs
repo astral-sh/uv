@@ -61,6 +61,7 @@ pub(crate) async fn pip_sync(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
