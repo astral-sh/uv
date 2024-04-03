@@ -135,15 +135,6 @@ impl Tags {
                 }
             }
         }
-        if matches!(implementation, Implementation::CPython { .. }) {
-            for platform_tag in &platform_tags {
-                tags.push((
-                    implementation.language_tag((python_version.0, python_version.1)),
-                    "none".to_string(),
-                    platform_tag.clone(),
-                ));
-            }
-        }
         // 3. no abi (e.g. executable binary)
         for minor in (0..=python_version.1).rev() {
             for platform_tag in &platform_tags {
