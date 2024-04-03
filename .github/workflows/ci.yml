@@ -499,7 +499,7 @@ jobs:
         run: echo $(which python)
 
       - name: "Validate global Python install"
-        run: py -3.10 ./scripts/check_system_python.py --uv ./uv.exe
+        run: python ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-windows-python-313:
     needs: build-binary-windows
