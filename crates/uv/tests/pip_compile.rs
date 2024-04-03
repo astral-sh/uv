@@ -1680,8 +1680,8 @@ fn conflicting_repeated_url_dependency() -> Result<()> {
     Ok(())
 }
 
-/// Request Werkzeug via two different URLs: `3.0.1`, and a precise SHA. Allow the precise SHA
-/// to override the `3.0.1` branch.
+/// Request `anyio` via three different URLs: `4.3.0`, a short SHA, and a precise SHA. All three
+/// are compatible, since they resolve to the same canonical version.
 #[test]
 fn compatible_narrowed_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1713,8 +1713,8 @@ fn compatible_narrowed_url_dependency() -> Result<()> {
     Ok(())
 }
 
-/// Request Werkzeug via two different URLs: a precise SHA, and `3.0.1`. Allow the precise SHA
-/// to override the `3.0.1` branch.
+/// Request `anyio` via three different URLs: a precise SHA, a short SHA, and `4.3.0`. All three
+/// are compatible, since they resolve to the same canonical version.
 #[test]
 fn compatible_broader_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1746,7 +1746,8 @@ fn compatible_broader_url_dependency() -> Result<()> {
     Ok(())
 }
 
-/// Request Werkzeug via two different URLs: `4.3.0`, and a precise SHA, followed by `4.3.0` again.
+/// Request `anyio` via two different URLs: `4.3.0`, and a precise SHA, followed by `4.3.0` again.
+/// All three are compatible, since they resolve to the same canonical version.
 #[test]
 fn compatible_repeated_narrowed_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1778,16 +1779,18 @@ fn compatible_repeated_narrowed_url_dependency() -> Result<()> {
     Ok(())
 }
 
-/// Request Werkzeug via two different URLs: `master`, and a precise SHA. Allow the precise SHA
-/// to override the `master` branch, but error when we see yet another URL for the same package.
+/// Request `anyio` via three different URLs: `4.3.0`, a precise SHA, and `master`.
+///
+/// Although `4.3.0` and the precise SHA resolve to the same canonical version, `master` resolves to
+/// a different version, so there should be a conflict.
 #[test]
 fn incompatible_narrowed_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        anyio @ git+https://github.com/agronholm/anyio.git@master
-        anyio @ git+https://github.com/agronholm/anyio@437a7e310925a962cab4a58fcd2455fbcd578d51
         anyio @ git+https://github.com/agronholm/anyio.git@4.3.0
+        anyio @ git+https://github.com/agronholm/anyio@437a7e310925a962cab4a58fcd2455fbcd578d51
+        anyio @ git+https://github.com/agronholm/anyio.git@master
     "})?;
 
     uv_snapshot!(context.compile()
@@ -1798,8 +1801,8 @@ fn incompatible_narrowed_url_dependency() -> Result<()> {
 
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `anyio`:
-    - git+https://github.com/agronholm/anyio.git@master
     - git+https://github.com/agronholm/anyio@437a7e310925a962cab4a58fcd2455fbcd578d51
+    - git+https://github.com/agronholm/anyio.git@master
     "###
     );
 
