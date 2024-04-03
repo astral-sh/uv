@@ -110,21 +110,28 @@ impl Tags {
             ));
         }
         // 2. abi3 and no abi (e.g. executable binary)
-        // No abi3 for no-gil python
-        if matches!(
-            implementation,
-            Implementation::CPython {
-                gil_disabled: false
-            }
-        ) {
+        if let Implementation::CPython { gil_disabled } = implementation {
             // For some reason 3.2 is the minimum python for the cp abi
             for minor in (2..=python_version.1).rev() {
-                for platform_tag in &platform_tags {
-                    tags.push((
-                        implementation.language_tag((python_version.0, minor)),
-                        "abi3".to_string(),
-                        platform_tag.clone(),
-                    ));
+                // No abi3 for no-gil python
+                if !gil_disabled {
+                    for platform_tag in &platform_tags {
+                        tags.push((
+                            implementation.language_tag((python_version.0, minor)),
+                            "abi3".to_string(),
+                            platform_tag.clone(),
+                        ));
+                    }
+                }
+                // Only include `none` tags for the current CPython version
+                if minor == python_version.1 {
+                    for platform_tag in &platform_tags {
+                        tags.push((
+                            implementation.language_tag((python_version.0, minor)),
+                            "none".to_string(),
+                            platform_tag.clone(),
+                        ));
+                    }
                 }
             }
         }
