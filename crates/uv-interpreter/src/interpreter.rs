@@ -294,10 +294,10 @@ impl Interpreter {
         &self.virtualenv
     }
 
-    /// Return whether this is a Python 3.13+ no-GIL python, as specified by the sysconfig var
+    /// Return whether this is a Python 3.13+ freethreaded Python, as specified by the sysconfig var
     /// `Py_GIL_DISABLED`.
     ///
-    /// No-GIL or free-threaded Python is incompatible with existing native modules, re-introducing
+    /// Freethreaded Python is incompatible with earlier native modules, re-introducing
     /// abiflags with a `t` flag. <https://peps.python.org/pep-0703/#build-configuration-changes>
     pub fn gil_disabled(&self) -> bool {
         self.gil_disabled
