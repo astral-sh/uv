@@ -3,7 +3,7 @@
 #
 # All additional options are passed to `rooster`
 #
-# See `scripts/release` for
+# See `scripts/release/` for supporting files.
 set -eu
 
 script_root="$(realpath "$(dirname "$0")")"
