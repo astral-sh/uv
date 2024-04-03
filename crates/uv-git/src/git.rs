@@ -32,7 +32,7 @@ pub enum GitReference {
     /// From a named reference, like `refs/pull/493/head`.
     NamedRef(String),
     /// From a specific revision, using a full 40-character commit hash.
-    Commit(String),
+    FullCommit(String),
     /// The default branch of the repository, the reference named `HEAD`.
     DefaultBranch,
 }
@@ -52,7 +52,7 @@ impl GitReference {
             Self::NamedRef(rev.to_owned())
         } else if looks_like_commit_hash(rev) {
             if rev.len() == 40 {
-                Self::Commit(rev.to_owned())
+                Self::FullCommit(rev.to_owned())
             } else {
                 Self::BranchOrTagOrCommit(rev.to_owned())
             }
@@ -65,7 +65,7 @@ impl GitReference {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::BranchOrTag(rev) => Some(rev),
-            Self::Commit(rev) => Some(rev),
+            Self::FullCommit(rev) => Some(rev),
             Self::BranchOrTagOrCommit(rev) => Some(rev),
             Self::NamedRef(rev) => Some(rev),
             Self::DefaultBranch => None,
@@ -76,7 +76,7 @@ impl GitReference {
     pub(crate) fn as_rev(&self) -> &str {
         match self {
             Self::BranchOrTag(rev)
-            | Self::Commit(rev)
+            | Self::FullCommit(rev)
             | Self::BranchOrTagOrCommit(rev)
             | Self::NamedRef(rev) => rev,
             Self::DefaultBranch => "HEAD",
@@ -87,7 +87,7 @@ impl GitReference {
     pub(crate) fn kind_str(&self) -> &str {
         match self {
             Self::BranchOrTag(_) => "branch or tag",
-            Self::Commit(_) => "commit",
+            Self::FullCommit(_) => "commit",
             Self::BranchOrTagOrCommit(_) => "branch, tag, or commit",
             Self::NamedRef(_) => "ref",
             Self::DefaultBranch => "default branch",
@@ -169,7 +169,7 @@ impl GitRemote {
         strategy: FetchStrategy,
         client: &Client,
     ) -> Result<(GitDatabase, git2::Oid)> {
-        let locked_ref = locked_rev.map(|oid| GitReference::Commit(oid.to_string()));
+        let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
         if let Some(mut db) = db {
             fetch(&mut db.repo, self.url.as_str(), reference, strategy, client)
@@ -283,6 +283,35 @@ impl GitReference {
                     .ok_or_else(|| anyhow::format_err!("failed to find {refkind} `{s}`"))?
             }
 
+            // Attempt to resolve the branch, then the tag, then the commit.
+            Self::BranchOrTagOrCommit(s) => {
+                let name = format!("origin/{s}");
+
+                // Resolve the remote name since that's all we're configuring in
+                // `fetch` below.
+                repo.find_branch(&name, git2::BranchType::Remote)
+                    .ok()
+                    .and_then(|b| b.get().target())
+                    .or_else(|| {
+                        // Note that we resolve the named tag here in sync with where it's
+                        // fetched into via `fetch` below.
+                        let refname = format!("refs/remotes/origin/tags/{s}");
+                        let id = repo.refname_to_id(&refname).ok()?;
+                        let obj = repo.find_object(id, None).ok()?;
+                        let obj = obj.peel(ObjectType::Commit).ok()?;
+                        Some(obj.id())
+                    })
+                    .or_else(|| {
+                        // Resolve the commit.
+                        let obj = repo.revparse_single(s).ok()?;
+                        match obj.as_tag() {
+                            Some(tag) => Some(tag.target_id()),
+                            None => Some(obj.id()),
+                        }
+                    })
+                    .ok_or_else(|| anyhow::format_err!("failed to find {refkind} `{s}`"))?
+            }
+
             // We'll be using the HEAD commit
             Self::DefaultBranch => {
                 let head_id = repo.refname_to_id("refs/remotes/origin/HEAD")?;
@@ -290,7 +319,7 @@ impl GitReference {
                 head.peel(ObjectType::Commit)?.id()
             }
 
-            Self::Commit(s) | Self::BranchOrTagOrCommit(s) | Self::NamedRef(s) => {
+            Self::FullCommit(s) | Self::NamedRef(s) => {
                 let obj = repo.revparse_single(s)?;
                 match obj.as_tag() {
                     Some(tag) => tag.target_id(),
@@ -511,7 +540,7 @@ impl<'a> GitCheckout<'a> {
 
                 // Fetch data from origin and reset to the head commit
                 debug!("Updating Git submodule: {}", child_remote_url);
-                let reference = GitReference::Commit(head.to_string());
+                let reference = GitReference::FullCommit(head.to_string());
                 fetch(&mut repo, &child_remote_url, &reference, strategy, client).with_context(
                     || {
                         format!(
@@ -930,6 +959,26 @@ pub(crate) fn fetch(
             refspec_strategy = RefspecStrategy::First;
         }
 
+        // For ambiguous references, we can fetch the exact commit (if known); otherwise,
+        // we fetch all branches and tags.
+        GitReference::BranchOrTagOrCommit(branch_or_tag_or_commit) => {
+            // The `oid_to_fetch` is the exact commit we want to fetch. But it could be the exact
+            // commit of a branch or tag. We should only fetch it directly if it's the exact commit
+            // of a short commit hash.
+            if let Some(oid_to_fetch) =
+                oid_to_fetch.filter(|oid| is_short_hash_of(branch_or_tag_or_commit, *oid))
+            {
+                refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
+            } else {
+                // We don't know what the rev will point to. To handle this
+                // situation we fetch all branches and tags, and then we pray
+                // it's somewhere in there.
+                refspecs.push(String::from("+refs/heads/*:refs/remotes/origin/*"));
+                refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
+                tags = true;
+            }
+        }
+
         GitReference::DefaultBranch => {
             refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
         }
@@ -938,7 +987,7 @@ pub(crate) fn fetch(
             refspecs.push(format!("+{rev}:{rev}"));
         }
 
-        GitReference::Commit(rev) => {
+        GitReference::FullCommit(rev) => {
             if let Some(oid_to_fetch) = oid_to_fetch {
                 refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
             } else {
@@ -949,19 +998,6 @@ pub(crate) fn fetch(
                 // The reason we write to `refs/remotes/origin/HEAD` is that it's of special significance
                 // when during `GitReference::resolve()`, but otherwise it shouldn't matter.
                 refspecs.push(format!("+{rev}:refs/remotes/origin/HEAD"));
-            }
-        }
-
-        GitReference::BranchOrTagOrCommit(_) => {
-            if let Some(oid_to_fetch) = oid_to_fetch {
-                refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
-            } else {
-                // We don't know what the rev will point to. To handle this
-                // situation we fetch all branches and tags, and then we pray
-                // it's somewhere in there.
-                refspecs.push(String::from("+refs/heads/*:refs/remotes/origin/*"));
-                refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
-                tags = true;
             }
         }
     }
@@ -976,8 +1012,12 @@ pub(crate) fn fetch(
                     let mut errors = refspecs
                         .iter()
                         .map_while(|refspec| {
-                            let fetch_result =
-                                fetch_with_cli(repo, remote_url, &[refspec.clone()], tags);
+                            let fetch_result = fetch_with_cli(
+                                repo,
+                                remote_url,
+                                std::slice::from_ref(refspec),
+                                tags,
+                            );
 
                             // Stop after the first success and log failures
                             match fetch_result {
@@ -1292,35 +1332,30 @@ fn github_fast_path(
         GitReference::BranchOrTag(branch_or_tag) => branch_or_tag,
         GitReference::DefaultBranch => "HEAD",
         GitReference::NamedRef(rev) => rev,
-        GitReference::Commit(rev) | GitReference::BranchOrTagOrCommit(rev) => {
-            if looks_like_commit_hash(rev) {
-                // `revparse_single` (used by `resolve`) is the only way to turn
-                // short hash -> long hash, but it also parses other things,
-                // like branch and tag names, which might coincidentally be
-                // valid hex.
-                //
-                // We only return early if `rev` is a prefix of the object found
-                // by `revparse_single`. Don't bother talking to GitHub in that
-                // case, since commit hashes are permanent. If a commit with the
-                // requested hash is already present in the local clone, its
-                // contents must be the same as what is on the server for that
-                // hash.
-                //
-                // If `rev` is not found locally by `revparse_single`, we'll
-                // need GitHub to resolve it and get a hash. If `rev` is found
-                // but is not a short hash of the found object, it's probably a
-                // branch and we also need to get a hash from GitHub, in case
-                // the branch has moved.
-                if let Some(local_object) = local_object {
-                    if is_short_hash_of(rev, local_object) {
-                        return Ok(FastPathRev::UpToDate);
-                    }
+        GitReference::FullCommit(rev) | GitReference::BranchOrTagOrCommit(rev) => {
+            // `revparse_single` (used by `resolve`) is the only way to turn
+            // short hash -> long hash, but it also parses other things,
+            // like branch and tag names, which might coincidentally be
+            // valid hex.
+            //
+            // We only return early if `rev` is a prefix of the object found
+            // by `revparse_single`. Don't bother talking to GitHub in that
+            // case, since commit hashes are permanent. If a commit with the
+            // requested hash is already present in the local clone, its
+            // contents must be the same as what is on the server for that
+            // hash.
+            //
+            // If `rev` is not found locally by `revparse_single`, we'll
+            // need GitHub to resolve it and get a hash. If `rev` is found
+            // but is not a short hash of the found object, it's probably a
+            // branch and we also need to get a hash from GitHub, in case
+            // the branch has moved.
+            if let Some(local_object) = local_object {
+                if is_short_hash_of(rev, local_object) {
+                    return Ok(FastPathRev::UpToDate);
                 }
-                rev
-            } else {
-                debug!("can't use github fast path with `rev = \"{}\"`", rev);
-                return Ok(FastPathRev::Indeterminate);
             }
+            rev
         }
     };
 

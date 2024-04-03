@@ -41,7 +41,7 @@ impl GitUrl {
 
     /// Returns `true` if the reference is a full commit.
     pub fn is_full_commit(&self) -> bool {
-        matches!(self.reference, GitReference::Commit(_))
+        matches!(self.reference, GitReference::FullCommit(_))
     }
 
     /// Return the precise commit, if known.
@@ -71,7 +71,7 @@ impl TryFrom<Url> for GitUrl {
             url.set_path(&prefix);
         }
 
-        let precise = if let GitReference::Commit(rev) = &reference {
+        let precise = if let GitReference::FullCommit(rev) = &reference {
             Some(GitSha::from_str(rev)?)
         } else {
             None
@@ -97,7 +97,7 @@ impl From<GitUrl> for Url {
             match git.reference {
                 GitReference::BranchOrTag(rev)
                 | GitReference::NamedRef(rev)
-                | GitReference::Commit(rev)
+                | GitReference::FullCommit(rev)
                 | GitReference::BranchOrTagOrCommit(rev) => {
                     url.set_path(&format!("{}@{}", url.path(), rev));
                 }
