@@ -27,12 +27,12 @@ const CHECKOUT_READY_LOCK: &str = ".ok";
 pub enum GitReference {
     /// From a reference that's ambiguously a branch or tag.
     BranchOrTag(String),
-    /// From a specific revision, using a full 40-character commit hash.
-    FullCommit(String),
-    /// From a truncated revision.
-    ShortCommit(String),
+    /// From a reference that's ambiguously a short commit, a branch, or a tag.
+    BranchOrTagOrCommit(String),
     /// From a named reference, like `refs/pull/493/head`.
-    Ref(String),
+    NamedRef(String),
+    /// From a specific revision, using a full 40-character commit hash.
+    Commit(String),
     /// The default branch of the repository, the reference named `HEAD`.
     DefaultBranch,
 }
@@ -46,25 +46,18 @@ enum RefspecStrategy {
 }
 
 impl GitReference {
+    /// Creates a [`GitReference`] from a revision string.
     pub(crate) fn from_rev(rev: &str) -> Self {
         if rev.starts_with("refs/") {
-            Self::Ref(rev.to_owned())
+            Self::NamedRef(rev.to_owned())
         } else if looks_like_commit_hash(rev) {
             if rev.len() == 40 {
-                Self::FullCommit(rev.to_owned())
+                Self::Commit(rev.to_owned())
             } else {
-                Self::ShortCommit(rev.to_owned())
+                Self::BranchOrTagOrCommit(rev.to_owned())
             }
         } else {
             Self::BranchOrTag(rev.to_owned())
-        }
-    }
-
-    pub fn precise(&self) -> Option<&str> {
-        match self {
-            Self::FullCommit(rev) => Some(rev),
-            Self::ShortCommit(rev) => Some(rev),
-            _ => None,
         }
     }
 
@@ -72,9 +65,9 @@ impl GitReference {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::BranchOrTag(rev) => Some(rev),
-            Self::FullCommit(rev) => Some(rev),
-            Self::ShortCommit(rev) => Some(rev),
-            Self::Ref(rev) => Some(rev),
+            Self::Commit(rev) => Some(rev),
+            Self::BranchOrTagOrCommit(rev) => Some(rev),
+            Self::NamedRef(rev) => Some(rev),
             Self::DefaultBranch => None,
         }
     }
@@ -83,9 +76,9 @@ impl GitReference {
     pub(crate) fn as_rev(&self) -> &str {
         match self {
             Self::BranchOrTag(rev)
-            | Self::FullCommit(rev)
-            | Self::ShortCommit(rev)
-            | Self::Ref(rev) => rev,
+            | Self::Commit(rev)
+            | Self::BranchOrTagOrCommit(rev)
+            | Self::NamedRef(rev) => rev,
             Self::DefaultBranch => "HEAD",
         }
     }
@@ -94,9 +87,9 @@ impl GitReference {
     pub(crate) fn kind_str(&self) -> &str {
         match self {
             Self::BranchOrTag(_) => "branch or tag",
-            Self::FullCommit(_) => "commit",
-            Self::ShortCommit(_) => "short commit",
-            Self::Ref(_) => "ref",
+            Self::Commit(_) => "commit",
+            Self::BranchOrTagOrCommit(_) => "branch, tag, or commit",
+            Self::NamedRef(_) => "ref",
             Self::DefaultBranch => "default branch",
         }
     }
@@ -176,7 +169,7 @@ impl GitRemote {
         strategy: FetchStrategy,
         client: &Client,
     ) -> Result<(GitDatabase, git2::Oid)> {
-        let locked_ref = locked_rev.map(|oid| GitReference::FullCommit(oid.to_string()));
+        let locked_ref = locked_rev.map(|oid| GitReference::Commit(oid.to_string()));
         let reference = locked_ref.as_ref().unwrap_or(reference);
         if let Some(mut db) = db {
             fetch(&mut db.repo, self.url.as_str(), reference, strategy, client)
@@ -297,7 +290,7 @@ impl GitReference {
                 head.peel(ObjectType::Commit)?.id()
             }
 
-            Self::FullCommit(s) | Self::ShortCommit(s) | Self::Ref(s) => {
+            Self::Commit(s) | Self::BranchOrTagOrCommit(s) | Self::NamedRef(s) => {
                 let obj = repo.revparse_single(s)?;
                 match obj.as_tag() {
                     Some(tag) => tag.target_id(),
@@ -518,7 +511,7 @@ impl<'a> GitCheckout<'a> {
 
                 // Fetch data from origin and reset to the head commit
                 debug!("Updating Git submodule: {}", child_remote_url);
-                let reference = GitReference::FullCommit(head.to_string());
+                let reference = GitReference::Commit(head.to_string());
                 fetch(&mut repo, &child_remote_url, &reference, strategy, client).with_context(
                     || {
                         format!(
@@ -941,11 +934,11 @@ pub(crate) fn fetch(
             refspecs.push(String::from("+HEAD:refs/remotes/origin/HEAD"));
         }
 
-        GitReference::Ref(rev) => {
+        GitReference::NamedRef(rev) => {
             refspecs.push(format!("+{rev}:{rev}"));
         }
 
-        GitReference::FullCommit(rev) => {
+        GitReference::Commit(rev) => {
             if let Some(oid_to_fetch) = oid_to_fetch {
                 refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
             } else {
@@ -959,7 +952,7 @@ pub(crate) fn fetch(
             }
         }
 
-        GitReference::ShortCommit(_) => {
+        GitReference::BranchOrTagOrCommit(_) => {
             if let Some(oid_to_fetch) = oid_to_fetch {
                 refspecs.push(format!("+{oid_to_fetch}:refs/commit/{oid_to_fetch}"));
             } else {
@@ -1298,8 +1291,8 @@ fn github_fast_path(
     let github_branch_name = match reference {
         GitReference::BranchOrTag(branch_or_tag) => branch_or_tag,
         GitReference::DefaultBranch => "HEAD",
-        GitReference::Ref(rev) => rev,
-        GitReference::FullCommit(rev) | GitReference::ShortCommit(rev) => {
+        GitReference::NamedRef(rev) => rev,
+        GitReference::Commit(rev) | GitReference::BranchOrTagOrCommit(rev) => {
             if looks_like_commit_hash(rev) {
                 // `revparse_single` (used by `resolve`) is the only way to turn
                 // short hash -> long hash, but it also parses other things,
