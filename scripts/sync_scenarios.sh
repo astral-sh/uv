@@ -6,15 +6,16 @@
 #
 #   Install the pinned packse version in a temporary virtual environment, fetch scenarios, and regenerate test cases and snapshots:
 #
-#       $ ./scripts/scenarios/sync.sh
+#       $ ./scripts/sync_scenarios.sh
 #
 #   Additional arguments are passed to `./scripts/scenarios/generate.py`, for example:
 #
-#       $ ./scripts/scenarios/sync.sh --verbose --no-snapshot-update
+#       $ ./scripts/sync_scenarios.sh --verbose --no-snapshot-update
 #
 #   For development purposes, the `./scripts/scenarios/generate.py` script can be used directly to generate
 #   test cases from a local set of scenarios.
-
+#
+# See `scripts/scenarios/` for supporting files.
 set -eu
 
 script_root="$(realpath "$(dirname "$0")")"
