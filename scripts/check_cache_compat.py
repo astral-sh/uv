@@ -59,9 +59,9 @@ def check_cache_with_package(
     uv_previous: str,
     package: str,
 ):
-    # The coverage here is rough and not particularly targetted — we're just performing various
+    # The coverage here is rough and not particularly targeted — we're just performing various
     # operations in the hope of catching cache load issues. As cache problems are discovered in
-    # the future, we should expand coverage with targetted cases.
+    # the future, we should expand coverage with targeted cases.
 
     # First, install with the previous uv to populate the cache
     install_package(uv=uv_previous, package=package, flags=[])

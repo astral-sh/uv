@@ -621,7 +621,7 @@ pass the `--native-tls` command-line flag to enable this behavior.
 - Avoid attempting rename in copy fallback path ([#1546](https://github.com/astral-sh/uv/pull/1546))
 - Fix list rendering in `venv --help` output ([#1459](https://github.com/astral-sh/uv/pull/1459))
 - Fix trailing commas on `Requires-Python` in HTML indexes  ([#1507](https://github.com/astral-sh/uv/pull/1507))
-- Read from `/bin/sh` if `/bin/ls` cannot be found when determing libc path ([#1433](https://github.com/astral-sh/uv/pull/1433))
+- Read from `/bin/sh` if `/bin/ls` cannot be found when determining libc path ([#1433](https://github.com/astral-sh/uv/pull/1433))
 - Remove URL encoding when determining file name ([#1555](https://github.com/astral-sh/uv/pull/1555))
 - Support recursive extras ([#1435](https://github.com/astral-sh/uv/pull/1435))
 - Use comparable representation for `PackageId` ([#1543](https://github.com/astral-sh/uv/pull/1543))
@@ -677,4 +677,4 @@ pass the `--native-tls` command-line flag to enable this behavior.
 ### Documentation
 
 - Fix diagram alignment ([#1354](https://github.com/astral-sh/uv/pull/1354))
-- Grammer nit ([#1345](https://github.com/astral-sh/uv/pull/1345))
+- Grammar nit ([#1345](https://github.com/astral-sh/uv/pull/1345))
