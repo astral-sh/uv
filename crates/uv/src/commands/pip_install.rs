@@ -385,13 +385,13 @@ async fn read_requirements(
     extras: &ExtrasSpecification<'_>,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
-    // If the user requests `extras` but does not provide a pyproject toml source
-    if !matches!(extras, ExtrasSpecification::None)
-        && !requirements
-            .iter()
-            .any(|source| matches!(source, RequirementsSource::PyprojectToml(_)))
-    {
-        return Err(anyhow!("Requesting extras requires a pyproject.toml input file.").into());
+    // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
+    // return an error.
+    if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
+        return Err(anyhow!(
+            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file."
+        )
+        .into());
     }
 
     // Read all requirements from the provided sources.
@@ -404,21 +404,24 @@ async fn read_requirements(
     )
     .await?;
 
-    // Check that all provided extras are used
-    if let ExtrasSpecification::Some(extras) = extras {
-        let mut unused_extras = extras
-            .iter()
-            .filter(|extra| !spec.extras.contains(extra))
-            .collect::<Vec<_>>();
-        if !unused_extras.is_empty() {
-            unused_extras.sort_unstable();
-            unused_extras.dedup();
-            let s = if unused_extras.len() == 1 { "" } else { "s" };
-            return Err(anyhow!(
-                "Requested extra{s} not found: {}",
-                unused_extras.iter().join(", ")
-            )
-            .into());
+    // If all the metadata could be statically resolved, validate that every extra was used. If we
+    // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
+    if spec.source_trees.is_empty() {
+        if let ExtrasSpecification::Some(extras) = extras {
+            let mut unused_extras = extras
+                .iter()
+                .filter(|extra| !spec.extras.contains(extra))
+                .collect::<Vec<_>>();
+            if !unused_extras.is_empty() {
+                unused_extras.sort_unstable();
+                unused_extras.dedup();
+                let s = if unused_extras.len() == 1 { "" } else { "s" };
+                return Err(anyhow!(
+                    "Requested extra{s} not found: {}",
+                    unused_extras.iter().join(", ")
+                )
+                .into());
+            }
         }
     }
 
