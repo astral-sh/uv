@@ -29,7 +29,7 @@ repos:
     rev: v3.1.0
     hooks:
       - id: prettier
-        types: [yaml]
+        types_or: [yaml, json5]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.2.1
