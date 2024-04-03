@@ -4,8 +4,8 @@ use pep508_rs::VerbatimUrl;
 
 /// Given a [`VerbatimUrl`] and a redirect, apply the redirect to the URL while preserving as much
 /// of the verbatim representation as possible.
-pub(crate) fn apply_redirect(url: &VerbatimUrl, redirect: &Url) -> VerbatimUrl {
-    let redirect = VerbatimUrl::from_url(redirect.clone());
+pub(crate) fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
+    let redirect = VerbatimUrl::from_url(redirect);
 
     // The redirect should be the "same" URL, but with a specific commit hash added after the `@`.
     // We take advantage of this to preserve as much of the verbatim representation as possible.
@@ -53,7 +53,7 @@ mod tests {
             "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe",
         )?
         .with_given("https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe");
-        assert_eq!(apply_redirect(&verbatim, &redirect), expected);
+        assert_eq!(apply_redirect(&verbatim, redirect), expected);
 
         // If there's an `@` in the original representation, and it's stable between the parsed and
         // given representations, we preserve everything that precedes the `@` in the precise
@@ -67,7 +67,7 @@ mod tests {
             "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe",
         )?
         .with_given("https://${DOMAIN}.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe");
-        assert_eq!(apply_redirect(&verbatim, &redirect), expected);
+        assert_eq!(apply_redirect(&verbatim, redirect), expected);
 
         // If there's a conflict after the `@`, discard the original representation.
         let verbatim = VerbatimUrl::parse_url("https://github.com/flask.git@main")?
@@ -78,7 +78,7 @@ mod tests {
         let expected = VerbatimUrl::parse_url(
             "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe",
         )?;
-        assert_eq!(apply_redirect(&verbatim, &redirect), expected);
+        assert_eq!(apply_redirect(&verbatim, redirect), expected);
 
         Ok(())
     }

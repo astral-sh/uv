@@ -100,15 +100,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     /// possible. For example, given a Git dependency with a reference to a branch or tag, return a
     /// URL with a precise reference to the current commit of that branch or tag.
     #[instrument(skip_all, fields(%dist))]
-    pub async fn get_or_build_wheel_metadata(
-        &self,
-        dist: &Dist,
-    ) -> Result<(Metadata23, Option<Url>), Error> {
+    pub async fn get_or_build_wheel_metadata(&self, dist: &Dist) -> Result<Metadata23, Error> {
         match dist {
-            Dist::Built(built) => self
-                .get_wheel_metadata(built)
-                .await
-                .map(|metadata| (metadata, None)),
+            Dist::Built(built) => self.get_wheel_metadata(built).await,
             Dist::Source(source) => {
                 self.build_wheel_metadata(&BuildableSource::Dist(source))
                     .await
@@ -365,7 +359,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     pub async fn build_wheel_metadata(
         &self,
         source: &BuildableSource<'_>,
-    ) -> Result<(Metadata23, Option<Url>), Error> {
+    ) -> Result<Metadata23, Error> {
         let no_build = match self.build_context.no_build() {
             NoBuild::All => true,
             NoBuild::None => false,
@@ -401,7 +395,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .download_and_build_metadata(&source)
                     .boxed()
                     .await?;
-                return Ok((metadata, Some(precise)));
+                return Ok(metadata);
             }
         }
 
@@ -420,7 +414,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .download_and_build_metadata(&source)
                     .boxed()
                     .await?;
-                return Ok((metadata, Some(precise)));
+                return Ok(metadata);
             }
         }
 
@@ -429,7 +423,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             .download_and_build_metadata(source)
             .boxed()
             .await?;
-        Ok((metadata, None))
+        Ok(metadata)
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.

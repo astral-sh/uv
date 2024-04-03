@@ -34,7 +34,7 @@ use uv_fs::write_atomic;
 use uv_types::{BuildContext, BuildKind, NoBuild, SourceBuildTrait};
 
 use crate::error::Error;
-use crate::git::fetch_git_archive;
+use crate::git::{fetch_git_archive, resolve_precise};
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::manifest::Manifest;
 use crate::Reporter;
@@ -768,6 +768,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &GitSourceUrl<'_>,
     ) -> Result<Metadata23, Error> {
+        // Resolve to a precise Git SHA.
+        let url = if let Some(url) = resolve_precise(
+                resource.url,
+                self.build_context.cache(),
+                self.reporter.as_ref(),
+            )
+            .await? {
+            Cow::Owned(url)
+        } else {
+            Cow::Borrowed(resource.url)
+        };
+
         let (fetch, subdirectory) = fetch_git_archive(
             resource.url,
             self.build_context.cache(),

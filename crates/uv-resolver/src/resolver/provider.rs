@@ -2,7 +2,6 @@ use std::future::Future;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use url::Url;
 
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
@@ -17,7 +16,7 @@ use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
-pub type WheelMetadataResult = Result<(Metadata23, Option<Url>), uv_distribution::Error>;
+pub type WheelMetadataResult = Result<Metadata23, uv_distribution::Error>;
 
 /// The response when requesting versions for a package
 #[derive(Debug)]

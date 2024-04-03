@@ -160,6 +160,28 @@ pub(crate) async fn resolve_precise(
     })))
 }
 
+/// Given a remote source distribution, return a precise variant, if possible.
+///
+/// For example, given a Git dependency with a reference to a branch or tag, return a URL
+/// with a precise reference to the current commit of that branch or tag.
+///
+/// This method takes into account various normalizations that are independent from the Git
+/// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
+/// prefix kinds.
+///
+/// This method will only return precise URLs for URLs that have already been resolved via
+/// [`resolve_precise`].
+pub fn to_precise(url: &Url) -> Option<Url> {
+    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).ok()?;
+    let resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
+    let reference = RepositoryReference::new(&url);
+    let precise = resolved_git_refs.get(&reference)?;
+    Some(Url::from(DirectGitUrl {
+        url: url.with_precise(*precise),
+        subdirectory,
+    }))
+}
+
 /// Returns `true` if the URLs refer to the same Git commit.
 ///
 /// For example, the previous URL could be a branch or tag, while the current URL would be a

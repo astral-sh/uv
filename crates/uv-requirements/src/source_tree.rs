@@ -6,7 +6,6 @@ use anyhow::{Context, Result};
 use futures::{StreamExt, TryStreamExt};
 use url::Url;
 
-use cache_key::CanonicalUrl;
 use distribution_types::{BuildableSource, PackageId, PathSourceUrl, SourceUrl};
 use pep508_rs::Requirement;
 use uv_client::RegistryClient;
@@ -94,15 +93,10 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
-                let (metadata, precise) = self.database.build_wheel_metadata(&source).await?;
+                let metadata = self.database.build_wheel_metadata(&source).await?;
 
                 // Insert the metadata into the index.
                 self.index.insert_metadata(id, metadata.clone());
-
-                // Insert the redirect into the index.
-                if let Some(precise) = precise {
-                    self.index.insert_redirect(CanonicalUrl::new(&url), precise);
-                }
 
                 metadata
             }

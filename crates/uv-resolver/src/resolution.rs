@@ -2,8 +2,6 @@ use std::borrow::Cow;
 use std::hash::BuildHasherDefault;
 
 use anyhow::Result;
-use cache_key::CanonicalUrl;
-use dashmap::DashMap;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
@@ -12,9 +10,7 @@ use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
 use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
-use url::Url;
 
-use crate::dependency_provider::UvDependencyProvider;
 use distribution_types::{
     Dist, DistributionMetadata, LocalEditable, Name, PackageId, ResolvedDist, Verbatim,
     VersionOrUrl,
@@ -23,8 +19,10 @@ use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::{Hashes, Metadata23};
+use uv_distribution::to_precise;
 use uv_normalize::{ExtraName, PackageName};
 
+use crate::dependency_provider::UvDependencyProvider;
 use crate::editables::Editables;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
@@ -69,7 +67,6 @@ impl ResolutionGraph {
         pins: &FilePins,
         packages: &OnceMap<PackageName, VersionsResponse>,
         distributions: &OnceMap<PackageId, Metadata23>,
-        redirects: &DashMap<CanonicalUrl, Url>,
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
         editables: Editables,
@@ -120,10 +117,8 @@ impl ResolutionGraph {
                     let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
                         Dist::from_editable(package_name.clone(), editable.clone())?
                     } else {
-                        let url = redirects.get(&CanonicalUrl::new(url)).map_or_else(
-                            || url.clone(),
-                            |precise| apply_redirect(url, precise.value()),
-                        );
+                        let url = to_precise(url)
+                            .map_or_else(|| url.clone(), |precise| apply_redirect(url, precise));
                         Dist::from_url(package_name.clone(), url)?
                     };
 
@@ -225,9 +220,9 @@ impl ResolutionGraph {
                                 .or_insert_with(Vec::new)
                                 .push(extra.clone());
                         } else {
-                            let url = redirects.get(&CanonicalUrl::new(url)).map_or_else(
+                            let url = to_precise(url).map_or_else(
                                 || url.clone(),
-                                |precise| apply_redirect(url, precise.value()),
+                                |precise| apply_redirect(url, precise),
                             );
                             let pinned_package = Dist::from_url(package_name.clone(), url)?;
 
