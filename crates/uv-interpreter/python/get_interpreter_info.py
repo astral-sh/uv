@@ -415,7 +415,17 @@ def get_operating_system_and_architecture():
     """
     # https://github.com/pypa/packaging/blob/cc938f984bbbe43c5734b9656c9837ab3a28191f/src/packaging/_musllinux.py#L84
     # Note that this is not `os.name`.
-    [operating_system, version_arch] = sysconfig.get_platform().split("-", 1)
+    # https://docs.python.org/3/library/sysconfig.html#sysconfig.get_platform
+    # windows x86 will return win32
+    platform_info = sysconfig.get_platform().split("-", 1)
+    if len(platform_info) == 1:
+        if platform_info[0] == "win32":
+            operating_system, version_arch = "win", "i386"
+        else:
+            # unknown_operating_system will flow to the final error print
+            operating_system, version_arch = platform_info[0], ""
+    else:
+        [operating_system, version_arch] = platform_info
     if "-" in version_arch:
         # Ex: macosx-11.2-arm64
         version, architecture = version_arch.rsplit("-", 1)
