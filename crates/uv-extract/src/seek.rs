@@ -14,7 +14,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let target = target.as_ref();
-    let mut reader = futures::io::BufReader::with_capacity(128 * 1024, reader.compat());
+    let mut reader = futures::io::BufReader::new(reader.compat());
     let mut zip = async_zip::base::read::seek::ZipFileReader::new(&mut reader).await?;
 
     let mut directories = FxHashSet::default();

@@ -424,7 +424,7 @@ impl RegistryClient {
     ) -> Result<Metadata23, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
-        if false && file
+        if file
             .dist_info_metadata
             .as_ref()
             .is_some_and(pypi_types::DistInfoMetadata::is_available)
@@ -618,7 +618,7 @@ async fn read_metadata_async_seek(
     debug_source: String,
     reader: impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
 ) -> Result<Metadata23, Error> {
-    let reader = futures::io::BufReader::with_capacity(128 * 1024, reader.compat());
+    let reader = futures::io::BufReader::new(reader.compat());
     let mut zip_reader = async_zip::base::read::seek::ZipFileReader::new(reader)
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;

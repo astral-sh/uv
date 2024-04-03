@@ -55,7 +55,7 @@ async-channel = { version = "2.2.0" }
 async-compression = { version = "0.4.6" }
 async-trait = { version = "0.1.78" }
 async_http_range_reader = { version = "0.7.0" }
-async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "70e8419cabee9ec5d3f25eff5821e1d539ac3873", features = ["deflate"] }
+async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "cdd8320d6eec449b0cb1f27069d1a3116aff9364", features = ["deflate"] }
 axoupdater = { version = "0.3.1", default-features = false }
 backoff = { version = "0.4.0" }
 base64 = { version = "0.21.7" }

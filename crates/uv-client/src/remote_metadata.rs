@@ -1,4 +1,5 @@
 use async_http_range_reader::AsyncHttpRangeReader;
+use futures::io::BufReader;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
 use distribution_filename::WheelFilename;
@@ -60,8 +61,8 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
         .await;
 
     // Construct a zip reader to uses the stream.
-    let buffer = futures::io::BufReader::with_capacity(128 * 1024, reader.compat());
-    let mut reader = async_zip::base::read::seek::ZipFileReader::new(buffer)
+    let buf = BufReader::new(reader.compat());
+    let mut reader = async_zip::base::read::seek::ZipFileReader::new(buf)
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
