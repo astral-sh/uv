@@ -9,12 +9,12 @@ use crate::Error;
 /// Unzip a `.zip` archive into the target directory, requiring `Seek`.
 ///
 /// This is useful for unzipping files asynchronously that already exist on disk.
-pub async fn unzip<R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin>(
+pub async fn unzip<R: tokio::io::AsyncBufRead + tokio::io::AsyncSeek + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let target = target.as_ref();
-    let mut reader = reader.compat();
+    let mut reader = futures::io::BufReader::with_capacity(128 * 1024, reader.compat());
     let mut zip = async_zip::base::read::seek::ZipFileReader::new(&mut reader).await?;
 
     let mut directories = FxHashSet::default();

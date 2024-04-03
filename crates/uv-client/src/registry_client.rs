@@ -9,7 +9,7 @@ use http::HeaderMap;
 use reqwest::{Client, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
@@ -618,7 +618,8 @@ async fn read_metadata_async_seek(
     debug_source: String,
     reader: impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
 ) -> Result<Metadata23, Error> {
-    let mut zip_reader = async_zip::tokio::read::seek::ZipFileReader::with_tokio(reader)
+    let reader = futures::io::BufReader::with_capacity(128 * 1024, reader.compat());
+    let mut zip_reader = async_zip::base::read::seek::ZipFileReader::new(reader)
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
@@ -655,6 +656,7 @@ async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
     debug_source: String,
     reader: R,
 ) -> Result<Metadata23, Error> {
+    let reader = futures::io::BufReader::with_capacity(128 * 1024, reader);
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(reader);
 
     while let Some(mut entry) = zip

@@ -246,8 +246,8 @@ dependencies = [
 
 [[package]]
 name = "async_zip"
-version = "0.0.16"
-source = "git+https://github.com/charliermarsh/rs-async-zip?rev=d76801da0943de985254fc6255c0e476b57c5836#d76801da0943de985254fc6255c0e476b57c5836"
+version = "0.0.17"
+source = "git+https://github.com/charliermarsh/rs-async-zip?rev=70e8419cabee9ec5d3f25eff5821e1d539ac3873#70e8419cabee9ec5d3f25eff5821e1d539ac3873"
 dependencies = [
  "async-compression",
  "crc32fast",
