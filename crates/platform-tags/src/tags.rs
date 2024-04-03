@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
 use std::fmt::Formatter;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::{cmp, num::NonZeroU32};
 
@@ -18,6 +17,8 @@ pub enum TagsError {
     UnknownImplementation(String),
     #[error("Invalid priority: {0}")]
     InvalidPriority(usize, #[source] std::num::TryFromIntError),
+    #[error("Only CPython can disable the GIL, not: {0}")]
+    GilIsACpythonProblem(String),
 }
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone)]
@@ -93,8 +94,9 @@ impl Tags {
         python_version: (u8, u8),
         implementation_name: &str,
         implementation_version: (u8, u8),
+        gil_disabled: bool,
     ) -> Result<Self, TagsError> {
-        let implementation = Implementation::from_str(implementation_name)?;
+        let implementation = Implementation::parse(implementation_name, gil_disabled)?;
         let platform_tags = compatible_tags(platform)?;
 
         let mut tags = Vec::with_capacity(5 * platform_tags.len());
@@ -108,7 +110,13 @@ impl Tags {
             ));
         }
         // 2. abi3 and no abi (e.g. executable binary)
-        if matches!(implementation, Implementation::CPython) {
+        // No abi3 for no-gil python
+        if matches!(
+            implementation,
+            Implementation::CPython {
+                gil_disabled: false
+            }
+        ) {
             // For some reason 3.2 is the minimum python for the cp abi
             for minor in (2..=python_version.1).rev() {
                 for platform_tag in &platform_tags {
@@ -118,16 +126,15 @@ impl Tags {
                         platform_tag.clone(),
                     ));
                 }
-                // Only include `none` tags for the current CPython version
-                if minor == python_version.1 {
-                    for platform_tag in &platform_tags {
-                        tags.push((
-                            implementation.language_tag((python_version.0, minor)),
-                            "none".to_string(),
-                            platform_tag.clone(),
-                        ));
-                    }
-                }
+            }
+        }
+        if matches!(implementation, Implementation::CPython { .. }) {
+            for platform_tag in &platform_tags {
+                tags.push((
+                    implementation.language_tag((python_version.0, python_version.1)),
+                    "none".to_string(),
+                    platform_tag.clone(),
+                ));
             }
         }
         // 3. no abi (e.g. executable binary)
@@ -151,9 +158,9 @@ impl Tags {
             }
         }
         // 4. no binary
-        if matches!(implementation, Implementation::CPython) {
+        if matches!(implementation, Implementation::CPython { .. }) {
             tags.push((
-                format!("cp{}{}", python_version.0, python_version.1),
+                implementation.language_tag(python_version),
                 "none".to_string(),
                 "any".to_string(),
             ));
@@ -291,7 +298,7 @@ impl std::fmt::Display for Tags {
 
 #[derive(Debug, Clone, Copy)]
 enum Implementation {
-    CPython,
+    CPython { gil_disabled: bool },
     PyPy,
     Pyston,
 }
@@ -302,7 +309,7 @@ impl Implementation {
     fn language_tag(self, python_version: (u8, u8)) -> String {
         match self {
             // Ex) `cp39`
-            Self::CPython => format!("cp{}{}", python_version.0, python_version.1),
+            Self::CPython { .. } => format!("cp{}{}", python_version.0, python_version.1),
             // Ex) `pp39`
             Self::PyPy => format!("pp{}{}", python_version.0, python_version.1),
             // Ex) `pt38``
@@ -313,11 +320,20 @@ impl Implementation {
     fn abi_tag(self, python_version: (u8, u8), implementation_version: (u8, u8)) -> String {
         match self {
             // Ex) `cp39`
-            Self::CPython => {
+            Self::CPython { gil_disabled } => {
                 if python_version.1 <= 7 {
                     format!("cp{}{}m", python_version.0, python_version.1)
+                } else if gil_disabled {
+                    // https://peps.python.org/pep-0703/#build-configuration-changes
+                    // Python 3.13+ only, but it makes more sense to just rely on the sysconfig var.
+                    format!("cp{}{}t", python_version.0, python_version.1,)
                 } else {
-                    format!("cp{}{}", python_version.0, python_version.1)
+                    format!(
+                        "cp{}{}{}",
+                        python_version.0,
+                        python_version.1,
+                        if gil_disabled { "t" } else { "" }
+                    )
                 }
             }
             // Ex) `pypy39_pp73`
@@ -338,23 +354,22 @@ impl Implementation {
             ),
         }
     }
-}
 
-impl FromStr for Implementation {
-    type Err = TagsError;
-
-    fn from_str(s: &str) -> Result<Self, TagsError> {
-        match s {
+    fn parse(name: &str, gil_disabled: bool) -> Result<Self, TagsError> {
+        if gil_disabled && name != "cpython" {
+            return Err(TagsError::GilIsACpythonProblem(name.to_string()));
+        }
+        match name {
             // Known and supported implementations.
-            "cpython" => Ok(Self::CPython),
+            "cpython" => Ok(Self::CPython { gil_disabled }),
             "pypy" => Ok(Self::PyPy),
             "pyston" => Ok(Self::Pyston),
             // Known but unsupported implementations.
-            "python" => Err(TagsError::UnsupportedImplementation(s.to_string())),
-            "ironpython" => Err(TagsError::UnsupportedImplementation(s.to_string())),
-            "jython" => Err(TagsError::UnsupportedImplementation(s.to_string())),
+            "python" => Err(TagsError::UnsupportedImplementation(name.to_string())),
+            "ironpython" => Err(TagsError::UnsupportedImplementation(name.to_string())),
+            "jython" => Err(TagsError::UnsupportedImplementation(name.to_string())),
             // Unknown implementations.
-            _ => Err(TagsError::UnknownImplementation(s.to_string())),
+            _ => Err(TagsError::UnknownImplementation(name.to_string())),
         }
     }
 }
@@ -547,7 +562,7 @@ mod tests {
     /// The list is displayed in decreasing priority.
     ///
     /// A reference list can be generated with:
-    /// ```
+    /// ```text
     /// $ python -c "from packaging import tags; [print(tag) for tag in tags.platform_tags()]"`
     /// ````
     #[test]
@@ -908,7 +923,7 @@ mod tests {
     /// The list is displayed in decreasing priority.
     ///
     /// A reference list can be generated with:
-    /// ```
+    /// ```text
     /// $ python -c "from packaging import tags; [print(tag) for tag in tags.sys_tags()]"`
     /// ```
     #[test]
@@ -924,6 +939,7 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
+            false,
         )
         .unwrap();
         assert_snapshot!(
@@ -1546,6 +1562,7 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
+            false,
         )
         .unwrap();
         assert_snapshot!(
