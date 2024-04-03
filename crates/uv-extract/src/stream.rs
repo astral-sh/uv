@@ -58,45 +58,6 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
         zip = entry.skip().await?;
     }
 
-    // On Unix, we need to set file permissions, which are stored in the central directory, at the
-    // end of the archive. The `ZipFileReader` reads until it sees a central directory signature,
-    // which indicates the first entry in the central directory. So we continue reading from there.
-    #[cfg(unix)]
-    {
-        use std::fs::Permissions;
-        use std::os::unix::fs::PermissionsExt;
-
-        // To avoid lots of small reads to `reader` when parsing the central directory, wrap it in
-        // a buffer.
-        let mut buf = futures::io::BufReader::new(reader);
-        let mut directory = async_zip::base::read::cd::CentralDirectoryReader::new(&mut buf);
-        while let Some(entry) = directory.next().await? {
-            if entry.dir()? {
-                continue;
-            }
-
-            let Some(mode) = entry.unix_permissions() else {
-                continue;
-            };
-
-            // The executable bit is the only permission we preserve, otherwise we use the OS defaults.
-            // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/utils/unpacking.py#L88-L100
-            let has_any_executable_bit = mode & 0o111;
-            if has_any_executable_bit != 0 {
-                // Construct the (expected) path to the file on-disk.
-                let path = entry.filename().as_str()?;
-                let path = target.join(path);
-
-                let permissions = fs_err::tokio::metadata(&path).await?.permissions();
-                fs_err::tokio::set_permissions(
-                    &path,
-                    Permissions::from_mode(permissions.mode() | 0o111),
-                )
-                .await?;
-            }
-        }
-    }
-
     Ok(())
 }
 

@@ -1,0 +1,3 @@
+--extra-index-url https://buf.build/gen/python
+
+hashb_foxglove_protocolbuffers_python==25.3.0.1.20240226043130+465630478360
