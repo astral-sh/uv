@@ -534,7 +534,7 @@ def main() -> None:
         "scheme": get_scheme(),
         "virtualenv": get_virtualenv(),
         "platform": get_operating_system_and_architecture(),
-        # The `t` abiflag for freethreaded python
+        # The `t` abiflag for freethreading python
         # https://peps.python.org/pep-0703/#build-configuration-changes
         "gil_disabled": bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
     }

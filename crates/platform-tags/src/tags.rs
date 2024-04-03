@@ -17,7 +17,7 @@ pub enum TagsError {
     UnknownImplementation(String),
     #[error("Invalid priority: {0}")]
     InvalidPriority(usize, #[source] std::num::TryFromIntError),
-    #[error("Only CPython can disable the GIL, not: {0}")]
+    #[error("Only CPython can be freethreading, not: {0}")]
     GilIsACpythonProblem(String),
 }
 
@@ -113,7 +113,7 @@ impl Tags {
         if let Implementation::CPython { gil_disabled } = implementation {
             // For some reason 3.2 is the minimum python for the cp abi
             for minor in (2..=python_version.1).rev() {
-                // No abi3 for freethreaded python
+                // No abi3 for freethreading python
                 if !gil_disabled {
                     for platform_tag in &platform_tags {
                         tags.push((

@@ -42,6 +42,6 @@ winapi = { workspace = true }
 [dev-dependencies]
 anyhow = { version = "1.0.80" }
 indoc = { version = "2.0.4" }
-insta = { version = "1.36.1" }
+insta = { version = "1.36.1", features = ["filters"] }
 itertools = { version = "0.12.1" }
 tempfile = { version = "3.9.0" }
