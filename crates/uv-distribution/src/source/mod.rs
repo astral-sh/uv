@@ -21,7 +21,6 @@ use distribution_types::{
     PathSourceDist, PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
 };
 use install_wheel_rs::metadata::read_archive_metadata;
-use pep508_rs::Scheme;
 use platform_tags::Tags;
 use pypi_types::Metadata23;
 use uv_cache::{
@@ -1087,7 +1086,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 }
 
 #[derive(Debug)]
-pub enum ExtractedSource {
+enum ExtractedSource {
     /// The source distribution was passed in as a directory, and so doesn't need to be extracted.
     Directory(PathBuf),
     /// The source distribution was passed in as an archive, and was extracted into a temporary
@@ -1101,7 +1100,7 @@ pub enum ExtractedSource {
 
 impl ExtractedSource {
     /// Return the [`Path`] to the extracted source root.
-    pub fn path(&self) -> &Path {
+    fn path(&self) -> &Path {
         match self {
             ExtractedSource::Directory(path) => path,
             ExtractedSource::Archive(path, _) => path,
@@ -1285,91 +1284,5 @@ async fn extract_archive(path: &Path, cache: &Cache) -> Result<ExtractedSource, 
         };
 
         Ok(ExtractedSource::Archive(extracted, temp_dir))
-    }
-}
-
-/// Download and extract a source distribution from a URL.
-///
-/// This function will download the source distribution from the given URL, and extract it into a
-/// directory.
-///
-/// For VCS distributions, this method will checkout the URL into the shared Git cache.
-///
-/// For local archives, this method will extract the archive into a temporary directory.
-///
-/// For HTTP distributions, this method will download the archive and extract it into a temporary
-/// directory.
-pub async fn download_and_extract_archive(
-    url: &Url,
-    cache: &Cache,
-    client: &RegistryClient,
-) -> Result<ExtractedSource, Error> {
-    match Scheme::parse(url.scheme()) {
-        // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
-        Some(Scheme::File) => {
-            let path = url.to_file_path().expect("URL to be a file path");
-            extract_archive(&path, cache).await
-        }
-        // Ex) `git+https://github.com/pallets/flask`
-        Some(Scheme::GitSsh | Scheme::GitHttps) => {
-            // Download the source distribution from the Git repository.
-            let (fetch, subdirectory) = fetch_git_archive(url, cache, None).await?;
-            let path = if let Some(subdirectory) = subdirectory {
-                fetch.path().join(subdirectory)
-            } else {
-                fetch.path().to_path_buf()
-            };
-            Ok(ExtractedSource::Directory(path))
-        }
-        // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-        Some(Scheme::Http | Scheme::Https) => {
-            let filename = url.filename().expect("Distribution must have a filename");
-
-            // Build a request to download the source distribution.
-            let req = client
-                .uncached_client()
-                .get(url.clone())
-                .header(
-                    // `reqwest` defaults to accepting compressed responses.
-                    // Specify identity encoding to get consistent .whl downloading
-                    // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
-                    "accept-encoding",
-                    reqwest::header::HeaderValue::from_static("identity"),
-                )
-                .build()?;
-
-            // Execute the request over the network.
-            let response = client
-                .uncached_client()
-                .execute(req)
-                .await?
-                .error_for_status()?;
-
-            // Download and unzip the source distribution into a temporary directory.
-            let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::BuiltWheels))
-                .map_err(Error::CacheWrite)?;
-            let reader = response
-                .bytes_stream()
-                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
-                .into_async_read();
-            uv_extract::stream::archive(reader.compat(), filename.as_ref(), temp_dir.path())
-                .await?;
-
-            // Extract the top-level directory.
-            let extracted = match uv_extract::strip_component(temp_dir.path()) {
-                Ok(top_level) => top_level,
-                Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
-                Err(err) => return Err(err.into()),
-            };
-
-            Ok(ExtractedSource::Archive(extracted, temp_dir))
-        }
-        // Ex) `../editable/`
-        None => {
-            let path = url.to_file_path().expect("URL to be a file path");
-            extract_archive(&path, cache).await
-        }
-        // Ex) `bzr+https://launchpad.net/bzr/+download/...`
-        Some(scheme) => Err(Error::UnsupportedScheme(scheme.to_string())),
     }
 }
