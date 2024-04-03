@@ -449,6 +449,9 @@ uv accepts the following command-line arguments as environment variables:
   should be used with caution, as it can modify the system Python installation.
 - `UV_NATIVE_TLS`: Equivalent to the `--native-tls` command-line argument. If set to `true`, uv
   will use the system's trust store instead of the bundled `webpki-roots` crate.
+- `UV_INDEX_STRATEGY`: Equivalent to the `--index-strategy` command-line argument. For example, if
+  set to `unsafe-any-match`, uv will consider versions of a given package available across all
+  index URLs, rather than limiting its search to the first index URL that contains the package.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 

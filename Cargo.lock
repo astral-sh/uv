@@ -4786,6 +4786,7 @@ name = "uv-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "clap",
  "distribution-types",
  "itertools 0.12.1",
  "once-map",

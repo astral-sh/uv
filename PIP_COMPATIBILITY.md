@@ -128,6 +128,12 @@ internal package, thus causing the malicious package to be installed instead of 
 package. See, for example, [the `torchtriton` attack](https://pytorch.org/blog/compromised-nightly-dependency/)
 from December 2022.
 
+As of v0.1.29, users can opt in to `pip`-style behavior for multiple indexes via the
+`--index-strategy unsafe-any-match` command-line option, or the `UV_INDEX_STRATEGY` environment
+variable. When enabled, uv will search for each package across all indexes, and consider all
+available versions when resolving dependencies, prioritizing the `--extra-index-url` indexes over
+the default index URL. (Versions that are duplicated _across_ indexes will be ignored.)
+
 In the future, uv will support pinning packages to dedicated indexes (see: [#171](https://github.com/astral-sh/uv/issues/171)).
 Additionally, [PEP 708](https://peps.python.org/pep-0708/) is a provisional standard that aims to
 address the "dependency confusion" issue across package registries and installers.
