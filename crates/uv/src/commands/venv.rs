@@ -21,7 +21,8 @@ use uv_fs::Simplified;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{InMemoryIndex, OptionsBuilder};
 use uv_types::{
-    BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, SetupPyStrategy,
+    BuildContext, BuildIsolation, ConfigSettings, InFlight, IndexStrategy, NoBinary, NoBuild,
+    SetupPyStrategy,
 };
 
 use crate::commands::ExitStatus;
@@ -34,6 +35,7 @@ pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
@@ -48,6 +50,7 @@ pub(crate) async fn venv(
         path,
         python_request,
         index_locations,
+        index_strategy,
         keyring_provider,
         prompt,
         system_site_packages,
@@ -93,6 +96,7 @@ async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
     index_locations: &IndexLocations,
+    index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
@@ -150,6 +154,7 @@ async fn venv_impl(
         let client = RegistryClientBuilder::new(cache.clone())
             .native_tls(native_tls)
             .index_urls(index_locations.index_urls())
+            .index_strategy(index_strategy)
             .keyring_provider(keyring_provider)
             .connectivity(connectivity)
             .markers(interpreter.markers())

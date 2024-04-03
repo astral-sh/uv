@@ -174,16 +174,10 @@ impl VersionMap {
     }
 
     /// Return the [`Hashes`] for the given version, if any.
-    pub(crate) fn hashes(&self, version: &Version) -> Vec<Hashes> {
+    pub(crate) fn hashes(&self, version: &Version) -> Option<Vec<Hashes>> {
         match self.inner {
-            VersionMapInner::Eager(ref map) => map
-                .get(version)
-                .map(|file| file.hashes().to_vec())
-                .unwrap_or_default(),
-            VersionMapInner::Lazy(ref lazy) => lazy
-                .get(version)
-                .map(|file| file.hashes().to_vec())
-                .unwrap_or_default(),
+            VersionMapInner::Eager(ref map) => map.get(version).map(|file| file.hashes().to_vec()),
+            VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(|file| file.hashes().to_vec()),
         }
     }
 

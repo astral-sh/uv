@@ -139,13 +139,23 @@ impl TestContext {
     /// * Set a cutoff for versions used in the resolution so the snapshots don't change after a new release.
     /// * Set the venv to a fresh `.venv` in `temp_dir`.
     pub fn compile(&self) -> std::process::Command {
+        let mut command = self.compile_without_exclude_newer();
+        command.arg("--exclude-newer").arg(EXCLUDE_NEWER);
+        command
+    }
+
+    /// Create a `pip compile` command with no `--exclude-newer` option.
+    ///
+    /// One should avoid using this in tests to the extent possible because
+    /// it can result in tests failing when the index state changes. Therefore,
+    /// if you use this, there should be some other kind of mitigation in place.
+    /// For example, pinning package versions.
+    pub fn compile_without_exclude_newer(&self) -> std::process::Command {
         let mut cmd = std::process::Command::new(get_bin());
         cmd.arg("pip")
             .arg("compile")
             .arg("--cache-dir")
             .arg(self.cache_dir.path())
-            .arg("--exclude-newer")
-            .arg(EXCLUDE_NEWER)
             .env("VIRTUAL_ENV", self.venv.as_os_str())
             .current_dir(self.temp_dir.path());
 

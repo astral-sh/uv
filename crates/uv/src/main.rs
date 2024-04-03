@@ -20,11 +20,11 @@ use uv_interpreter::PythonVersion;
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{ExtrasSpecification, RequirementsSource};
 use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
-use uv_types::NoBinary;
 use uv_types::{
     ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, Reinstall, SetupPyStrategy,
     Upgrade,
 };
+use uv_types::{IndexStrategy, NoBinary};
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, ListFormat, VersionFormat};
 use crate::compat::CompatArgs;
@@ -384,6 +384,16 @@ struct PipCompileArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
+    /// When resolving against multiple index URLs, search for every package on every index, and
+    /// merge the results.
+    ///
+    /// By default, `uv` will stop at the first index on which a given package is available, and
+    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
+    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
+    /// index.
+    #[clap(long)]
+    unsafe_index_merge: bool,
+
     /// Attempt to use `keyring` for authentication for index urls
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
@@ -569,6 +579,16 @@ struct PipSyncArgs {
     /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// When resolving against multiple index URLs, search for every package on every index, and
+    /// merge the results.
+    ///
+    /// By default, `uv` will stop at the first index on which a given package is available, and
+    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
+    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
+    /// index.
+    #[clap(long)]
+    unsafe_index_merge: bool,
 
     /// Attempt to use `keyring` for authentication for index urls
     ///
@@ -834,6 +854,16 @@ struct PipInstallArgs {
     /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// When resolving against multiple index URLs, search for every package on every index, and
+    /// merge the results.
+    ///
+    /// By default, `uv` will stop at the first index on which a given package is available, and
+    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
+    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
+    /// index.
+    #[clap(long)]
+    unsafe_index_merge: bool,
 
     /// Attempt to use `keyring` for authentication for index urls
     ///
@@ -1336,6 +1366,16 @@ struct VenvArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
+    /// When resolving against multiple index URLs, search for every package on every index, and
+    /// merge the results.
+    ///
+    /// By default, `uv` will stop at the first index on which a given package is available, and
+    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
+    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
+    /// index.
+    #[clap(long)]
+    unsafe_index_merge: bool,
+
     /// Attempt to use `keyring` for authentication for index urls
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
@@ -1516,6 +1556,7 @@ async fn run() -> Result<ExitStatus> {
             };
             let upgrade = Upgrade::from_args(args.upgrade, args.upgrade_package);
             let no_build = NoBuild::from_args(args.only_binary, args.no_build);
+            let index_strategy = IndexStrategy::from_args(args.unsafe_index_merge);
             let dependency_mode = if args.no_deps {
                 DependencyMode::Direct
             } else {
@@ -1552,6 +1593,7 @@ async fn run() -> Result<ExitStatus> {
                 args.emit_find_links,
                 args.emit_marker_expression,
                 index_urls,
+                index_strategy,
                 args.keyring_provider,
                 setup_py,
                 config_settings,
@@ -1595,6 +1637,7 @@ async fn run() -> Result<ExitStatus> {
             let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
             let no_binary = NoBinary::from_args(args.no_binary);
             let no_build = NoBuild::from_args(args.only_binary, args.no_build);
+            let index_strategy = IndexStrategy::from_args(args.unsafe_index_merge);
             let setup_py = if args.legacy_setup_py {
                 SetupPyStrategy::Setuptools
             } else {
@@ -1608,6 +1651,7 @@ async fn run() -> Result<ExitStatus> {
                 args.link_mode,
                 args.compile,
                 index_urls,
+                index_strategy,
                 args.keyring_provider,
                 setup_py,
                 if args.offline {
@@ -1674,6 +1718,7 @@ async fn run() -> Result<ExitStatus> {
             let upgrade = Upgrade::from_args(args.upgrade, args.upgrade_package);
             let no_binary = NoBinary::from_args(args.no_binary);
             let no_build = NoBuild::from_args(args.only_binary, args.no_build);
+            let index_strategy = IndexStrategy::from_args(args.unsafe_index_merge);
             let dependency_mode = if args.no_deps {
                 DependencyMode::Direct
             } else {
@@ -1701,6 +1746,7 @@ async fn run() -> Result<ExitStatus> {
                 dependency_mode,
                 upgrade,
                 index_urls,
+                index_strategy,
                 args.keyring_provider,
                 reinstall,
                 args.link_mode,
@@ -1820,6 +1866,8 @@ async fn run() -> Result<ExitStatus> {
                 args.no_index,
             );
 
+            let index_strategy = IndexStrategy::from_args(args.unsafe_index_merge);
+
             // Since we use ".venv" as the default name, we use "." as the default prompt.
             let prompt = args.prompt.or_else(|| {
                 if args.name == PathBuf::from(DEFAULT_VENV_NAME) {
@@ -1833,6 +1881,7 @@ async fn run() -> Result<ExitStatus> {
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
+                index_strategy,
                 args.keyring_provider,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,

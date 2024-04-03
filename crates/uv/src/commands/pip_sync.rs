@@ -28,8 +28,8 @@ use uv_requirements::{
 };
 use uv_resolver::{DependencyMode, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
 use uv_types::{
-    BuildIsolation, ConfigSettings, EmptyInstalledPackages, InFlight, NoBinary, NoBuild, Reinstall,
-    SetupPyStrategy,
+    BuildIsolation, ConfigSettings, EmptyInstalledPackages, InFlight, IndexStrategy, NoBinary,
+    NoBuild, Reinstall, SetupPyStrategy,
 };
 use uv_warnings::warn_user;
 
@@ -45,6 +45,7 @@ pub(crate) async fn pip_sync(
     link_mode: LinkMode,
     compile: bool,
     index_locations: IndexLocations,
+    index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
@@ -144,6 +145,7 @@ pub(crate) async fn pip_sync(
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .index_strategy(index_strategy)
         .keyring_provider(keyring_provider)
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())

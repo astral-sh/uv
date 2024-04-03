@@ -71,7 +71,7 @@ impl CandidateSelector {
         &'a self,
         package_name: &'a PackageName,
         range: &'a Range<Version>,
-        version_map: &'a VersionMap,
+        version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
         exclusions: &'a Exclusions,
@@ -107,7 +107,10 @@ impl CandidateSelector {
                 }
 
                 // Check for a remote distribution that matches the preferred version
-                if let Some(file) = version_map.get(version) {
+                if let Some(file) = version_maps
+                    .iter()
+                    .find_map(|version_map| version_map.get(version))
+                {
                     return Some(Candidate::new(package_name, version, file));
                 }
             }
@@ -163,33 +166,39 @@ impl CandidateSelector {
             "selecting candidate for package {:?} with range {:?} with {} remote versions",
             package_name,
             range,
-            version_map.len()
+            version_maps.iter().map(VersionMap::len).sum::<usize>(),
         );
         match &self.resolution_strategy {
-            ResolutionStrategy::Highest => Self::select_candidate(
-                version_map.iter().rev(),
-                package_name,
-                range,
-                allow_prerelease,
-            ),
-            ResolutionStrategy::Lowest => {
+            ResolutionStrategy::Highest => version_maps.iter().find_map(|version_map| {
+                Self::select_candidate(
+                    version_map.iter().rev(),
+                    package_name,
+                    range,
+                    allow_prerelease,
+                )
+            }),
+            ResolutionStrategy::Lowest => version_maps.iter().find_map(|version_map| {
                 Self::select_candidate(version_map.iter(), package_name, range, allow_prerelease)
-            }
+            }),
             ResolutionStrategy::LowestDirect(direct_dependencies) => {
                 if direct_dependencies.contains(package_name) {
-                    Self::select_candidate(
-                        version_map.iter(),
-                        package_name,
-                        range,
-                        allow_prerelease,
-                    )
+                    version_maps.iter().find_map(|version_map| {
+                        Self::select_candidate(
+                            version_map.iter(),
+                            package_name,
+                            range,
+                            allow_prerelease,
+                        )
+                    })
                 } else {
-                    Self::select_candidate(
-                        version_map.iter().rev(),
-                        package_name,
-                        range,
-                        allow_prerelease,
-                    )
+                    version_maps.iter().find_map(|version_map| {
+                        Self::select_candidate(
+                            version_map.iter().rev(),
+                            package_name,
+                            range,
+                            allow_prerelease,
+                        )
+                    })
                 }
             }
         }

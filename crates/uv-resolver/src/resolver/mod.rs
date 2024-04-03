@@ -6,7 +6,6 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use anyhow::Result;
-
 use dashmap::{DashMap, DashSet};
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
@@ -34,7 +33,6 @@ use uv_normalize::PackageName;
 use uv_types::{BuildContext, Constraints, InstalledPackagesProvider, Overrides};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
-
 use crate::editables::Editables;
 use crate::error::ResolveError;
 use crate::manifest::Manifest;
@@ -54,7 +52,7 @@ pub use crate::resolver::provider::{
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
-use crate::{DependencyMode, Exclusions, Options, VersionMap};
+use crate::{DependencyMode, Exclusions, Options};
 
 mod index;
 mod locals;
@@ -632,23 +630,22 @@ impl<
                     .ok_or(ResolveError::Unregistered)?;
                 self.visited.insert(package_name.clone());
 
-                let empty_version_map = VersionMap::default();
-                let version_map = match *versions_response {
-                    VersionsResponse::Found(ref version_map) => version_map,
+                let version_maps = match *versions_response {
+                    VersionsResponse::Found(ref version_maps) => version_maps.as_slice(),
                     VersionsResponse::NoIndex => {
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::NoIndex);
-                        &empty_version_map
+                        &[]
                     }
                     VersionsResponse::Offline => {
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::Offline);
-                        &empty_version_map
+                        &[]
                     }
                     VersionsResponse::NotFound => {
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::NotFound);
-                        &empty_version_map
+                        &[]
                     }
                 };
 
@@ -664,7 +661,7 @@ impl<
                 let Some(candidate) = self.selector.select(
                     package_name,
                     range,
-                    version_map,
+                    version_maps,
                     &self.preferences,
                     self.installed_packages,
                     &self.exclusions,

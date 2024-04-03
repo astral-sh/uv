@@ -4464,6 +4464,7 @@ dependencies = [
  "uv-cache",
  "uv-fs",
  "uv-normalize",
+ "uv-types",
  "uv-version",
  "uv-warnings",
  "webpki-roots",

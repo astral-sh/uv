@@ -22,7 +22,7 @@ pub type WheelMetadataResult = Result<Metadata23, uv_distribution::Error>;
 #[derive(Debug)]
 pub enum VersionsResponse {
     /// The package was found in the registry with the included versions
-    Found(VersionMap),
+    Found(Vec<VersionMap>),
     /// The package was not found in the registry
     NotFound,
     /// The package was not found in the local registry
@@ -113,29 +113,36 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
         // If the "Simple API" request was successful, convert to `VersionMap` on the Tokio
         // threadpool, since it can be slow.
         match result {
-            Ok((index, metadata)) => Ok(VersionsResponse::Found(VersionMap::from_metadata(
-                metadata,
-                package_name,
-                &index,
-                &self.tags,
-                &self.python_requirement,
-                &self.allowed_yanks,
-                self.exclude_newer.as_ref(),
-                self.flat_index.get(package_name).cloned(),
-                &self.no_binary,
-                &self.no_build,
-            ))),
+            Ok(results) => Ok(VersionsResponse::Found(
+                results
+                    .into_iter()
+                    .map(|(index, metadata)| {
+                        VersionMap::from_metadata(
+                            metadata,
+                            package_name,
+                            &index,
+                            &self.tags,
+                            &self.python_requirement,
+                            &self.allowed_yanks,
+                            self.exclude_newer.as_ref(),
+                            self.flat_index.get(package_name).cloned(),
+                            &self.no_binary,
+                            &self.no_build,
+                        )
+                    })
+                    .collect(),
+            )),
             Err(err) => match err.into_kind() {
                 uv_client::ErrorKind::PackageNotFound(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
-                        Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
+                        Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::NotFound)
                     }
                 }
                 uv_client::ErrorKind::NoIndex(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
-                        Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
+                        Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else if self.flat_index.offline() {
                         Ok(VersionsResponse::Offline)
                     } else {
@@ -144,7 +151,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                 }
                 uv_client::ErrorKind::Offline(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
-                        Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
+                        Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::Offline)
                     }

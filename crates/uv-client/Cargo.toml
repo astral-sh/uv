@@ -15,6 +15,7 @@ uv-auth = { workspace = true }
 uv-cache = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-normalize = { workspace = true }
+uv-types = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 pypi-types = { workspace = true }
