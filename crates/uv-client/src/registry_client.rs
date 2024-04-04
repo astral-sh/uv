@@ -518,6 +518,7 @@ impl RegistryClient {
         // fetch the file from the remote zip.
         let read_metadata_range_request = |response: Response| {
             async {
+                let response_url = response.url().clone();
                 let mut reader = AsyncHttpRangeReader::from_head_response(
                     self.uncached_client().client(),
                     response,
@@ -525,7 +526,7 @@ impl RegistryClient {
                 )
                 .await
                 .map_err(ErrorKind::AsyncHttpRangeReader)?;
-                trace!("Getting metadata for {filename} by range request");
+                trace!("Getting metadata for {filename} by range request at {response_url}");
                 let text = wheel_metadata_from_remote_zip(filename, &mut reader).await?;
                 let metadata = Metadata23::parse_metadata(text.as_bytes()).map_err(|err| {
                     Error::from(ErrorKind::MetadataParseError(
