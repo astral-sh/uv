@@ -10,8 +10,8 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name,
-    Resolution,
+    DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, LocalEditable,
+    LocalEditables, Name, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{MarkerEnvironment, Requirement};
@@ -272,7 +272,7 @@ pub(crate) async fn pip_install(
     let editables = if editables.is_empty() {
         vec![]
     } else {
-        editable_wheel_dir = tempdir_in(venv.root())?;
+        editable_wheel_dir = tempdir_in(cache.root())?;
         build_editables(
             &editables,
             editable_wheel_dir.path(),
@@ -447,17 +447,14 @@ async fn build_editables(
     let downloader = Downloader::new(cache, tags, client, build_dispatch)
         .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
-    let editables: Vec<LocalEditable> = editables
-        .iter()
-        .map(|editable| {
-            let EditableRequirement { url, extras, path } = editable;
-            Ok(LocalEditable {
-                url: url.clone(),
-                extras: extras.clone(),
-                path: path.clone(),
-            })
-        })
-        .collect::<Result<_>>()?;
+    let editables = LocalEditables::from_editables(editables.iter().map(|editable| {
+        let EditableRequirement { url, extras, path } = editable;
+        LocalEditable {
+            url: url.clone(),
+            extras: extras.clone(),
+            path: path.clone(),
+        }
+    }));
 
     let editables: Vec<_> = downloader
         .build_editables(editables, editable_wheel_dir)

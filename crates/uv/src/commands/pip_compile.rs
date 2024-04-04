@@ -14,7 +14,7 @@ use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
 use tracing::debug;
 
-use distribution_types::{IndexLocations, LocalEditable, Verbatim};
+use distribution_types::{IndexLocations, LocalEditable, LocalEditables, Verbatim};
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
@@ -300,13 +300,10 @@ pub(crate) async fn pip_compile(
     } else {
         let start = std::time::Instant::now();
 
-        let editables: Vec<LocalEditable> = editables
-            .into_iter()
-            .map(|editable| {
-                let EditableRequirement { url, extras, path } = editable;
-                Ok(LocalEditable { url, path, extras })
-            })
-            .collect::<Result<_>>()?;
+        let editables = LocalEditables::from_editables(editables.into_iter().map(|editable| {
+            let EditableRequirement { url, extras, path } = editable;
+            LocalEditable { url, path, extras }
+        }));
 
         let downloader = Downloader::new(&cache, &tags, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));

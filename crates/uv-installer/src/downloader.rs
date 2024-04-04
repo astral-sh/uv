@@ -9,7 +9,7 @@ use tracing::instrument;
 use url::Url;
 
 use distribution_types::{
-    BuildableSource, CachedDist, Dist, Identifier, LocalEditable, RemoteSource,
+    BuildableSource, CachedDist, Dist, Identifier, LocalEditable, LocalEditables, RemoteSource,
 };
 use platform_tags::Tags;
 use uv_cache::Cache;
@@ -117,7 +117,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     #[instrument(skip_all)]
     pub async fn build_editables(
         &self,
-        editables: Vec<LocalEditable>,
+        editables: LocalEditables,
         editable_wheel_dir: &Path,
     ) -> Result<Vec<BuiltEditable>, Error> {
         // Build editables in parallel

@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{
-    IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name, ResolvedDist,
+    IndexLocations, InstalledMetadata, LocalDist, LocalEditable, LocalEditables, Name, ResolvedDist,
 };
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
@@ -599,32 +599,28 @@ async fn resolve_editables(
     } else {
         let start = std::time::Instant::now();
 
-        let temp_dir = tempfile::tempdir_in(cache.root())?;
-
         let downloader = Downloader::new(cache, tags, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(uninstalled.len() as u64));
 
-        let local_editables: Vec<LocalEditable> = uninstalled
-            .iter()
-            .map(|editable| {
-                let EditableRequirement { url, path, extras } = editable;
-                Ok(LocalEditable {
-                    url: url.clone(),
-                    path: path.clone(),
-                    extras: extras.clone(),
-                })
-            })
-            .collect::<Result<_>>()?;
+        let editables = LocalEditables::from_editables(uninstalled.iter().map(|editable| {
+            let EditableRequirement { url, path, extras } = editable;
+            LocalEditable {
+                url: url.clone(),
+                path: path.clone(),
+                extras: extras.clone(),
+            }
+        }));
 
-        let built_editables: Vec<_> = downloader
-            .build_editables(local_editables, temp_dir.path())
+        let editable_wheel_dir = tempfile::tempdir_in(cache.root())?;
+        let editables: Vec<_> = downloader
+            .build_editables(editables, editable_wheel_dir.path())
             .await
             .context("Failed to build editables")?
             .into_iter()
             .collect();
 
         // Validate that the editables are compatible with the target Python version.
-        for editable in &built_editables {
+        for editable in &editables {
             if let Some(python_requires) = editable.metadata.requires_python.as_ref() {
                 if !python_requires.contains(interpreter.python_version()) {
                     return Err(anyhow!(
@@ -637,19 +633,19 @@ async fn resolve_editables(
             }
         }
 
-        let s = if built_editables.len() == 1 { "" } else { "s" };
+        let s = if editables.len() == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
             "{}",
             format!(
                 "Built {} in {}",
-                format!("{} editable{}", built_editables.len(), s).bold(),
+                format!("{} editable{}", editables.len(), s).bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()
         )?;
 
-        (built_editables, Some(temp_dir))
+        (editables, Some(editable_wheel_dir))
     };
 
     Ok(ResolvedEditables {
