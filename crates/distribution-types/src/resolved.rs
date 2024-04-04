@@ -1,3 +1,4 @@
+use pep440_rs::Version;
 use std::fmt::Display;
 
 use pep508_rs::PackageName;
@@ -29,6 +30,13 @@ impl ResolvedDist {
         match self {
             Self::Installable(dist) => dist.is_editable(),
             Self::Installed(dist) => dist.is_editable(),
+        }
+    }
+
+    pub fn version(&self) -> Option<&Version> {
+        match self {
+            Self::Installable(dist) => dist.version(),
+            Self::Installed(dist) => Some(dist.version()),
         }
     }
 }
