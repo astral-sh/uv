@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.29
+
+### Enhancements
+
+- Allow conflicting Git URLs that refer to the same commit SHA ([#2769](https://github.com/astral-sh/uv/pull/2769))
+- Allow package lookups across multiple indexes via explicit opt-in (`--index-strategy unsafe-any-match`) ([#2815](https://github.com/astral-sh/uv/pull/2815))
+- Allow no-op `--no-compile` flag on CLI ([#2816](https://github.com/astral-sh/uv/pull/2816))
+- Upgrade `rs-async-zip` to support data descriptors ([#2809](https://github.com/astral-sh/uv/pull/2809))
+
+### Bug fixes
+
+- Avoid unused extras check in `pip install` for source trees ([#2811](https://github.com/astral-sh/uv/pull/2811))
+- Deduplicate editables during install commands ([#2820](https://github.com/astral-sh/uv/pull/2820))
+- Fix windows lock race: lock exclusive after all try lock errors ([#2800](https://github.com/astral-sh/uv/pull/2800))
+- Preserve `.git` suffixes and casing in Git dependencies ([#2789](https://github.com/astral-sh/uv/pull/2789))
+- Respect Git tags and branches that look like short commits ([#2795](https://github.com/astral-sh/uv/pull/2795))
+- Enable virtualenv creation on Windows with cpython-x86 ([#2707](https://github.com/astral-sh/uv/pull/2707))
+
+### Documentation
+
+- Document that uv is safe to run concurrently ([#2818](https://github.com/astral-sh/uv/pull/2818))
+
 ## 0.1.28
 
 ### Enhancements
