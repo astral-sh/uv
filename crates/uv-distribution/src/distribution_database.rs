@@ -481,8 +481,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 file.seek(io::SeekFrom::Start(0))
                     .await
                     .map_err(Error::CacheWrite)?;
-                let reader = tokio::io::BufReader::new(file);
-                uv_extract::seek::unzip(reader, temp_dir.path()).await?;
+                uv_extract::seek::unzip(file, temp_dir.path()).await?;
 
                 // Persist the temporary directory to the directory store.
                 let archive = self

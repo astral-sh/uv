@@ -66,10 +66,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
         use std::fs::Permissions;
         use std::os::unix::fs::PermissionsExt;
 
-        // To avoid lots of small reads to `reader` when parsing the central directory, wrap it in
-        // a buffer.
-        let mut buf = futures::io::BufReader::new(reader);
-        let mut directory = async_zip::base::read::cd::CentralDirectoryReader::new(&mut buf);
+        let mut directory = async_zip::base::read::cd::CentralDirectoryReader::new(&mut reader);
         while let Some(entry) = directory.next().await? {
             if entry.dir()? {
                 continue;
@@ -154,10 +151,11 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
 /// Unzip a `.tar.gz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
-pub async fn untar<R: tokio::io::AsyncBufRead + Unpin>(
+pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
+    let reader = tokio::io::BufReader::new(reader);
     let decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
     let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
         .set_preserve_mtime(false)
@@ -166,7 +164,7 @@ pub async fn untar<R: tokio::io::AsyncBufRead + Unpin>(
 }
 
 /// Unzip a `.zip` or `.tar.gz` archive into the target directory, without requiring `Seek`.
-pub async fn archive<R: tokio::io::AsyncBufRead + Unpin>(
+pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     source: impl AsRef<Path>,
     target: impl AsRef<Path>,
