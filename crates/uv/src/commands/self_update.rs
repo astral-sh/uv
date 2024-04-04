@@ -265,10 +265,14 @@ async fn self_update_pip(
 
     #[cfg(windows)]
     if result.is_ok() {
-        // TODO remove old binary
+        let new_exe = orig.with_file_name("uv-new.exe");
+        force_remove_all(&new_exe)?;
+        rename_with_retry(&orig, &new_exe).await?;
+        rename_with_retry(&temp, &orig).await?;
+        self_replace::self_replace(new_exe)?;
     } else {
         rename_with_retry(&temp, &orig).await?;
-    };
+    }
 
     result?;
     Ok(Some(latest_version.to_string()))
