@@ -67,6 +67,7 @@ pub(crate) async fn pip_install(
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
+    require_hashes: bool,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -84,6 +85,11 @@ pub(crate) async fn pip_install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+
+    if require_hashes {
+        warn_user!("Hash-checking mode (via `--require-hashes`) is not yet supported.");
+    }
+
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
@@ -292,6 +298,7 @@ pub(crate) async fn pip_install(
         .prerelease_mode(prerelease_mode)
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
+        .require_hashes(require_hashes)
         .build();
 
     // Resolve the requirements.

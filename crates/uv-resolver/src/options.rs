@@ -9,6 +9,7 @@ pub struct Options {
     pub prerelease_mode: PreReleaseMode,
     pub dependency_mode: DependencyMode,
     pub exclude_newer: Option<DateTime<Utc>>,
+    pub require_hashes: bool,
 }
 
 /// Builder for [`Options`].
@@ -18,6 +19,7 @@ pub struct OptionsBuilder {
     prerelease_mode: PreReleaseMode,
     dependency_mode: DependencyMode,
     exclude_newer: Option<DateTime<Utc>>,
+    require_hashes: bool,
 }
 
 impl OptionsBuilder {
@@ -54,6 +56,13 @@ impl OptionsBuilder {
         self
     }
 
+    /// Sets the `--requires-hash` flag.
+    #[must_use]
+    pub fn require_hashes(mut self, require_hashes: bool) -> Self {
+        self.require_hashes = require_hashes;
+        self
+    }
+
     /// Builds the options.
     pub fn build(self) -> Options {
         Options {
@@ -61,6 +70,7 @@ impl OptionsBuilder {
             prerelease_mode: self.prerelease_mode,
             dependency_mode: self.dependency_mode,
             exclude_newer: self.exclude_newer,
+            require_hashes: self.require_hashes,
         }
     }
 }
