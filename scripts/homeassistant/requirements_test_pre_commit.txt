@@ -1,0 +1,5 @@
+# Automatically generated from .pre-commit-config.yaml by gen_requirements_all.py, do not edit
+
+codespell==2.2.6
+ruff==0.3.5
+yamllint==1.35.1
