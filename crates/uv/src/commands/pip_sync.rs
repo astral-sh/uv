@@ -44,6 +44,7 @@ pub(crate) async fn pip_sync(
     reinstall: &Reinstall,
     link_mode: LinkMode,
     compile: bool,
+    require_hashes: bool,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
@@ -62,6 +63,10 @@ pub(crate) async fn pip_sync(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+
+    if require_hashes {
+        warn_user!("Hash-checking mode (via `--require-hashes`) is not yet supported.");
+    }
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
@@ -288,6 +293,7 @@ pub(crate) async fn pip_sync(
         // Resolve with `--no-deps`.
         let options = OptionsBuilder::new()
             .dependency_mode(DependencyMode::Direct)
+            .require_hashes(require_hashes)
             .build();
 
         // Create a bound on the progress bar, since we know the number of packages upfront.

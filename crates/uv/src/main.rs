@@ -588,6 +588,20 @@ struct PipSyncArgs {
     #[clap(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
     index_strategy: IndexStrategy,
 
+    /// Require a matching hash for each requirement.
+    ///
+    /// Hash-checking mode is all or nothing. If enabled, _all_ requirements must be provided
+    /// with a corresponding hash or set of hashes. Additionally, if enabled, _all_ requirements
+    /// must either be pinned to exact versions (e.g., `==1.0.0`), or be specified via direct URL.
+    ///
+    /// Hash-checking mode introduces a number of additional constraints:
+    /// - Git dependencies are not supported.
+    /// - Editable installs are not supported.
+    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
+    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
+    #[clap(long, hide = true)]
+    require_hashes: bool,
+
     /// Attempt to use `keyring` for authentication for index urls
     ///
     /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
@@ -861,6 +875,20 @@ struct PipInstallArgs {
     /// index.
     #[clap(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
     index_strategy: IndexStrategy,
+
+    /// Require a matching hash for each requirement.
+    ///
+    /// Hash-checking mode is all or nothing. If enabled, _all_ requirements must be provided
+    /// with a corresponding hash or set of hashes. Additionally, if enabled, _all_ requirements
+    /// must either be pinned to exact versions (e.g., `==1.0.0`), or be specified via direct URL.
+    ///
+    /// Hash-checking mode introduces a number of additional constraints:
+    /// - Git dependencies are not supported.
+    /// - Editable installs are not supported.
+    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
+    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
+    #[clap(long, hide = true)]
+    require_hashes: bool,
 
     /// Attempt to use `keyring` for authentication for index urls
     ///
@@ -1644,6 +1672,7 @@ async fn run() -> Result<ExitStatus> {
                 &reinstall,
                 args.link_mode,
                 args.compile,
+                args.require_hashes,
                 index_urls,
                 args.index_strategy,
                 args.keyring_provider,
@@ -1744,6 +1773,7 @@ async fn run() -> Result<ExitStatus> {
                 reinstall,
                 args.link_mode,
                 args.compile,
+                args.require_hashes,
                 setup_py,
                 if args.offline {
                     Connectivity::Offline
