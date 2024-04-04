@@ -6,7 +6,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::str::FromStr;
 
-use anstream::{eprint, AutoStream, StripStream};
+use anstream::{AutoStream, eprint, StripStream};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
@@ -17,7 +17,7 @@ use tracing::debug;
 use distribution_types::{IndexLocations, LocalEditable, LocalEditables, Verbatim};
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
-use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
+use uv_auth::{GLOBAL_AUTH_STORE, KeyringProvider};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -30,19 +30,19 @@ use uv_installer::Downloader;
 use uv_interpreter::{find_best_python, PythonEnvironment};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
-    upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
-    RequirementsSource, RequirementsSpecification, SourceTreeResolver,
+    ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
+    RequirementsSpecification, SourceTreeResolver, upgrade::read_lockfile,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, Exclusions, FlatIndex, InMemoryIndex,
     Manifest, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
 use uv_toolchain::PythonVersion;
-use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight, RequiredHashes};
 use uv_warnings::warn_user;
 
-use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
+use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
@@ -101,6 +101,7 @@ pub(crate) async fn pip_compile(
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project,
+        entries: _,
         requirements,
         constraints,
         overrides,
@@ -229,7 +230,13 @@ pub(crate) async fn pip_compile(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, &tags, &no_build, &NoBinary::None)
+        FlatIndex::from_entries(
+            entries,
+            &tags,
+            &RequiredHashes::default(),
+            &no_build,
+            &NoBinary::None,
+        )
     };
 
     // Track in-flight downloads, builds, etc., across resolutions.
@@ -370,7 +377,9 @@ pub(crate) async fn pip_compile(
         preferences,
         project,
         editables,
-        // Do not consider any installed packages during compilation
+        // Do not require hashes during resolution.
+        RequiredHashes::default(),
+        // Do not consider any installed packages during resolution.
         Exclusions::All,
         lookaheads,
     );

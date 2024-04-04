@@ -2,8 +2,9 @@ use std::collections::btree_map::{BTreeMap, Entry};
 use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
+use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use rustc_hash::FxHashSet;
-use tracing::{instrument, warn};
+use tracing::instrument;
 
 use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
@@ -13,10 +14,10 @@ use distribution_types::{
 use pep440_rs::{Version, VersionSpecifiers};
 use platform_tags::Tags;
 use pypi_types::{HashDigest, Yanked};
-use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::{NoBinary, NoBuild};
 use uv_normalize::PackageName;
+use uv_types::RequiredHashes;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
@@ -47,6 +48,7 @@ impl VersionMap {
         tags: &Tags,
         python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
+        required_hashes: &RequiredHashes,
         exclude_newer: Option<&DateTime<Utc>>,
         flat_index: Option<FlatDistributions>,
         no_binary: &NoBinary,
@@ -110,6 +112,10 @@ impl VersionMap {
             .allowed_versions(package_name)
             .cloned()
             .unwrap_or_default();
+        let required_hashes = required_hashes
+            .get(package_name)
+            .cloned()
+            .unwrap_or_default();
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
@@ -121,6 +127,7 @@ impl VersionMap {
                 python_requirement: python_requirement.clone(),
                 exclude_newer: exclude_newer.copied(),
                 allowed_yanks,
+                required_hashes,
             }),
         }
     }
@@ -303,6 +310,8 @@ struct VersionMapLazy {
     exclude_newer: Option<DateTime<Utc>>,
     /// Which yanked versions are allowed
     allowed_yanks: FxHashSet<Version>,
+    /// The hashes of allowed distributions.
+    required_hashes: FxHashSet<HashDigest>,
 }
 
 impl VersionMapLazy {
@@ -386,6 +395,7 @@ impl VersionMapLazy {
                             &filename,
                             &version,
                             requires_python,
+                            &hashes,
                             yanked,
                             excluded,
                             upload_time,
@@ -401,6 +411,7 @@ impl VersionMapLazy {
                         let compatibility = self.source_dist_compatibility(
                             &version,
                             requires_python,
+                            &hashes,
                             yanked,
                             excluded,
                             upload_time,
@@ -427,6 +438,7 @@ impl VersionMapLazy {
         &self,
         version: &Version,
         requires_python: Option<VersionSpecifiers>,
+        hashes: &[HashDigest],
         yanked: Option<Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
@@ -441,6 +453,19 @@ impl VersionMapLazy {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::ExcludeNewer(
                 upload_time,
             ));
+        }
+
+        // Check if hashes line up
+        if !self.required_hashes.is_empty() {
+            if hashes.is_empty() {
+                return SourceDistCompatibility::Incompatible(IncompatibleSource::MissingHash);
+            }
+            if !hashes
+                .iter()
+                .any(|hash| self.required_hashes.contains(hash))
+            {
+                return SourceDistCompatibility::Incompatible(IncompatibleSource::MismatchedHash);
+            }
         }
 
         // Check if yanked
@@ -471,6 +496,7 @@ impl VersionMapLazy {
         filename: &WheelFilename,
         version: &Version,
         requires_python: Option<VersionSpecifiers>,
+        hashes: &[HashDigest],
         yanked: Option<Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
@@ -483,6 +509,19 @@ impl VersionMapLazy {
         // Check if after upload time cutoff
         if excluded {
             return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
+        }
+
+        // Check if hashes line up
+        if !self.required_hashes.is_empty() {
+            if hashes.is_empty() {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::MissingHash);
+            }
+            if !hashes
+                .iter()
+                .any(|hash| self.required_hashes.contains(hash))
+            {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::MismatchedHash);
+            }
         }
 
         // Check if yanked

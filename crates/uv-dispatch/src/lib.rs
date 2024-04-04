@@ -21,7 +21,7 @@ use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, Reinstall, 
 use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, Resolver};
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, InFlight};
+use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, InFlight, RequiredHashes};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -135,7 +135,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let markers = self.interpreter.markers();
         let tags = self.interpreter.tags()?;
         let resolver = Resolver::new(
-            Manifest::simple(requirements.to_vec()),
+            Manifest::simple(requirements.to_vec(), RequiredHashes::default()),
             self.options,
             markers,
             self.interpreter,

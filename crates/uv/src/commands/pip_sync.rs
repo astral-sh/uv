@@ -10,10 +10,11 @@ use distribution_types::{
     IndexLocations, InstalledMetadata, LocalDist, LocalEditable, LocalEditables, Name, ResolvedDist,
 };
 use install_wheel_rs::linker::LinkMode;
+use pep508_rs::RequirementsTxtRequirement;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
-use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
+use uv_auth::{GLOBAL_AUTH_STORE, KeyringProvider};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
@@ -23,18 +24,18 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_installer::{is_dynamic, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
+use uv_installer::{Downloader, is_dynamic, Plan, Planner, ResolvedEditable, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
 use uv_resolver::{DependencyMode, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
-use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight, RequiredHashes};
 use uv_warnings::warn_user;
 
+use crate::commands::{ChangeEvent, ChangeEventKind, compile_bytecode, elapsed, ExitStatus};
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
-use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
@@ -76,6 +77,7 @@ pub(crate) async fn pip_sync(
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project: _,
+        entries,
         requirements,
         constraints: _,
         overrides: _,
@@ -135,6 +137,22 @@ pub(crate) async fn pip_sync(
 
     // Determine the current environment markers.
     let tags = venv.interpreter().tags()?;
+    let markers = venv.interpreter().markers();
+
+    // Collect the set of required hashes.
+    let required_hashes = if require_hashes {
+        RequiredHashes::from_requirements(
+            entries
+                .into_iter()
+                .flat_map(|requirement| match requirement.requirement {
+                    RequirementsTxtRequirement::Pep508(req) => Some((req, requirement.hashes)),
+                    RequirementsTxtRequirement::Unnamed(_) => None,
+                }),
+            markers,
+        )?
+    } else {
+        RequiredHashes::default()
+    };
 
     // Incorporate any index locations from the provided sources.
     let index_locations =
@@ -160,7 +178,7 @@ pub(crate) async fn pip_sync(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, tags, &required_hashes, &no_build, &no_binary)
     };
 
     // Create a shared in-memory index.
@@ -301,7 +319,7 @@ pub(crate) async fn pip_sync(
 
         // Run the resolver.
         let resolver = Resolver::new(
-            Manifest::simple(remote),
+            Manifest::simple(remote, required_hashes),
             options,
             markers,
             interpreter,
