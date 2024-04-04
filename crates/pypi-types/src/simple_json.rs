@@ -122,6 +122,63 @@ impl Default for Yanked {
     }
 }
 
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub enum HashAlgorithm {
+    Md5,
+    Sha256,
+    Sha384,
+    Sha512,
+}
+
+impl FromStr for HashAlgorithm {
+    type Err = HashError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "md5" => Ok(Self::Md5),
+            "sha256" => Ok(Self::Sha256),
+            "sha384" => Ok(Self::Sha384),
+            "sha512" => Ok(Self::Sha512),
+            _ => Err(HashError::UnsupportedHashAlgorithm(s.to_string())),
+        }
+    }
+}
+
+/// A hash name and hex encoded digest of the file.
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub struct HashDigest {
+    pub algorithm: HashAlgorithm,
+    pub digest: String,
+}
+
+impl FromStr for HashDigest {
+    type Err = HashError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.split(':');
+
+        // Extract the key and value.
+        let name = parts
+            .next()
+            .ok_or_else(|| HashError::InvalidStructure(s.to_string()))?;
+        let value = parts
+            .next()
+            .ok_or_else(|| HashError::InvalidStructure(s.to_string()))?;
+
+        // Ensure there are no more parts.
+        if parts.next().is_some() {
+            return Err(HashError::InvalidStructure(s.to_string()));
+        }
+
+        let algorithm = HashAlgorithm::from_str(name)?;
+
+        Ok(HashDigest {
+            algorithm,
+            digest: value.to_string(),
+        })
+    }
+}
+
 /// A dictionary mapping a hash name to a hex encoded digest of the file.
 ///
 /// PEP 691 says multiple hashes can be included and the interpretation is left to the client.
@@ -175,6 +232,14 @@ impl Hashes {
             .or(self.sha384.as_deref())
             .or(self.sha256.as_deref())
             .or(self.md5.as_deref())
+    }
+
+    /// Returns `true` if the hash is empty.
+    pub fn is_empty(&self) -> bool {
+        self.sha512.is_none()
+            && self.sha384.is_none()
+            && self.sha256.is_none()
+            && self.md5.is_none()
     }
 }
 

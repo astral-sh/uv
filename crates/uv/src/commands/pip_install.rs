@@ -14,7 +14,7 @@ use distribution_types::{
     LocalEditables, Name, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::{MarkerEnvironment, Requirement};
+use pep508_rs::{MarkerEnvironment, Requirement, RequirementsTxtRequirement};
 use platform_tags::Tags;
 use pypi_types::{Metadata23, Yanked};
 use requirements_txt::EditableRequirement;
@@ -39,7 +39,7 @@ use uv_resolver::{
 };
 use uv_types::{
     BuildIsolation, ConfigSettings, Constraints, InFlight, IndexStrategy, NoBinary, NoBuild,
-    Overrides, Reinstall, SetupPyStrategy, Upgrade,
+    Overrides, Reinstall, RequiredHashes, SetupPyStrategy, Upgrade,
 };
 use uv_warnings::warn_user;
 
@@ -97,6 +97,7 @@ pub(crate) async fn pip_install(
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project,
+        entries,
         requirements,
         constraints,
         overrides,
@@ -188,6 +189,21 @@ pub(crate) async fn pip_install(
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
 
+    // Collect the set of required hashes.
+    let required_hashes = if require_hashes {
+        RequiredHashes::from_requirements(
+            entries
+                .into_iter()
+                .flat_map(|requirement| match requirement.requirement {
+                    RequirementsTxtRequirement::Pep508(req) => Some((req, requirement.hashes)),
+                    RequirementsTxtRequirement::Unnamed(_) => None,
+                }),
+            markers,
+        )?
+    } else {
+        RequiredHashes::default()
+    };
+
     // Incorporate any index locations from the provided sources.
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
@@ -212,7 +228,7 @@ pub(crate) async fn pip_install(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, tags, &required_hashes, &no_build, &no_binary)
     };
 
     // Determine whether to enable build isolation.
@@ -307,6 +323,7 @@ pub(crate) async fn pip_install(
         overrides,
         project,
         &editables,
+        required_hashes,
         &site_packages,
         &reinstall,
         &upgrade,
@@ -508,6 +525,7 @@ async fn resolve(
     overrides: Vec<Requirement>,
     project: Option<PackageName>,
     editables: &[BuiltEditable],
+    required_hashes: RequiredHashes,
     site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
     upgrade: &Upgrade,
@@ -570,6 +588,7 @@ async fn resolve(
         preferences,
         project,
         editables,
+        required_hashes,
         exclusions,
         lookaheads,
     );
@@ -1010,6 +1029,9 @@ enum Error {
 
     #[error(transparent)]
     Platform(#[from] platform_tags::PlatformError),
+
+    #[error(transparent)]
+    RequiredHashes(#[from] uv_types::RequiredHashesError),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

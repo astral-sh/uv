@@ -60,7 +60,7 @@ pub struct ResolutionGraph {
 }
 
 impl ResolutionGraph {
-    /// Create a new graph from the resolved `PubGrub` state.
+    /// Create a new graph from the resolved `PubGrub` state.issi
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_state(
         selection: &SelectedDependencies<UvDependencyProvider>,

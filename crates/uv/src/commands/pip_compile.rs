@@ -37,7 +37,7 @@ use uv_resolver::{
 };
 use uv_types::{
     BuildIsolation, ConfigSettings, Constraints, EmptyInstalledPackages, InFlight, IndexStrategy,
-    NoBinary, NoBuild, Overrides, SetupPyStrategy, Upgrade,
+    NoBinary, NoBuild, Overrides, RequiredHashes, SetupPyStrategy, Upgrade,
 };
 use uv_warnings::warn_user;
 
@@ -100,6 +100,7 @@ pub(crate) async fn pip_compile(
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project,
+        entries: _,
         requirements,
         constraints,
         overrides,
@@ -228,7 +229,13 @@ pub(crate) async fn pip_compile(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, &tags, &no_build, &NoBinary::None)
+        FlatIndex::from_entries(
+            entries,
+            &tags,
+            &RequiredHashes::default(),
+            &no_build,
+            &NoBinary::None,
+        )
     };
 
     // Track in-flight downloads, builds, etc., across resolutions.
@@ -369,7 +376,9 @@ pub(crate) async fn pip_compile(
         preferences,
         project,
         editables,
-        // Do not consider any installed packages during compilation
+        // Do not require hashes during resolution.
+        RequiredHashes::default(),
+        // Do not consider any installed packages during resolution.
         Exclusions::All,
         lookaheads,
     );

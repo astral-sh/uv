@@ -72,7 +72,7 @@ pub enum Pep508ErrorSource {
     String(String),
     /// A URL parsing error.
     #[error(transparent)]
-    UrlError(#[from] verbatim_url::VerbatimUrlError),
+    UrlError(#[from] VerbatimUrlError),
     /// The version requirement is not supported.
     #[error("{0}")]
     UnsupportedRequirement(String),

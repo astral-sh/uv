@@ -84,6 +84,8 @@ impl Display for IncompatibleDist {
                 IncompatibleWheel::RequiresPython(python) => {
                     write!(f, "it requires at python {python}")
                 }
+                IncompatibleWheel::MissingHash => f.write_str("it has no hash"),
+                IncompatibleWheel::MismatchedHash => f.write_str("the hash does not match"),
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => {
@@ -104,6 +106,8 @@ impl Display for IncompatibleDist {
                 IncompatibleSource::RequiresPython(python) => {
                     write!(f, "it requires python {python}")
                 }
+                IncompatibleSource::MissingHash => f.write_str("it has no hash"),
+                IncompatibleSource::MismatchedHash => f.write_str("the hash does not match"),
             },
             Self::Unavailable => f.write_str("no distributions are available"),
         }
@@ -122,6 +126,8 @@ pub enum IncompatibleWheel {
     Tag(IncompatibleTag),
     RequiresPython(VersionSpecifiers),
     Yanked(Yanked),
+    MissingHash,
+    MismatchedHash,
     NoBinary,
 }
 
@@ -136,6 +142,8 @@ pub enum IncompatibleSource {
     ExcludeNewer(Option<i64>),
     RequiresPython(VersionSpecifiers),
     Yanked(Yanked),
+    MissingHash,
+    MismatchedHash,
     NoBuild,
 }
 
@@ -369,20 +377,26 @@ impl IncompatibleSource {
             Self::ExcludeNewer(timestamp_self) => match other {
                 // Smaller timestamps are closer to the cut-off time
                 Self::ExcludeNewer(timestamp_other) => timestamp_other < timestamp_self,
-                Self::NoBuild | Self::RequiresPython(_) | Self::Yanked(_) => true,
+                Self::NoBuild
+                | Self::RequiresPython(_)
+                | Self::Yanked(_)
+                | Self::MissingHash
+                | Self::MismatchedHash => true,
             },
             Self::RequiresPython(_) => match other {
                 Self::ExcludeNewer(_) => false,
                 // Version specifiers cannot be reasonably compared
                 Self::RequiresPython(_) => false,
-                Self::NoBuild | Self::Yanked(_) => true,
+                Self::NoBuild | Self::Yanked(_) | Self::MissingHash | Self::MismatchedHash => true,
             },
             Self::Yanked(_) => match other {
                 Self::ExcludeNewer(_) | Self::RequiresPython(_) => false,
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
-                Self::NoBuild => true,
+                Self::NoBuild | Self::MissingHash | Self::MismatchedHash => true,
             },
+            Self::MissingHash => false,
+            Self::MismatchedHash => false,
             Self::NoBuild => false,
         }
     }
@@ -400,26 +414,37 @@ impl IncompatibleWheel {
                         timestamp_other < timestamp_self
                     }
                 },
-                Self::NoBinary | Self::RequiresPython(_) | Self::Tag(_) | Self::Yanked(_) => true,
+                Self::NoBinary
+                | Self::RequiresPython(_)
+                | Self::Tag(_)
+                | Self::Yanked(_)
+                | Self::MissingHash
+                | Self::MismatchedHash => true,
             },
             Self::Tag(tag_self) => match other {
                 Self::ExcludeNewer(_) => false,
                 Self::Tag(tag_other) => tag_other > tag_self,
-                Self::NoBinary | Self::RequiresPython(_) | Self::Yanked(_) => true,
+                Self::NoBinary
+                | Self::RequiresPython(_)
+                | Self::Yanked(_)
+                | Self::MissingHash
+                | Self::MismatchedHash => true,
             },
             Self::RequiresPython(_) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) => false,
                 // Version specifiers cannot be reasonably compared
                 Self::RequiresPython(_) => false,
-                Self::NoBinary | Self::Yanked(_) => true,
+                Self::NoBinary | Self::Yanked(_) | Self::MissingHash | Self::MismatchedHash => true,
             },
             Self::Yanked(_) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) | Self::RequiresPython(_) => false,
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
-                Self::NoBinary => true,
+                Self::NoBinary | Self::MissingHash | Self::MismatchedHash => true,
             },
             Self::NoBinary => false,
+            Self::MismatchedHash => false,
+            Self::MissingHash => false,
         }
     }
 }

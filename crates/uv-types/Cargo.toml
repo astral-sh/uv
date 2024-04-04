@@ -16,6 +16,7 @@ workspace = true
 distribution-types = { workspace = true }
 once-map = { workspace = true }
 pep508_rs = { workspace = true }
+pypi-types = { workspace = true }
 uv-cache = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
@@ -26,6 +27,7 @@ itertools = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true }
 
 [features]
 default = []

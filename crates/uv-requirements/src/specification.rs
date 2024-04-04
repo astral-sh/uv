@@ -7,7 +7,7 @@ use tracing::{instrument, Level};
 use cache_key::CanonicalUrl;
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use pep508_rs::{Requirement, RequirementsTxtRequirement};
-use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
+use requirements_txt::{EditableRequirement, FindLink, RequirementEntry, RequirementsTxt};
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
@@ -20,6 +20,8 @@ use crate::{ExtrasSpecification, RequirementsSource};
 pub struct RequirementsSpecification {
     /// The name of the project specifying requirements.
     pub project: Option<PackageName>,
+    /// The `requirements.txt` entries for the project.
+    pub entries: Vec<RequirementEntry>,
     /// The requirements for the project.
     pub requirements: Vec<RequirementsTxtRequirement>,
     /// The constraints for the project.
@@ -60,6 +62,7 @@ impl RequirementsSpecification {
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
                     project: None,
+                    entries: vec![],
                     requirements: vec![requirement],
                     constraints: vec![],
                     overrides: vec![],
@@ -79,6 +82,7 @@ impl RequirementsSpecification {
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
                     project: None,
+                    entries: vec![],
                     requirements: vec![],
                     constraints: vec![],
                     overrides: vec![],
@@ -98,6 +102,7 @@ impl RequirementsSpecification {
                     RequirementsTxt::parse(path, std::env::current_dir()?, client_builder).await?;
                 Self {
                     project: None,
+                    entries: requirements_txt.requirements.clone(),
                     requirements: requirements_txt
                         .requirements
                         .into_iter()
@@ -148,6 +153,7 @@ impl RequirementsSpecification {
                 {
                     Self {
                         project: Some(project.name),
+                        entries: vec![],
                         requirements: project
                             .requirements
                             .into_iter()
@@ -175,6 +181,7 @@ impl RequirementsSpecification {
                     })?;
                     Self {
                         project: None,
+                        entries: vec![],
                         requirements: vec![],
                         constraints: vec![],
                         overrides: vec![],
@@ -200,6 +207,7 @@ impl RequirementsSpecification {
                 })?;
                 Self {
                     project: None,
+                    entries: vec![],
                     requirements: vec![],
                     constraints: vec![],
                     overrides: vec![],
@@ -232,6 +240,7 @@ impl RequirementsSpecification {
         // a requirements file can also add constraints.
         for source in requirements {
             let source = Self::from_source(source, extras, client_builder).await?;
+            spec.entries.extend(source.entries);
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
@@ -261,7 +270,8 @@ impl RequirementsSpecification {
             spec.no_build.extend(source.no_build);
         }
 
-        // Read all constraints, treating _everything_ as a constraint.
+        // Read all constraints, treating _everything_ as a constraint. The raw entries (i.e.,
+        // hashes) are ignored, as they are not relevant for constraints.
         for source in constraints {
             let source = Self::from_source(source, extras, client_builder).await?;
             for requirement in source.requirements {
@@ -311,6 +321,7 @@ impl RequirementsSpecification {
                     }
                 }
             }
+            spec.entries.extend(source.entries);
             spec.overrides.extend(source.constraints);
             spec.overrides.extend(source.overrides);
 

@@ -18,7 +18,7 @@ use uv_client::{FlatIndex, RegistryClientBuilder};
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_resolver::{
     DisplayResolutionGraph, Exclusions, InMemoryIndex, Manifest, Options, OptionsBuilder,
-    PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
+    PreReleaseMode, Preference, RequiredHashes, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{
     BuildContext, BuildIsolation, BuildKind, Constraints, EmptyInstalledPackages, NoBinary,
@@ -276,6 +276,7 @@ async fn black_mypy_extensions() -> Result<()> {
         vec![],
         None,
         vec![],
+        RequiredHashes::default(),
         Exclusions::default(),
         vec![],
     );
@@ -315,6 +316,7 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         vec![],
         None,
         vec![],
+        RequiredHashes::default(),
         Exclusions::default(),
         vec![],
     );
@@ -352,6 +354,7 @@ async fn black_flake8() -> Result<()> {
         vec![],
         None,
         vec![],
+        RequiredHashes::default(),
         Exclusions::default(),
         vec![],
     );
@@ -443,6 +446,7 @@ async fn black_respect_preference() -> Result<()> {
         )?)],
         None,
         vec![],
+        RequiredHashes::default(),
         Exclusions::default(),
         vec![],
     );
@@ -481,6 +485,7 @@ async fn black_ignore_preference() -> Result<()> {
         )?)],
         None,
         vec![],
+        RequiredHashes::default(),
         Exclusions::default(),
         vec![],
     );

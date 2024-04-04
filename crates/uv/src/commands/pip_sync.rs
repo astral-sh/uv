@@ -9,6 +9,7 @@ use distribution_types::{
     IndexLocations, InstalledMetadata, LocalDist, LocalEditable, LocalEditables, Name, ResolvedDist,
 };
 use install_wheel_rs::linker::LinkMode;
+use pep508_rs::RequirementsTxtRequirement;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
@@ -29,7 +30,7 @@ use uv_requirements::{
 use uv_resolver::{DependencyMode, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
 use uv_types::{
     BuildIsolation, ConfigSettings, EmptyInstalledPackages, InFlight, IndexStrategy, NoBinary,
-    NoBuild, Reinstall, SetupPyStrategy,
+    NoBuild, Reinstall, RequiredHashes, SetupPyStrategy,
 };
 use uv_warnings::warn_user;
 
@@ -76,6 +77,7 @@ pub(crate) async fn pip_sync(
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project: _,
+        entries,
         requirements,
         constraints: _,
         overrides: _,
@@ -135,6 +137,22 @@ pub(crate) async fn pip_sync(
 
     // Determine the current environment markers.
     let tags = venv.interpreter().tags()?;
+    let markers = venv.interpreter().markers();
+
+    // Collect the set of required hashes.
+    let required_hashes = if require_hashes {
+        RequiredHashes::from_requirements(
+            entries
+                .into_iter()
+                .flat_map(|requirement| match requirement.requirement {
+                    RequirementsTxtRequirement::Pep508(req) => Some((req, requirement.hashes)),
+                    RequirementsTxtRequirement::Unnamed(_) => None,
+                }),
+            markers,
+        )?
+    } else {
+        RequiredHashes::default()
+    };
 
     // Incorporate any index locations from the provided sources.
     let index_locations =
@@ -160,7 +178,7 @@ pub(crate) async fn pip_sync(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, tags, &required_hashes, &no_build, &no_binary)
     };
 
     // Create a shared in-memory index.
@@ -301,7 +319,7 @@ pub(crate) async fn pip_sync(
 
         // Run the resolver.
         let resolver = Resolver::new(
-            Manifest::simple(remote),
+            Manifest::simple(remote, required_hashes),
             options,
             markers,
             interpreter,

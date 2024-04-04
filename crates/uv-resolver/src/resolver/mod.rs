@@ -143,6 +143,7 @@ impl<
             tags,
             PythonRequirement::new(interpreter, markers),
             AllowedYanks::from_manifest(&manifest, markers),
+            manifest.hashes.clone(),
             options.exclude_newer,
             build_context.no_binary(),
             build_context.no_build(),
@@ -757,10 +758,16 @@ impl<
                 for (package, version) in constraints.iter() {
                     debug!("Adding direct dependency: {package}{version}");
 
+                    // STOPSHIP(charlie): If `--require-hashes` is enabled, fail if:
+                    // - Any requirement is a VCS requirement. (But it's fine if it's already installed...)
+                    // - Any requirement is a source tree. (But it's fine if it's already installed...)
+
                     // Emit a request to fetch the metadata for this package.
                     self.visit_package(package, priorities, request_sink)
                         .await?;
                 }
+
+                // STOPSHIP(charlie): If `--require-hashes` is enabled, fail if editables are provided.
 
                 // Add a dependency on each editable.
                 for (editable, metadata) in self.editables.iter() {
