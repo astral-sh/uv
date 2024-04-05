@@ -6,7 +6,7 @@ use std::str::FromStr;
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
-use reqwest::{Client, Response, StatusCode};
+use reqwest::{Client, Response, ResponseBuilderExt, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
@@ -520,7 +520,7 @@ impl RegistryClient {
             async {
                 let mut reader = AsyncHttpRangeReader::from_head_response(
                     self.uncached_client().client(),
-                    response,
+                    response_with_original_url(response, url.clone()),
                     headers,
                 )
                 .await
@@ -610,6 +610,18 @@ impl RegistryClient {
             std::io::Error::new(std::io::ErrorKind::Other, err)
         }
     }
+}
+
+fn response_with_original_url(response: Response, original_url: Url) -> Response {
+    let mut r = http::Response::builder()
+        .status(response.status())
+        .url(original_url)
+        .version(response.version());
+    for (name, value) in response.headers() {
+        r = r.header(name, value);
+    }
+    let r = r.body("").unwrap();
+    Response::from(r)
 }
 
 /// Read a wheel's `METADATA` file from a zip file.
