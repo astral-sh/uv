@@ -70,7 +70,31 @@ impl CandidateSelector {
     pub(crate) fn select<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
         package_name: &'a PackageName,
-        range: &'a Range<Version>,
+        range: &Range<Version>,
+        version_maps: &'a [VersionMap],
+        preferences: &'a Preferences,
+        installed_packages: &'a InstalledPackages,
+        exclusions: &'a Exclusions,
+    ) -> Option<Candidate<'a>> {
+        if let Some(preferred) = Self::get_preferred(
+            package_name,
+            range,
+            version_maps,
+            preferences,
+            installed_packages,
+            exclusions,
+        ) {
+            return Some(preferred);
+        }
+
+        self.select_no_preference(package_name, range, version_maps)
+    }
+
+    /// Get a preferred version if one exists. This is the preference from a lockfile or a locally
+    /// installed version.
+    fn get_preferred<'a, InstalledPackages: InstalledPackagesProvider>(
+        package_name: &'a PackageName,
+        range: &Range<Version>,
         version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
@@ -141,8 +165,12 @@ impl CandidateSelector {
             }
         }
 
-        // Determine the appropriate prerelease strategy for the current package.
-        let allow_prerelease = match &self.prerelease_strategy {
+        None
+    }
+
+    /// Determine the appropriate prerelease strategy for the current package.
+    fn allow_prereleases(&self, package_name: &PackageName) -> AllowPreRelease {
+        match &self.prerelease_strategy {
             PreReleaseStrategy::Disallow => AllowPreRelease::No,
             PreReleaseStrategy::Allow => AllowPreRelease::Yes,
             PreReleaseStrategy::IfNecessary => AllowPreRelease::IfNecessary,
@@ -160,46 +188,50 @@ impl CandidateSelector {
                     AllowPreRelease::IfNecessary
                 }
             }
-        };
+        }
+    }
 
+    /// Select a [`Candidate`] without checking for version preference such as an existing
+    /// lockfile.
+    pub(crate) fn select_no_preference<'a>(
+        &'a self,
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        version_maps: &'a [VersionMap],
+    ) -> Option<Candidate> {
         tracing::trace!(
-            "selecting candidate for package {:?} with range {:?} with {} remote versions",
+            "selecting candidate for package {} with range {:?} with {} remote versions",
             package_name,
             range,
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
         );
-        match &self.resolution_strategy {
-            ResolutionStrategy::Highest => version_maps.iter().find_map(|version_map| {
+        let highest = self.use_highest_version(package_name);
+        let allow_prerelease = self.allow_prereleases(package_name);
+
+        if highest {
+            version_maps.iter().find_map(|version_map| {
                 Self::select_candidate(
                     version_map.iter().rev(),
                     package_name,
                     range,
                     allow_prerelease,
                 )
-            }),
-            ResolutionStrategy::Lowest => version_maps.iter().find_map(|version_map| {
+            })
+        } else {
+            version_maps.iter().find_map(|version_map| {
                 Self::select_candidate(version_map.iter(), package_name, range, allow_prerelease)
-            }),
+            })
+        }
+    }
+
+    /// By default, we select the latest version, but we also allow using the lowest version instead
+    /// to check the lower bounds.
+    pub(crate) fn use_highest_version(&self, package_name: &PackageName) -> bool {
+        match &self.resolution_strategy {
+            ResolutionStrategy::Highest => true,
+            ResolutionStrategy::Lowest => false,
             ResolutionStrategy::LowestDirect(direct_dependencies) => {
-                if direct_dependencies.contains(package_name) {
-                    version_maps.iter().find_map(|version_map| {
-                        Self::select_candidate(
-                            version_map.iter(),
-                            package_name,
-                            range,
-                            allow_prerelease,
-                        )
-                    })
-                } else {
-                    version_maps.iter().find_map(|version_map| {
-                        Self::select_candidate(
-                            version_map.iter().rev(),
-                            package_name,
-                            range,
-                            allow_prerelease,
-                        )
-                    })
-                }
+                !direct_dependencies.contains(package_name)
             }
         }
     }
@@ -207,7 +239,7 @@ impl CandidateSelector {
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
     /// preferring wheels over source distributions.
     fn select_candidate<'a>(
-        versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
+        versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)> + ExactSizeIterator,
         package_name: &'a PackageName,
         range: &Range<Version>,
         allow_prerelease: AllowPreRelease,
@@ -219,10 +251,8 @@ impl CandidateSelector {
         }
 
         let mut prerelease = None;
-        let mut steps = 0;
-        for (version, maybe_dist) in versions {
-            steps += 1;
-
+        let versions_len = versions.len();
+        for (step, (version, maybe_dist)) in versions.enumerate() {
             let candidate = if version.any_prerelease() {
                 if range.contains(version) {
                     match allow_prerelease {
@@ -235,7 +265,7 @@ impl CandidateSelector {
                                  after {} steps: {:?} version",
                                 package_name,
                                 range,
-                                steps,
+                                step,
                                 version,
                             );
                             // If pre-releases are allowed, treat them equivalently
@@ -276,7 +306,7 @@ impl CandidateSelector {
                          after {} steps: {:?} version",
                         package_name,
                         range,
-                        steps,
+                        step,
                         version,
                     );
                     Candidate::new(package_name, version, dist)
@@ -308,7 +338,7 @@ impl CandidateSelector {
              after {} steps",
             package_name,
             range,
-            steps,
+            versions_len,
         );
         match prerelease {
             None => None,
