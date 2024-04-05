@@ -48,7 +48,7 @@ pub enum Error {
         metadata: PackageName,
     },
     #[error("Failed to parse metadata from built wheel")]
-    Metadata(#[from] pypi_types::Error),
+    Metadata(#[from] pypi_types::MetadataError),
     #[error("Failed to read `dist-info` metadata from built wheel")]
     DistInfo(#[from] install_wheel_rs::Error),
     #[error("Failed to read zip archive from built wheel")]
@@ -62,11 +62,11 @@ pub enum Error {
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
     #[error("The source distribution does not support static metadata in `PKG-INFO`")]
-    DynamicPkgInfo(#[source] pypi_types::Error),
+    DynamicPkgInfo(#[source] pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
     MissingPyprojectToml,
     #[error("The source distribution does not support static metadata in `pyproject.toml`")]
-    DynamicPyprojectToml(#[source] pypi_types::Error),
+    DynamicPyprojectToml(#[source] pypi_types::MetadataError),
     #[error("Unsupported scheme in URL: {0}")]
     UnsupportedScheme(String),
 
