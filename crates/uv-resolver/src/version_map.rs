@@ -152,7 +152,9 @@ impl VersionMap {
     /// which can be used to lazily request a [`CompatibleDist`]. This is
     /// useful in cases where one can skip materializing a full distribution
     /// for each version.
-    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> {
+    pub(crate) fn iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> + ExactSizeIterator {
         match self.inner {
             VersionMapInner::Eager(ref map) => {
                 either::Either::Left(map.iter().map(|(version, dist)| {
