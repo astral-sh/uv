@@ -206,7 +206,7 @@ pub(crate) async fn pip_install(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags)
+        FlatIndex::from_entries(entries, tags, &no_build, &no_binary)
     };
 
     // Determine whether to enable build isolation.

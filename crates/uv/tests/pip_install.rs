@@ -1854,7 +1854,7 @@ fn launcher() -> Result<()> {
     uv_snapshot!(
         filters,
         context.install()
-        .arg(format!("simple_launcher@{}", project_root.join("scripts/wheels/simple_launcher-0.1.0-py3-none-any.whl").display()))
+        .arg(format!("simple_launcher@{}", project_root.join("scripts/links/simple_launcher-0.1.0-py3-none-any.whl").display()))
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
@@ -1899,7 +1899,7 @@ fn launcher_with_symlink() -> Result<()> {
 
     uv_snapshot!(filters,
         context.install()
-            .arg(format!("simple_launcher@{}", project_root.join("scripts/wheels/simple_launcher-0.1.0-py3-none-any.whl").display()))
+            .arg(format!("simple_launcher@{}", project_root.join("scripts/links/simple_launcher-0.1.0-py3-none-any.whl").display()))
             .arg("--strict"),
         @r###"
     success: true
@@ -3738,4 +3738,64 @@ fn already_installed_remote_url() {
           and no additional package locations were provided (try: `--find-links
           <uri>`)
     "###);
+}
+
+/// Sync using `--find-links` with a local directory.
+#[test]
+fn find_links() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        tqdm
+    "})?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("tqdm")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Sync using `--find-links` with a local directory, with wheels disabled.
+#[test]
+fn find_links_no_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        tqdm
+    "})?;
+
+    uv_snapshot!(context.filters(), context.install()
+        .arg("tqdm")
+        .arg("--no-binary")
+        .arg(":all:")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==999.0.0
+    "###
+    );
+
+    Ok(())
 }

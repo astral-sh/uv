@@ -8,10 +8,11 @@ use rustc_hash::FxHashMap;
 use tracing::{debug, info_span, instrument, warn, Instrument};
 use url::Url;
 
-use distribution_filename::DistFilename;
+use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuiltDist, Dist, File, FileLocation, FlatIndexLocation, IndexUrl, PrioritizedDist,
-    RegistryBuiltDist, RegistrySourceDist, SourceDist, SourceDistCompatibility,
+    BuiltDist, Dist, File, FileLocation, FlatIndexLocation, IncompatibleSource, IncompatibleWheel,
+    IndexUrl, PrioritizedDist, RegistryBuiltDist, RegistrySourceDist, SourceDist,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
@@ -19,6 +20,7 @@ use platform_tags::Tags;
 use pypi_types::Hashes;
 use uv_cache::{Cache, CacheBucket};
 use uv_normalize::PackageName;
+use uv_types::{NoBinary, NoBuild};
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
@@ -271,12 +273,25 @@ pub struct FlatIndex {
 impl FlatIndex {
     /// Collect all files from a `--find-links` target into a [`FlatIndex`].
     #[instrument(skip_all)]
-    pub fn from_entries(entries: FlatIndexEntries, tags: &Tags) -> Self {
+    pub fn from_entries(
+        entries: FlatIndexEntries,
+        tags: &Tags,
+        no_build: &NoBuild,
+        no_binary: &NoBinary,
+    ) -> Self {
         // Collect compatible distributions.
         let mut index = FxHashMap::default();
         for (filename, file, url) in entries.entries {
             let distributions = index.entry(filename.name().clone()).or_default();
-            Self::add_file(distributions, file, filename, tags, url);
+            Self::add_file(
+                distributions,
+                file,
+                filename,
+                tags,
+                no_build,
+                no_binary,
+                url,
+            );
         }
 
         // Collect offline entries.
@@ -290,15 +305,17 @@ impl FlatIndex {
         file: File,
         filename: DistFilename,
         tags: &Tags,
+        no_build: &NoBuild,
+        no_binary: &NoBinary,
         index: IndexUrl,
     ) {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
         match filename {
             DistFilename::WheelFilename(filename) => {
-                let compatibility = filename.compatibility(tags);
                 let version = filename.version.clone();
 
+                let compatibility = Self::wheel_compatibility(&filename, tags, no_binary);
                 let dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
                     filename,
                     file: Box::new(file),
@@ -306,20 +323,15 @@ impl FlatIndex {
                 }));
                 match distributions.0.entry(version) {
                     Entry::Occupied(mut entry) => {
-                        entry
-                            .get_mut()
-                            .insert_built(dist, None, compatibility.into());
+                        entry.get_mut().insert_built(dist, None, compatibility);
                     }
                     Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_built(
-                            dist,
-                            None,
-                            compatibility.into(),
-                        ));
+                        entry.insert(PrioritizedDist::from_built(dist, None, compatibility));
                     }
                 }
             }
             DistFilename::SourceDistFilename(filename) => {
+                let compatibility = Self::source_dist_compatibility(&filename, no_build);
                 let dist = Dist::Source(SourceDist::Registry(RegistrySourceDist {
                     filename: filename.clone(),
                     file: Box::new(file),
@@ -327,22 +339,52 @@ impl FlatIndex {
                 }));
                 match distributions.0.entry(filename.version) {
                     Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_source(
-                            dist,
-                            None,
-                            SourceDistCompatibility::Compatible,
-                        );
+                        entry.get_mut().insert_source(dist, None, compatibility);
                     }
                     Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_source(
-                            dist,
-                            None,
-                            SourceDistCompatibility::Compatible,
-                        ));
+                        entry.insert(PrioritizedDist::from_source(dist, None, compatibility));
                     }
                 }
             }
         }
+    }
+
+    fn source_dist_compatibility(
+        filename: &SourceDistFilename,
+        no_build: &NoBuild,
+    ) -> SourceDistCompatibility {
+        // Check if source distributions are allowed for this package.
+        let no_build = match no_build {
+            NoBuild::None => false,
+            NoBuild::All => true,
+            NoBuild::Packages(packages) => packages.contains(&filename.name),
+        };
+
+        if no_build {
+            return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
+        }
+
+        SourceDistCompatibility::Compatible
+    }
+
+    fn wheel_compatibility(
+        filename: &WheelFilename,
+        tags: &Tags,
+        no_binary: &NoBinary,
+    ) -> WheelCompatibility {
+        // Check if binaries are allowed for this package.
+        let no_binary = match no_binary {
+            NoBinary::None => false,
+            NoBinary::All => true,
+            NoBinary::Packages(packages) => packages.contains(&filename.name),
+        };
+
+        if no_binary {
+            return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
+        }
+
+        // Determine a compatibility for the wheel based on tags.
+        WheelCompatibility::from(filename.compatibility(tags))
     }
 
     /// Get the [`FlatDistributions`] for the given package name.

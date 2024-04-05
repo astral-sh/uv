@@ -2461,7 +2461,7 @@ fn find_links() -> Result<()> {
     uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.txt")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/wheels/")), @r###"
+        .arg(context.workspace_root.join("scripts/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2494,7 +2494,7 @@ fn find_links_no_index_match() -> Result<()> {
         .arg("requirements.txt")
         .arg("--no-index")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/wheels/")), @r###"
+        .arg(context.workspace_root.join("scripts/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2524,7 +2524,7 @@ fn find_links_offline_match() -> Result<()> {
         .arg("requirements.txt")
         .arg("--offline")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/wheels/")), @r###"
+        .arg(context.workspace_root.join("scripts/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2555,7 +2555,7 @@ fn find_links_offline_no_match() -> Result<()> {
         .arg("requirements.txt")
         .arg("--offline")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/wheels/")), @r###"
+        .arg(context.workspace_root.join("scripts/links/")), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
