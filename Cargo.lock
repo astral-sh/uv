@@ -2025,6 +2025,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "md-5"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
+dependencies = [
+ "cfg-if",
+ "digest",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4416,7 +4426,6 @@ dependencies = [
  "uv-configuration",
  "uv-fs",
  "uv-normalize",
- "uv-types",
  "uv-version",
  "uv-warnings",
 ]
@@ -4520,6 +4529,7 @@ dependencies = [
  "fs-err",
  "futures",
  "install-wheel-rs",
+ "md-5",
  "nanoid",
  "once_cell",
  "pep440_rs",
@@ -4531,6 +4541,7 @@ dependencies = [
  "rmp-serde",
  "rustc-hash",
  "serde",
+ "sha2",
  "tempfile",
  "thiserror",
  "tokio",
@@ -4556,8 +4567,11 @@ dependencies = [
  "async_zip",
  "fs-err",
  "futures",
+ "md-5",
+ "pypi-types",
  "rayon",
  "rustc-hash",
+ "sha2",
  "thiserror",
  "tokio",
  "tokio-tar",
@@ -4622,6 +4636,7 @@ dependencies = [
  "pypi-types",
  "rayon",
  "requirements-txt",
+ "rmp-serde",
  "rustc-hash",
  "serde",
  "tempfile",
@@ -4795,6 +4810,7 @@ dependencies = [
  "distribution-types",
  "itertools 0.12.1",
  "once-map",
+ "pep440_rs",
  "pep508_rs",
  "pypi-types",
  "rustc-hash",

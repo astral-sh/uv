@@ -2,19 +2,23 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use distribution_filename::WheelFilename;
+use distribution_types::Hashed;
 use platform_tags::Tags;
+use pypi_types::HashDigest;
 use uv_cache::CacheShard;
 use uv_fs::files;
 
 /// The information about the wheel we either just built or got from the cache.
 #[derive(Debug, Clone)]
-pub struct BuiltWheelMetadata {
+pub(crate) struct BuiltWheelMetadata {
     /// The path to the built wheel.
     pub(crate) path: PathBuf,
     /// The expected path to the downloaded wheel's entry in the cache.
     pub(crate) target: PathBuf,
     /// The parsed filename.
     pub(crate) filename: WheelFilename,
+    /// The computed hashes of the source distribution from which the wheel was built.
+    pub(crate) hashes: Vec<HashDigest>,
 }
 
 impl BuiltWheelMetadata {
@@ -39,6 +43,20 @@ impl BuiltWheelMetadata {
             target: cache_shard.join(filename.stem()),
             path,
             filename,
+            hashes: vec![],
         })
+    }
+
+    /// Set the computed hashes of the wheel.
+    #[must_use]
+    pub(crate) fn with_hashes(mut self, hashes: Vec<HashDigest>) -> Self {
+        self.hashes = hashes;
+        self
+    }
+}
+
+impl Hashed for BuiltWheelMetadata {
+    fn hashes(&self) -> &[HashDigest] {
+        &self.hashes
     }
 }

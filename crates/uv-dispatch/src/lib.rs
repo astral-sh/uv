@@ -3,8 +3,8 @@
 //! implementing [`BuildContext`].
 
 use std::ffi::OsStr;
-use std::ffi::OsString;
 use std::path::Path;
+use std::{ffi::OsString, future::Future};
 
 use anyhow::{bail, Context, Result};
 use futures::FutureExt;
@@ -134,8 +134,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
         let markers = self.interpreter.markers();
         let tags = self.interpreter.tags()?;
+        let hashes = RequiredHashes::default();
         let resolver = Resolver::new(
-            Manifest::simple(requirements.to_vec(), RequiredHashes::default()),
+            Manifest::simple(requirements.to_vec()),
             self.options,
             markers,
             self.interpreter,
@@ -143,6 +144,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.client,
             self.flat_index,
             self.index,
+            &hashes,
             self,
             &EmptyInstalledPackages,
         )?;
@@ -162,7 +164,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             venv = ?venv.root()
         )
     )]
-    async fn install<'data>(
+    fn install<'data>(
         &'data self,
         resolution: &'data Resolution,
         venv: &'data PythonEnvironment,
@@ -175,6 +177,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .join(", "),
             venv.root().display(),
         );
+
+        // Don't enforce hashes for build dependencies.
+        let hashes = RequiredHashes::default();
 
         // Determine the current environment markers.
         let tags = self.interpreter.tags()?;
@@ -192,6 +197,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             site_packages,
             &Reinstall::None,
             &NoBinary::None,
+            &RequiredHashes::default(),
             self.index_locations,
             self.cache(),
             venv,
@@ -220,7 +226,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             vec![]
         } else {
             // TODO(konstin): Check that there is no endless recursion.
-            let downloader = Downloader::new(self.cache, tags, self.client, self);
+            let downloader = Downloader::new(self.cache, tags, &hashes, self.client, self);
             debug!(
                 "Downloading and building requirement{} for build: {}",
                 if remote.len() == 1 { "" } else { "s" },

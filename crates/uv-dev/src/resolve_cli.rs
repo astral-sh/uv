@@ -58,6 +58,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     let index_locations =
         IndexLocations::new(args.index_url, args.extra_index_url, args.find_links, false);
     let index = InMemoryIndex::default();
+    let hashes = RequiredHashes::default();
     let in_flight = InFlight::default();
     let no_build = if args.no_build {
         NoBuild::All
@@ -100,7 +101,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     // Copied from `BuildDispatch`
     let tags = venv.interpreter().tags()?;
     let resolver = Resolver::new(
-        Manifest::simple(args.requirements.clone(), RequiredHashes::default()),
+        Manifest::simple(args.requirements.clone()),
         Options::default(),
         venv.interpreter().markers(),
         venv.interpreter(),
@@ -108,6 +109,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         &client,
         &flat_index,
         &index,
+        &hashes,
         &build_dispatch,
         &site_packages,
     )?;

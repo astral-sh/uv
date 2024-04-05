@@ -31,12 +31,12 @@ use uv_configuration::{Constraints, Overrides};
 use uv_distribution::DistributionDatabase;
 use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
-use uv_types::{BuildContext, InstalledPackagesProvider};
+use uv_types::{BuildContext, InstalledPackagesProvider, RequiredHashes};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::editables::Editables;
 use crate::error::ResolveError;
-use crate::flat_index::FlatIndex;
+use crate::hash_checking_mode::HashCheckingMode;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
@@ -122,6 +122,8 @@ pub struct Resolver<
     urls: Urls,
     locals: Locals,
     dependency_mode: DependencyMode,
+    hash_checking_mode: HashCheckingMode,
+    hashes: &'a RequiredHashes,
     markers: &'a MarkerEnvironment,
     python_requirement: PythonRequirement,
     selector: CandidateSelector,
@@ -156,6 +158,7 @@ impl<
         client: &'a RegistryClient,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
+        hashes: &'a RequiredHashes,
         build_context: &'a Context,
         installed_packages: &'a InstalledPackages,
     ) -> Result<Self, ResolveError> {
@@ -166,7 +169,7 @@ impl<
             tags,
             PythonRequirement::new(interpreter, markers),
             AllowedYanks::from_manifest(&manifest, markers),
-            manifest.hashes.clone(),
+            hashes,
             options.exclude_newer,
             build_context.no_binary(),
             build_context.no_build(),
@@ -174,6 +177,7 @@ impl<
         Self::new_custom_io(
             manifest,
             options,
+            hashes,
             markers,
             PythonRequirement::new(interpreter, markers),
             index,
@@ -190,9 +194,11 @@ impl<
     > Resolver<'a, Provider, InstalledPackages>
 {
     /// Initialize a new resolver using a user provided backend.
+    #[allow(clippy::too_many_arguments)]
     pub fn new_custom_io(
         manifest: Manifest,
         options: Options,
+        hashes: &'a RequiredHashes,
         markers: &'a MarkerEnvironment,
         python_requirement: PythonRequirement,
         index: &'a InMemoryIndex,
@@ -206,6 +212,7 @@ impl<
             visited: DashSet::default(),
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
+            hash_checking_mode: options.hash_checking_mode,
             urls: Urls::from_manifest(&manifest, markers)?,
             locals: Locals::from_manifest(&manifest, markers),
             project: manifest.project,
@@ -215,6 +222,7 @@ impl<
             preferences: Preferences::from_iter(manifest.preferences, markers),
             exclusions: manifest.exclusions,
             editables: Editables::from_requirements(manifest.editables),
+            hashes,
             markers,
             python_requirement,
             reporter: None,
@@ -519,6 +527,13 @@ impl<
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Python(_) => {}
             PubGrubPackage::Package(package_name, _extra, None) => {
+                // Validate that the package is permitted under hash-checking mode.
+                if self.hash_checking_mode.is_enabled() {
+                    if !self.hashes.contains(package_name) {
+                        return Err(ResolveError::UnhashedPackage(package_name.clone()));
+                    }
+                }
+
                 // Emit a request to fetch the metadata for this package.
                 if self.index.packages.register(package_name.clone()) {
                     priorities.add(package_name.clone());
@@ -528,6 +543,13 @@ impl<
                 }
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
+                // Validate that the package is permitted under hash-checking mode.
+                if self.hash_checking_mode.is_enabled() {
+                    if !self.hashes.contains(package_name) {
+                        return Err(ResolveError::UnhashedPackage(package_name.clone()));
+                    }
+                }
+
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(package_name.clone(), url.clone())?;
                 if self.index.distributions.register(dist.package_id()) {
@@ -826,16 +848,10 @@ impl<
                 for (package, version) in constraints.iter() {
                     debug!("Adding direct dependency: {package}{version}");
 
-                    // STOPSHIP(charlie): If `--require-hashes` is enabled, fail if:
-                    // - Any requirement is a VCS requirement. (But it's fine if it's already installed...)
-                    // - Any requirement is a source tree. (But it's fine if it's already installed...)
-
                     // Emit a request to fetch the metadata for this package.
                     self.visit_package(package, priorities, request_sink)
                         .await?;
                 }
-
-                // STOPSHIP(charlie): If `--require-hashes` is enabled, fail if editables are provided.
 
                 // Add a dependency on each editable.
                 for (editable, metadata) in self.editables.iter() {

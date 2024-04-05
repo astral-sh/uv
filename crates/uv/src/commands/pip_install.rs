@@ -18,7 +18,7 @@ use pep508_rs::{MarkerEnvironment, Requirement, RequirementsTxtRequirement};
 use platform_tags::Tags;
 use pypi_types::{Metadata23, Yanked};
 use requirements_txt::EditableRequirement;
-use uv_auth::{GLOBAL_AUTH_STORE, KeyringProvider};
+use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
@@ -36,15 +36,12 @@ use uv_requirements::{
     ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
     RequirementsSpecification, SourceTreeResolver,
 };
-use uv_resolver::{
-    DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, OptionsBuilder,
-    PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
-};
+use uv_resolver::{DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver, HashCheckingMode};
 use uv_types::{BuildIsolation, InFlight, RequiredHashes};
 use uv_warnings::warn_user;
 
-use crate::commands::{ChangeEvent, ChangeEventKind, compile_bytecode, elapsed, ExitStatus};
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
+use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 
 use super::DryRunEvent;
@@ -84,10 +81,6 @@ pub(crate) async fn pip_install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
-
-    if require_hashes {
-        warn_user!("Hash-checking mode (via `--require-hashes`) is not yet supported.");
-    }
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
@@ -190,11 +183,11 @@ pub(crate) async fn pip_install(
     let markers = venv.interpreter().markers();
 
     // Collect the set of required hashes.
-    let required_hashes = if require_hashes {
+    let hashes = if require_hashes {
         RequiredHashes::from_requirements(
             entries
                 .into_iter()
-                .flat_map(|requirement| match requirement.requirement {
+                .filter_map(|requirement| match requirement.requirement {
                     RequirementsTxtRequirement::Pep508(req) => Some((req, requirement.hashes)),
                     RequirementsTxtRequirement::Unnamed(_) => None,
                 }),
@@ -228,7 +221,7 @@ pub(crate) async fn pip_install(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &required_hashes, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, tags, &hashes, &no_build, &no_binary)
     };
 
     // Determine whether to enable build isolation.
@@ -268,19 +261,31 @@ pub(crate) async fn pip_install(
     // Resolve the requirements from the provided sources.
     let requirements = {
         // Convert from unnamed to named requirements.
-        let mut requirements =
-            NamedRequirementsResolver::new(requirements, &resolve_dispatch, &client, &index)
-                .with_reporter(ResolverReporter::from(printer))
-                .resolve()
-                .await?;
+        let mut requirements = NamedRequirementsResolver::new(
+            requirements,
+            require_hashes,
+            &resolve_dispatch,
+            &client,
+            &index,
+        )
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve()
+        .await?;
 
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
             requirements.extend(
-                SourceTreeResolver::new(source_trees, extras, &resolve_dispatch, &client, &index)
-                    .with_reporter(ResolverReporter::from(printer))
-                    .resolve()
-                    .await?,
+                SourceTreeResolver::new(
+                    source_trees,
+                    extras,
+                    require_hashes,
+                    &resolve_dispatch,
+                    &client,
+                    &index,
+                )
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?,
             );
         }
 
@@ -298,6 +303,7 @@ pub(crate) async fn pip_install(
         build_editables(
             &editables,
             editable_wheel_dir.path(),
+            &hashes,
             &cache,
             &interpreter,
             tags,
@@ -312,8 +318,12 @@ pub(crate) async fn pip_install(
         .resolution_mode(resolution_mode)
         .prerelease_mode(prerelease_mode)
         .dependency_mode(dependency_mode)
+        .hash_checking_mode(if require_hashes {
+            HashCheckingMode::Enabled
+        } else {
+            HashCheckingMode::Disabled
+        })
         .exclude_newer(exclude_newer)
-        .require_hashes(require_hashes)
         .build();
 
     // Resolve the requirements.
@@ -323,7 +333,7 @@ pub(crate) async fn pip_install(
         overrides,
         project,
         &editables,
-        required_hashes,
+        &hashes,
         &site_packages,
         &reinstall,
         &upgrade,
@@ -384,6 +394,7 @@ pub(crate) async fn pip_install(
         link_mode,
         compile,
         &index_locations,
+        &hashes,
         tags,
         &client,
         &in_flight,
@@ -459,6 +470,7 @@ async fn read_requirements(
 async fn build_editables(
     editables: &[EditableRequirement],
     editable_wheel_dir: &Path,
+    hashes: &RequiredHashes,
     cache: &Cache,
     interpreter: &Interpreter,
     tags: &Tags,
@@ -468,7 +480,7 @@ async fn build_editables(
 ) -> Result<Vec<BuiltEditable>, Error> {
     let start = std::time::Instant::now();
 
-    let downloader = Downloader::new(cache, tags, client, build_dispatch)
+    let downloader = Downloader::new(cache, tags, hashes, client, build_dispatch)
         .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
     let editables = LocalEditables::from_editables(editables.iter().map(|editable| {
@@ -525,7 +537,7 @@ async fn resolve(
     overrides: Vec<Requirement>,
     project: Option<PackageName>,
     editables: &[BuiltEditable],
-    required_hashes: RequiredHashes,
+    hashes: &RequiredHashes,
     site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
     upgrade: &Upgrade,
@@ -572,6 +584,7 @@ async fn resolve(
         &constraints,
         &overrides,
         &editables,
+        hashes,
         build_dispatch,
         client,
         index,
@@ -588,7 +601,6 @@ async fn resolve(
         preferences,
         project,
         editables,
-        required_hashes,
         exclusions,
         lookaheads,
     );
@@ -603,6 +615,7 @@ async fn resolve(
         client,
         flat_index,
         index,
+        hashes,
         build_dispatch,
         site_packages,
     )?
@@ -646,6 +659,7 @@ async fn install(
     link_mode: LinkMode,
     compile: bool,
     index_urls: &IndexLocations,
+    hashes: &RequiredHashes,
     tags: &Tags,
     client: &RegistryClient,
     in_flight: &InFlight,
@@ -673,6 +687,7 @@ async fn install(
             site_packages,
             reinstall,
             no_binary,
+            hashes,
             index_urls,
             cache,
             venv,
@@ -725,7 +740,7 @@ async fn install(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(cache, tags, client, build_dispatch)
+        let downloader = Downloader::new(cache, tags, hashes, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader

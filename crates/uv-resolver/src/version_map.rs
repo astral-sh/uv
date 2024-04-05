@@ -114,8 +114,8 @@ impl VersionMap {
             .unwrap_or_default();
         let required_hashes = required_hashes
             .get(package_name)
-            .cloned()
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .to_vec();
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
@@ -311,7 +311,7 @@ struct VersionMapLazy {
     /// Which yanked versions are allowed
     allowed_yanks: FxHashSet<Version>,
     /// The hashes of allowed distributions.
-    required_hashes: FxHashSet<HashDigest>,
+    required_hashes: Vec<HashDigest>,
 }
 
 impl VersionMapLazy {
@@ -434,6 +434,7 @@ impl VersionMapLazy {
         simple.dist.get_or_init(get_or_init).as_ref()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn source_dist_compatibility(
         &self,
         version: &Version,
@@ -491,6 +492,7 @@ impl VersionMapLazy {
         SourceDistCompatibility::Compatible
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn wheel_compatibility(
         &self,
         filename: &WheelFilename,

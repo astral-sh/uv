@@ -4,6 +4,7 @@ use zip::result::ZipError;
 
 use distribution_filename::WheelFilenameError;
 use pep440_rs::Version;
+use pypi_types::HashDigest;
 use uv_client::BetterReqwestError;
 use uv_normalize::PackageName;
 
@@ -81,6 +82,23 @@ pub enum Error {
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
     Join(#[from] JoinError),
+
+    /// An I/O error that occurs while exhausting a reader to compute a hash.
+    #[error("Failed to exhaust hash reader")]
+    HashExhaustion(#[source] std::io::Error),
+
+    #[error("Hash mismatch for {distribution}\n\nExpected:\n{expected}\n\nComputed:\n{actual}")]
+    HashMismatch {
+        distribution: String,
+        expected: String,
+        actual: String,
+    },
+
+    #[error("Hash-checking is not supported for local directories: {0}")]
+    HashesNotSupportedSourceTree(String),
+
+    #[error("Hash-checking is not supported for Git repositories: {0}")]
+    HashesNotSupportedGit(String),
 }
 
 impl From<reqwest::Error> for Error {
@@ -96,6 +114,33 @@ impl From<reqwest_middleware::Error> for Error {
             reqwest_middleware::Error::Reqwest(error) => {
                 Self::Reqwest(BetterReqwestError::from(error))
             }
+        }
+    }
+}
+
+impl Error {
+    /// Construct a hash mismatch error.
+    pub fn hash_mismatch(
+        distribution: String,
+        expected: &[HashDigest],
+        actual: &[HashDigest],
+    ) -> Error {
+        let expected = expected
+            .iter()
+            .map(|hash| format!("  {hash}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let actual = actual
+            .iter()
+            .map(|hash| format!("  {hash}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        Self::HashMismatch {
+            distribution,
+            expected,
+            actual,
         }
     }
 }

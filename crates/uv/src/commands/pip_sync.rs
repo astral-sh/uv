@@ -14,7 +14,7 @@ use pep508_rs::RequirementsTxtRequirement;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
-use uv_auth::{GLOBAL_AUTH_STORE, KeyringProvider};
+use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
@@ -24,18 +24,18 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
-use uv_installer::{Downloader, is_dynamic, Plan, Planner, ResolvedEditable, SitePackages};
+use uv_installer::{is_dynamic, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
-use uv_resolver::{DependencyMode, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
+use uv_resolver::{DependencyMode, FlatIndex, HashCheckingMode, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight, RequiredHashes};
 use uv_warnings::warn_user;
 
-use crate::commands::{ChangeEvent, ChangeEventKind, compile_bytecode, elapsed, ExitStatus};
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
+use crate::commands::{compile_bytecode, elapsed, ChangeEvent, ChangeEventKind, ExitStatus};
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
@@ -64,10 +64,6 @@ pub(crate) async fn pip_sync(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
-
-    if require_hashes {
-        warn_user!("Hash-checking mode (via `--require-hashes`) is not yet supported.");
-    }
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
@@ -140,11 +136,11 @@ pub(crate) async fn pip_sync(
     let markers = venv.interpreter().markers();
 
     // Collect the set of required hashes.
-    let required_hashes = if require_hashes {
+    let hashes = if require_hashes {
         RequiredHashes::from_requirements(
             entries
                 .into_iter()
-                .flat_map(|requirement| match requirement.requirement {
+                .filter_map(|requirement| match requirement.requirement {
                     RequirementsTxtRequirement::Pep508(req) => Some((req, requirement.hashes)),
                     RequirementsTxtRequirement::Unnamed(_) => None,
                 }),
@@ -178,7 +174,7 @@ pub(crate) async fn pip_sync(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &required_hashes, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, tags, &hashes, &no_build, &no_binary)
     };
 
     // Create a shared in-memory index.
@@ -220,11 +216,16 @@ pub(crate) async fn pip_sync(
     // Convert from unnamed to named requirements.
     let requirements = {
         // Convert from unnamed to named requirements.
-        let mut requirements =
-            NamedRequirementsResolver::new(requirements, &build_dispatch, &client, &index)
-                .with_reporter(ResolverReporter::from(printer))
-                .resolve()
-                .await?;
+        let mut requirements = NamedRequirementsResolver::new(
+            requirements,
+            require_hashes,
+            &build_dispatch,
+            &client,
+            &index,
+        )
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve()
+        .await?;
 
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
@@ -232,6 +233,7 @@ pub(crate) async fn pip_sync(
                 SourceTreeResolver::new(
                     source_trees,
                     &ExtrasSpecification::None,
+                    require_hashes,
                     &build_dispatch,
                     &client,
                     &index,
@@ -250,6 +252,7 @@ pub(crate) async fn pip_sync(
         editables,
         &site_packages,
         reinstall,
+        &hashes,
         venv.interpreter(),
         tags,
         &cache,
@@ -273,6 +276,7 @@ pub(crate) async fn pip_sync(
             site_packages,
             reinstall,
             &no_binary,
+            &hashes,
             &index_locations,
             &cache,
             &venv,
@@ -311,7 +315,11 @@ pub(crate) async fn pip_sync(
         // Resolve with `--no-deps`.
         let options = OptionsBuilder::new()
             .dependency_mode(DependencyMode::Direct)
-            .require_hashes(require_hashes)
+            .hash_checking_mode(if require_hashes {
+                HashCheckingMode::Enabled
+            } else {
+                HashCheckingMode::Disabled
+            })
             .build();
 
         // Create a bound on the progress bar, since we know the number of packages upfront.
@@ -319,7 +327,7 @@ pub(crate) async fn pip_sync(
 
         // Run the resolver.
         let resolver = Resolver::new(
-            Manifest::simple(remote, required_hashes),
+            Manifest::simple(remote),
             options,
             markers,
             interpreter,
@@ -327,6 +335,7 @@ pub(crate) async fn pip_sync(
             &client,
             &flat_index,
             &index,
+            &hashes,
             &build_dispatch,
             // TODO(zanieb): We should consider support for installed packages in pip sync
             &EmptyInstalledPackages,
@@ -370,7 +379,7 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(&cache, tags, &client, &build_dispatch)
+        let downloader = Downloader::new(&cache, tags, &hashes, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader
@@ -566,6 +575,7 @@ async fn resolve_editables(
     editables: Vec<EditableRequirement>,
     site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
+    hashes: &RequiredHashes,
     interpreter: &Interpreter,
     tags: &Tags,
     cache: &Cache,
@@ -632,7 +642,7 @@ async fn resolve_editables(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(cache, tags, client, build_dispatch)
+        let downloader = Downloader::new(cache, tags, hashes, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(uninstalled.len() as u64));
 
         let editables = LocalEditables::from_editables(uninstalled.iter().map(|editable| {

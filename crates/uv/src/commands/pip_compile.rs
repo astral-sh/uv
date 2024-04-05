@@ -6,7 +6,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::str::FromStr;
 
-use anstream::{AutoStream, eprint, StripStream};
+use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
@@ -17,7 +17,7 @@ use tracing::debug;
 use distribution_types::{IndexLocations, LocalEditable, LocalEditables, Verbatim};
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
-use uv_auth::{GLOBAL_AUTH_STORE, KeyringProvider};
+use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -30,8 +30,8 @@ use uv_installer::Downloader;
 use uv_interpreter::{find_best_python, PythonEnvironment};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
-    ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTreeResolver, upgrade::read_lockfile,
+    upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
+    RequirementsSource, RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, Exclusions, FlatIndex, InMemoryIndex,
@@ -41,8 +41,8 @@ use uv_toolchain::PythonVersion;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight, RequiredHashes};
 use uv_warnings::warn_user;
 
-use crate::commands::{elapsed, ExitStatus};
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
+use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
@@ -199,6 +199,9 @@ pub(crate) async fn pip_compile(
         |python_version| Cow::Owned(python_version.markers(interpreter.markers())),
     );
 
+    // Don't enforce hashes during resolution.
+    let hashes = RequiredHashes::default();
+
     // Incorporate any index locations from the provided sources.
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
@@ -230,13 +233,7 @@ pub(crate) async fn pip_compile(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(
-            entries,
-            &tags,
-            &RequiredHashes::default(),
-            &no_build,
-            &NoBinary::None,
-        )
+        FlatIndex::from_entries(entries, &tags, &hashes, &no_build, &NoBinary::None)
     };
 
     // Track in-flight downloads, builds, etc., across resolutions.
@@ -275,6 +272,7 @@ pub(crate) async fn pip_compile(
         // Convert from unnamed to named requirements.
         let mut requirements = NamedRequirementsResolver::new(
             requirements,
+            false,
             &build_dispatch,
             &client,
             &top_level_index,
@@ -289,6 +287,7 @@ pub(crate) async fn pip_compile(
                 SourceTreeResolver::new(
                     source_trees,
                     &extras,
+                    false,
                     &build_dispatch,
                     &client,
                     &top_level_index,
@@ -313,7 +312,7 @@ pub(crate) async fn pip_compile(
             LocalEditable { url, path, extras }
         }));
 
-        let downloader = Downloader::new(&cache, &tags, &client, &build_dispatch)
+        let downloader = Downloader::new(&cache, &tags, &hashes, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
         // Build all editables.
@@ -361,6 +360,7 @@ pub(crate) async fn pip_compile(
         &constraints,
         &overrides,
         &editables,
+        &hashes,
         &build_dispatch,
         &client,
         &top_level_index,
@@ -377,8 +377,6 @@ pub(crate) async fn pip_compile(
         preferences,
         project,
         editables,
-        // Do not require hashes during resolution.
-        RequiredHashes::default(),
         // Do not consider any installed packages during resolution.
         Exclusions::All,
         lookaheads,
@@ -401,6 +399,7 @@ pub(crate) async fn pip_compile(
         &client,
         &flat_index,
         &top_level_index,
+        &hashes,
         &build_dispatch,
         &EmptyInstalledPackages,
     )?

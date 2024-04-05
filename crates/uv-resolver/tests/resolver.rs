@@ -123,6 +123,7 @@ async fn resolve(
         find_default_python(&Cache::temp().unwrap()).expect("Expected a python to be installed");
     let interpreter = Interpreter::artificial(real_interpreter.platform().clone(), markers.clone());
     let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
+    let hashes = RequiredHashes::default();
     let installed_packages = EmptyInstalledPackages;
     let resolver = Resolver::new(
         manifest,
@@ -133,6 +134,7 @@ async fn resolve(
         &client,
         &flat_index,
         &index,
+        &hashes,
         &build_context,
         &installed_packages,
     )?;
@@ -274,7 +276,6 @@ async fn black_mypy_extensions() -> Result<()> {
         vec![],
         None,
         vec![],
-        RequiredHashes::default(),
         Exclusions::default(),
         vec![],
     );
@@ -314,7 +315,6 @@ async fn black_mypy_extensions_extra() -> Result<()> {
         vec![],
         None,
         vec![],
-        RequiredHashes::default(),
         Exclusions::default(),
         vec![],
     );
@@ -352,7 +352,6 @@ async fn black_flake8() -> Result<()> {
         vec![],
         None,
         vec![],
-        RequiredHashes::default(),
         Exclusions::default(),
         vec![],
     );
@@ -444,7 +443,6 @@ async fn black_respect_preference() -> Result<()> {
         )?)],
         None,
         vec![],
-        RequiredHashes::default(),
         Exclusions::default(),
         vec![],
     );
@@ -483,7 +481,6 @@ async fn black_ignore_preference() -> Result<()> {
         )?)],
         None,
         vec![],
-        RequiredHashes::default(),
         Exclusions::default(),
         vec![],
     );

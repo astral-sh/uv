@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -25,6 +24,8 @@ pub struct SourceTreeResolver<'a, Context: BuildContext + Send + Sync> {
     source_trees: Vec<PathBuf>,
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification<'a>,
+    /// Whether to require hashes for all dependencies.
+    require_hashes: bool,
     /// The in-memory index for resolving dependencies.
     index: &'a InMemoryIndex,
     /// The database for fetching and building distributions.
@@ -36,6 +37,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
     pub fn new(
         source_trees: Vec<PathBuf>,
         extras: &'a ExtrasSpecification<'a>,
+        require_hashes: bool,
         context: &'a Context,
         client: &'a RegistryClient,
         index: &'a InMemoryIndex,
@@ -43,6 +45,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
         Self {
             source_trees,
             extras,
+            require_hashes,
             index,
             database: DistributionDatabase::new(client, context),
         }
@@ -84,6 +87,16 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
             path: Cow::Owned(path),
         });
 
+        // TODO(charlie): Should we enforce this earlier? If the metadata can be extracted
+        // statically, it won't go through this resolver. But we'll fail anyway, since the
+        // dependencies (when extracted from a `pyproject.toml` or `setup.py`) won't include hashes.
+        if self.require_hashes {
+            return Err(anyhow::anyhow!(
+                "Hash-checking is not supported for local directories: {}",
+                source_tree.user_display()
+            ));
+        }
+
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = PackageId::from_url(source.url());
@@ -104,7 +117,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
-                let metadata = self.database.build_wheel_metadata(&source).await?;
+                let metadata = self.database.build_wheel_metadata(&source, &[]).await?;
 
                 // Insert the metadata into the index.
                 self.index

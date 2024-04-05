@@ -13,7 +13,7 @@ use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name, ResolvedDist};
 use pep508_rs::Requirement;
-use uv_auth::{GLOBAL_AUTH_STORE, KeyringProvider};
+use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy};

@@ -1,16 +1,16 @@
 use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use rustc_hash::FxHashMap;
 
-use distribution_types::{CachedRegistryDist, FlatIndexLocation, IndexLocations, IndexUrl};
+use distribution_types::{CachedRegistryDist, FlatIndexLocation, Hashed, IndexLocations, IndexUrl};
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use uv_cache::{Cache, CacheBucket, WheelCache};
-use uv_fs::{directories, symlinks};
+use uv_fs::{directories, files, symlinks};
 use uv_normalize::PackageName;
+use uv_types::RequiredHashes;
 
 use crate::index::cached_wheel::CachedWheel;
 use crate::source::{read_http_revision, REVISION};
@@ -21,16 +21,23 @@ pub struct RegistryWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,
     index_locations: &'a IndexLocations,
+    hashes: &'a RequiredHashes,
     index: FxHashMap<&'a PackageName, BTreeMap<Version, CachedRegistryDist>>,
 }
 
 impl<'a> RegistryWheelIndex<'a> {
     /// Initialize an index of registry distributions.
-    pub fn new(cache: &'a Cache, tags: &'a Tags, index_locations: &'a IndexLocations) -> Self {
+    pub fn new(
+        cache: &'a Cache,
+        tags: &'a Tags,
+        index_locations: &'a IndexLocations,
+        hashes: &'a RequiredHashes,
+    ) -> Self {
         Self {
             cache,
             tags,
             index_locations,
+            hashes,
             index: FxHashMap::default(),
         }
     }
@@ -65,6 +72,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 self.cache,
                 self.tags,
                 self.index_locations,
+                self.hashes,
             )),
         };
         versions
@@ -76,8 +84,10 @@ impl<'a> RegistryWheelIndex<'a> {
         cache: &Cache,
         tags: &Tags,
         index_locations: &IndexLocations,
+        hashes: &RequiredHashes,
     ) -> BTreeMap<Version, CachedRegistryDist> {
         let mut versions = BTreeMap::new();
+        let hashes = hashes.get(package).unwrap_or_default();
 
         // Collect into owned `IndexUrl`
         let flat_index_urls: Vec<IndexUrl> = index_locations
@@ -100,7 +110,34 @@ impl<'a> RegistryWheelIndex<'a> {
                 WheelCache::Index(index_url).wheel_dir(package.to_string()),
             );
 
-            Self::add_directory(&wheel_dir, tags, &mut versions);
+            // For registry wheels, the cache structure is: `<index>/<package-name>/<wheel>.http`
+            // or `<index>/<package-name>/<version>/<wheel>.rev`.
+            for file in files(&wheel_dir) {
+                if file
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("http"))
+                {
+                    if let Some(wheel) = CachedWheel::from_http_pointer(&wheel_dir.join(&file)) {
+                        // Enforce hash-checking based on the built distribution.
+                        if wheel.satisfies(hashes) {
+                            Self::add_wheel(wheel, tags, &mut versions);
+                        }
+                    }
+                }
+
+                if file
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("rev"))
+                {
+                    if let Some(wheel) = CachedWheel::from_revision_pointer(&wheel_dir.join(&file))
+                    {
+                        // Enforce hash-checking based on the built distribution.
+                        if wheel.satisfies(hashes) {
+                            Self::add_wheel(wheel, tags, &mut versions);
+                        }
+                    }
+                }
+            }
 
             // Index all the built wheels, created by downloading and building source distributions
             // from the registry.
@@ -115,7 +152,14 @@ impl<'a> RegistryWheelIndex<'a> {
                 let cache_shard = cache_shard.shard(shard);
                 let revision_entry = cache_shard.entry(REVISION);
                 if let Ok(Some(revision)) = read_http_revision(&revision_entry) {
-                    Self::add_directory(cache_shard.join(revision.id()), tags, &mut versions);
+                    // Enforce hash-checking based on the source distribution.
+                    if revision.satisfies(hashes) {
+                        for wheel_dir in symlinks(cache_shard.join(revision.id())) {
+                            if let Some(wheel) = CachedWheel::from_built_source(&wheel_dir) {
+                                Self::add_wheel(wheel, tags, &mut versions);
+                            }
+                        }
+                    }
                 };
             }
         }
@@ -123,33 +167,23 @@ impl<'a> RegistryWheelIndex<'a> {
         versions
     }
 
-    /// Add the wheels in a given directory to the index.
-    ///
-    /// Each subdirectory in the given path is expected to be that of an unzipped wheel.
-    fn add_directory(
-        path: impl AsRef<Path>,
+    /// Add the [`CachedWheel`] to the index.
+    fn add_wheel(
+        wheel: CachedWheel,
         tags: &Tags,
         versions: &mut BTreeMap<Version, CachedRegistryDist>,
     ) {
-        // Unzipped wheels are stored as symlinks into the archive directory.
-        for wheel_dir in symlinks(path.as_ref()) {
-            match CachedWheel::from_path(&wheel_dir) {
-                None => {}
-                Some(dist_info) => {
-                    let dist_info = dist_info.into_registry_dist();
+        let dist_info = wheel.into_registry_dist();
 
-                    // Pick the wheel with the highest priority
-                    let compatibility = dist_info.filename.compatibility(tags);
-                    if let Some(existing) = versions.get_mut(&dist_info.filename.version) {
-                        // Override if we have better compatibility
-                        if compatibility > existing.filename.compatibility(tags) {
-                            *existing = dist_info;
-                        }
-                    } else if compatibility.is_compatible() {
-                        versions.insert(dist_info.filename.version.clone(), dist_info);
-                    }
-                }
+        // Pick the wheel with the highest priority
+        let compatibility = dist_info.filename.compatibility(tags);
+        if let Some(existing) = versions.get_mut(&dist_info.filename.version) {
+            // Override if we have better compatibility
+            if compatibility > existing.filename.compatibility(tags) {
+                *existing = dist_info;
             }
+        } else if compatibility.is_compatible() {
+            versions.insert(dist_info.filename.version.clone(), dist_info);
         }
     }
 }

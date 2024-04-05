@@ -6,6 +6,7 @@ use anyhow::{bail, Result};
 use rustc_hash::FxHashMap;
 use tracing::{debug, warn};
 
+use distribution_types::Hashed;
 use distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations, InstalledDist,
     InstalledMetadata, InstalledVersion, Name, SourceDist,
@@ -13,10 +14,12 @@ use distribution_types::{
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, WheelCache};
+use uv_client::DataWithCachePolicy;
 use uv_configuration::{NoBinary, Reinstall};
-use uv_distribution::{BuiltWheelIndex, RegistryWheelIndex};
+use uv_distribution::{read_timestamped_archive, Archive, BuiltWheelIndex, RegistryWheelIndex};
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
+use uv_types::RequiredHashes;
 
 use crate::{ResolvedEditable, SitePackages};
 
@@ -53,20 +56,25 @@ impl<'a> Planner<'a> {
     /// plan will respect cache entries created after the current time (as per the [`Refresh`]
     /// policy). Otherwise, entries will be ignored. The downstream distribution database may still
     /// read those entries from the cache after revalidating them.
+    ///
+    /// The install plan will also respect the required hashes, such that it will never return a
+    /// cached distribution that does not match the required hash. Like pip, though, it _will_
+    /// return an _installed_ distribution that does not match the required hash.
     #[allow(clippy::too_many_arguments)]
     pub fn build(
         self,
         mut site_packages: SitePackages<'_>,
         reinstall: &Reinstall,
         no_binary: &NoBinary,
+        hashes: &RequiredHashes,
         index_locations: &IndexLocations,
         cache: &Cache,
         venv: &PythonEnvironment,
         tags: &Tags,
     ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
-        let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations);
-        let built_index = BuiltWheelIndex::new(cache, tags);
+        let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations, hashes);
+        let built_index = BuiltWheelIndex::new(cache, tags, hashes);
 
         let mut cached = vec![];
         let mut remote = vec![];
@@ -206,16 +214,9 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Some(VersionOrUrl::VersionSpecifier(specifier)) => {
-                    if let Some(distribution) =
-                        registry_index
-                            .get(&requirement.name)
-                            .find_map(|(version, distribution)| {
-                                if specifier.contains(version) {
-                                    Some(distribution)
-                                } else {
-                                    None
-                                }
-                            })
+                    if let Some((_version, distribution)) = registry_index
+                        .get(&requirement.name)
+                        .find(|(version, _)| specifier.contains(version))
                     {
                         debug!("Requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
@@ -252,19 +253,30 @@ impl<'a> Planner<'a> {
                                     CacheBucket::Wheels,
                                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                                 )
-                                .entry(wheel.filename.stem());
+                                .entry(format!("{}.http", wheel.filename.stem()));
 
-                            match cache_entry.path().canonicalize() {
-                                Ok(archive) => {
-                                    let cached_dist = CachedDirectUrlDist::from_url(
-                                        wheel.filename,
-                                        wheel.url,
-                                        archive,
-                                    );
+                            // Read the HTTP pointer.
+                            match fs_err::File::open(cache_entry.path()) {
+                                Ok(file) => {
+                                    let data = DataWithCachePolicy::from_reader(file)?.data;
+                                    let archive = rmp_serde::from_slice::<Archive>(&data)?;
 
-                                    debug!("URL wheel requirement already cached: {cached_dist}");
-                                    cached.push(CachedDist::Url(cached_dist));
-                                    continue;
+                                    // Enforce hash checking.
+                                    let hashes = hashes.get(&requirement.name).unwrap_or_default();
+                                    if archive.satisfies(hashes) {
+                                        let cached_dist = CachedDirectUrlDist::from_url(
+                                            wheel.filename,
+                                            wheel.url,
+                                            archive.hashes,
+                                            archive.path,
+                                        );
+
+                                        debug!(
+                                            "URL wheel requirement already cached: {cached_dist}"
+                                        );
+                                        cached.push(CachedDist::Url(cached_dist));
+                                        continue;
+                                    }
                                 }
                                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
                                     // The cache entry doesn't exist, so it's not fresh.
@@ -294,31 +306,25 @@ impl<'a> Planner<'a> {
                                     CacheBucket::Wheels,
                                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                                 )
-                                .entry(wheel.filename.stem());
+                                .entry(format!("{}.rev", wheel.filename.stem()));
 
-                            match cache_entry.path().canonicalize() {
-                                Ok(archive) => {
-                                    if ArchiveTimestamp::up_to_date_with(
-                                        &wheel.path,
-                                        ArchiveTarget::Cache(&archive),
-                                    )? {
-                                        let cached_dist = CachedDirectUrlDist::from_url(
-                                            wheel.filename,
-                                            wheel.url,
-                                            archive,
-                                        );
+                            if let Some(archive) = read_timestamped_archive(
+                                &cache_entry,
+                                ArchiveTimestamp::from_file(&wheel.path)?,
+                            )? {
+                                let hashes = hashes.get(&requirement.name).unwrap_or_default();
+                                if archive.satisfies(hashes) {
+                                    let cached_dist = CachedDirectUrlDist::from_url(
+                                        wheel.filename,
+                                        wheel.url,
+                                        archive.hashes,
+                                        archive.path,
+                                    );
 
-                                        debug!(
-                                            "URL wheel requirement already cached: {cached_dist}"
-                                        );
-                                        cached.push(CachedDist::Url(cached_dist));
-                                        continue;
-                                    }
+                                    debug!("Path wheel requirement already cached: {cached_dist}");
+                                    cached.push(CachedDist::Url(cached_dist));
+                                    continue;
                                 }
-                                Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                                    // The cache entry doesn't exist, so it's not fresh.
-                                }
-                                Err(err) => return Err(err.into()),
                             }
                         }
                         Dist::Source(SourceDist::DirectUrl(sdist)) => {

@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use distribution_filename::WheelFilename;
-use distribution_types::{CachedDist, Dist};
-use pypi_types::Metadata23;
+use distribution_types::{CachedDist, Dist, Hashed};
+use pypi_types::{HashDigest, Metadata23};
 
 use crate::Error;
 
@@ -16,6 +16,8 @@ pub struct LocalWheel {
     /// The canonicalized path in the cache directory to which the wheel was downloaded.
     /// Typically, a directory within the archive bucket.
     pub(crate) archive: PathBuf,
+    /// The computed hashes of the wheel.
+    pub(crate) hashes: Vec<HashDigest>,
 }
 
 impl LocalWheel {
@@ -40,10 +42,16 @@ impl LocalWheel {
     }
 }
 
+impl Hashed for LocalWheel {
+    fn hashes(&self) -> &[HashDigest] {
+        &self.hashes
+    }
+}
+
 /// Convert a [`LocalWheel`] into a [`CachedDist`].
 impl From<LocalWheel> for CachedDist {
     fn from(wheel: LocalWheel) -> CachedDist {
-        CachedDist::from_remote(wheel.dist, wheel.filename, wheel.archive)
+        CachedDist::from_remote(wheel.dist, wheel.filename, wheel.hashes, wheel.archive)
     }
 }
 

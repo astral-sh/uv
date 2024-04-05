@@ -159,14 +159,6 @@ impl Hashes {
         }
         digests
     }
-
-    /// Returns `true` if the hash is empty.
-    pub fn is_empty(&self) -> bool {
-        self.sha512.is_none()
-            && self.sha384.is_none()
-            && self.sha256.is_none()
-            && self.md5.is_none()
-    }
 }
 
 impl FromStr for Hashes {

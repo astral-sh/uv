@@ -3,7 +3,7 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use pypi_types::Metadata23;
 use uv_configuration::{Constraints, Overrides};
 use uv_normalize::PackageName;
-use uv_types::{RequestedRequirements, RequiredHashes};
+use uv_types::RequestedRequirements;
 
 use crate::{preferences::Preference, Exclusions};
 
@@ -35,9 +35,6 @@ pub struct Manifest {
     /// direct requirements in their own right.
     pub(crate) editables: Vec<(LocalEditable, Metadata23)>,
 
-    /// The required hashes for the project.
-    pub(crate) hashes: RequiredHashes,
-
     /// The installed packages to exclude from consideration during resolution.
     ///
     /// These typically represent packages that are being upgraded or reinstalled
@@ -61,7 +58,6 @@ impl Manifest {
         preferences: Vec<Preference>,
         project: Option<PackageName>,
         editables: Vec<(LocalEditable, Metadata23)>,
-        hashes: RequiredHashes,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
@@ -72,13 +68,12 @@ impl Manifest {
             preferences,
             project,
             editables,
-            hashes,
             exclusions,
             lookaheads,
         }
     }
 
-    pub fn simple(requirements: Vec<Requirement>, hashes: RequiredHashes) -> Self {
+    pub fn simple(requirements: Vec<Requirement>) -> Self {
         Self {
             requirements,
             constraints: Constraints::default(),
@@ -86,7 +81,6 @@ impl Manifest {
             preferences: Vec::new(),
             project: None,
             editables: Vec::new(),
-            hashes,
             exclusions: Exclusions::default(),
             lookaheads: Vec::new(),
         }
