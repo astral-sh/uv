@@ -1,5 +1,6 @@
 use std::fmt::Write;
 
+use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -308,7 +309,16 @@ pub(crate) async fn pip_sync(
             &EmptyInstalledPackages,
         )?
         .with_reporter(reporter);
-        let resolution = resolver.resolve().await?;
+
+        let resolution = match resolver.resolve().await {
+            Err(uv_resolver::ResolveError::NoSolution(err)) => {
+                let report = miette::Report::msg(format!("{err}"))
+                    .context("No solution found when resolving dependencies:");
+                eprint!("{report:?}");
+                return Ok(ExitStatus::Failure);
+            }
+            result => result,
+        }?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
