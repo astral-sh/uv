@@ -4,13 +4,9 @@ Fetch Python version metadata.
 
 Generates the bootstrap `versions.json` file.
 
-Installation:
-
-    pip install requests==2.31.0
-
 Usage:
 
-    scripts/bootstrap/fetch-versions
+    python fetch-version-metadata.py
 
 Acknowledgements:
 
@@ -22,18 +18,12 @@ import argparse
 import hashlib
 import json
 import logging
-import os
 import re
-import sys
+import urllib.error
+import urllib.request
 from itertools import chain
 from pathlib import Path
 from urllib.parse import unquote
-
-try:
-    import requests
-except ImportError:
-    print("ERROR: requests is required; install with `pip install requests==2.31.0`")
-    sys.exit(1)
 
 SELF_DIR = Path(__file__).parent
 RELEASE_URL = "https://api.github.com/repos/indygreg/python-build-standalone/releases"
@@ -129,11 +119,13 @@ def normalize_triple(triple):
     return "%s-%s-%s" % (arch, platform, libc)
 
 
-def read_sha256(session, url):
-    resp = session.get(url + ".sha256")
-    if not resp.ok:
+def read_sha256(url):
+    try:
+        resp = urllib.request.urlopen(url + ".sha256")
+    except urllib.error.HTTPError:
         return None
-    return resp.text.strip()
+    assert resp.status == 200
+    return resp.read().strip()
 
 
 def sha256(path):
@@ -159,32 +151,16 @@ def _sort_key(info):
     return pref
 
 
-def get_session() -> requests.Session:
-    session = requests.Session()
-    session.headers = HEADERS.copy()
-
-    token = os.environ.get("GITHUB_TOKEN")
-    if token:
-        session.headers["Authorization"] = "Bearer " + token
-    else:
-        logging.warning(
-            "An authentication token was not found at `GITHUB_TOKEN`, rate limits may be encountered.",
-        )
-
-    return session
-
-
-def find(args):
+def find():
     """
     Find available Python versions and write metadata to a file.
     """
     results = {}
-    session = get_session()
 
     for page in range(1, 100):
         logging.debug("Reading release page %s...", page)
-        resp = session.get("%s?page=%d" % (RELEASE_URL, page))
-        rows = resp.json()
+        resp = urllib.request.urlopen("%s?page=%d" % (RELEASE_URL, page))
+        rows = json.loads(resp.read())
         if not rows:
             break
         for row in rows:
@@ -226,7 +202,7 @@ def find(args):
         for (arch, platform, libc), url in sorted(choices.items()):
             key = "%s-%s.%s.%s-%s-%s-%s" % (interpreter, *py_ver, platform, arch, libc)
             logging.info("Found %s", key)
-            sha256 = read_sha256(session, url)
+            sha256 = read_sha256(url)
 
             final_results[key] = {
                 "name": interpreter,
@@ -273,7 +249,7 @@ def main():
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    find(args)
+    find()
 
 
 if __name__ == "__main__":
