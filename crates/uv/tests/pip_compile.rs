@@ -4548,27 +4548,84 @@ fn offline_direct_url() -> Result<()> {
     Ok(())
 }
 
-/// Resolve a package, but backtrack past versions with invalid metadata.
+/// Resolve a package with invalid metadata, by way of an invalid `Requires-Python` field in the
+/// `METADATA` file.
 #[test]
-fn invalid_metadata_backtrack() -> Result<()> {
+fn invalid_metadata_requires_python() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("google-cloud-bigquery<=1.28.0")?;
+    requirements_in.write_str("validation==2.0.0")?;
 
-    // `1.28.0` has invalid metadata. We should backtrack to `1.27.2` (the preceding version, which
-    // has valid metadata), but we don't right now.
+    // `2.0.0` has invalid metadata.
     uv_snapshot!(context.compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in")
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(context.workspace_root.join("scripts").join("links")), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download: google-cloud-bigquery==1.28.0
-      Caused by: Couldn't parse metadata of google_cloud_bigquery-1.28.0-py2.py3-none-any.whl from https://files.pythonhosted.org/packages/49/18/6aeca7e64efb37f4d4fceaed0cbb7cd861416588240b76c4796fe2e3393c/google_cloud_bigquery-1.28.0-py2.py3-none-any.whl.metadata
-      Caused by: after parsing 2.0, found "de" after it, which is not part of a valid version
-    pyarrow (<2.0de,>=1.0.0) ; (python_version >= "3.5") and extra == 'all'
-             ^^^^^^
+    error: Failed to download: validation==2.0.0
+      Caused by: Couldn't parse metadata of validation-2.0.0-py3-none-any.whl from validation==2.0.0
+      Caused by: Failed to parse version: Unexpected end of version specifier, expected operator:
+    12
+    ^^
+
+    "###
+    );
+
+    Ok(())
+}
+
+/// Resolve a package with multiple `.dist-info` directories.
+#[test]
+fn invalid_metadata_multiple_dist_info() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("validation==3.0.0")?;
+
+    // `3.0.0` has an invalid structure (multiple `.dist-info` directories).
+    uv_snapshot!(context.compile()
+            .arg("requirements.in")
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download: validation==3.0.0
+      Caused by: Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Resolve a package, but backtrack past versions with invalid metadata.
+#[test]
+fn invalid_metadata_backtrack() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("validation")?;
+
+    // `2.0.0` and `3.0.0` have invalid metadata. We should backtrack to `1.0.0` (the preceding
+    // version, which has valid metadata), but we don't right now.
+    uv_snapshot!(context.compile()
+            .arg("requirements.in")
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download: validation==3.0.0
+      Caused by: Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
     "###
     );
 
