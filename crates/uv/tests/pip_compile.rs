@@ -3600,7 +3600,7 @@ fn find_links_directory() -> Result<()> {
     uv_snapshot!(context.filters(), context.compile()
             .arg("requirements.in")
             .arg("--find-links")
-            .arg(context.workspace_root.join("scripts").join("wheels")), @r###"
+            .arg(context.workspace_root.join("scripts").join("links")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -56,20 +56,25 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     let venv = PythonEnvironment::from_virtualenv(&cache)?;
     let index_locations =
         IndexLocations::new(args.index_url, args.extra_index_url, args.find_links, false);
-    let client = RegistryClientBuilder::new(cache.clone())
-        .index_urls(index_locations.index_urls())
-        .build();
-    let flat_index = {
-        let client = FlatIndexClient::new(&client, &cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, venv.interpreter().tags()?)
-    };
     let index = InMemoryIndex::default();
     let in_flight = InFlight::default();
     let no_build = if args.no_build {
         NoBuild::All
     } else {
         NoBuild::None
+    };
+    let client = RegistryClientBuilder::new(cache.clone())
+        .index_urls(index_locations.index_urls())
+        .build();
+    let flat_index = {
+        let client = FlatIndexClient::new(&client, &cache);
+        let entries = client.fetch(index_locations.flat_index()).await?;
+        FlatIndex::from_entries(
+            entries,
+            venv.interpreter().tags()?,
+            &no_build,
+            &NoBinary::None,
+        )
     };
     let config_settings = ConfigSettings::default();
 

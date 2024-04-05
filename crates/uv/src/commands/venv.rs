@@ -169,7 +169,7 @@ async fn venv_impl(
                 .fetch(index_locations.flat_index())
                 .await
                 .map_err(VenvError::FlatIndex)?;
-            FlatIndex::from_entries(entries, tags)
+            FlatIndex::from_entries(entries, tags, &NoBuild::All, &NoBinary::None)
         };
 
         // Create a shared in-memory index.
