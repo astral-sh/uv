@@ -132,7 +132,7 @@ pub enum ErrorKind {
 
     /// Dist-info error
     #[error(transparent)]
-    InstallWheel(#[from] install_wheel_rs::Error),
+    DistInfo(#[from] install_wheel_rs::Error),
 
     #[error("{0} isn't available locally, but making network requests to registries was banned.")]
     NoIndex(String),

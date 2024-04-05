@@ -4754,6 +4754,7 @@ dependencies = [
  "futures",
  "indexmap",
  "insta",
+ "install-wheel-rs",
  "itertools 0.12.1",
  "once-map",
  "once_cell",

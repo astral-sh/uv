@@ -16,7 +16,7 @@ use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
-pub type WheelMetadataResult = Result<Metadata23, uv_distribution::Error>;
+pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
 
 /// The response when requesting versions for a package
 #[derive(Debug)]
@@ -28,6 +28,18 @@ pub enum VersionsResponse {
     /// The package was not found in the local registry
     NoIndex,
     /// The package was not found in the cache and the network is not available.
+    Offline,
+}
+
+#[derive(Debug)]
+pub enum MetadataResponse {
+    /// The wheel metadata was found and parsed successfully.
+    Found(Metadata23),
+    /// The wheel metadata was found, but could not be parsed.
+    InvalidMetadata(Box<pypi_types::MetadataError>),
+    /// The wheel has an invalid structure.
+    InvalidStructure(Box<install_wheel_rs::Error>),
+    /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
 }
 
@@ -108,11 +120,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
         &'io self,
         package_name: &'io PackageName,
     ) -> PackageVersionsResult {
-        let result = self.client.simple(package_name).await;
-
-        // If the "Simple API" request was successful, convert to `VersionMap` on the Tokio
-        // threadpool, since it can be slow.
-        match result {
+        match self.client.simple(package_name).await {
             Ok(results) => Ok(VersionsResponse::Found(
                 results
                     .into_iter()
@@ -161,8 +169,30 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
         }
     }
 
+    /// Fetch the metadata for a distribution, building it if necessary.
     async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
-        self.fetcher.get_or_build_wheel_metadata(dist).await
+        match self.fetcher.get_or_build_wheel_metadata(dist).await {
+            Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
+            Err(err) => match err {
+                uv_distribution::Error::Client(client) => match client.into_kind() {
+                    uv_client::ErrorKind::Offline(_) => Ok(MetadataResponse::Offline),
+                    uv_client::ErrorKind::MetadataParseError(_, _, err) => {
+                        Ok(MetadataResponse::InvalidMetadata(err))
+                    }
+                    uv_client::ErrorKind::DistInfo(err) => {
+                        Ok(MetadataResponse::InvalidStructure(Box::new(err)))
+                    }
+                    kind => Err(uv_client::Error::from(kind).into()),
+                },
+                uv_distribution::Error::Metadata(err) => {
+                    Ok(MetadataResponse::InvalidMetadata(Box::new(err)))
+                }
+                uv_distribution::Error::DistInfo(err) => {
+                    Ok(MetadataResponse::InvalidStructure(Box::new(err)))
+                }
+                err => Err(err),
+            },
+        }
     }
 
     fn index_locations(&self) -> &IndexLocations {

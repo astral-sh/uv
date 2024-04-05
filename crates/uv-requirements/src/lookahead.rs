@@ -11,7 +11,7 @@ use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use pypi_types::Metadata23;
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_resolver::InMemoryIndex;
+use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, Constraints, Overrides, RequestedRequirements};
 
 /// A resolver for resolving lookahead requirements from direct URLs.
@@ -134,7 +134,18 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let requires_dist = {
             let id = dist.package_id();
-            if let Some(metadata) = self.index.get_metadata(&id) {
+            if let Some(metadata) = self
+                .index
+                .get_metadata(&id)
+                .as_deref()
+                .and_then(|response| {
+                    if let MetadataResponse::Found(metadata) = response {
+                        Some(metadata)
+                    } else {
+                        None
+                    }
+                })
+            {
                 // If the metadata is already in the index, return it.
                 metadata.requires_dist.clone()
             } else {
@@ -151,7 +162,8 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
                 let requires_dist = metadata.requires_dist.clone();
 
                 // Insert the metadata into the index.
-                self.index.insert_metadata(id, metadata);
+                self.index
+                    .insert_metadata(id, MetadataResponse::Found(metadata));
 
                 requires_dist
             }

@@ -632,7 +632,7 @@ async fn read_metadata_async_seek(
             .enumerate()
             .filter_map(|(index, entry)| Some((index, entry.filename().as_str().ok()?))),
     )
-    .map_err(ErrorKind::InstallWheel)?;
+    .map_err(ErrorKind::DistInfo)?;
 
     // Read the contents of the `METADATA` file.
     let mut contents = Vec::new();

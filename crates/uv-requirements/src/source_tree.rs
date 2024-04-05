@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::ops::Deref;
+
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -11,7 +11,7 @@ use pep508_rs::Requirement;
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_fs::Simplified;
-use uv_resolver::InMemoryIndex;
+use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::BuildContext;
 
 use crate::ExtrasSpecification;
@@ -87,16 +87,28 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = PackageId::from_url(source.url());
-            if let Some(metadata) = self.index.get_metadata(&id) {
+            if let Some(metadata) = self
+                .index
+                .get_metadata(&id)
+                .as_deref()
+                .and_then(|response| {
+                    if let MetadataResponse::Found(metadata) = response {
+                        Some(metadata)
+                    } else {
+                        None
+                    }
+                })
+            {
                 // If the metadata is already in the index, return it.
-                metadata.deref().clone()
+                metadata.clone()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
                 let metadata = self.database.build_wheel_metadata(&source).await?;
 
                 // Insert the metadata into the index.
-                self.index.insert_metadata(id, metadata.clone());
+                self.index
+                    .insert_metadata(id, MetadataResponse::Found(metadata.clone()));
 
                 metadata
             }

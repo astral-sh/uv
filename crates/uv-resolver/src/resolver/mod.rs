@@ -14,7 +14,7 @@ use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, info_span, instrument, trace, Instrument};
+use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
@@ -46,8 +46,8 @@ use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
 pub use crate::resolver::index::InMemoryIndex;
 pub use crate::resolver::provider::{
-    DefaultResolverProvider, PackageVersionsResult, ResolverProvider, VersionsResponse,
-    WheelMetadataResult,
+    DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
+    VersionsResponse, WheelMetadataResult,
 };
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
@@ -77,6 +77,10 @@ pub(crate) enum UnavailablePackage {
     Offline,
     /// The package was not found in the registry
     NotFound,
+    /// The wheel metadata was found, but could not be parsed.
+    InvalidMetadata,
+    /// The wheel has an invalid structure.
+    InvalidStructure,
 }
 
 enum ResolverVersion {
@@ -342,6 +346,12 @@ impl<
                                     UnavailablePackage::NotFound => {
                                         "was not found in the package registry"
                                     }
+                                    UnavailablePackage::InvalidMetadata => {
+                                        "was found, but the metadata could not be parsed"
+                                    }
+                                    UnavailablePackage::InvalidStructure => {
+                                        "was found, but has an invalid format"
+                                    }
                                 })
                         } else {
                             None
@@ -590,12 +600,33 @@ impl<
                 }
 
                 let dist = PubGrubDistribution::from_url(package_name, url);
-                let metadata = self
+                let response = self
                     .index
                     .distributions
                     .wait(&dist.package_id())
                     .await
                     .ok_or(ResolveError::Unregistered)?;
+
+                // If we failed to fetch the metadata for a URL, we can't proceed.
+                let metadata = match &*response {
+                    MetadataResponse::Found(metadata) => metadata,
+                    MetadataResponse::Offline => {
+                        self.unavailable_packages
+                            .insert(package_name.clone(), UnavailablePackage::Offline);
+                        return Ok(None);
+                    }
+                    MetadataResponse::InvalidMetadata(_) => {
+                        self.unavailable_packages
+                            .insert(package_name.clone(), UnavailablePackage::InvalidMetadata);
+                        return Ok(None);
+                    }
+                    MetadataResponse::InvalidStructure(_) => {
+                        self.unavailable_packages
+                            .insert(package_name.clone(), UnavailablePackage::InvalidStructure);
+                        return Ok(None);
+                    }
+                };
+
                 let version = &metadata.version;
 
                 // The version is incompatible with the requirement.
@@ -711,7 +742,6 @@ impl<
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
-
                 if self.index.distributions.register(candidate.package_id()) {
                     let request = match dist.for_resolution() {
                         ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
@@ -866,13 +896,33 @@ impl<
                 }
 
                 // Wait for the metadata to be available.
-                let metadata = self
+                let response = self
                     .index
                     .distributions
                     .wait(&package_id)
                     .instrument(info_span!("distributions_wait", %package_id))
                     .await
                     .ok_or(ResolveError::Unregistered)?;
+
+                let metadata = match *response {
+                    MetadataResponse::Found(ref metadata) => metadata,
+                    MetadataResponse::Offline => {
+                        return Ok(Dependencies::Unavailable(
+                            "network connectivity is disabled, but the metadata wasn't found in the cache"
+                                .to_string(),
+                        ));
+                    }
+                    MetadataResponse::InvalidMetadata(_) => {
+                        return Ok(Dependencies::Unavailable(
+                            "the package metadata could not be parsed".to_string(),
+                        ));
+                    }
+                    MetadataResponse::InvalidStructure(_) => {
+                        return Ok(Dependencies::Unavailable(
+                            "the package has an invalid format".to_string(),
+                        ));
+                    }
+                };
 
                 let mut constraints = PubGrubDependencies::from_requirements(
                     &metadata.requires_dist,
@@ -923,23 +973,41 @@ impl<
                 }
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
-                    self.index.distributions.done(dist.package_id(), metadata);
+                    self.index
+                        .distributions
+                        .done(dist.package_id(), MetadataResponse::Found(metadata));
                 }
                 Some(Response::Dist {
                     dist: Dist::Built(dist),
                     metadata,
                 }) => {
                     trace!("Received built distribution metadata for: {dist}");
+                    match &metadata {
+                        MetadataResponse::InvalidMetadata(err) => {
+                            warn!("Unable to extract metadata for {dist}: {err}");
+                        }
+                        MetadataResponse::InvalidStructure(err) => {
+                            warn!("Unable to extract metadata for {dist}: {err}");
+                        }
+                        _ => {}
+                    }
                     self.index.distributions.done(dist.package_id(), metadata);
                 }
                 Some(Response::Dist {
-                    dist: Dist::Source(distribution),
+                    dist: Dist::Source(dist),
                     metadata,
                 }) => {
-                    trace!("Received source distribution metadata for: {distribution}");
-                    self.index
-                        .distributions
-                        .done(distribution.package_id(), metadata);
+                    trace!("Received source distribution metadata for: {dist}");
+                    match &metadata {
+                        MetadataResponse::InvalidMetadata(err) => {
+                            warn!("Unable to extract metadata for {dist}: {err}");
+                        }
+                        MetadataResponse::InvalidStructure(err) => {
+                            warn!("Unable to extract metadata for {dist}: {err}");
+                        }
+                        _ => {}
+                    }
+                    self.index.distributions.done(dist.package_id(), metadata);
                 }
                 None => {}
             }
@@ -1147,7 +1215,10 @@ enum Response {
     /// The returned metadata for a package hosted on a registry.
     Package(PackageName, VersionsResponse),
     /// The returned metadata for a distribution.
-    Dist { dist: Dist, metadata: Metadata23 },
+    Dist {
+        dist: Dist,
+        metadata: MetadataResponse,
+    },
     /// The returned metadata for an already-installed distribution.
     Installed {
         dist: InstalledDist,

@@ -2,10 +2,9 @@ use std::sync::Arc;
 
 use distribution_types::PackageId;
 use once_map::OnceMap;
-use pypi_types::Metadata23;
 use uv_normalize::PackageName;
 
-use crate::resolver::provider::VersionsResponse;
+use crate::resolver::provider::{MetadataResponse, VersionsResponse};
 
 /// In-memory index of package metadata.
 #[derive(Default)]
@@ -15,18 +14,18 @@ pub struct InMemoryIndex {
     pub(crate) packages: OnceMap<PackageName, VersionsResponse>,
 
     /// A map from package ID to metadata for that distribution.
-    pub(crate) distributions: OnceMap<PackageId, Metadata23>,
+    pub(crate) distributions: OnceMap<PackageId, MetadataResponse>,
 }
 
 impl InMemoryIndex {
     /// Insert a [`VersionsResponse`] into the index.
-    pub fn insert_package(&self, package_name: PackageName, metadata: VersionsResponse) {
-        self.packages.done(package_name, metadata);
+    pub fn insert_package(&self, package_name: PackageName, response: VersionsResponse) {
+        self.packages.done(package_name, response);
     }
 
     /// Insert a [`Metadata23`] into the index.
-    pub fn insert_metadata(&self, package_id: PackageId, metadata: Metadata23) {
-        self.distributions.done(package_id, metadata);
+    pub fn insert_metadata(&self, package_id: PackageId, response: MetadataResponse) {
+        self.distributions.done(package_id, response);
     }
 
     /// Get the [`VersionsResponse`] for a given package name, without waiting.
@@ -34,8 +33,8 @@ impl InMemoryIndex {
         self.packages.get(package_name)
     }
 
-    /// Get the [`Metadata23`] for a given package ID, without waiting.
-    pub fn get_metadata(&self, package_id: &PackageId) -> Option<Arc<Metadata23>> {
+    /// Get the [`MetadataResponse`] for a given package ID, without waiting.
+    pub fn get_metadata(&self, package_id: &PackageId) -> Option<Arc<MetadataResponse>> {
         self.distributions.get(package_id)
     }
 }
