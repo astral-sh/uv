@@ -595,6 +595,17 @@ async fn resolve(
         .dimmed()
     )?;
 
+    // Notify the user of any diagnostics.
+    for diagnostic in resolution.diagnostics() {
+        writeln!(
+            printer.stderr(),
+            "{}{} {}",
+            "warning".yellow().bold(),
+            ":".bold(),
+            diagnostic.message().bold()
+        )?;
+    }
+
     Ok(resolution)
 }
 

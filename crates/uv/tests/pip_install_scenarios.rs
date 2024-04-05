@@ -708,6 +708,7 @@ fn missing_extra() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    warning: The package `package-a==1.0.0` does not have an extra named `extra`.
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==1.0.0
@@ -1080,6 +1081,7 @@ fn extra_does_not_exist_backtrack() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    warning: The package `package-a==3.0.0` does not have an extra named `extra`.
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
      + package-a==3.0.0
