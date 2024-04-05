@@ -20,7 +20,7 @@ use pypi_types::Metadata10;
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_normalize::PackageName;
-use uv_resolver::InMemoryIndex;
+use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::BuildContext;
 
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
@@ -236,7 +236,13 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
         // Fetch the metadata for the distribution.
         let name = {
             let id = PackageId::from_url(source.url());
-            if let Some(metadata) = index.get_metadata(&id) {
+            if let Some(metadata) = index.get_metadata(&id).as_deref().and_then(|response| {
+                if let MetadataResponse::Found(metadata) = response {
+                    Some(metadata)
+                } else {
+                    None
+                }
+            }) {
                 // If the metadata is already in the index, return it.
                 metadata.name.clone()
             } else {
@@ -247,7 +253,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                 let name = metadata.name.clone();
 
                 // Insert the metadata into the index.
-                index.insert_metadata(id, metadata);
+                index.insert_metadata(id, MetadataResponse::Found(metadata));
 
                 name
             }

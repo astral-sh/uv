@@ -9,7 +9,7 @@ pub use python_requirement::PythonRequirement;
 pub use resolution::{AnnotationStyle, Diagnostic, DisplayResolutionGraph, ResolutionGraph};
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
-    BuildId, DefaultResolverProvider, InMemoryIndex, PackageVersionsResult,
+    BuildId, DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
     Reporter as ResolverReporter, Resolver, ResolverProvider, VersionsResponse,
     WheelMetadataResult,
 };

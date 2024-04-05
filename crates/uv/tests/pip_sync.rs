@@ -1100,8 +1100,7 @@ fn mismatched_name() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read: foo @ file://[TEMP_DIR]/foo-2.0.1-py3-none-any.whl
-      Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
+    error: Because foo was found, but has an invalid format and you require foo, we can conclude that the requirements are unsatisfiable.
     "###
     );
 

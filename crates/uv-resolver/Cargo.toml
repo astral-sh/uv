@@ -16,6 +16,7 @@ workspace = true
 cache-key = { workspace = true }
 distribution-filename = { workspace = true, features = ["serde"] }
 distribution-types = { workspace = true }
+install-wheel-rs = { workspace = true }
 once-map = { workspace = true }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }

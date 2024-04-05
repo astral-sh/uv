@@ -18,7 +18,7 @@ use distribution_types::{
 use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use pypi_types::{Hashes, Metadata23};
+use pypi_types::Hashes;
 use uv_distribution::to_precise;
 use uv_normalize::{ExtraName, PackageName};
 
@@ -28,7 +28,7 @@ use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage};
 use crate::redirect::apply_redirect;
-use crate::resolver::{InMemoryIndex, VersionsResponse};
+use crate::resolver::{InMemoryIndex, MetadataResponse, VersionsResponse};
 use crate::{Manifest, ResolveError};
 
 /// Indicate the style of annotation comments, used to indicate the dependencies that requested each
@@ -66,7 +66,7 @@ impl ResolutionGraph {
         selection: &SelectedDependencies<UvDependencyProvider>,
         pins: &FilePins,
         packages: &OnceMap<PackageName, VersionsResponse>,
-        distributions: &OnceMap<PackageId, Metadata23>,
+        distributions: &OnceMap<PackageId, MetadataResponse>,
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
         editables: Editables,
@@ -164,12 +164,19 @@ impl ResolutionGraph {
                             });
                         }
                     } else {
-                        let metadata = distributions.get(&dist.package_id()).unwrap_or_else(|| {
+                        let response = distributions.get(&dist.package_id()).unwrap_or_else(|| {
                             panic!(
                                 "Every package should have metadata: {:?}",
                                 dist.package_id()
                             )
                         });
+
+                        let MetadataResponse::Found(metadata) = &*response else {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.package_id()
+                            )
+                        };
 
                         if metadata.provides_extras.contains(extra) {
                             extras
@@ -211,12 +218,19 @@ impl ResolutionGraph {
                             });
                         }
                     } else {
-                        let metadata = distributions.get(&dist.package_id()).unwrap_or_else(|| {
+                        let response = distributions.get(&dist.package_id()).unwrap_or_else(|| {
                             panic!(
                                 "Every package should have metadata: {:?}",
                                 dist.package_id()
                             )
                         });
+
+                        let MetadataResponse::Found(metadata) = &*response else {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.package_id()
+                            )
+                        };
 
                         if metadata.provides_extras.contains(extra) {
                             extras
@@ -417,10 +431,16 @@ impl ResolutionGraph {
                 }
                 VersionOrUrl::Url(verbatim_url) => PackageId::from_url(verbatim_url.raw()),
             };
-            let md = index
+            let res = index
                 .distributions
                 .get(&package_id)
                 .expect("every package in resolution graph has metadata");
+            let MetadataResponse::Found(md) = &*res else {
+                panic!(
+                    "Every package should have metadata: {:?}",
+                    dist.package_id()
+                )
+            };
             for req in manifest.apply(&md.requires_dist) {
                 let Some(ref marker_tree) = req.marker else {
                     continue;
