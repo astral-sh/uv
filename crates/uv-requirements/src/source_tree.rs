@@ -18,7 +18,7 @@ use crate::ExtrasSpecification;
 
 /// A resolver for requirements specified via source trees.
 ///
-/// Used, e.g., to determine the the input requirements when a user specifies a `pyproject.toml`
+/// Used, e.g., to determine the input requirements when a user specifies a `pyproject.toml`
 /// file, which may require running PEP 517 build hooks to extract metadata.
 pub struct SourceTreeResolver<'a, Context: BuildContext + Send + Sync> {
     /// The requirements for the project.
