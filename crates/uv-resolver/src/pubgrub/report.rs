@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound;
 
 use derivative::Derivative;
@@ -17,7 +17,7 @@ use uv_normalize::PackageName;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::python_requirement::PythonRequirement;
-use crate::resolver::UnavailablePackage;
+use crate::resolver::{IncompletePackage, UnavailablePackage};
 
 use super::PubGrubPackage;
 
@@ -342,6 +342,7 @@ impl PubGrubReportFormatter<'_> {
         selector: &Option<CandidateSelector>,
         index_locations: &Option<IndexLocations>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
+        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
     ) -> IndexSet<PubGrubHint> {
         /// Returns `true` if pre-releases were allowed for a package.
         fn allowed_prerelease(package: &PubGrubPackage, selector: &CandidateSelector) -> bool {
@@ -354,7 +355,7 @@ impl PubGrubReportFormatter<'_> {
         let mut hints = IndexSet::default();
         match derivation_tree {
             DerivationTree::External(external) => match external {
-                External::NoVersions(package, set, _) => {
+                External::Unavailable(package, set, _) | External::NoVersions(package, set, _) => {
                     // Check for no versions due to pre-release options
                     if let Some(selector) = selector {
                         let any_prerelease = set.iter().any(|(start, end)| {
@@ -404,6 +405,7 @@ impl PubGrubReportFormatter<'_> {
                             index_locations.flat_index().peekable().peek().is_none();
 
                         if let PubGrubPackage::Package(name, ..) = package {
+                            // Add hints due to the package being entirely unavailable.
                             match unavailable_packages.get(name) {
                                 Some(UnavailablePackage::NoIndex) => {
                                     if no_find_links {
@@ -413,13 +415,55 @@ impl PubGrubReportFormatter<'_> {
                                 Some(UnavailablePackage::Offline) => {
                                     hints.insert(PubGrubHint::Offline);
                                 }
-                                _ => {}
+                                Some(UnavailablePackage::InvalidMetadata(reason)) => {
+                                    hints.insert(PubGrubHint::InvalidPackageMetadata {
+                                        package: package.clone(),
+                                        reason: reason.clone(),
+                                    });
+                                }
+                                Some(UnavailablePackage::InvalidStructure(reason)) => {
+                                    hints.insert(PubGrubHint::InvalidPackageStructure {
+                                        package: package.clone(),
+                                        reason: reason.clone(),
+                                    });
+                                }
+                                Some(UnavailablePackage::NotFound) => {}
+                                None => {}
+                            }
+
+                            // Add hints due to the package being unavailable at specific versions.
+                            if let Some(versions) = incomplete_packages.get(name) {
+                                for (version, incomplete) in versions.iter().rev() {
+                                    if set.contains(version) {
+                                        match incomplete {
+                                            IncompletePackage::Offline => {
+                                                hints.insert(PubGrubHint::Offline);
+                                            }
+                                            IncompletePackage::InvalidMetadata(reason) => {
+                                                hints.insert(PubGrubHint::InvalidVersionMetadata {
+                                                    package: package.clone(),
+                                                    version: version.clone(),
+                                                    reason: reason.clone(),
+                                                });
+                                            }
+                                            IncompletePackage::InvalidStructure(reason) => {
+                                                hints.insert(
+                                                    PubGrubHint::InvalidVersionStructure {
+                                                        package: package.clone(),
+                                                        version: version.clone(),
+                                                        reason: reason.clone(),
+                                                    },
+                                                );
+                                            }
+                                        }
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }
                 }
                 External::NotRoot(..) => {}
-                External::Unavailable(..) => {}
                 External::FromDependencyOf(..) => {}
             },
             DerivationTree::Derived(derived) => {
@@ -428,12 +472,14 @@ impl PubGrubReportFormatter<'_> {
                     selector,
                     index_locations,
                     unavailable_packages,
+                    incomplete_packages,
                 ));
                 hints.extend(self.hints(
                     &derived.cause2,
                     selector,
                     index_locations,
                     unavailable_packages,
+                    incomplete_packages,
                 ));
             }
         }
@@ -462,8 +508,36 @@ pub(crate) enum PubGrubHint {
     /// Requirements were unavailable due to lookups in the index being disabled and no extra
     /// index was provided via `--find-links`
     NoIndex,
-    /// A package was not found in the registry, but
+    /// A package was not found in the registry, but network access was disabled.
     Offline,
+    /// Metadata for a package could not be parsed.
+    InvalidPackageMetadata {
+        package: PubGrubPackage,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        reason: String,
+    },
+    /// The structure of a package was invalid (e.g., multiple `.dist-info` directories).
+    InvalidPackageStructure {
+        package: PubGrubPackage,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        reason: String,
+    },
+    /// Metadata for a package version could not be parsed.
+    InvalidVersionMetadata {
+        package: PubGrubPackage,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        version: Version,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        reason: String,
+    },
+    /// The structure of a package version was invalid (e.g., multiple `.dist-info` directories).
+    InvalidVersionStructure {
+        package: PubGrubPackage,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        version: Version,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        reason: String,
+    },
 }
 
 impl std::fmt::Display for PubGrubHint {
@@ -503,6 +577,56 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} Packages were unavailable because the network was disabled",
                     "hint".bold().cyan(),
                     ":".bold(),
+                )
+            }
+            Self::InvalidPackageMetadata { package, reason } => {
+                write!(
+                    f,
+                    "{}{} Metadata for {} could not be parsed:\n{}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.bold(),
+                    textwrap::indent(reason, "  ")
+                )
+            }
+            Self::InvalidPackageStructure { package, reason } => {
+                write!(
+                    f,
+                    "{}{} The structure of {} was invalid:\n{}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.bold(),
+                    textwrap::indent(reason, "  ")
+                )
+            }
+            Self::InvalidVersionMetadata {
+                package,
+                version,
+                reason,
+            } => {
+                write!(
+                    f,
+                    "{}{} Metadata for {}=={} could not be parsed:\n{}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.bold(),
+                    version.bold(),
+                    textwrap::indent(reason, "  ")
+                )
+            }
+            Self::InvalidVersionStructure {
+                package,
+                version,
+                reason,
+            } => {
+                write!(
+                    f,
+                    "{}{} The structure of {}=={} was invalid:\n{}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.bold(),
+                    version.bold(),
+                    textwrap::indent(reason, "  ")
                 )
             }
         }

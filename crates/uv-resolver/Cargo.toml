@@ -47,6 +47,7 @@ petgraph = { workspace = true }
 pubgrub = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
+textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
 tokio-stream = { workspace = true }
