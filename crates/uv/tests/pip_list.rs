@@ -21,6 +21,7 @@ fn install_command(context: &TestContext) -> Command {
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir);
 
     if cfg!(all(windows, debug_assertions)) {
@@ -42,6 +43,7 @@ fn list_empty() {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -84,6 +86,7 @@ fn list_single_no_editable() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -135,6 +138,7 @@ fn list_editable() {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -188,6 +192,7 @@ fn list_editable_only() {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -207,6 +212,7 @@ fn list_editable_only() {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -229,6 +235,7 @@ fn list_editable_only() {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -277,6 +284,7 @@ fn list_exclude() {
     .arg("--cache-dir")
     .arg(context.cache_dir.path())
     .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .env("UV_NO_WRAP", "1")
     .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -300,6 +308,7 @@ fn list_exclude() {
     .arg("--cache-dir")
     .arg(context.cache_dir.path())
     .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .env("UV_NO_WRAP", "1")
     .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -324,6 +333,7 @@ fn list_exclude() {
     .arg("--cache-dir")
     .arg(context.cache_dir.path())
     .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .env("UV_NO_WRAP", "1")
     .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -377,6 +387,7 @@ fn list_format_json() {
     .arg("--cache-dir")
     .arg(context.cache_dir.path())
     .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .env("UV_NO_WRAP", "1")
     .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -395,6 +406,7 @@ fn list_format_json() {
     .arg("--cache-dir")
     .arg(context.cache_dir.path())
     .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .env("UV_NO_WRAP", "1")
     .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -413,6 +425,7 @@ fn list_format_json() {
     .arg("--cache-dir")
     .arg(context.cache_dir.path())
     .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .env("UV_NO_WRAP", "1")
     .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -432,6 +445,7 @@ fn list_format_json() {
     .arg("--cache-dir")
     .arg(context.cache_dir.path())
     .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .env("UV_NO_WRAP", "1")
     .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -479,6 +493,7 @@ fn list_format_freeze() {
     .arg("--cache-dir")
     .arg(context.cache_dir.path())
     .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .env("UV_NO_WRAP", "1")
     .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -500,6 +515,7 @@ fn list_format_freeze() {
     .arg("--cache-dir")
     .arg(context.cache_dir.path())
     .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .env("UV_NO_WRAP", "1")
     .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -518,6 +534,7 @@ fn list_format_freeze() {
     .arg("--cache-dir")
     .arg(context.cache_dir.path())
     .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .env("UV_NO_WRAP", "1")
     .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -539,6 +556,7 @@ fn list_format_freeze() {
     .arg("--cache-dir")
     .arg(context.cache_dir.path())
     .env("VIRTUAL_ENV", context.venv.as_os_str())
+    .env("UV_NO_WRAP", "1")
     .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0

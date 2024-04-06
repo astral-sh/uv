@@ -157,6 +157,7 @@ impl TestContext {
             .arg("--cache-dir")
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
             .current_dir(self.temp_dir.path());
 
         if cfg!(all(windows, debug_assertions)) {
@@ -189,6 +190,7 @@ impl TestContext {
             .arg("--cache-dir")
             .arg(self.cache_dir.path())
             .env("VIRTUAL_ENV", self.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
             .current_dir(&self.temp_dir);
 
         if cfg!(all(windows, debug_assertions)) {

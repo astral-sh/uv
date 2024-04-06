@@ -24,6 +24,7 @@ fn install_command(context: &TestContext) -> Command {
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir);
 
     if cfg!(all(windows, debug_assertions)) {
@@ -45,6 +46,7 @@ fn show_empty() {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: false
     exit_code: 1
@@ -92,6 +94,7 @@ fn show_requires_multiple() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -149,6 +152,7 @@ fn show_python_version_marker() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -199,6 +203,7 @@ fn show_found_single_package() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -255,6 +260,7 @@ fn show_found_multiple_packages() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -318,6 +324,7 @@ fn show_found_one_out_of_three() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -377,6 +384,7 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -429,6 +437,7 @@ fn show_empty_quiet() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: false
     exit_code: 1
@@ -464,6 +473,7 @@ fn show_editable() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -526,6 +536,7 @@ fn show_required_by_multiple() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0

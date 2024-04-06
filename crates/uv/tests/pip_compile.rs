@@ -882,11 +882,8 @@ fn compile_python_37() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the requested Python version (3.7) does not satisfy Python>=3.8
-          and black==23.10.1 depends on Python>=3.8, we can conclude that
-          black==23.10.1 cannot be used.
-          And because you require black==23.10.1, we can conclude that the
-          requirements are unsatisfiable.
+      ╰─▶ Because the requested Python version (3.7) does not satisfy Python>=3.8 and black==23.10.1 depends on Python>=3.8, we can conclude that black==23.10.1 cannot be used.
+          And because you require black==23.10.1, we can conclude that the requirements are unsatisfiable.
     "###);
 
     Ok(())
@@ -1458,9 +1455,7 @@ fn conflicting_direct_url_dependency() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of werkzeug==3.0.0 and you require
-          werkzeug==3.0.0, we can conclude that the requirements are
-          unsatisfiable.
+      ╰─▶ Because there is no version of werkzeug==3.0.0 and you require werkzeug==3.0.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -1584,10 +1579,8 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only werkzeug<3.0.0 is available and flask==3.0.0 depends on
-          werkzeug>=3.0.0, we can conclude that flask==3.0.0 cannot be used.
-          And because you require flask==3.0.0, we can conclude that the
-          requirements are unsatisfiable.
+      ╰─▶ Because only werkzeug<3.0.0 is available and flask==3.0.0 depends on werkzeug>=3.0.0, we can conclude that flask==3.0.0 cannot be used.
+          And because you require flask==3.0.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -1936,8 +1929,7 @@ fn requirement_constraint_override_url() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==3.7.0 and you require
-          anyio==3.7.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there is no version of anyio==3.7.0 and you require anyio==3.7.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -2149,8 +2141,7 @@ dependencies = ["anyio==3.7.0", "anyio==4.0.0"]
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because my-project depends on anyio==3.7.0 and my-project depends on
-          anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because my-project depends on anyio==3.7.0 and my-project depends on anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -2181,8 +2172,7 @@ dependencies = ["anyio==300.1.4"]
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==300.1.4 and my-project depends on
-          anyio==300.1.4, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there is no version of anyio==300.1.4 and my-project depends on anyio==300.1.4, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -2207,6 +2197,7 @@ fn compile_exclude_newer() -> Result<()> {
             .arg("--cache-dir")
             .arg(context.cache_dir.path())
             .env("VIRTUAL_ENV", context.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
             .current_dir(context.temp_dir.path()), @r###"
     success: true
     exit_code: 0
@@ -2231,6 +2222,7 @@ fn compile_exclude_newer() -> Result<()> {
             .arg("--cache-dir")
             .arg(context.cache_dir.path())
             .env("VIRTUAL_ENV", context.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
             .current_dir(context.temp_dir.path()), @r###"
     success: true
     exit_code: 0
@@ -2254,6 +2246,7 @@ fn compile_exclude_newer() -> Result<()> {
             .arg("--cache-dir")
             .arg(context.cache_dir.path())
             .env("VIRTUAL_ENV", context.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
             .current_dir(context.temp_dir.path()), @r###"
     success: false
     exit_code: 2
@@ -2628,11 +2621,8 @@ fn compile_yanked_version_indirect() -> Result<()> {
               attrs<=20.3.0
               attrs==21.1.0
               attrs>=21.2.0
-          and attrs==21.1.0 is unusable because it was yanked (reason:
-          Installable but not importable on Python 3.4), we can conclude that
-          attrs>20.3.0,<21.2.0 cannot be used.
-          And because you require attrs>20.3.0,<21.2.0, we can conclude that the
-          requirements are unsatisfiable.
+          and attrs==21.1.0 is unusable because it was yanked (reason: Installable but not importable on Python 3.4), we can conclude that attrs>20.3.0,<21.2.0 cannot be used.
+          And because you require attrs>20.3.0,<21.2.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -3331,6 +3321,7 @@ fn compile_html() -> Result<()> {
             .arg("--index-url")
             .arg("https://download.pytorch.org/whl")
             .env("VIRTUAL_ENV", context.venv.as_os_str())
+            .env("UV_NO_WRAP", "1")
             .current_dir(context.temp_dir.path()), @r###"
     success: true
     exit_code: 0
@@ -4225,12 +4216,9 @@ fn no_index_requirements_txt() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because tqdm was not found in the provided package locations and you
-          require tqdm, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because tqdm was not found in the provided package locations and you require tqdm, we can conclude that the requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled
-          and no additional package locations were provided (try: `--find-links
-          <uri>`)
+          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "###
     );
 
@@ -4336,8 +4324,7 @@ fn offline_registry() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because black==23.10.1 was not found in the cache and you require
-          black==23.10.1, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because black==23.10.1 was not found in the cache and you require black==23.10.1, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###
@@ -4464,8 +4451,7 @@ fn offline_find_links() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can
-          conclude that the requirements are unsatisfiable.
+      ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###
@@ -4484,8 +4470,7 @@ fn offline_find_links() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can
-          conclude that the requirements are unsatisfiable.
+      ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that the requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled
     "###
@@ -4569,9 +4554,7 @@ fn invalid_metadata_requires_python() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because validation==2.0.0 is unusable because the package metadata could
-          not be parsed and you require validation==2.0.0, we can conclude that
-          the requirements are unsatisfiable.
+      ╰─▶ Because validation==2.0.0 is unusable because the package metadata could not be parsed and you require validation==2.0.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -4597,9 +4580,7 @@ fn invalid_metadata_multiple_dist_info() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because validation==3.0.0 is unusable because the package has an invalid
-          format and you require validation==3.0.0, we can conclude that the
-          requirements are unsatisfiable.
+      ╰─▶ Because validation==3.0.0 is unusable because the package has an invalid format and you require validation==3.0.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -4814,8 +4795,7 @@ fn compile_constraints_incompatible_url() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only anyio>=4 is available and you require anyio<4, we can
-          conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only anyio>=4 is available and you require anyio<4, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -4838,8 +4818,7 @@ fn index_url_in_requirements() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio<4 was not found in the package registry and you require
-          anyio<4, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because anyio<4 was not found in the package registry and you require anyio<4, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -5173,8 +5152,7 @@ fn compile_constraints_incompatible_version() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require filelock==1.0.0 and you require filelock==3.8.0, we
-          can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because you require filelock==1.0.0 and you require filelock==3.8.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -5202,8 +5180,7 @@ fn conflicting_url_markers() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require filelock==1.0.0 and you require filelock==3.8.0, we
-          can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because you require filelock==1.0.0 and you require filelock==3.8.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -5351,8 +5328,7 @@ fn override_with_incompatible_constraint() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require anyio>=3.0.0 and you require anyio<3.0.0, we can
-          conclude that the requirements are unsatisfiable.
+      ╰─▶ Because you require anyio>=3.0.0 and you require anyio<3.0.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -6015,6 +5991,7 @@ fn no_stream() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -6087,11 +6064,8 @@ requires-python = "<=3.8"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.1) does not satisfy Python<=3.8
-          and example==0.0.0 depends on Python<=3.8, we can conclude that
-          example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we
-          can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because the current Python version (3.12.1) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
+          And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -6483,7 +6457,7 @@ fn unnamed_path_requirement() -> Result<()> {
 fn unnamed_git_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("git+https://github.com/pallets/flask.git")?;
+    requirements_in.write_str("git+https://github.com/pallets/flask.git@3.0.0")?;
 
     uv_snapshot!(context.compile()
         .arg("requirements.in"), @r###"
@@ -6496,7 +6470,7 @@ fn unnamed_git_requirement() -> Result<()> {
         # via flask
     click==8.1.7
         # via flask
-    flask @ git+https://github.com/pallets/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe
+    flask @ git+https://github.com/pallets/flask.git@735a4701d6d5e848241e7d7535db898efb62d400
     itsdangerous==2.1.2
         # via flask
     jinja2==3.1.3
@@ -7105,19 +7079,16 @@ requires-python = ">3.8"
         .arg("requirements.in")
         .arg("--override")
         .arg("overrides.txt"), @r###"
-        success: false
-        exit_code: 1
-        ----- stdout -----
+    success: false
+    exit_code: 1
+    ----- stdout -----
 
-        ----- stderr -----
-          × No solution found when resolving dependencies:
-          ╰─▶ Because there is no version of anyio==0.0.0 and lib==0.0.0 depends on
-              anyio==0.0.0, we can conclude that lib==0.0.0 cannot be used.
-              And because only lib==0.0.0 is available and example==0.0.0 depends on
-              lib, we can conclude that example==0.0.0 cannot be used.
-              And because only example==0.0.0 is available and you require example, we
-              can conclude that the requirements are unsatisfiable.
-        "###
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of anyio==0.0.0 and lib==0.0.0 depends on anyio==0.0.0, we can conclude that lib==0.0.0 cannot be used.
+          And because only lib==0.0.0 is available and example==0.0.0 depends on lib, we can conclude that example==0.0.0 cannot be used.
+          And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
+    "###
     );
 
     // Now constrain `anyio` to the local version.
@@ -7283,8 +7254,7 @@ fn compile_index_url_first_match() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of jinja2==3.1.0 and you require
-          jinja2==3.1.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because there is no version of jinja2==3.1.0 and you require jinja2==3.1.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
