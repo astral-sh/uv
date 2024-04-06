@@ -838,13 +838,18 @@ fn install_no_index() -> Result<()> {
         .arg("--no-index")
         .arg("--strict"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Because markupsafe==2.1.3 was not found in the provided package locations and you require markupsafe==2.1.3, we can conclude that the requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because markupsafe==2.1.3 was not found in the provided package
+          locations and you require markupsafe==2.1.3, we can conclude that the
+          requirements are unsatisfiable.
 
-    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+          hint: Packages were unavailable because index lookups were disabled
+          and no additional package locations were provided (try: `--find-links
+          <uri>`)
     "###
     );
 
@@ -890,13 +895,18 @@ fn install_no_index_cached() -> Result<()> {
         .arg("--no-index")
         .arg("--strict"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Because markupsafe==2.1.3 was not found in the provided package locations and you require markupsafe==2.1.3, we can conclude that the requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because markupsafe==2.1.3 was not found in the provided package
+          locations and you require markupsafe==2.1.3, we can conclude that the
+          requirements are unsatisfiable.
 
-    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+          hint: Packages were unavailable because index lookups were disabled
+          and no additional package locations were provided (try: `--find-links
+          <uri>`)
     "###
     );
 
@@ -1096,11 +1106,13 @@ fn mismatched_name() -> Result<()> {
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Because foo was found, but has an invalid format and you require foo, we can conclude that the requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because foo was found, but has an invalid format and you require foo, we
+          can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -2556,13 +2568,15 @@ fn find_links_offline_no_match() -> Result<()> {
         .arg("--find-links")
         .arg(context.workspace_root.join("scripts/links/")), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Because numpy was not found in the cache and you require numpy, we can conclude that the requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because numpy was not found in the cache and you require numpy, we can
+          conclude that the requirements are unsatisfiable.
 
-    hint: Packages were unavailable because the network was disabled
+          hint: Packages were unavailable because the network was disabled
     "###
     );
 
@@ -2581,13 +2595,15 @@ fn offline() -> Result<()> {
         .arg("requirements.in")
         .arg("--offline"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Because black==23.10.1 was not found in the cache and you require black==23.10.1, we can conclude that the requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because black==23.10.1 was not found in the cache and you require
+          black==23.10.1, we can conclude that the requirements are unsatisfiable.
 
-    hint: Packages were unavailable because the network was disabled
+          hint: Packages were unavailable because the network was disabled
     "###
     );
 
@@ -3011,12 +3027,16 @@ requires-python = "<=3.5"
     uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.in"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Because the current Python version (3.12.1) does not satisfy Python<=3.5 and example==0.0.0 depends on Python<=3.5, we can conclude that example==0.0.0 cannot be used.
-    And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.12.1) does not satisfy Python<=3.5
+          and example==0.0.0 depends on Python<=3.5, we can conclude that
+          example==0.0.0 cannot be used.
+          And because only example==0.0.0 is available and you require example, we
+          can conclude that the requirements are unsatisfiable.
     "###
     );
 
