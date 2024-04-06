@@ -21,6 +21,7 @@ fn prune_command(context: &TestContext) -> Command {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir);
 
     if cfg!(all(windows, debug_assertions)) {
@@ -41,6 +42,7 @@ fn sync_command(context: &TestContext) -> Command {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir);
 
     if cfg!(all(windows, debug_assertions)) {

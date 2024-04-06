@@ -482,6 +482,7 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
         .arg("--python")
         .arg("3.12")
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .assert()
         .success();
 
