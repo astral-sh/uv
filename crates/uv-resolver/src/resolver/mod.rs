@@ -429,18 +429,10 @@ impl<
                     .await?
                 {
                     Dependencies::Unavailable(reason) => {
-                        let message = {
-                            if matches!(package, PubGrubPackage::Root(_)) {
-                                // Including front-matter for the root package is redundant
-                                reason.clone()
-                            } else {
-                                format!("its dependencies are unusable because {reason}")
-                            }
-                        };
                         state.add_incompatibility(Incompatibility::unavailable(
                             package.clone(),
                             version.clone(),
-                            message,
+                            reason.clone(),
                         ));
                         continue;
                     }
