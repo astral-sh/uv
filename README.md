@@ -63,6 +63,10 @@ brew install uv
 
 # With Pacman.
 pacman -S uv
+
+# With Cave.
+cave resolve -x repository/rust
+cave resolve -x uv
 ```
 
 To create a virtual environment:
