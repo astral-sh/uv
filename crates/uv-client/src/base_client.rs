@@ -19,7 +19,7 @@ use crate::middleware::OfflineMiddleware;
 use crate::tls::Roots;
 use crate::{tls, Connectivity};
 
-/// A builder for an [`RegistryClient`].
+/// A builder for an [`BaseClient`].
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
     keyring_provider: KeyringProvider,
