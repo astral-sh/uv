@@ -1,3 +1,3 @@
-pub use downloads::PythonDownloadMetadata;
+pub use downloads::{Platform, PythonDownloadMetadata};
 
 mod downloads;

@@ -4804,6 +4804,9 @@ dependencies = [
 [[package]]
 name = "uv-toolchain"
 version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "uv-types"
