@@ -413,18 +413,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             .instrument(info_span!("wheel", wheel = %dist))
         };
 
-        let req = self
-            .client
-            .uncached_client()
-            .get(url)
-            .header(
-                // `reqwest` defaults to accepting compressed responses.
-                // Specify identity encoding to get consistent .whl downloading
-                // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
-                "accept-encoding",
-                reqwest::header::HeaderValue::from_static("identity"),
-            )
-            .build()?;
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(
                 self.build_context
@@ -438,7 +426,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         let archive = self
             .client
             .cached_client()
-            .get_serde(req, &http_entry, cache_control, download)
+            .get_serde(self.request(url)?, &http_entry, cache_control, download)
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,
@@ -495,18 +483,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             .instrument(info_span!("wheel", wheel = %dist))
         };
 
-        let req = self
-            .client
-            .uncached_client()
-            .get(url)
-            .header(
-                // `reqwest` defaults to accepting compressed responses.
-                // Specify identity encoding to get consistent .whl downloading
-                // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
-                "accept-encoding",
-                reqwest::header::HeaderValue::from_static("identity"),
-            )
-            .build()?;
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(
                 self.build_context
@@ -520,7 +496,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         let archive = self
             .client
             .cached_client()
-            .get_serde(req, &http_entry, cache_control, download)
+            .get_serde(self.request(url)?, &http_entry, cache_control, download)
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,
@@ -528,6 +504,21 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             })?;
 
         Ok(archive)
+    }
+
+    /// Returns a GET [`reqwest::Request`] for the given URL.
+    fn request(&self, url: Url) -> Result<reqwest::Request, reqwest::Error> {
+        self.client
+            .uncached_client()
+            .get(url)
+            .header(
+                // `reqwest` defaults to accepting compressed responses.
+                // Specify identity encoding to get consistent .whl downloading
+                // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
+                "accept-encoding",
+                reqwest::header::HeaderValue::from_static("identity"),
+            )
+            .build()
     }
 
     /// Return the [`IndexLocations`] used by this resolver.
