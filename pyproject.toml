@@ -41,7 +41,7 @@ manifest-path = "crates/uv/Cargo.toml"
 module-name = "uv"
 python-source = "python"
 strip = true
-include = ["rust-toolchain.toml"]
+include = [{ path = "rust-toolchain.toml", format = ["sdist", "wheel"] }, { path = "LICENSE-APACHE", format = "sdist" }, { path = "LICENSE-MIT", format = "sdist" }]
 
 [tool.rooster]
 major_labels = []  # We do not use the major version number
