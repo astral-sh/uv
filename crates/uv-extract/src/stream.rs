@@ -151,12 +151,28 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin, P: AsRef<Path>>(
 /// Unzip a `.tar.gz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
-pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
+pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let reader = tokio::io::BufReader::new(reader);
     let decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
+    let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
+        .set_preserve_mtime(false)
+        .build();
+    Ok(untar_in(&mut archive, target.as_ref()).await?)
+}
+
+/// Unzip a `.tar.zst` archive into the target directory, without requiring `Seek`.
+///
+/// This is useful for unpacking files as they're being downloaded.
+pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
+    target: impl AsRef<Path>,
+) -> Result<(), Error> {
+    let reader = tokio::io::BufReader::new(reader);
+    let decompressed_bytes = async_compression::tokio::bufread::ZstdDecoder::new(reader);
+
     let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
         .set_preserve_mtime(false)
         .build();
@@ -190,7 +206,22 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
         })
     {
-        untar(reader, target).await?;
+        untar_gz(reader, target).await?;
+        return Ok(());
+    }
+
+    // `.tar.zst`
+    if source
+        .as_ref()
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zst"))
+        && source.as_ref().file_stem().is_some_and(|stem| {
+            Path::new(stem)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
+        })
+    {
+        untar_zst(reader, target).await?;
         return Ok(());
     }
 

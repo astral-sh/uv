@@ -13,7 +13,7 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-async-compression = { workspace = true, features = ["gzip"] }
+async-compression = { workspace = true, features = ["gzip", "zstd"] }
 async_zip = { workspace = true, features = ["tokio"] }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
