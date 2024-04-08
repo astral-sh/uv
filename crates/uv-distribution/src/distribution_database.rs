@@ -358,6 +358,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             .instrument(info_span!("wheel", wheel = %dist))
         };
 
+        let req = self.request(url.clone())?;
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(
                 self.build_context
@@ -367,11 +368,10 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
-
         let archive = self
             .client
             .cached_client()
-            .get_serde(self.request(url)?, &http_entry, cache_control, download)
+            .get_serde(req, &http_entry, cache_control, download)
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,
@@ -428,6 +428,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             .instrument(info_span!("wheel", wheel = %dist))
         };
 
+        let req = self.request(url.clone())?;
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(
                 self.build_context
@@ -441,7 +442,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         let archive = self
             .client
             .cached_client()
-            .get_serde(self.request(url)?, &http_entry, cache_control, download)
+            .get_serde(req, &http_entry, cache_control, download)
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback(err) => err,
