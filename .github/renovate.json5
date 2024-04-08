@@ -29,6 +29,12 @@
       matchManagers: ["pre-commit"],
       description: "Weekly update of pre-commit dependencies",
     },
+    {
+      groupName: "reqwest",
+      matchManagers: ["cargo"],
+      matchPackagePatterns: ["reqwest"],
+      description: "Weekly update of reqwest dependencies",
+    },
   ],
   vulnerabilityAlerts: {
     commitMessageSuffix: "",
