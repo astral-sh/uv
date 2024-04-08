@@ -107,7 +107,22 @@ pub async fn archive<R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin>(
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
         })
     {
-        crate::stream::untar(reader, target).await?;
+        crate::stream::untar_gz(reader, target).await?;
+        return Ok(());
+    }
+
+    // `.tar.zst`
+    if source
+        .as_ref()
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zst"))
+        && source.as_ref().file_stem().is_some_and(|stem| {
+            Path::new(stem)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
+        })
+    {
+        crate::stream::untar_zst(reader, target).await?;
         return Ok(());
     }
 
