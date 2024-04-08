@@ -29,6 +29,12 @@
       matchManagers: ["pre-commit"],
       description: "Weekly update of pre-commit dependencies",
     },
+    {
+      groupName: "Rust dev-dependencies",
+      matchManagers: ["cargo"],
+      matchDepTypes: ["devDependencies"],
+      description: "Weekly update of Rust development dependencies",
+    },
   ],
   vulnerabilityAlerts: {
     commitMessageSuffix: "",
