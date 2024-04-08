@@ -60,6 +60,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
 
     let client = uv_client::BaseClientBuilder::new().build();
 
+    info!("Fetching requested versions...");
     let mut tasks = futures::stream::iter(downloads.iter())
         .map(|download| {
             async {
@@ -71,29 +72,36 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
         .buffered(4);
 
     let mut results = Vec::new();
+    let mut downloaded = 0;
     while let Some(task) = tasks.next().await {
         let (version, result) = task;
         let path = match result? {
             DownloadResult::AlreadyAvailable(path) => {
-                info!("Found existing download of {}", version);
+                info!("Found existing download for v{}", version);
                 path
             }
             DownloadResult::Fetched(path) => {
-                info!("Downloaded {} to {}", version, &path.user_display());
+                info!("Downloaded v{} to {}", version, &path.user_display());
+                downloaded += 1;
                 path
             }
         };
         results.push((version, path));
     }
 
-    let s = if downloads.len() == 1 { "" } else { "s" };
-    info!(
-        "Fetched {} in {}s",
-        format!("{} version{}", downloads.len(), s),
-        start.elapsed().as_secs()
-    );
+    if downloaded > 0 {
+        let s = if downloaded == 1 { "" } else { "s" };
+        info!(
+            "Fetched {} in {}s",
+            format!("{} version{}", downloaded, s),
+            start.elapsed().as_secs()
+        );
+    } else {
+        info!("All versions downloaded already.");
+    };
 
     // Order matters here, as we overwrite previous links
+    info!("Installing to `{}`...", bootstrap_dir.user_display());
     let mut links = HashMap::new();
     for (version, path) in results {
         // TODO(zanieb): This path should be a part of the download metadata
@@ -131,11 +139,13 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     }
     for (target, executable) in links.iter().sorted() {
         info!(
-            "Linked {} to {}",
+            "Linked `{}` to `{}`",
             target.user_display(),
             executable.user_display()
         );
     }
+
+    info!("Installed {} versions", requests.len());
 
     Ok(())
 }
