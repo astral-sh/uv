@@ -6,6 +6,7 @@ use thiserror::Error;
 use url::Url;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
+use pep508_rs::split_scheme;
 use pypi_types::{DistInfoMetadata, Hashes, Yanked};
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
@@ -51,10 +52,12 @@ impl File {
                 .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(|dt| dt.timestamp_millis()),
-            url: if file.url.contains("://") {
-                FileLocation::AbsoluteUrl(file.url)
-            } else {
-                FileLocation::RelativeUrl(base.to_string(), file.url)
+            url: {
+                if split_scheme(&file.url).is_some() {
+                    FileLocation::AbsoluteUrl(file.url)
+                } else {
+                    FileLocation::RelativeUrl(base.to_string(), file.url)
+                }
             },
             yanked: file.yanked,
         })
