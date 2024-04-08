@@ -6,7 +6,7 @@ use console::{style, Key, Term};
 /// This is a slimmed-down version of `dialoguer::Confirm`, with the post-confirmation report
 /// enabled.
 pub(crate) fn confirm(message: &str, term: &Term, default: bool) -> Result<bool> {
-    ctrlc::set_handler(move || {
+    let handler_set = ctrlc::set_handler(move || {
         let term = Term::stderr();
         term.show_cursor().ok();
         term.flush().ok();
@@ -17,7 +17,13 @@ pub(crate) fn confirm(message: &str, term: &Term, default: bool) -> Result<bool>
         } else {
             130
         });
-    })?;
+    });
+
+    // silence MultipleHandlers error from ctrlc
+    match handler_set {
+        Ok(_) | Err(ctrlc::Error::MultipleHandlers) => {}
+        Err(e) => return Err(e.into()),
+    }
 
     let prompt = format!(
         "{} {} {} {} {}",
