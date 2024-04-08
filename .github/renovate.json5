@@ -35,6 +35,12 @@
       matchDepTypes: ["devDependencies"],
       description: "Weekly update of Rust development dependencies",
     },
+    {
+      groupName: "pyo3",
+      matchManagers: ["cargo"],
+      matchPackagePatterns: ["pyo3"],
+      description: "Weekly update of pyo3 dependencies",
+    },
   ],
   vulnerabilityAlerts: {
     commitMessageSuffix: "",
