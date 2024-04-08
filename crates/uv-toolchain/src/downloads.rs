@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{self, Display};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -17,9 +17,9 @@ use uv_fs::Simplified;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("operating system not supported: {0}")]
-    OsNotSupported(&'static str),
+    OsNotSupported(String),
     #[error("architecture not supported: {0}")]
-    ArchNotSupported(&'static str),
+    ArchNotSupported(String),
     #[error("libc type could not be detected")]
     LibcNotDetected(),
     #[error("invalid python version: {0}")]
@@ -134,15 +134,6 @@ impl FromStr for PythonDownloadRequest {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Arch {
-    Arm64,
-    I686,
-    Ppc64Le,
-    S390X,
-    X86_64,
-}
-
-#[derive(Debug, PartialEq)]
 pub enum Libc {
     Gnu,
     Musl,
@@ -153,14 +144,6 @@ pub enum Libc {
 pub enum ImplementationName {
     Cpython,
 }
-
-#[derive(Debug, PartialEq)]
-pub enum Os {
-    Darwin,
-    Linux,
-    Windows,
-}
-
 #[derive(Debug, PartialEq)]
 pub struct Platform {
     os: Os,
@@ -297,37 +280,130 @@ impl Platform {
     }
 }
 
-impl Arch {
-    fn from_env() -> Result<Self, Error> {
-        match std::env::consts::ARCH {
-            "arm64" | "aarch64" => Ok(Arch::Arm64),
-            "i686" => Ok(Arch::I686),
-            "ppc64le" => Ok(Arch::Ppc64Le),
-            "s390x" => Ok(Arch::S390X),
-            "x86_64" => Ok(Arch::X86_64),
-            arch => Err(Error::ArchNotSupported(arch)),
+/// All supported operating systems.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Os {
+    Windows,
+    Linux,
+    Macos,
+    FreeBsd,
+    NetBsd,
+    OpenBsd,
+    Dragonfly,
+    Illumos,
+    Haiku,
+}
+
+impl fmt::Display for Os {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Self::Windows => write!(f, "Windows"),
+            Self::Macos => write!(f, "MacOS"),
+            Self::FreeBsd => write!(f, "FreeBSD"),
+            Self::NetBsd => write!(f, "NetBSD"),
+            Self::Linux => write!(f, "Linux"),
+            Self::OpenBsd => write!(f, "OpenBSD"),
+            Self::Dragonfly => write!(f, "DragonFly"),
+            Self::Illumos => write!(f, "Illumos"),
+            Self::Haiku => write!(f, "Haiku"),
         }
     }
 }
 
 impl Os {
-    fn from_env() -> Result<Self, Error> {
-        match std::env::consts::OS {
-            "linux" => Ok(Os::Linux),
-            "windows" => Ok(Os::Windows),
-            "macos" => Ok(Os::Darwin),
-            os => Err(Error::OsNotSupported(os)),
+    pub(crate) fn from_env() -> Result<Self, Error> {
+        Self::from_str(std::env::consts::OS)
+    }
+}
+
+impl FromStr for Os {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "windows" => Ok(Self::Windows),
+            "linux" => Ok(Self::Linux),
+            "macos" => Ok(Self::Macos),
+            "freebsd" => Ok(Self::FreeBsd),
+            "netbsd" => Ok(Self::NetBsd),
+            "openbsd" => Ok(Self::OpenBsd),
+            "dragonfly" => Ok(Self::Dragonfly),
+            "illumos" => Ok(Self::Illumos),
+            "haiku" => Ok(Self::Haiku),
+            _ => Err(Error::OsNotSupported(s.to_string())),
         }
     }
 }
 
+/// All supported CPU architectures
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum Arch {
+    Aarch64,
+    Armv6L,
+    Armv7L,
+    Powerpc64Le,
+    Powerpc64,
+    X86,
+    X86_64,
+    S390X,
+}
+
+impl fmt::Display for Arch {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Self::Aarch64 => write!(f, "aarch64"),
+            Self::Armv6L => write!(f, "armv6l"),
+            Self::Armv7L => write!(f, "armv7l"),
+            Self::Powerpc64Le => write!(f, "ppc64le"),
+            Self::Powerpc64 => write!(f, "ppc64"),
+            Self::X86 => write!(f, "i686"),
+            Self::X86_64 => write!(f, "x86_64"),
+            Self::S390X => write!(f, "s390x"),
+        }
+    }
+}
+
+impl FromStr for Arch {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "aarch64" | "arm64" => Ok(Self::Aarch64),
+            "armv6l" => Ok(Self::Armv6L),
+            "armv7l" => Ok(Self::Armv7L),
+            "powerpc64le" | "ppc64le" => Ok(Self::Powerpc64Le),
+            "powerpc64" | "ppc64" => Ok(Self::Powerpc64),
+            "x86" | "i686" | "i386" => Ok(Self::X86),
+            "x86_64" | "amd64" => Ok(Self::X86_64),
+            "s390x" => Ok(Self::S390X),
+            _ => Err(Error::ArchNotSupported(s.to_string())),
+        }
+    }
+}
+
+impl Arch {
+    pub(crate) fn from_env() -> Result<Self, Error> {
+        Self::from_str(std::env::consts::ARCH)
+    }
+}
+
 impl Libc {
-    fn from_env() -> Result<Self, Error> {
+    pub(crate) fn from_env() -> Result<Self, Error> {
         // TODO(zanieb): Perform this lookup
         match std::env::consts::OS {
             "linux" | "macos" => Ok(Libc::Gnu),
             "windows" => Ok(Libc::None),
             _ => Err(Error::LibcNotDetected()),
+        }
+    }
+}
+
+impl fmt::Display for Libc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Libc::Gnu => f.write_str("gnu"),
+            Libc::None => f.write_str("none"),
+            Libc::Musl => f.write_str("musl"),
         }
     }
 }

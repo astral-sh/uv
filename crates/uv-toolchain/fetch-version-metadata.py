@@ -80,8 +80,14 @@ _suffix_re = re.compile(
     )
 )
 
-# to match the output of the `arch` command
-ARCH_MAP = {"aarch64": "arm64"}
+# Normalized mappings to match the Rust types
+ARCH_MAP = {
+    "ppc64": "powerpc64",
+    "ppc64le": "powerpc64le",
+    "i686": "x86",
+    "i386": "x86",
+}
+OS_MAP = {"darwin": "macos"}
 
 
 def parse_filename(filename):
@@ -106,10 +112,8 @@ def normalize_triple(triple):
     triple = SPECIAL_TRIPLES.get(triple, triple)
     pieces = triple.split("-")
     try:
-        arch = pieces[0]
-        # Normalize
-        arch = normalize_arch(arch)
-        platform = pieces[2]
+        arch = normalize_arch(pieces[0])
+        operating_system = normalize_os(pieces[2])
         if pieces[2] == "linux":
             # On linux, the triple has four segments, the last one is the libc
             libc = pieces[3]
@@ -118,7 +122,7 @@ def normalize_triple(triple):
     except IndexError:
         logging.debug("Skipping %r: unknown triple", triple)
         return
-    return "%s-%s-%s" % (arch, platform, libc)
+    return "%s-%s-%s" % (arch, operating_system, libc)
 
 
 def normalize_arch(arch):
@@ -126,6 +130,10 @@ def normalize_arch(arch):
     pieces = arch.split("_")
     # Strip `_vN` from `x86_64`
     return "_".join(pieces[:2])
+
+
+def normalize_os(os):
+    return OS_MAP.get(os, os)
 
 
 def read_sha256(url):
@@ -208,15 +216,21 @@ def find():
         key=lambda x: x[:2],
         reverse=True,
     ):
-        for (arch, platform, libc), url in sorted(choices.items()):
-            key = "%s-%s.%s.%s-%s-%s-%s" % (interpreter, *py_ver, platform, arch, libc)
+        for (arch, operating_system, libc), url in sorted(choices.items()):
+            key = "%s-%s.%s.%s-%s-%s-%s" % (
+                interpreter,
+                *py_ver,
+                operating_system,
+                arch,
+                libc,
+            )
             logging.info("Found %s", key)
             sha256 = read_sha256(url)
 
             final_results[key] = {
                 "name": interpreter,
                 "arch": arch,
-                "os": platform,
+                "os": operating_system,
                 "libc": libc,
                 "major": py_ver[0],
                 "minor": py_ver[1],

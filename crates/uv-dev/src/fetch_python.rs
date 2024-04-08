@@ -1,6 +1,7 @@
 use fs_err as fs;
 use std::collections::HashMap;
-use std::{path::PathBuf, str::FromStr};
+
+use std::str::FromStr;
 
 use anyhow::Result;
 use clap::Parser;
@@ -21,7 +22,9 @@ use fs_err::tokio::symlink;
 use tracing::{info, info_span, Instrument};
 
 use uv_fs::Simplified;
-use uv_toolchain::{DownloadResult, Error, PythonDownload, PythonDownloadRequest};
+use uv_toolchain::{
+    DownloadResult, Error, PythonDownload, PythonDownloadRequest, TOOLCHAIN_DIRECTORY,
+};
 
 #[derive(Parser, Debug)]
 pub(crate) struct FetchPythonArgs {
@@ -31,11 +34,9 @@ pub(crate) struct FetchPythonArgs {
 pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let start = Instant::now();
 
-    let bootstrap_dir = std::env::var_os("UV_BOOTSTRAP_DIR")
-        .map(PathBuf::from)
-        .unwrap_or(std::env::current_dir()?.join("bin"));
+    let bootstrap_dir = &*TOOLCHAIN_DIRECTORY;
 
-    fs_err::create_dir_all(&bootstrap_dir)?;
+    fs_err::create_dir_all(bootstrap_dir)?;
 
     let versions = if args.versions.is_empty() {
         info!("Reading versions from file...");
@@ -65,7 +66,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let mut tasks = futures::stream::iter(downloads.iter())
         .map(|download| {
             async {
-                let result = download.fetch(&client, &bootstrap_dir).await;
+                let result = download.fetch(&client, bootstrap_dir).await;
                 (download.python_version(), result)
             }
             .instrument(info_span!("download", key = %download))
