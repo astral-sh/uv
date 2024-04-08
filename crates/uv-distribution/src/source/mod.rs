@@ -356,18 +356,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed()
             .instrument(info_span!("download", source_dist = %source))
         };
-        let req = self
-            .client
-            .uncached_client()
-            .get(url.clone())
-            .header(
-                // `reqwest` defaults to accepting compressed responses.
-                // Specify identity encoding to get consistent .whl downloading
-                // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
-                "accept-encoding",
-                reqwest::header::HeaderValue::from_static("identity"),
-            )
-            .build()?;
+        let req = self.request(url.clone())?;
         let manifest = self
             .client
             .cached_client()
@@ -460,18 +449,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed()
             .instrument(info_span!("download", source_dist = %source))
         };
-        let req = self
-            .client
-            .uncached_client()
-            .get(url.clone())
-            .header(
-                // `reqwest` defaults to accepting compressed responses.
-                // Specify identity encoding to get consistent .whl downloading
-                // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
-                "accept-encoding",
-                reqwest::header::HeaderValue::from_static("identity"),
-            )
-            .build()?;
+        let req = self.request(url.clone())?;
         let manifest = self
             .client
             .cached_client()
@@ -1102,6 +1080,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         debug!("Finished building (editable): {dist}");
         Ok((dist, disk_filename, filename, metadata))
+    }
+
+    /// Returns a GET [`reqwest::Request`] for the given URL.
+    fn request(&self, url: Url) -> Result<reqwest::Request, reqwest::Error> {
+        self.client
+            .uncached_client()
+            .get(url)
+            .header(
+                // `reqwest` defaults to accepting compressed responses.
+                // Specify identity encoding to get consistent .whl downloading
+                // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
+                "accept-encoding",
+                reqwest::header::HeaderValue::from_static("identity"),
+            )
+            .build()
     }
 }
 
