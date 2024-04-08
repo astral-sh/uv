@@ -279,7 +279,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: "Install Python"
-        run: apt-get update && apt-get install -y python3.9 python3-pip python3.9-venv
+        run: apt-get update && apt-get install -y python3.11 python3-pip python3.11-venv
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -290,10 +290,10 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Print Python path"
-        run: echo $(which python3.9)
+        run: echo $(which python3.11)
 
       - name: "Validate global Python install"
-        run: python3.9 scripts/check_system_python.py --uv ./uv
+        run: python3.11 scripts/check_system_python.py --uv ./uv
 
   system-test-fedora:
     needs: build-binary-linux
