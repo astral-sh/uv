@@ -83,6 +83,7 @@ jobs:
       - name: "Install required Python versions"
         run: |
           cargo run -p uv-dev -- fetch-python
+          echo "$PWD/bin" >> $GITHUB_PATH
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
@@ -91,7 +92,6 @@ jobs:
 
       - name: "Cargo test"
         run: |
-          source .env
           cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
       - name: "Smoke test (unix)"
