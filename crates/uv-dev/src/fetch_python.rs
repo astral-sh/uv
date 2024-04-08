@@ -97,11 +97,13 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let mut links = HashMap::new();
     for (version, path) in results {
         // TODO(zanieb): This path should be a part of the download metadata
-        let mut executable = path.join("install").join("bin").join("python3");
-
-        if cfg!(windows) {
-            executable = executable.with_extension("exe");
-        }
+        let executable = if cfg!(windows) {
+            path.join("install").join("bin").join("python.exe")
+        } else if cfg!(unix) {
+            path.join("install").join("bin").join("python3")
+        } else {
+            unimplemented!("Only Windows and Unix systems are supported.")
+        };
 
         for mut target in [
             bootstrap_dir.join(format!("python{}", version.python_full_version())),
