@@ -11,10 +11,9 @@ use itertools::Itertools;
 use tokio::io::AsyncReadExt;
 use tokio::{fs::File, time::Instant};
 
+use fs_err::tokio::hard_link;
+use fs_err::tokio::symlink;
 use tracing::{info, info_span, Instrument};
-
-#[cfg(unix)]
-use std::os::unix::fs::symlink;
 
 use uv_fs::Simplified;
 use uv_toolchain::{DownloadResult, Error, PythonDownload, PythonDownloadRequest};
@@ -106,10 +105,10 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
             // but if it's missing we don't want to error
             let _ = fs::remove_file(target);
             if cfg!(unix) {
-                symlink(&executable, target)?;
+                symlink(&executable, target).await?;
             } else if cfg!(windows) {
                 // Windows requires higher permissions for symbolic links
-                fs::hard_link(&executable, target)?;
+                hard_link(&executable, target).await?;
             } else {
                 panic!("Only Windows and Unix are supported");
             }
