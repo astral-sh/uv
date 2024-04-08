@@ -98,7 +98,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     for (version, path) in results {
         // TODO(zanieb): This path should be a part of the download metadata
         let executable = if cfg!(windows) {
-            path.join("install").join("bin").join("python.exe")
+            path.join("install").join("python.exe")
         } else if cfg!(unix) {
             path.join("install").join("bin").join("python3")
         } else {
