@@ -21,7 +21,7 @@ pub(crate) fn confirm(message: &str, term: &Term, default: bool) -> Result<bool>
 
     // silence MultipleHandlers error from ctrlc
     match handler_set {
-        Ok(_) | Err(ctrlc::Error::MultipleHandlers) => {}
+        Ok(()) | Err(ctrlc::Error::MultipleHandlers) => {}
         Err(e) => return Err(e.into()),
     }
 
