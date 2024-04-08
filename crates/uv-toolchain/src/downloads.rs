@@ -106,19 +106,18 @@ impl PythonDownloadRequest {
         self
     }
 
-    #[must_use]
     pub fn fill(mut self) -> Result<Self, Error> {
         if self.implementation.is_none() {
-            self.implementation = Some(ImplementationName::Cpython)
+            self.implementation = Some(ImplementationName::Cpython);
         }
         if self.arch.is_none() {
-            self.arch = Some(Arch::from_env()?)
+            self.arch = Some(Arch::from_env()?);
         }
         if self.os.is_none() {
-            self.os = Some(Os::from_env()?)
+            self.os = Some(Os::from_env()?);
         }
         if self.libc.is_none() {
-            self.libc = Some(Libc::from_env()?)
+            self.libc = Some(Libc::from_env()?);
         }
         Ok(self)
     }
@@ -129,7 +128,7 @@ impl FromStr for PythonDownloadRequest {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // TOOD(zanieb): Implement parsing of additional request parts
-        let version = PythonVersion::from_str(s).map_err(|err| Error::InvalidPythonVersion(err))?;
+        let version = PythonVersion::from_str(s).map_err(Error::InvalidPythonVersion)?;
         Ok(Self::new(Some(version), None, None, None, None))
     }
 }
@@ -176,12 +175,7 @@ include!("python_versions.inc");
 impl PythonDownload {
     /// Return the [`PythonDownload`] corresponding to the key, if it exists.
     pub fn from_key(key: &str) -> Option<&PythonDownload> {
-        for value in PYTHON_DOWNLOADS {
-            if value.key == key {
-                return Some(value);
-            }
-        }
-        None
+        PYTHON_DOWNLOADS.iter().find(|&value| value.key == key)
     }
 
     pub fn from_request(request: &PythonDownloadRequest) -> Option<&'static PythonDownload> {
@@ -234,7 +228,7 @@ impl PythonDownload {
         path: &Path,
     ) -> Result<PathBuf, Error> {
         let url = Url::parse(self.url)?;
-        let path = path.join(self.key).to_path_buf();
+        let path = path.join(self.key).clone();
 
         // If it already exists, return it
         if path.is_dir() {
@@ -248,7 +242,7 @@ impl PythonDownload {
         response.error_for_status_ref()?;
 
         // Download and extract into a temporary directory.
-        let temp_dir = tempfile::tempdir().map_err(|err| Error::DownloadDirError(err))?;
+        let temp_dir = tempfile::tempdir().map_err(Error::DownloadDirError)?;
 
         debug!(
             "Downloading {url} to temporary location {}",

@@ -1,11 +1,10 @@
+use fs_err as fs;
 use std::collections::HashMap;
-use std::fs;
 use std::{path::PathBuf, str::FromStr};
 
 use anyhow::Result;
 use clap::Parser;
 
-use fs_err::hard_link;
 use futures::StreamExt;
 
 use itertools::Itertools;
@@ -14,8 +13,6 @@ use tokio::{fs::File, time::Instant};
 
 use tracing::{info, info_span, Instrument};
 
-#[cfg(windows)]
-use std::fs::hard_link;
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
 
@@ -37,7 +34,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     fs_err::create_dir_all(&bootstrap_dir)?;
 
     let versions = if args.versions.is_empty() {
-        println!("Reading versions from file...");
+        info!("Reading versions from file...");
         read_versions_file().await?
     } else {
         args.versions
@@ -102,9 +99,11 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
             let _ = fs::remove_file(target);
             if cfg!(unix) {
                 symlink(&executable, target)?;
-            } else {
+            } else if cfg!(windows) {
                 // Windows requires higher permissions for symbolic links
-                hard_link(&executable, target)?;
+                fs::hard_link(&executable, target)?;
+            } else {
+                panic!("Only Windows and Unix are supported");
             }
             links.insert(target.clone(), executable.clone());
         }
@@ -127,6 +126,9 @@ async fn read_versions_file() -> Result<Vec<String>> {
     let mut contents = String::new();
     file.read_to_string(&mut contents).await?;
 
-    let lines: Vec<String> = contents.lines().map(|line| line.to_string()).collect();
+    let lines: Vec<String> = contents
+        .lines()
+        .map(std::string::ToString::to_string)
+        .collect();
     Ok(lines)
 }
