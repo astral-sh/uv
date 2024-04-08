@@ -299,7 +299,7 @@ jobs:
     needs: build-binary-linux
     name: "check system | python on fedora"
     runs-on: ubuntu-latest
-    container: fedora:39
+    container: fedora:41
     steps:
       - uses: actions/checkout@v4
 
