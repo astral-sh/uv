@@ -85,7 +85,7 @@ hex = { version = "0.4.3" }
 hmac = { version = "0.12.1" }
 home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
-http = { version = "0.2.12" }
+http = { version = "1.0.0" }
 indexmap = { version = "2.2.5" }
 indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
