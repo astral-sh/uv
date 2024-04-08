@@ -55,7 +55,7 @@ webpki-roots = { version = "0.25.4" }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-hyper = { version = "0.14.28", features = ["server", "http1"] }
+hyper = { version = "1.0.0", features = ["server", "http1"] }
 insta = { version = "1.36.1" }
 os_info = { version = "3.7.0", default-features = false }
 tokio = { workspace = true, features = ["fs", "macros"] }
