@@ -361,6 +361,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
+name = "base64"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9475866fec1451be56a3c2400fd081ff546538961565ccb5b7142cbd22bc7a51"
+
+[[package]]
 name = "bench"
 version = "0.0.0"
 dependencies = [
@@ -4290,7 +4296,7 @@ dependencies = [
  "assert_cmd",
  "assert_fs",
  "axoupdater",
- "base64 0.21.7",
+ "base64 0.22.0",
  "byteorder",
  "chrono",
  "clap",
@@ -4349,7 +4355,7 @@ name = "uv-auth"
 version = "0.0.1"
 dependencies = [
  "async-trait",
- "base64 0.21.7",
+ "base64 0.22.0",
  "clap",
  "once_cell",
  "reqwest",
@@ -4613,7 +4619,7 @@ name = "uv-git"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "base64 0.21.7",
+ "base64 0.22.0",
  "cache-key",
  "cargo-util",
  "fs-err",
