@@ -53,6 +53,8 @@ SPECIAL_TRIPLES = {
     "linux64": "x86_64-unknown-linux-gnu",
     "windows-amd64": "x86_64-pc-windows",
     "windows-x86": "i686-pc-windows",
+    "windows-amd64-shared": "x86_64-pc-windows",
+    "windows-x86-shared": "i686-pc-windows",
     "linux64-musl": "x86_64-unknown-linux-musl",
 }
 

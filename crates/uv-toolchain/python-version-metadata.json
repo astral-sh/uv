@@ -4729,17 +4729,6 @@
     "url": "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.7.7-i686-pc-windows-msvc-shared-pgo-20200517T2153.tar.zst",
     "sha256": null
   },
-  "cpython-3.7.7-shared-windows-none": {
-    "name": "cpython",
-    "arch": "windows",
-    "os": "shared",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 7,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20200408/cpython-3.7.7-windows-amd64-shared-20200409T0108.tar.zst",
-    "sha256": null
-  },
   "cpython-3.7.7-darwin-x86_64-none": {
     "name": "cpython",
     "arch": "x86_64",
@@ -4793,17 +4782,6 @@
     "minor": 7,
     "patch": 6,
     "url": "https://github.com/indygreg/python-build-standalone/releases/download/20200216/cpython-3.7.6-windows-x86-shared-pgo-20200217T0110.tar.zst",
-    "sha256": null
-  },
-  "cpython-3.7.6-shared-windows-none": {
-    "name": "cpython",
-    "arch": "windows",
-    "os": "shared",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 6,
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20200216/cpython-3.7.6-windows-amd64-shared-20200216T2324.tar.zst",
     "sha256": null
   },
   "cpython-3.7.6-darwin-x86_64-none": {

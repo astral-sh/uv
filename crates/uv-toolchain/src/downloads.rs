@@ -139,7 +139,6 @@ pub enum Arch {
     I686,
     Ppc64Le,
     S390X,
-    Windows,
     X86_64,
 }
 
@@ -159,7 +158,6 @@ pub enum ImplementationName {
 pub enum Os {
     Darwin,
     Linux,
-    Shared,
     Windows,
 }
 

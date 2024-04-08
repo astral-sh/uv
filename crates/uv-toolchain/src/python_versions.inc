@@ -5165,18 +5165,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[PythonDownload] = &[
         sha256: None
     },
     PythonDownload {
-        key: "cpython-3.7.7-shared-windows-none",
-        major: 3,
-        minor: 7,
-        patch: 7,
-        implementation: ImplementationName::Cpython,
-        arch: Arch::Windows,
-        os: Os::Shared,
-        libc: Libc::None,
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200408/cpython-3.7.7-windows-amd64-shared-20200409T0108.tar.zst",
-        sha256: None
-    },
-    PythonDownload {
         key: "cpython-3.7.7-darwin-x86_64-none",
         major: 3,
         minor: 7,
@@ -5234,18 +5222,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[PythonDownload] = &[
         os: Os::Windows,
         libc: Libc::None,
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20200216/cpython-3.7.6-windows-x86-shared-pgo-20200217T0110.tar.zst",
-        sha256: None
-    },
-    PythonDownload {
-        key: "cpython-3.7.6-shared-windows-none",
-        major: 3,
-        minor: 7,
-        patch: 6,
-        implementation: ImplementationName::Cpython,
-        arch: Arch::Windows,
-        os: Os::Shared,
-        libc: Libc::None,
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200216/cpython-3.7.6-windows-amd64-shared-20200216T2324.tar.zst",
         sha256: None
     },
     PythonDownload {
