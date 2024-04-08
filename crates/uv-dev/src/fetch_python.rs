@@ -100,7 +100,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
         let mut executable = path.join("install").join("bin").join("python3");
 
         if cfg!(windows) {
-            executable = executable.with_extension(".exe");
+            executable = executable.with_extension("exe");
         }
 
         for mut target in [
@@ -110,7 +110,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
             bootstrap_dir.join("python"),
         ] {
             if cfg!(windows) {
-                target = target.with_extension(".exe");
+                target = target.with_extension("exe");
             }
 
             // Attempt to remove it, we'll fail on link if we couldn't remove it for some reason
