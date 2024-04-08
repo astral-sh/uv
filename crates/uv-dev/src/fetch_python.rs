@@ -17,7 +17,7 @@ use tracing::{info, info_span, Instrument};
 use std::os::unix::fs::symlink;
 
 use uv_fs::Simplified;
-use uv_toolchain::{Error, PythonDownload, PythonDownloadRequest};
+use uv_toolchain::{DownloadResult, Error, PythonDownload, PythonDownloadRequest};
 
 #[derive(Parser, Debug)]
 pub(crate) struct FetchPythonArgs {
@@ -71,8 +71,16 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let mut results = Vec::new();
     while let Some(task) = tasks.next().await {
         let (version, result) = task;
-        let path = result?;
-        info!("Downloaded {} to {}", version, &path.user_display());
+        let path = match result? {
+            DownloadResult::AlreadyAvailable(path) => {
+                info!("Found existing download of {}", version);
+                path
+            }
+            DownloadResult::Fetched(path) => {
+                info!("Downloaded {} to {}", version, &path.user_display());
+                path
+            }
+        };
         results.push((version, path));
     }
 

@@ -172,6 +172,11 @@ pub struct Platform {
 
 include!("python_versions.inc");
 
+pub enum DownloadResult {
+    AlreadyAvailable(PathBuf),
+    Fetched(PathBuf),
+}
+
 impl PythonDownload {
     /// Return the [`PythonDownload`] corresponding to the key, if it exists.
     pub fn from_key(key: &str) -> Option<&PythonDownload> {
@@ -226,13 +231,13 @@ impl PythonDownload {
         &self,
         client: &uv_client::BaseClient,
         path: &Path,
-    ) -> Result<PathBuf, Error> {
+    ) -> Result<DownloadResult, Error> {
         let url = Url::parse(self.url)?;
         let path = path.join(self.key).clone();
 
         // If it already exists, return it
         if path.is_dir() {
-            return Ok(path);
+            return Ok(DownloadResult::AlreadyAvailable(path));
         }
 
         let filename = url.path_segments().unwrap().last().unwrap();
@@ -272,7 +277,7 @@ impl PythonDownload {
                 err,
             })?;
 
-        Ok(path)
+        Ok(DownloadResult::Fetched(path))
     }
 
     pub fn python_version(&self) -> PythonVersion {
