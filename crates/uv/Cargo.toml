@@ -78,7 +78,7 @@ indoc = { version = "2.0.4" }
 insta = { version = "1.36.1", features = ["filters", "json"] }
 predicates = { version = "3.0.4" }
 regex = { version = "1.10.3" }
-reqwest = { version = "0.11.23", features = ["blocking"], default-features = false }
+reqwest = { version = "0.12.0", features = ["blocking"], default-features = false }
 
 [features]
 default = ["flate2/zlib-ng", "python", "pypi", "git", "maturin"]
