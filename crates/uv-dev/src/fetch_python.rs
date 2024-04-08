@@ -88,9 +88,9 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
 
     let s = if downloads.len() == 1 { "" } else { "s" };
     info!(
-        "Fetched {} in {} ms",
+        "Fetched {} in {}s",
         format!("{} version{}", downloads.len(), s),
-        start.elapsed().as_millis()
+        start.elapsed().as_secs()
     );
 
     // Order matters here, as we overwrite previous links
