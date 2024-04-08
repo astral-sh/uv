@@ -274,7 +274,7 @@ jobs:
     needs: build-binary-linux
     name: "check system | python on debian"
     runs-on: ubuntu-latest
-    container: debian:bullseye
+    container: debian:bookworm
     steps:
       - uses: actions/checkout@v4
 
