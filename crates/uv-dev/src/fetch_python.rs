@@ -68,7 +68,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
             }
             .instrument(info_span!("download", key = %download))
         })
-        .buffered(2);
+        .buffered(4);
 
     let mut results = Vec::new();
     while let Some(task) = tasks.next().await {
