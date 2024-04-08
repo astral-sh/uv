@@ -293,7 +293,7 @@ jobs:
         run: echo $(which python3.11)
 
       - name: "Validate global Python install"
-        run: python3.11 scripts/check_system_python.py --uv ./uv
+        run: python3.11 scripts/check_system_python.py --uv ./uv --externally-managed
 
   system-test-fedora:
     needs: build-binary-linux
