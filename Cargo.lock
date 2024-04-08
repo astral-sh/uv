@@ -200,9 +200,9 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.6"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a116f46a969224200a0a97f29cfd4c50e7534e4b4826bd23ea2c3c533039c82c"
+checksum = "07dbbf24db18d609b1462965249abdf49129ccad073ec257da372adc83259c60"
 dependencies = [
  "brotli",
  "flate2",
@@ -266,9 +266,9 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "axoasset"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dce2f189800bafe8322ef3a4d361ee7373bfc2f8fe052afda404230166dc45f"
+checksum = "5e05853b0d9abfab8e7532cad0d07ec396dd95c1a81926b49ab3cfa121a9d8d6"
 dependencies = [
  "camino",
  "image",
@@ -294,9 +294,9 @@ dependencies = [
 
 [[package]]
 name = "axoupdater"
-version = "0.3.3"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e18b628756d7e73bcd3b7330e5834a44f841b115e92bad8563c3dc616a64131"
+checksum = "01f40156112045abb1409e115d684306b9ff005399fd10ce2caf33bd800742b4"
 dependencies = [
  "axoasset",
  "axoprocess",
@@ -416,9 +416,9 @@ dependencies = [
 
 [[package]]
 name = "brotli"
-version = "3.4.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "516074a47ef4bce09577a3b379392300159ce5b1ba2e501ff1c819950066100f"
+checksum = "125740193d7fee5cc63ab9e16c2fdc4e07c74ba755cc53b327d6ea029e9fc569"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
@@ -427,9 +427,9 @@ dependencies = [
 
 [[package]]
 name = "brotli-decompressor"
-version = "2.5.1"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e2e4afe60d7dd600fdd3de8d0f08c2b7ec039712e3b6137ff98b7004e82de4f"
+checksum = "65622a320492e09b5e0ac436b14c54ff68199bac392d0e89a6832c4518eea525"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
@@ -1362,9 +1362,9 @@ checksum = "4271d37baee1b8c7e4b708028c57d816cf9d2434acb33a549475f78c181f6253"
 
 [[package]]
 name = "git2"
-version = "0.18.2"
+version = "0.18.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b3ba52851e73b46a4c3df1d89343741112003f0f6f13beb0dfac9e457c3fdcd"
+checksum = "232e6a7bfe35766bf715e55a88b39a700596c0ccfd88cd3680b4cdb40d66ef70"
 dependencies = [
  "bitflags 2.4.2",
  "libc",
@@ -1751,9 +1751,9 @@ checksum = "b72ad49b554c1728b1e83254a1b1565aea4161e28dabbfa171fc15fe62299caf"
 
 [[package]]
 name = "indexmap"
-version = "2.2.5"
+version = "2.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b0b929d511467233429c45a44ac1dcaa21ba0f5ba11e4879e6ed28ddb4f9df4"
+checksum = "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
 dependencies = [
  "equivalent",
  "hashbrown 0.14.3",
@@ -2676,7 +2676,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset 0.9.0",
- "parking_lot 0.12.1",
+ "parking_lot 0.11.2",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",
@@ -2888,9 +2888,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.10.3"
+version = "1.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b62dbe01f0b06f9d8dc7d49e05a0785f153b00b2c227856282f671e0318c9b15"
+checksum = "c117dbdfde9c8308975b6a18d71f3f385c89461f7b3fb054288ecf2a2058ba4c"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -3368,9 +3368,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.114"
+version = "1.0.115"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5f09b1bd632ef549eaa9f60a1f8de742bdbc698e6cee2095fc84dde5f549ae0"
+checksum = "12dc5c46daa8e9fdf4f5e71b6cf9a53f2487da0e86e55808e2d35539666497dd"
 dependencies = [
  "itoa",
  "ryu",
@@ -3680,9 +3680,9 @@ dependencies = [
 
 [[package]]
 name = "temp-dir"
-version = "0.1.12"
+version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd16aa9ffe15fe021c6ee3766772132c6e98dfa395a167e16864f61a9cfb71d6"
+checksum = "1f227968ec00f0e5322f9b8173c7a0cbcff6181a0a5b28e9892491c286277231"
 
 [[package]]
 name = "tempfile"
@@ -3913,9 +3913,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-stream"
-version = "0.1.14"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "397c988d37662c7dda6d2208364a706264bf3d6138b11d436cbac0ad38832842"
+checksum = "267ac89e0bec6e691e5813911606935d77c476ff49024f98abcea3e7b15e37af"
 dependencies = [
  "futures-core",
  "pin-project-lite",
@@ -5043,15 +5043,14 @@ checksum = "53a85b86a771b1c87058196170769dd264f66c0782acf1ae6cc51bfd64b39082"
 
 [[package]]
 name = "which"
-version = "6.0.0"
+version = "6.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fa5e0c10bf77f44aac573e498d1a82d5fbd5e91f6fc0a99e7be4b38e85e101c"
+checksum = "8211e4f58a2b2805adfbefbc07bab82958fc91e3836339b1ab7ae32465dce0d7"
 dependencies = [
  "either",
  "home",
- "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "winsafe",
 ]
 
 [[package]]
@@ -5313,6 +5312,12 @@ dependencies = [
  "cfg-if",
  "windows-sys 0.48.0",
 ]
+
+[[package]]
+name = "winsafe"
+version = "0.0.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "wiremock"
