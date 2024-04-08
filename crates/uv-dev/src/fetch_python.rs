@@ -11,6 +11,11 @@ use itertools::Itertools;
 use tokio::io::AsyncReadExt;
 use tokio::{fs::File, time::Instant};
 
+#[cfg(windows)]
+use fs_err::tokio::hard_link;
+#[cfg(unix)]
+use fs_err::tokio::symlink;
+
 use tracing::{info, info_span, Instrument};
 
 use uv_fs::Simplified;
@@ -102,16 +107,14 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
             // Attempt to remove it, we'll fail on link if we couldn't remove it for some reason
             // but if it's missing we don't want to error
             let _ = fs::remove_file(target);
-            if cfg!(unix) {
-                use fs_err::tokio::symlink;
-                symlink(&executable, target).await?;
-            } else if cfg!(windows) {
-                use fs_err::tokio::hard_link;
-                // Windows requires higher permissions for symbolic links
-                hard_link(&executable, target).await?;
-            } else {
-                panic!("Only Windows and Unix are supported");
-            }
+
+            #[cfg(unix)]
+            symlink(&executable, target).await?;
+
+            #[cfg(windows)]
+            // Windows requires higher permissions for symbolic links
+            hard_link(&executable, target).await?;
+
             links.insert(target.clone(), executable.clone());
         }
     }
