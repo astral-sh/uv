@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use futures::{FutureExt, TryStreamExt};
+use tempfile::TempDir;
 use tokio::io::AsyncSeekExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{info_span, instrument, warn, Instrument};
@@ -18,9 +19,9 @@ use uv_cache::{ArchiveTarget, ArchiveTimestamp, CacheBucket, CacheEntry, WheelCa
 use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
 use uv_types::{BuildContext, NoBinary, NoBuild};
 
-use crate::download::{BuiltWheel, UnzippedWheel};
+use crate::download::UnzippedWheel;
 use crate::locks::Locks;
-use crate::{DiskWheel, Error, LocalWheel, Reporter, SourceDistributionBuilder};
+use crate::{Error, LocalWheel, Reporter, SourceDistributionBuilder};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -110,18 +111,23 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         editable: &LocalEditable,
         editable_wheel_dir: &Path,
     ) -> Result<(LocalWheel, Metadata23), Error> {
+        // Build the wheel.
         let (dist, disk_filename, filename, metadata) = self
             .builder
             .build_editable(editable, editable_wheel_dir)
             .await?;
 
-        let built_wheel = BuiltWheel {
+        // Unzip.
+        let path = editable_wheel_dir.join(&disk_filename);
+        let target = editable_wheel_dir.join(cache_key::digest(&editable.path));
+        let archive = self.unzip_wheel(&path, &target).await?;
+        let wheel = LocalWheel::Unzipped(UnzippedWheel {
             dist,
             filename,
-            path: editable_wheel_dir.join(disk_filename),
-            target: editable_wheel_dir.join(cache_key::digest(&editable.path)),
-        };
-        Ok((LocalWheel::Built(built_wheel), metadata))
+            archive,
+        });
+
+        Ok((wheel, metadata))
     }
 
     /// Fetch a wheel from the cache or download it from the index.
@@ -151,7 +157,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             WheelCache::Url(&url).wheel_dir(wheel.name().as_ref()),
                             wheel.filename.stem(),
                         );
-                        return Self::load_wheel(path, &wheel.filename, cache_entry, dist);
+                        return self
+                            .load_wheel(path, &wheel.filename, cache_entry, dist)
+                            .await;
                     }
                 };
 
@@ -241,7 +249,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.stem(),
                 );
-                Self::load_wheel(&wheel.path, &wheel.filename, cache_entry, dist)
+                self.load_wheel(&wheel.path, &wheel.filename, cache_entry, dist)
+                    .await
             }
         }
     }
@@ -261,21 +270,25 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         // If the wheel was unzipped previously, respect it. Source distributions are
         // cached under a unique build ID, so unzipped directories are never stale.
         match built_wheel.target.canonicalize() {
-            Ok(archive) => Ok(LocalWheel::Unzipped(UnzippedWheel {
-                dist: Dist::Source(dist.clone()),
-                archive,
-                filename: built_wheel.filename,
-            })),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                Ok(LocalWheel::Built(BuiltWheel {
+            Ok(archive) => {
+                return Ok(LocalWheel::Unzipped(UnzippedWheel {
                     dist: Dist::Source(dist.clone()),
-                    path: built_wheel.path,
-                    target: built_wheel.target,
+                    archive,
                     filename: built_wheel.filename,
-                }))
+                }));
             }
-            Err(err) => Err(Error::CacheRead(err)),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(Error::CacheRead(err)),
         }
+
+        // Otherwise, unzip the wheel.
+        Ok(LocalWheel::Unzipped(UnzippedWheel {
+            dist: Dist::Source(dist.clone()),
+            archive: self
+                .unzip_wheel(&built_wheel.path, &built_wheel.target)
+                .await?,
+            filename: built_wheel.filename,
+        }))
     }
 
     /// Fetch the wheel metadata from the index, or from the cache if possible.
@@ -453,7 +466,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     }
 
     /// Load a wheel from a local path.
-    fn load_wheel(
+    async fn load_wheel(
+        &self,
         path: &Path,
         filename: &WheelFilename,
         wheel_entry: CacheEntry,
@@ -477,13 +491,37 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             Err(err) => return Err(Error::CacheRead(err)),
         }
 
-        // Otherwise, return the path to the file.
-        Ok(LocalWheel::Disk(DiskWheel {
+        // Otherwise, unzip the wheel.
+        Ok(LocalWheel::Unzipped(UnzippedWheel {
             dist: Dist::Built(dist.clone()),
-            path: path.to_path_buf(),
-            target: wheel_entry.into_path_buf(),
+            archive: self.unzip_wheel(path, wheel_entry.path()).await?,
             filename: filename.clone(),
         }))
+    }
+
+    /// Unzip a wheel into the cache, returning the path to the unzipped directory.
+    async fn unzip_wheel(&self, path: &Path, target: &Path) -> Result<PathBuf, Error> {
+        let temp_dir = tokio::task::spawn_blocking({
+            let path = path.to_owned();
+            let root = self.build_context.cache().root().to_path_buf();
+            move || -> Result<TempDir, uv_extract::Error> {
+                // Unzip the wheel into a temporary directory.
+                let temp_dir = tempfile::tempdir_in(root)?;
+                uv_extract::unzip(fs_err::File::open(path)?, temp_dir.path())?;
+                Ok(temp_dir)
+            }
+        })
+        .await??;
+
+        // Persist the temporary directory to the directory store.
+        let archive = self
+            .build_context
+            .cache()
+            .persist(temp_dir.into_path(), target)
+            .await
+            .map_err(Error::CacheWrite)?;
+
+        Ok(archive)
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
