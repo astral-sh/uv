@@ -13,7 +13,7 @@ use uv_fs::{directories, symlinks};
 use uv_normalize::PackageName;
 
 use crate::index::cached_wheel::CachedWheel;
-use crate::source::{read_http_manifest, MANIFEST};
+use crate::source::{read_http_revision, REVISION};
 
 /// A local index of distributions that originate from a registry, like `PyPI`.
 #[derive(Debug)]
@@ -113,9 +113,9 @@ impl<'a> RegistryWheelIndex<'a> {
             for shard in directories(&cache_shard) {
                 // Read the existing metadata from the cache, if it exists.
                 let cache_shard = cache_shard.shard(shard);
-                let manifest_entry = cache_shard.entry(MANIFEST);
-                if let Ok(Some(manifest)) = read_http_manifest(&manifest_entry) {
-                    Self::add_directory(cache_shard.join(manifest.id()), tags, &mut versions);
+                let revision_entry = cache_shard.entry(REVISION);
+                if let Ok(Some(revision)) = read_http_revision(&revision_entry) {
+                    Self::add_directory(cache_shard.join(revision.id()), tags, &mut versions);
                 };
             }
         }
