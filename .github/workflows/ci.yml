@@ -346,6 +346,8 @@ jobs:
         run: python scripts/check_system_python.py --uv ./uv
 
   system-test-centos:
+    # https://github.com/astral-sh/uv/issues/2915
+    if: false
     needs: build-binary-linux
     name: "check system | python on centos"
     runs-on: ubuntu-latest
