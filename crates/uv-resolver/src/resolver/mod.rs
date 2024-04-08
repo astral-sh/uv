@@ -35,6 +35,7 @@ use uv_types::{BuildContext, Constraints, InstalledPackagesProvider, Overrides};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 
+use crate::dependency_provider::UvDependencyProvider;
 use crate::editables::Editables;
 use crate::error::ResolveError;
 use crate::manifest::Manifest;
@@ -114,6 +115,14 @@ pub struct Resolver<
     visited: DashSet<PackageName>,
     reporter: Option<Arc<dyn Reporter>>,
     provider: Provider,
+}
+
+pub(crate) struct ResolverState {
+    pub(crate) pubgrub: State<UvDependencyProvider>,
+    pub(crate) next: PubGrubPackage,
+    pub(crate) pins: FilePins,
+    pub(crate) priorities: PubGrubPriorities,
+    pub(crate) added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>>,
 }
 
 impl<
@@ -258,16 +267,13 @@ impl<
         request_sink: tokio::sync::mpsc::Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::Root(self.project.clone());
-
-        // Keep track of the packages for which we've requested metadata.
-        let mut pins = FilePins::default();
-        let mut priorities = PubGrubPriorities::default();
-
-        // Start the solve.
-        let mut state = State::init(root.clone(), MIN_VERSION.clone());
-        let mut added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>> =
-            FxHashMap::default();
-        let mut next = root;
+        let mut state = ResolverState {
+            pubgrub: State::init(root.clone(), MIN_VERSION.clone()),
+            next: root,
+            pins: FilePins::default(),
+            priorities: PubGrubPriorities::default(),
+            added_dependencies: FxHashMap::default(),
+        };
 
         debug!(
             "Solving with target Python version {}",
@@ -276,48 +282,48 @@ impl<
 
         loop {
             // Run unit propagation.
-            state.unit_propagation(next)?;
+            state.pubgrub.unit_propagation(state.next)?;
 
             // Pre-visit all candidate packages, to allow metadata to be fetched in parallel. If
             // the dependency mode is direct, we only need to visit the root package.
             if self.dependency_mode.is_transitive() {
-                Self::pre_visit(state.partial_solution.prioritized_packages(), &request_sink)
-                    .await?;
+                Self::pre_visit(
+                    state.pubgrub.partial_solution.prioritized_packages(),
+                    &request_sink,
+                )
+                .await?;
             }
 
             // Choose a package version.
-            let Some(highest_priority_pkg) =
-                state
-                    .partial_solution
-                    .pick_highest_priority_pkg(|package, _range| {
-                        priorities.get(package).unwrap_or_default()
-                    })
+            let Some(highest_priority_pkg) = state
+                .pubgrub
+                .partial_solution
+                .pick_highest_priority_pkg(|package, _range| {
+                    state.priorities.get(package).unwrap_or_default()
+                })
             else {
-                let selection = state.partial_solution.extract_solution();
                 return ResolutionGraph::from_state(
-                    &selection,
-                    &pins,
-                    &self.index.packages,
-                    &self.index.distributions,
-                    &self.index.redirects,
-                    &state,
+                    &self.index,
                     &self.preferences,
                     self.editables.clone(),
+                    &state.pubgrub,
+                    &state.pins,
                 );
             };
-            next = highest_priority_pkg;
+            state.next = highest_priority_pkg;
 
             let term_intersection = state
+                .pubgrub
                 .partial_solution
-                .term_intersection_for_package(&next)
+                .term_intersection_for_package(&state.next)
                 .ok_or_else(|| {
                     PubGrubError::Failure("a package was chosen but we don't have a term.".into())
                 })?;
             let decision = self
                 .choose_version(
-                    &next,
+                    &state.next,
                     term_intersection.unwrap_positive(),
-                    &mut pins,
+                    &mut state.pins,
                     &request_sink,
                 )
                 .await?;
@@ -325,15 +331,16 @@ impl<
             // Pick the next compatible version.
             let version = match decision {
                 None => {
-                    debug!("No compatible version found for: {next}");
+                    debug!("No compatible version found for: {next}", next = state.next);
 
                     let term_intersection = state
+                        .pubgrub
                         .partial_solution
-                        .term_intersection_for_package(&next)
+                        .term_intersection_for_package(&state.next)
                         .expect("a package was chosen but we don't have a term.");
 
                     let reason = {
-                        if let PubGrubPackage::Package(ref package_name, _, _) = next {
+                        if let PubGrubPackage::Package(ref package_name, _, _) = state.next {
                             // Check if the decision was due to the package being unavailable
                             self.unavailable_packages
                                 .get(package_name)
@@ -352,12 +359,12 @@ impl<
                     };
 
                     let inc = Incompatibility::no_versions(
-                        next.clone(),
+                        state.next.clone(),
                         term_intersection.clone(),
                         reason.map(ToString::to_string),
                     );
 
-                    state.add_incompatibility(inc);
+                    state.pubgrub.add_incompatibility(inc);
                     continue;
                 }
                 Some(version) => version,
@@ -384,90 +391,113 @@ impl<
                                     range.intersection(&specifier.into())
                                 })?;
 
-                            let package = &next;
+                            let package = &state.next;
                             for kind in [PubGrubPython::Installed, PubGrubPython::Target] {
-                                state.add_incompatibility(Incompatibility::from_dependency(
-                                    package.clone(),
-                                    Range::singleton(version.clone()),
-                                    (PubGrubPackage::Python(kind), python_version.clone()),
-                                ));
+                                state.pubgrub.add_incompatibility(
+                                    Incompatibility::from_dependency(
+                                        package.clone(),
+                                        Range::singleton(version.clone()),
+                                        (PubGrubPackage::Python(kind), python_version.clone()),
+                                    ),
+                                );
                             }
-                            state.partial_solution.add_decision(next.clone(), version);
+                            state
+                                .pubgrub
+                                .partial_solution
+                                .add_decision(state.next.clone(), version);
                             continue;
                         }
                         UnavailableVersion::IncompatibleDist(incompatibility) => {
                             incompatibility.to_string()
                         }
                     };
-                    state.add_incompatibility(Incompatibility::unavailable(
-                        next.clone(),
-                        version.clone(),
-                        reason,
-                    ));
+                    state
+                        .pubgrub
+                        .add_incompatibility(Incompatibility::unavailable(
+                            state.next.clone(),
+                            version.clone(),
+                            reason,
+                        ));
                     continue;
                 }
             };
 
-            self.on_progress(&next, &version);
+            self.on_progress(&state.next, &version);
 
-            if added_dependencies
-                .entry(next.clone())
+            if state
+                .added_dependencies
+                .entry(state.next.clone())
                 .or_default()
                 .insert(version.clone())
             {
                 // Retrieve that package dependencies.
-                let package = &next;
-                let dependencies = match self
-                    .get_dependencies(package, &version, &mut priorities, &request_sink)
-                    .await?
-                {
-                    Dependencies::Unavailable(reason) => {
-                        let message = {
-                            if matches!(package, PubGrubPackage::Root(_)) {
-                                // Including front-matter for the root package is redundant
-                                reason.clone()
-                            } else {
-                                format!("its dependencies are unusable because {reason}")
-                            }
-                        };
-                        state.add_incompatibility(Incompatibility::unavailable(
-                            package.clone(),
-                            version.clone(),
-                            message,
-                        ));
-                        continue;
-                    }
-                    Dependencies::Available(constraints)
-                        if constraints
-                            .iter()
-                            .any(|(dependency, _)| dependency == package) =>
+                let package = &state.next;
+                let mut forks = self
+                    .get_dependencies_forking(
+                        package,
+                        &version,
+                        &mut state.priorities,
+                        &request_sink,
+                    )
+                    .await?;
+                if forks.len() > 1 {
+                    todo!()
+                } else {
+                    let dependencies = match forks.pop().expect("at least one set of dependencies")
                     {
-                        return Err(PubGrubError::SelfDependency {
-                            package: package.clone(),
-                            version: version.clone(),
+                        Dependencies::Unavailable(reason) => {
+                            let message = {
+                                if matches!(package, PubGrubPackage::Root(_)) {
+                                    // Including front-matter for the root package is redundant
+                                    reason.clone()
+                                } else {
+                                    format!("its dependencies are unusable because {reason}")
+                                }
+                            };
+                            state
+                                .pubgrub
+                                .add_incompatibility(Incompatibility::unavailable(
+                                    package.clone(),
+                                    version.clone(),
+                                    message,
+                                ));
+                            continue;
                         }
-                        .into());
-                    }
-                    Dependencies::Available(constraints) => constraints,
-                };
+                        Dependencies::Available(constraints)
+                            if constraints
+                                .iter()
+                                .any(|(dependency, _)| dependency == package) =>
+                        {
+                            return Err(PubGrubError::SelfDependency {
+                                package: package.clone(),
+                                version: version.clone(),
+                            }
+                            .into());
+                        }
+                        Dependencies::Available(constraints) => constraints,
+                    };
 
-                // Add that package and version if the dependencies are not problematic.
-                let dep_incompats = state.add_incompatibility_from_dependencies(
-                    package.clone(),
-                    version.clone(),
-                    dependencies,
-                );
+                    // Add that package and version if the dependencies are not problematic.
+                    let dep_incompats = state.pubgrub.add_incompatibility_from_dependencies(
+                        package.clone(),
+                        version.clone(),
+                        dependencies,
+                    );
 
-                state.partial_solution.add_version(
-                    package.clone(),
-                    version,
-                    dep_incompats,
-                    &state.incompatibility_store,
-                );
+                    state.pubgrub.partial_solution.add_version(
+                        package.clone(),
+                        version,
+                        dep_incompats,
+                        &state.pubgrub.incompatibility_store,
+                    );
+                }
             } else {
                 // `dep_incompats` are already in `incompatibilities` so we know there are not satisfied
                 // terms and can add the decision directly.
-                state.partial_solution.add_decision(next.clone(), version);
+                state
+                    .pubgrub
+                    .partial_solution
+                    .add_decision(state.next.clone(), version);
             }
         }
     }
@@ -730,6 +760,55 @@ impl<
 
     /// Given a candidate package and version, return its dependencies.
     #[instrument(skip_all, fields(%package, %version))]
+    async fn get_dependencies_forking(
+        &self,
+        package: &PubGrubPackage,
+        version: &Version,
+        priorities: &mut PubGrubPriorities,
+        request_sink: &tokio::sync::mpsc::Sender<Request>,
+    ) -> Result<Vec<Dependencies>, ResolveError> {
+        type Dep = (PubGrubPackage, Range<Version>);
+        let deps: Vec<Dep> = match self
+            .get_dependencies(package, version, priorities, request_sink)
+            .await?
+        {
+            Dependencies::Available(deps) => deps,
+            Dependencies::Unavailable(err) => return Ok(vec![Dependencies::Unavailable(err)]),
+        };
+        let mut by_name: FxHashMap<&PackageName, Vec<&Dep>> = FxHashMap::default();
+        for dep in deps.iter() {
+            let (ref pkg, _) = *dep;
+            let name = match *pkg {
+                PubGrubPackage::Root(_) | PubGrubPackage::Python(_) => unreachable!(),
+                PubGrubPackage::Package(ref name, _, _) => name,
+            };
+            by_name.entry(name).or_insert(vec![]).push(dep);
+        }
+        let mut forks: Vec<Vec<Dep>> = vec![vec![]];
+        for (_, mut deps) in by_name {
+            if deps.len() <= 1 {
+                let dep = deps.pop().unwrap();
+                for fork in forks.iter_mut() {
+                    fork.push(dep.clone());
+                }
+            } else {
+                let mut new_forks: Vec<Vec<Dep>> = vec![];
+                for dep in deps {
+                    let mut new_forks_for_dep = forks.clone();
+                    for fork in new_forks_for_dep.iter_mut() {
+                        fork.push(dep.clone());
+                    }
+                    new_forks.extend(new_forks_for_dep);
+                }
+                forks = new_forks;
+            }
+        }
+        dbg!(&forks);
+        Ok(forks.into_iter().map(Dependencies::Available).collect())
+    }
+
+    /// Given a candidate package and version, return its dependencies.
+    #[instrument(skip_all, fields(%package, %version))]
     async fn get_dependencies(
         &self,
         package: &PubGrubPackage,
@@ -737,6 +816,11 @@ impl<
         priorities: &mut PubGrubPriorities,
         request_sink: &tokio::sync::mpsc::Sender<Request>,
     ) -> Result<Dependencies, ResolveError> {
+        // BREADCRUMBS: Detect duplicate dependencies here and create a new
+        // set of `Dependencies` for each duplicate. This is unfortunately
+        // exponential... For now, we can just assume that the version
+        // constraints are non-overlapping. We should do this on the pubgrub
+        // dependencies I think.
         match package {
             PubGrubPackage::Root(_) => {
                 // Add the root requirements.

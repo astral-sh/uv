@@ -2,26 +2,22 @@ use std::borrow::Cow;
 use std::hash::BuildHasherDefault;
 
 use anyhow::Result;
-use dashmap::DashMap;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use pubgrub::range::Range;
 use pubgrub::solver::{Kind, State};
-use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
-use url::Url;
 
 use crate::dependency_provider::UvDependencyProvider;
 use distribution_types::{
     Dist, DistributionMetadata, LocalEditable, Name, PackageId, ResolvedDist, Verbatim,
     VersionOrUrl,
 };
-use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use pypi_types::{Hashes, Metadata23};
+use pypi_types::Hashes;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::editables::Editables;
@@ -64,17 +60,15 @@ impl ResolutionGraph {
     /// Create a new graph from the resolved `PubGrub` state.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_state(
-        selection: &SelectedDependencies<UvDependencyProvider>,
-        pins: &FilePins,
-        packages: &OnceMap<PackageName, VersionsResponse>,
-        distributions: &OnceMap<PackageId, Metadata23>,
-        redirects: &DashMap<Url, Url>,
-        state: &State<UvDependencyProvider>,
+        index: &InMemoryIndex,
         preferences: &Preferences,
         editables: Editables,
+        state: &State<UvDependencyProvider>,
+        pins: &FilePins,
     ) -> Result<Self, ResolveError> {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
+        let selection = state.partial_solution.extract_solution();
         let mut petgraph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
         let mut hashes =
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
@@ -84,7 +78,7 @@ impl ResolutionGraph {
         // Add every package to the graph.
         let mut inverse =
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
-        for (package, version) in selection {
+        for (package, version) in &selection {
             match package {
                 PubGrubPackage::Package(package_name, None, None) => {
                     // Create the distribution.
@@ -100,7 +94,7 @@ impl ResolutionGraph {
                     // the lockfile if necessary.
                     if let Some(hash) = preferences.match_hashes(package_name, version) {
                         hashes.insert(package_name.clone(), hash.to_vec());
-                    } else if let Some(versions_response) = packages.get(package_name) {
+                    } else if let Some(versions_response) = index.packages.get(package_name) {
                         if let VersionsResponse::Found(ref version_map) = *versions_response {
                             hashes.insert(package_name.clone(), {
                                 let mut hash = version_map.hashes(version);
@@ -119,7 +113,7 @@ impl ResolutionGraph {
                     let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
                         Dist::from_editable(package_name.clone(), editable.clone())?
                     } else {
-                        let url = redirects.get(url).map_or_else(
+                        let url = index.redirects.get(url).map_or_else(
                             || url.clone(),
                             |precise| apply_redirect(url, precise.value()),
                         );
@@ -130,7 +124,7 @@ impl ResolutionGraph {
                     // the lockfile if necessary.
                     if let Some(hash) = preferences.match_hashes(package_name, version) {
                         hashes.insert(package_name.clone(), hash.to_vec());
-                    } else if let Some(versions_response) = packages.get(package_name) {
+                    } else if let Some(versions_response) = index.packages.get(package_name) {
                         if let VersionsResponse::Found(ref version_map) = *versions_response {
                             hashes.insert(package_name.clone(), {
                                 let mut hash = version_map.hashes(version);
@@ -164,12 +158,16 @@ impl ResolutionGraph {
                             });
                         }
                     } else {
-                        let metadata = distributions.get(&dist.package_id()).unwrap_or_else(|| {
-                            panic!(
-                                "Every package should have metadata: {:?}",
-                                dist.package_id()
-                            )
-                        });
+                        let metadata =
+                            index
+                                .distributions
+                                .get(&dist.package_id())
+                                .unwrap_or_else(|| {
+                                    panic!(
+                                        "Every package should have metadata: {:?}",
+                                        dist.package_id()
+                                    )
+                                });
 
                         if metadata.provides_extras.contains(extra) {
                             extras
@@ -211,12 +209,16 @@ impl ResolutionGraph {
                             });
                         }
                     } else {
-                        let metadata = distributions.get(&dist.package_id()).unwrap_or_else(|| {
-                            panic!(
-                                "Every package should have metadata: {:?}",
-                                dist.package_id()
-                            )
-                        });
+                        let metadata =
+                            index
+                                .distributions
+                                .get(&dist.package_id())
+                                .unwrap_or_else(|| {
+                                    panic!(
+                                        "Every package should have metadata: {:?}",
+                                        dist.package_id()
+                                    )
+                                });
 
                         if metadata.provides_extras.contains(extra) {
                             extras
@@ -224,7 +226,7 @@ impl ResolutionGraph {
                                 .or_insert_with(Vec::new)
                                 .push(extra.clone());
                         } else {
-                            let url = redirects.get(url).map_or_else(
+                            let url = index.redirects.get(url).map_or_else(
                                 || url.clone(),
                                 |precise| apply_redirect(url, precise.value()),
                             );
@@ -242,7 +244,7 @@ impl ResolutionGraph {
         }
 
         // Add every edge to the graph.
-        for (package, version) in selection {
+        for (package, version) in &selection {
             for id in &state.incompatibilities[package] {
                 if let Kind::FromDependencyOf(
                     self_package,
