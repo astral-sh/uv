@@ -19,7 +19,6 @@ use uv_cache::{ArchiveTarget, ArchiveTimestamp, CacheBucket, CacheEntry, WheelCa
 use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
 use uv_types::{BuildContext, NoBinary, NoBuild};
 
-use crate::download::UnzippedWheel;
 use crate::locks::Locks;
 use crate::{Error, LocalWheel, Reporter, SourceDistributionBuilder};
 
@@ -121,11 +120,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         let path = editable_wheel_dir.join(&disk_filename);
         let target = editable_wheel_dir.join(cache_key::digest(&editable.path));
         let archive = self.unzip_wheel(&path, &target).await?;
-        let wheel = LocalWheel::Unzipped(UnzippedWheel {
+        let wheel = LocalWheel {
             dist,
             filename,
             archive,
-        });
+        };
 
         Ok((wheel, metadata))
     }
@@ -175,11 +174,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .stream_wheel(url.clone(), &wheel.filename, &wheel_entry, dist)
                     .await
                 {
-                    Ok(archive) => Ok(LocalWheel::Unzipped(UnzippedWheel {
+                    Ok(archive) => Ok(LocalWheel {
                         dist: Dist::Built(dist.clone()),
                         archive,
                         filename: wheel.filename.clone(),
-                    })),
+                    }),
                     Err(Error::Extract(err)) if err.is_http_streaming_unsupported() => {
                         warn!(
                             "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
@@ -190,11 +189,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         let archive = self
                             .download_wheel(url, &wheel.filename, &wheel_entry, dist)
                             .await?;
-                        Ok(LocalWheel::Unzipped(UnzippedWheel {
+                        Ok(LocalWheel {
                             dist: Dist::Built(dist.clone()),
                             archive,
                             filename: wheel.filename.clone(),
-                        }))
+                        })
                     }
                     Err(err) => Err(err),
                 }
@@ -213,11 +212,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .stream_wheel(wheel.url.raw().clone(), &wheel.filename, &wheel_entry, dist)
                     .await
                 {
-                    Ok(archive) => Ok(LocalWheel::Unzipped(UnzippedWheel {
+                    Ok(archive) => Ok(LocalWheel {
                         dist: Dist::Built(dist.clone()),
                         archive,
                         filename: wheel.filename.clone(),
-                    })),
+                    }),
                     Err(Error::Client(err)) if err.is_http_streaming_unsupported() => {
                         warn!(
                             "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
@@ -233,11 +232,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                                 dist,
                             )
                             .await?;
-                        Ok(LocalWheel::Unzipped(UnzippedWheel {
+                        Ok(LocalWheel {
                             dist: Dist::Built(dist.clone()),
                             archive,
                             filename: wheel.filename.clone(),
-                        }))
+                        })
                     }
                     Err(err) => Err(err),
                 }
@@ -271,24 +270,24 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         // cached under a unique build ID, so unzipped directories are never stale.
         match built_wheel.target.canonicalize() {
             Ok(archive) => {
-                return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                return Ok(LocalWheel {
                     dist: Dist::Source(dist.clone()),
                     archive,
                     filename: built_wheel.filename,
-                }));
+                });
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
             Err(err) => return Err(Error::CacheRead(err)),
         }
 
         // Otherwise, unzip the wheel.
-        Ok(LocalWheel::Unzipped(UnzippedWheel {
+        Ok(LocalWheel {
             dist: Dist::Source(dist.clone()),
             archive: self
                 .unzip_wheel(&built_wheel.path, &built_wheel.target)
                 .await?,
             filename: built_wheel.filename,
-        }))
+        })
     }
 
     /// Fetch the wheel metadata from the index, or from the cache if possible.
@@ -480,11 +479,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 if ArchiveTimestamp::up_to_date_with(path, ArchiveTarget::Cache(&archive))
                     .map_err(Error::CacheRead)?
                 {
-                    return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                    return Ok(LocalWheel {
                         dist: Dist::Built(dist.clone()),
                         archive,
                         filename: filename.clone(),
-                    }));
+                    });
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
@@ -492,11 +491,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         }
 
         // Otherwise, unzip the wheel.
-        Ok(LocalWheel::Unzipped(UnzippedWheel {
+        Ok(LocalWheel {
             dist: Dist::Built(dist.clone()),
             archive: self.unzip_wheel(path, wheel_entry.path()).await?,
             filename: filename.clone(),
-        }))
+        })
     }
 
     /// Unzip a wheel into the cache, returning the path to the unzipped directory.

@@ -3,7 +3,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
-use tempfile::TempDir;
 use tokio::task::JoinError;
 use tracing::instrument;
 use url::Url;
@@ -14,7 +13,7 @@ use distribution_types::{
 use platform_tags::Tags;
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_distribution::{DistributionDatabase, LocalWheel, Unzip};
+use uv_distribution::DistributionDatabase;
 use uv_types::{BuildContext, InFlight};
 
 use crate::editable::BuiltEditable;
@@ -133,7 +132,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                     .build_wheel_editable(&editable, editable_wheel_dir)
                     .await
                     .map_err(Error::Editable)?;
-                let cached_dist = self.unzip_wheel(local_wheel).await?;
+                let cached_dist = CachedDist::from(local_wheel);
                 if let Some(task_id) = task_id {
                     if let Some(reporter) = &self.reporter {
                         reporter.on_editable_build_complete(&editable, task_id);
@@ -166,13 +165,13 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     pub async fn get_wheel(&self, dist: Dist, in_flight: &InFlight) -> Result<CachedDist, Error> {
         let id = dist.distribution_id();
         if in_flight.downloads.register(id.clone()) {
-            let download: LocalWheel = self
+            let result = self
                 .database
                 .get_or_build_wheel(&dist, self.tags)
                 .boxed()
                 .map_err(|err| Error::Fetch(dist.clone(), err))
-                .await?;
-            let result = self.unzip_wheel(download).await;
+                .await
+                .map(CachedDist::from);
             match result {
                 Ok(cached) => {
                     in_flight.downloads.done(id, Ok(cached.clone()));
@@ -195,37 +194,6 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
                 Err(err) => Err(Error::Thread(err.to_string())),
             }
         }
-    }
-
-    /// Unzip a locally-available wheel into the cache.
-    async fn unzip_wheel(&self, download: LocalWheel) -> Result<CachedDist, Error> {
-        // Just an optimization: Avoid spawning a blocking task if there is no work to be done.
-        if let LocalWheel::Unzipped(download) = download {
-            return Ok(download.into_cached_dist());
-        }
-
-        // Unzip the wheel.
-        let temp_dir = tokio::task::spawn_blocking({
-            let download = download.clone();
-            let cache = self.cache.clone();
-            move || -> Result<TempDir, uv_extract::Error> {
-                // Unzip the wheel into a temporary directory.
-                let temp_dir = tempfile::tempdir_in(cache.root())?;
-                download.unzip(temp_dir.path())?;
-                Ok(temp_dir)
-            }
-        })
-        .await?
-        .map_err(|err| Error::Unzip(download.remote().clone(), err))?;
-
-        // Persist the temporary directory to the directory store.
-        let archive = self
-            .cache
-            .persist(temp_dir.into_path(), download.target())
-            .map_err(Error::CacheWrite)
-            .await?;
-
-        Ok(download.into_cached_dist(archive))
     }
 }
 
