@@ -150,10 +150,9 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                         Url::parse(url).map_err(|err| Error::Url(url.clone(), err))?
                     }
                     FileLocation::Path(path) => {
-                        let url = Url::from_file_path(path).expect("path is absolute");
                         let cache_entry = self.build_context.cache().entry(
                             CacheBucket::Wheels,
-                            WheelCache::Url(&url).wheel_dir(wheel.name().as_ref()),
+                            WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
                             wheel.filename.stem(),
                         );
                         return self

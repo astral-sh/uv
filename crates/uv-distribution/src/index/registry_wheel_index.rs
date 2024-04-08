@@ -83,7 +83,10 @@ impl<'a> RegistryWheelIndex<'a> {
         let flat_index_urls: Vec<IndexUrl> = index_locations
             .flat_index()
             .filter_map(|flat_index| match flat_index {
-                FlatIndexLocation::Path(_) => None,
+                FlatIndexLocation::Path(path) => {
+                    let path = fs_err::canonicalize(path).ok()?;
+                    Some(IndexUrl::Url(VerbatimUrl::from_path(path)))
+                }
                 FlatIndexLocation::Url(url) => {
                     Some(IndexUrl::Url(VerbatimUrl::unknown(url.clone())))
                 }
