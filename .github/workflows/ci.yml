@@ -91,6 +91,7 @@ jobs:
 
       - name: "Cargo test"
         run: |
+          source .env
           cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
       - name: "Smoke test (unix)"
