@@ -77,9 +77,8 @@ impl BatchPrefetcher {
             compatible: current_range.clone(),
             previous: version.clone(),
         };
-        let mut i = 0;
-        while i < total_prefetch {
-            i += 1;
+        let mut prefetch_count = 0;
+        for _ in 0.. total_prefetch {
             let candidate = match phase {
                 BatchPrefetchStrategy::Compatible {
                     compatible,
@@ -126,17 +125,22 @@ impl BatchPrefetcher {
             let CandidateDist::Compatible(dist) = candidate.dist() else {
                 continue;
             };
+            // Avoid building a lot of source distributions.
+            if !dist.prefetchable() {
+                continue;
+            }
             let dist = dist.for_resolution();
 
             // Emit a request to fetch the metadata for this version.
             trace!(
-                "Prefetching {i} ({}) {}",
+                "Prefetching {prefetch_count} ({}) {}",
                 match phase {
                     BatchPrefetchStrategy::Compatible { .. } => "compatible",
                     BatchPrefetchStrategy::InOrder { .. } => "in order",
                 },
                 dist
             );
+            prefetch_count += 1;
             if index.distributions.register(candidate.package_id()) {
                 let request = match dist {
                     ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
@@ -146,7 +150,7 @@ impl BatchPrefetcher {
             }
         }
 
-        debug!("Prefetching {i} {package_name} versions");
+        debug!("Prefetching {prefetch_count} {package_name} versions");
 
         self.last_prefetch.insert(next.clone(), num_tried);
         Ok(())

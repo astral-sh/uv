@@ -311,6 +311,18 @@ impl<'a> CompatibleDist<'a> {
             } => ResolvedDistRef::Installable(source_dist),
         }
     }
+
+    /// Returns whether the distribution is a source distribution.
+    ///
+    /// Avoid building source distributions we don't need.
+    pub fn prefetchable(&self) -> bool {
+        match *self {
+            CompatibleDist::SourceDist(_) => false,
+            CompatibleDist::InstalledDist(_) |
+            CompatibleDist::CompatibleWheel(_, _) |
+            CompatibleDist::IncompatibleWheel { .. } => true
+        }
+    }
 }
 
 impl WheelCompatibility {
