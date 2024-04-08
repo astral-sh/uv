@@ -169,26 +169,23 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     let system_info = linehaul.system.unwrap();
     let impl_info = linehaul.implementation.unwrap();
 
-    assert_eq!(installer_info.name.unwrap(), "uv".to_string());
-    assert_eq!(installer_info.version.unwrap(), version());
+    assert_eq!(installer_info.name.as_deref(), Some("uv"));
+    assert_eq!(installer_info.version.as_deref(), Some(version()));
 
-    assert_eq!(system_info.name.unwrap(), markers.platform_system);
-    assert_eq!(system_info.release.unwrap(), markers.platform_release);
+    assert_eq!(system_info.name, Some(markers.platform_system));
+    assert_eq!(system_info.release, Some(markers.platform_release));
 
+    assert_eq!(impl_info.name, Some(markers.platform_python_implementation));
     assert_eq!(
-        impl_info.name.unwrap(),
-        markers.platform_python_implementation
-    );
-    assert_eq!(
-        impl_info.version.unwrap(),
-        markers.python_full_version.version.to_string()
+        impl_info.version,
+        Some(markers.python_full_version.version.to_string())
     );
 
     assert_eq!(
-        linehaul.python.unwrap(),
-        markers.python_full_version.version.to_string()
+        linehaul.python,
+        Some(markers.python_full_version.version.to_string())
     );
-    assert_eq!(linehaul.cpu.unwrap(), markers.platform_machine);
+    assert_eq!(linehaul.cpu, Some(markers.platform_machine));
 
     assert_eq!(linehaul.openssl_version, None);
     assert_eq!(linehaul.setuptools_version, None);
@@ -197,25 +194,18 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     if cfg!(windows) {
         assert_eq!(linehaul.distro, None);
     } else if cfg!(target_os = "linux") {
-        // Using `os_info` to confirm our values are as expected in Linux
-        let info = os_info::get();
         let Some(distro_info) = linehaul.distro else {
             panic!("got no distro, but expected one in linehaul")
         };
-        assert_eq!(distro_info.id.as_deref(), info.codename());
-        if let Some(ref name) = distro_info.name {
-            assert_eq!(name, &info.os_type().to_string());
-        }
-        if let Some(ref version) = distro_info.version {
-            assert_eq!(version, &info.version().to_string());
-        }
+        assert_eq!(distro_info.id.as_deref(), Some("jammy"));
+        assert_eq!(distro_info.name.as_deref(), Some("Ubuntu"));
+        assert_eq!(distro_info.version.as_deref(), Some("22.04"));
         assert!(distro_info.libc.is_some());
     } else if cfg!(target_os = "macos") {
-        // We mock the macOS version
         let distro_info = linehaul.distro.unwrap();
         assert_eq!(distro_info.id, None);
-        assert_eq!(distro_info.name.unwrap(), "macOS");
-        assert_eq!(distro_info.version, Some("14.4".to_string()));
+        assert_eq!(distro_info.name.as_deref(), Some("macOS"));
+        assert_eq!(distro_info.version.as_deref(), Some("14.4"));
         assert_eq!(distro_info.libc, None);
     }
 
