@@ -71,7 +71,7 @@ tikv-jemallocator = { version = "0.5.4" }
 [dev-dependencies]
 assert_cmd = { version = "2.0.14" }
 assert_fs = { version = "1.1.0" }
-base64 = { version = "0.21.7" }
+base64 = { version = "0.22.0" }
 byteorder = { version = "1.5.0" }
 filetime = { version = "0.2.23" }
 indoc = { version = "2.0.4" }
