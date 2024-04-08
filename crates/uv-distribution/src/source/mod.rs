@@ -1098,81 +1098,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 }
 
-#[derive(Debug)]
-enum ExtractedSource {
-    /// The source distribution was passed in as a directory, and so doesn't need to be extracted.
-    Directory(PathBuf),
-    /// The source distribution was passed in as an archive, and was extracted into a temporary
-    /// directory.
-    ///
-    /// The extracted archive and temporary directory will be deleted when the `ExtractedSource` is
-    /// dropped.
-    #[allow(dead_code)]
-    Archive(PathBuf, TempDir),
-}
-
-impl ExtractedSource {
-    /// Return the [`Path`] to the extracted source root.
-    fn path(&self) -> &Path {
-        match self {
-            ExtractedSource::Directory(path) => path,
-            ExtractedSource::Archive(path, _) => path,
-        }
-    }
-}
-
-/// Read the [`Metadata23`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
-/// or later _and_ none of the required fields (`Requires-Python`, `Requires-Dist`, and
-/// `Provides-Extra`) are marked as dynamic.
-pub(crate) async fn read_pkg_info(
-    source_tree: &Path,
-    subdirectory: Option<&Path>,
-) -> Result<Metadata23, Error> {
-    // Read the `PKG-INFO` file.
-    let pkg_info = match subdirectory {
-        Some(subdirectory) => source_tree.join(subdirectory).join("PKG-INFO"),
-        None => source_tree.join("PKG-INFO"),
-    };
-    let content = match fs::read(pkg_info).await {
-        Ok(content) => content,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Error::MissingPkgInfo);
-        }
-        Err(err) => return Err(Error::CacheRead(err)),
-    };
-
-    // Parse the metadata.
-    let metadata = Metadata23::parse_pkg_info(&content).map_err(Error::DynamicPkgInfo)?;
-
-    Ok(metadata)
-}
-
-/// Read the [`Metadata23`] from a source distribution's `pyproject.tom` file, if it defines static
-/// metadata consistent with PEP 621.
-pub(crate) async fn read_pyproject_toml(
-    source_tree: &Path,
-    subdirectory: Option<&Path>,
-) -> Result<Metadata23, Error> {
-    // Read the `pyproject.toml` file.
-    let pyproject_toml = match subdirectory {
-        Some(subdirectory) => source_tree.join(subdirectory).join("pyproject.toml"),
-        None => source_tree.join("pyproject.toml"),
-    };
-    let content = match fs::read_to_string(pyproject_toml).await {
-        Ok(content) => content,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Error::MissingPyprojectToml);
-        }
-        Err(err) => return Err(Error::CacheRead(err)),
-    };
-
-    // Parse the metadata.
-    let metadata =
-        Metadata23::parse_pyproject_toml(&content).map_err(Error::DynamicPyprojectToml)?;
-
-    Ok(metadata)
-}
-
 /// Read an existing HTTP-cached [`Manifest`], if it exists.
 pub(crate) fn read_http_manifest(cache_entry: &CacheEntry) -> Result<Option<Manifest>, Error> {
     match fs_err::File::open(cache_entry.path()) {
@@ -1206,10 +1131,85 @@ pub(crate) fn read_timestamp_manifest(
     Ok(None)
 }
 
+#[derive(Debug)]
+enum ExtractedSource {
+    /// The source distribution was passed in as a directory, and so doesn't need to be extracted.
+    Directory(PathBuf),
+    /// The source distribution was passed in as an archive, and was extracted into a temporary
+    /// directory.
+    ///
+    /// The extracted archive and temporary directory will be deleted when the `ExtractedSource` is
+    /// dropped.
+    #[allow(dead_code)]
+    Archive(PathBuf, TempDir),
+}
+
+impl ExtractedSource {
+    /// Return the [`Path`] to the extracted source root.
+    fn path(&self) -> &Path {
+        match self {
+            ExtractedSource::Directory(path) => path,
+            ExtractedSource::Archive(path, _) => path,
+        }
+    }
+}
+
+/// Read the [`Metadata23`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
+/// or later _and_ none of the required fields (`Requires-Python`, `Requires-Dist`, and
+/// `Provides-Extra`) are marked as dynamic.
+async fn read_pkg_info(
+    source_tree: &Path,
+    subdirectory: Option<&Path>,
+) -> Result<Metadata23, Error> {
+    // Read the `PKG-INFO` file.
+    let pkg_info = match subdirectory {
+        Some(subdirectory) => source_tree.join(subdirectory).join("PKG-INFO"),
+        None => source_tree.join("PKG-INFO"),
+    };
+    let content = match fs::read(pkg_info).await {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::MissingPkgInfo);
+        }
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    // Parse the metadata.
+    let metadata = Metadata23::parse_pkg_info(&content).map_err(Error::DynamicPkgInfo)?;
+
+    Ok(metadata)
+}
+
+/// Read the [`Metadata23`] from a source distribution's `pyproject.tom` file, if it defines static
+/// metadata consistent with PEP 621.
+async fn read_pyproject_toml(
+    source_tree: &Path,
+    subdirectory: Option<&Path>,
+) -> Result<Metadata23, Error> {
+    // Read the `pyproject.toml` file.
+    let pyproject_toml = match subdirectory {
+        Some(subdirectory) => source_tree.join(subdirectory).join("pyproject.toml"),
+        None => source_tree.join("pyproject.toml"),
+    };
+    let content = match fs::read_to_string(pyproject_toml).await {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::MissingPyprojectToml);
+        }
+        Err(err) => return Err(Error::CacheRead(err)),
+    };
+
+    // Parse the metadata.
+    let metadata =
+        Metadata23::parse_pyproject_toml(&content).map_err(Error::DynamicPyprojectToml)?;
+
+    Ok(metadata)
+}
+
 /// Read an existing timestamped [`Manifest`], if it exists and is up-to-date.
 ///
 /// If the cache entry is stale, a new entry will be created.
-pub(crate) async fn refresh_timestamp_manifest(
+async fn refresh_timestamp_manifest(
     cache_entry: &CacheEntry,
     freshness: Freshness,
     modified: ArchiveTimestamp,
@@ -1239,9 +1239,7 @@ pub(crate) async fn refresh_timestamp_manifest(
 }
 
 /// Read an existing cached [`Metadata23`], if it exists.
-pub(crate) async fn read_cached_metadata(
-    cache_entry: &CacheEntry,
-) -> Result<Option<Metadata23>, Error> {
+async fn read_cached_metadata(cache_entry: &CacheEntry) -> Result<Option<Metadata23>, Error> {
     match fs::read(&cache_entry.path()).await {
         Ok(cached) => Ok(Some(rmp_serde::from_slice::<Metadata23>(&cached)?)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
