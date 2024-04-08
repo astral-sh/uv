@@ -44,6 +44,7 @@ use crate::pubgrub::{
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
+use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::index::InMemoryIndex;
 pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
@@ -54,6 +55,7 @@ pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Exclusions, Options};
 
+mod batch_prefetch;
 mod index;
 mod locals;
 mod provider;
@@ -217,14 +219,14 @@ impl<
     pub async fn resolve(self) -> Result<ResolutionGraph, ResolveError> {
         // A channel to fetch package metadata (e.g., given `flask`, fetch all versions) and version
         // metadata (e.g., given `flask==1.0.0`, fetch the metadata for that version).
-        // Channel size is set to the same size as the task buffer for simplicity.
-        let (request_sink, request_stream) = tokio::sync::mpsc::channel(50);
+        // Channel size is set large to accommodate batch prefetching.
+        let (request_sink, request_stream) = tokio::sync::mpsc::channel(300);
 
         // Run the fetcher.
         let requests_fut = self.fetch(request_stream).fuse();
 
         // Run the solver.
-        let resolve_fut = self.solve(request_sink).fuse();
+        let resolve_fut = self.solve(request_sink).boxed().fuse();
 
         // Wait for both to complete.
         match tokio::try_join!(requests_fut, resolve_fut) {
@@ -260,6 +262,7 @@ impl<
         request_sink: tokio::sync::mpsc::Sender<Request>,
     ) -> Result<ResolutionGraph, ResolveError> {
         let root = PubGrubPackage::Root(self.project.clone());
+        let mut prefetcher = BatchPrefetcher::default();
 
         // Keep track of the packages for which we've requested metadata.
         let mut pins = FilePins::default();
@@ -307,6 +310,8 @@ impl<
                 );
             };
             next = highest_priority_pkg;
+
+            prefetcher.version_tried(next.clone());
 
             let term_intersection = state
                 .partial_solution
@@ -414,6 +419,17 @@ impl<
                     continue;
                 }
             };
+
+            prefetcher
+                .prefetch_batches(
+                    &next,
+                    &version,
+                    term_intersection.unwrap_positive(),
+                    &request_sink,
+                    self.index,
+                    &self.selector,
+                )
+                .await?;
 
             self.on_progress(&next, &version);
 

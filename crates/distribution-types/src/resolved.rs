@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
 use pep508_rs::PackageName;
 
@@ -38,6 +38,15 @@ impl ResolvedDistRef<'_> {
         match self {
             Self::Installable(dist) => ResolvedDist::Installable((*dist).clone()),
             Self::Installed(dist) => ResolvedDist::Installed((*dist).clone()),
+        }
+    }
+}
+
+impl Display for ResolvedDistRef<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Installable(dist) => Display::fmt(dist, f),
+            Self::Installed(dist) => Display::fmt(dist, f),
         }
     }
 }
