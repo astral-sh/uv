@@ -78,7 +78,7 @@ impl BatchPrefetcher {
             previous: version.clone(),
         };
         let mut prefetch_count = 0;
-        for _ in 0.. total_prefetch {
+        for _ in 0..total_prefetch {
             let candidate = match phase {
                 BatchPrefetchStrategy::Compatible {
                     compatible,

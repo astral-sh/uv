@@ -318,9 +318,9 @@ impl<'a> CompatibleDist<'a> {
     pub fn prefetchable(&self) -> bool {
         match *self {
             CompatibleDist::SourceDist(_) => false,
-            CompatibleDist::InstalledDist(_) |
-            CompatibleDist::CompatibleWheel(_, _) |
-            CompatibleDist::IncompatibleWheel { .. } => true
+            CompatibleDist::InstalledDist(_)
+            | CompatibleDist::CompatibleWheel(_, _)
+            | CompatibleDist::IncompatibleWheel { .. } => true,
         }
     }
 }
