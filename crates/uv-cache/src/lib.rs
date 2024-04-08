@@ -795,6 +795,12 @@ impl ArchiveTimestamp {
         }
     }
 
+    /// Return the modification timestamp for a file.
+    pub fn from_file(path: impl AsRef<Path>) -> Result<Self, io::Error> {
+        let metadata = fs_err::metadata(path.as_ref())?;
+        Ok(Self::Exact(Timestamp::from_metadata(&metadata)))
+    }
+
     /// Return the modification timestamp for an archive.
     pub fn timestamp(&self) -> Timestamp {
         match self {

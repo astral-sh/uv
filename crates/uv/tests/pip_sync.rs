@@ -1708,7 +1708,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 1 file for tomli ([SIZE])
+    Removed 2 files for tomli ([SIZE])
     "###
     );
 

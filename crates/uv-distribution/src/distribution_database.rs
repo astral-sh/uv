@@ -15,8 +15,9 @@ use distribution_types::{
 };
 use platform_tags::Tags;
 use pypi_types::Metadata23;
-use uv_cache::{ArchiveTarget, ArchiveTimestamp, CacheBucket, CacheEntry, WheelCache};
+use uv_cache::{ArchiveTimestamp, CacheBucket, CacheEntry, CachedByTimestamp, WheelCache};
 use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
+use uv_fs::write_atomic;
 use uv_types::{BuildContext, NoBinary, NoBuild};
 
 use crate::locks::Locks;
@@ -471,30 +472,31 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         wheel_entry: CacheEntry,
         dist: &BuiltDist,
     ) -> Result<LocalWheel, Error> {
-        // If the file is already unzipped, and the unzipped directory is fresh,
-        // return it.
-        match wheel_entry.path().canonicalize() {
-            Ok(archive) => {
-                if ArchiveTimestamp::up_to_date_with(path, ArchiveTarget::Cache(&archive))
-                    .map_err(Error::CacheRead)?
-                {
-                    return Ok(LocalWheel {
-                        dist: Dist::Built(dist.clone()),
-                        archive,
-                        filename: filename.clone(),
-                    });
-                }
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-            Err(err) => return Err(Error::CacheRead(err)),
-        }
+        // Determine the last-modified time of the wheel.
+        let modified = ArchiveTimestamp::from_file(path).map_err(Error::CacheRead)?;
 
-        // Otherwise, unzip the wheel.
-        Ok(LocalWheel {
-            dist: Dist::Built(dist.clone()),
-            archive: self.unzip_wheel(path, wheel_entry.path()).await?,
-            filename: filename.clone(),
-        })
+        // Attempt to read the archive pointer from the cache.
+        let archive_entry = wheel_entry.with_file(format!("{}.rev", filename.stem()));
+        let archive = read_timestamped_archive(&archive_entry, modified)?;
+
+        // If the file is already unzipped, and the cache is up-to-date, return it.
+        if let Some(archive) = archive {
+            Ok(LocalWheel {
+                dist: Dist::Built(dist.clone()),
+                archive,
+                filename: filename.clone(),
+            })
+        } else {
+            // Otherwise, unzip the wheel.
+            let archive = self.unzip_wheel(path, wheel_entry.path()).await?;
+            write_timestamped_archive(&archive_entry, archive.clone(), modified).await?;
+
+            Ok(LocalWheel {
+                dist: Dist::Built(dist.clone()),
+                archive,
+                filename: filename.clone(),
+            })
+        }
     }
 
     /// Unzip a wheel into the cache, returning the path to the unzipped directory.
@@ -541,4 +543,39 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     pub fn index_locations(&self) -> &IndexLocations {
         self.build_context.index_locations()
     }
+}
+
+/// Write a timestamped archive path to the cache.
+async fn write_timestamped_archive(
+    cache_entry: &CacheEntry,
+    data: PathBuf,
+    modified: ArchiveTimestamp,
+) -> Result<(), Error> {
+    write_atomic(
+        cache_entry.path(),
+        rmp_serde::to_vec(&CachedByTimestamp {
+            timestamp: modified.timestamp(),
+            data,
+        })?,
+    )
+    .await
+    .map_err(Error::CacheWrite)
+}
+
+/// Read an existing timestamped archive path, if it exists and is up-to-date.
+fn read_timestamped_archive(
+    cache_entry: &CacheEntry,
+    modified: ArchiveTimestamp,
+) -> Result<Option<PathBuf>, Error> {
+    match fs_err::read(cache_entry.path()) {
+        Ok(cached) => {
+            let cached = rmp_serde::from_slice::<CachedByTimestamp<PathBuf>>(&cached)?;
+            if cached.timestamp == modified.timestamp() {
+                return Ok(Some(cached.data));
+            }
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => return Err(Error::CacheRead(err)),
+    }
+    Ok(None)
 }
