@@ -151,35 +151,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             WheelCache::Url(&url).wheel_dir(wheel.name().as_ref()),
                             wheel.filename.stem(),
                         );
-
-                        // If the file is already unzipped, and the unzipped directory is fresh,
-                        // return it.
-                        match cache_entry.path().canonicalize() {
-                            Ok(archive) => {
-                                if ArchiveTimestamp::up_to_date_with(
-                                    path,
-                                    ArchiveTarget::Cache(&archive),
-                                )
-                                .map_err(Error::CacheRead)?
-                                {
-                                    return Ok(LocalWheel::Unzipped(UnzippedWheel {
-                                        dist: Dist::Built(dist.clone()),
-                                        archive,
-                                        filename: wheel.filename.clone(),
-                                    }));
-                                }
-                            }
-                            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-                            Err(err) => return Err(Error::CacheRead(err)),
-                        }
-
-                        // Otherwise, unzip the file.
-                        return Ok(LocalWheel::Disk(DiskWheel {
-                            dist: Dist::Built(dist.clone()),
-                            path: path.clone(),
-                            target: cache_entry.into_path_buf(),
-                            filename: wheel.filename.clone(),
-                        }));
+                        return Self::load_wheel(path, &wheel.filename, cache_entry, dist);
                     }
                 };
 
@@ -269,34 +241,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                     wheel.filename.stem(),
                 );
-
-                // If the file is already unzipped, and the unzipped directory is fresh,
-                // return it.
-                match cache_entry.path().canonicalize() {
-                    Ok(archive) => {
-                        if ArchiveTimestamp::up_to_date_with(
-                            &wheel.path,
-                            ArchiveTarget::Cache(&archive),
-                        )
-                        .map_err(Error::CacheRead)?
-                        {
-                            return Ok(LocalWheel::Unzipped(UnzippedWheel {
-                                dist: Dist::Built(dist.clone()),
-                                archive,
-                                filename: wheel.filename.clone(),
-                            }));
-                        }
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-                    Err(err) => return Err(Error::CacheRead(err)),
-                }
-
-                Ok(LocalWheel::Disk(DiskWheel {
-                    dist: Dist::Built(dist.clone()),
-                    path: wheel.path.clone(),
-                    target: cache_entry.into_path_buf(),
-                    filename: wheel.filename.clone(),
-                }))
+                Self::load_wheel(&wheel.path, &wheel.filename, cache_entry, dist)
             }
         }
     }
@@ -504,6 +449,40 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             })?;
 
         Ok(archive)
+    }
+
+    /// Load a wheel from a local path.
+    fn load_wheel(
+        path: &Path,
+        filename: &WheelFilename,
+        wheel_entry: CacheEntry,
+        dist: &BuiltDist,
+    ) -> Result<LocalWheel, Error> {
+        // If the file is already unzipped, and the unzipped directory is fresh,
+        // return it.
+        match wheel_entry.path().canonicalize() {
+            Ok(archive) => {
+                if ArchiveTimestamp::up_to_date_with(path, ArchiveTarget::Cache(&archive))
+                    .map_err(Error::CacheRead)?
+                {
+                    return Ok(LocalWheel::Unzipped(UnzippedWheel {
+                        dist: Dist::Built(dist.clone()),
+                        archive,
+                        filename: filename.clone(),
+                    }));
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(Error::CacheRead(err)),
+        }
+
+        // Otherwise, return the path to the file.
+        Ok(LocalWheel::Disk(DiskWheel {
+            dist: Dist::Built(dist.clone()),
+            path: path.to_path_buf(),
+            target: wheel_entry.into_path_buf(),
+            filename: filename.clone(),
+        }))
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
