@@ -97,25 +97,34 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let mut links = HashMap::new();
     for (version, path) in results {
         // TODO(zanieb): This path should be a part of the download metadata
-        let executable = path.join("install").join("bin").join("python3");
-        for target in &[
+        let mut executable = path.join("install").join("bin").join("python3");
+
+        if cfg!(windows) {
+            executable = executable.with_extension(".exe");
+        }
+
+        for mut target in [
             bootstrap_dir.join(format!("python{}", version.python_full_version())),
             bootstrap_dir.join(format!("python{}.{}", version.major(), version.minor())),
             bootstrap_dir.join(format!("python{}", version.major())),
             bootstrap_dir.join("python"),
         ] {
+            if cfg!(windows) {
+                target = target.with_extension(".exe");
+            }
+
             // Attempt to remove it, we'll fail on link if we couldn't remove it for some reason
             // but if it's missing we don't want to error
-            let _ = fs::remove_file(target);
+            let _ = fs::remove_file(&target);
 
             #[cfg(unix)]
-            symlink(&executable, target).await?;
+            symlink(&executable, &target).await?;
 
             #[cfg(windows)]
             // Windows requires higher permissions for symbolic links
-            hard_link(&executable, target).await?;
+            hard_link(&executable, &target).await?;
 
-            links.insert(target.clone(), executable.clone());
+            links.insert(target, executable.clone());
         }
     }
     for (target, executable) in links.iter().sorted() {
