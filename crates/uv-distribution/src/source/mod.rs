@@ -330,44 +330,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
         tags: &Tags,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let cache_entry = cache_shard.entry(REVISION);
-        let cache_control = match self.client.connectivity() {
-            Connectivity::Online => CacheControl::from(
-                self.build_context
-                    .cache()
-                    .freshness(&cache_entry, source.name())
-                    .map_err(Error::CacheRead)?,
-            ),
-            Connectivity::Offline => CacheControl::AllowStale,
-        };
-
-        let download = |response| {
-            async {
-                // At this point, we're seeing a new or updated source distribution. Initialize a
-                // new revision, to collect the source and built artifacts.
-                let revision = Revision::new();
-
-                // Download the source distribution.
-                debug!("Downloading source distribution: {source}");
-                let source_dist_entry = cache_shard.shard(revision.id()).entry(filename);
-                self.persist_url(response, source, filename, &source_dist_entry)
-                    .await?;
-
-                Ok(revision)
-            }
-            .boxed()
-            .instrument(info_span!("download", source_dist = %source))
-        };
-        let req = self.request(url.clone())?;
+        // Fetch the revision for the source distribution.
         let revision = self
-            .client
-            .cached_client()
-            .get_serde(req, &cache_entry, cache_control, download)
-            .await
-            .map_err(|err| match err {
-                CachedClientError::Callback(err) => err,
-                CachedClientError::Client(err) => Error::Client(err),
-            })?;
+            .url_revision(source, filename, url, cache_shard)
+            .await?;
 
         // From here on, scope all operations to the current build. Within the revision shard,
         // there's no need to check for freshness, since entries have to be fresher than the
@@ -423,44 +389,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
     ) -> Result<Metadata23, Error> {
-        let cache_entry = cache_shard.entry(REVISION);
-        let cache_control = match self.client.connectivity() {
-            Connectivity::Online => CacheControl::from(
-                self.build_context
-                    .cache()
-                    .freshness(&cache_entry, source.name())
-                    .map_err(Error::CacheRead)?,
-            ),
-            Connectivity::Offline => CacheControl::AllowStale,
-        };
-
-        let download = |response| {
-            async {
-                // At this point, we're seeing a new or updated source distribution. Initialize a
-                // new revision, to collect the source and built artifacts.
-                let revision = Revision::new();
-
-                // Download the source distribution.
-                debug!("Downloading source distribution: {source}");
-                let source_dist_entry = cache_shard.shard(revision.id()).entry(filename);
-                self.persist_url(response, source, filename, &source_dist_entry)
-                    .await?;
-
-                Ok(revision)
-            }
-            .boxed()
-            .instrument(info_span!("download", source_dist = %source))
-        };
-        let req = self.request(url.clone())?;
+        // Fetch the revision for the source distribution.
         let revision = self
-            .client
-            .cached_client()
-            .get_serde(req, &cache_entry, cache_control, download)
-            .await
-            .map_err(|err| match err {
-                CachedClientError::Callback(err) => err,
-                CachedClientError::Client(err) => Error::Client(err),
-            })?;
+            .url_revision(source, filename, url, cache_shard)
+            .await?;
 
         // From here on, scope all operations to the current build. Within the revision shard,
         // there's no need to check for freshness, since entries have to be fresher than the
@@ -521,6 +453,53 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(metadata)
     }
 
+    /// Return the [`Revision`] for a remote URL, refreshing it if necessary.
+    async fn url_revision(
+        &self,
+        source: &BuildableSource<'_>,
+        filename: &str,
+        url: &Url,
+        cache_shard: &CacheShard,
+    ) -> Result<Revision, Error> {
+        let cache_entry = cache_shard.entry(REVISION);
+        let cache_control = match self.client.connectivity() {
+            Connectivity::Online => CacheControl::from(
+                self.build_context
+                    .cache()
+                    .freshness(&cache_entry, source.name())
+                    .map_err(Error::CacheRead)?,
+            ),
+            Connectivity::Offline => CacheControl::AllowStale,
+        };
+
+        let download = |response| {
+            async {
+                // At this point, we're seeing a new or updated source distribution. Initialize a
+                // new revision, to collect the source and built artifacts.
+                let revision = Revision::new();
+
+                // Download the source distribution.
+                debug!("Downloading source distribution: {source}");
+                let source_dist_entry = cache_shard.shard(revision.id()).entry(filename);
+                self.persist_url(response, source, filename, &source_dist_entry)
+                    .await?;
+
+                Ok(revision)
+            }
+            .boxed()
+            .instrument(info_span!("download", source_dist = %source))
+        };
+        let req = self.request(url.clone())?;
+        self.client
+            .cached_client()
+            .get_serde(req, &cache_entry, cache_control, download)
+            .await
+            .map_err(|err| match err {
+                CachedClientError::Callback(err) => err,
+                CachedClientError::Client(err) => Error::Client(err),
+            })
+    }
+
     /// Build a source distribution from a local path.
     async fn path(
         &self,
@@ -534,22 +513,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             WheelCache::Path(resource.url).root(),
         );
 
-        // Determine the last-modified time of the source distribution.
-        let Some(modified) =
-            ArchiveTimestamp::from_path(&resource.path).map_err(Error::CacheRead)?
-        else {
-            return Err(Error::DirWithoutEntrypoint);
-        };
-
-        // Read the existing metadata from the cache.
-        let revision_entry = cache_shard.entry(REVISION);
-        let revision_freshness = self
-            .build_context
-            .cache()
-            .freshness(&revision_entry, source.name())
-            .map_err(Error::CacheRead)?;
-        let revision =
-            refresh_timestamped_revision(&revision_entry, revision_freshness, modified).await?;
+        // Fetch the revision for the source distribution.
+        let revision = self.path_revision(source, resource, &cache_shard).await?;
 
         // From here on, scope all operations to the current build. Within the revision shard,
         // there's no need to check for freshness, since entries have to be fresher than the
@@ -606,22 +571,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             WheelCache::Path(resource.url).root(),
         );
 
-        // Determine the last-modified time of the source distribution.
-        let Some(modified) =
-            ArchiveTimestamp::from_path(&resource.path).map_err(Error::CacheRead)?
-        else {
-            return Err(Error::DirWithoutEntrypoint);
-        };
-
-        // Read the existing metadata from the cache, to clear stale entries.
-        let revision_entry = cache_shard.entry(REVISION);
-        let revision_freshness = self
-            .build_context
-            .cache()
-            .freshness(&revision_entry, source.name())
-            .map_err(Error::CacheRead)?;
-        let revision =
-            refresh_timestamped_revision(&revision_entry, revision_freshness, modified).await?;
+        // Fetch the revision for the source distribution.
+        let revision = self.path_revision(source, resource, &cache_shard).await?;
 
         // From here on, scope all operations to the current build. Within the revision shard,
         // there's no need to check for freshness, since entries have to be fresher than the
@@ -684,6 +635,31 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(metadata)
+    }
+
+    /// Return the [`Revision`] for a local path, refreshing it if necessary.
+    async fn path_revision(
+        &self,
+        source: &BuildableSource<'_>,
+        resource: &PathSourceUrl<'_>,
+        cache_shard: &CacheShard,
+    ) -> Result<Revision, Error> {
+        // Determine the last-modified time of the source distribution.
+        let Some(modified) =
+            ArchiveTimestamp::from_path(&resource.path).map_err(Error::CacheRead)?
+        else {
+            return Err(Error::DirWithoutEntrypoint);
+        };
+
+        // Read the existing metadata from the cache.
+        let revision_entry = cache_shard.entry(REVISION);
+        let revision_freshness = self
+            .build_context
+            .cache()
+            .freshness(&revision_entry, source.name())
+            .map_err(Error::CacheRead)?;
+
+        refresh_timestamped_revision(&revision_entry, revision_freshness, modified).await
     }
 
     /// Build a source distribution from a Git repository.
