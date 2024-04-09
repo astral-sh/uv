@@ -28,7 +28,7 @@ use tracing::{debug, info_span, instrument, Instrument};
 use distribution_types::Resolution;
 use pep440_rs::Version;
 use pep508_rs::{PackageName, Requirement};
-use uv_config::{BuildKind, ConfigSettings, SetupPyStrategy};
+use uv_configuration::{BuildKind, ConfigSettings, SetupPyStrategy};
 use uv_fs::{PythonExt, Simplified};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};

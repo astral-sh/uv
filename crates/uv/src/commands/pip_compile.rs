@@ -22,7 +22,7 @@ use uv_cache::Cache;
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder,
 };
-use uv_config::{
+use uv_configuration::{
     ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, SetupPyStrategy,
     Upgrade,
 };

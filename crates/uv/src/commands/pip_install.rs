@@ -24,7 +24,7 @@ use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClient,
     RegistryClientBuilder,
 };
-use uv_config::{
+use uv_configuration::{
     ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, Reinstall,
     SetupPyStrategy, Upgrade,
 };

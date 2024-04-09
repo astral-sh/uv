@@ -28,7 +28,7 @@ use uv_cache::{
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_config::{BuildKind, NoBuild};
+use uv_configuration::{BuildKind, NoBuild};
 use uv_fs::write_atomic;
 use uv_types::{BuildContext, SourceBuildTrait};
 

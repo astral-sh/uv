@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_interpreter::{Interpreter, PythonEnvironment};
 
 use crate::BuildIsolation;
-use uv_config::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
+use uv_configuration::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///

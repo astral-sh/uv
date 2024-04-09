@@ -19,7 +19,9 @@ use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClient,
     RegistryClientBuilder,
 };
-use uv_config::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, Reinstall, SetupPyStrategy};
+use uv_configuration::{
+    ConfigSettings, IndexStrategy, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{is_dynamic, Downloader, Plan, Planner, ResolvedEditable, SitePackages};

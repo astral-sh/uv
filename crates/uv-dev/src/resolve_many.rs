@@ -15,7 +15,7 @@ use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, OwnedArchive, RegistryClient, RegistryClientBuilder};
-use uv_config::{ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
+use uv_configuration::{ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;

@@ -13,7 +13,7 @@ use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl, Resolution
 use pep508_rs::Requirement;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
-use uv_config::{ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
+use uv_configuration::{ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;

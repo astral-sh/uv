@@ -10,7 +10,7 @@ use rustc_hash::FxHashMap;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, RegistryClientBuilder};
-use uv_config::{BuildKind, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
+use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::InMemoryIndex;

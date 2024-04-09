@@ -29,7 +29,7 @@ uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
-uv-config = { workspace = true }
+uv-configuration = { workspace = true }
 
 anyhow = { workspace = true }
 async-channel = { workspace = true }
