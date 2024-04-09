@@ -150,15 +150,10 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
 }
 
 async fn read_versions_file() -> Result<Vec<String>> {
-    let mut file = File::open(".python-versions").await?;
-
-    // Since the file is small, just read the whole thing into a buffer then parse
-    let mut contents = String::new();
-    file.read_to_string(&mut contents).await?;
-
-    let lines: Vec<String> = contents
+    let lines: Vec<String> = fs::tokio::read_to_string(".python-versions")
+        .await?
         .lines()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     Ok(lines)
 }
