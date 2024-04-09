@@ -1601,7 +1601,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 4 files for wheel ([SIZE])
+    Removed 102 files for wheel ([SIZE])
     "###
     );
 
