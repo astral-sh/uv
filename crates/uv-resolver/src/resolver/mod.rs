@@ -27,11 +27,11 @@ use platform_tags::Tags;
 use pypi_types::Metadata23;
 pub(crate) use urls::Urls;
 use uv_client::{FlatIndex, RegistryClient};
+use uv_config::{Constraints, Overrides};
 use uv_distribution::DistributionDatabase;
 use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
 use uv_types::{BuildContext, InstalledPackagesProvider};
-use uv_config::{Constraints,  Overrides};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::editables::Editables;

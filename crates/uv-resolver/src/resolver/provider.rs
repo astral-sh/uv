@@ -7,10 +7,10 @@ use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
 use pypi_types::Metadata23;
 use uv_client::{FlatIndex, RegistryClient};
+use uv_config::{NoBinary, NoBuild};
 use uv_distribution::DistributionDatabase;
 use uv_normalize::PackageName;
-use uv_types::{BuildContext};
-use uv_config::{NoBinary, NoBuild};
+use uv_types::BuildContext;
 
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;

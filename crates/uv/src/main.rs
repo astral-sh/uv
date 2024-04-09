@@ -16,15 +16,15 @@ use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheArgs, Refresh};
 use uv_client::Connectivity;
-use uv_interpreter::PythonVersion;
-use uv_normalize::{ExtraName, PackageName};
-use uv_requirements::{ExtrasSpecification, RequirementsSource};
-use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
 use uv_config::{
     ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, Reinstall, SetupPyStrategy,
     Upgrade,
 };
 use uv_config::{IndexStrategy, NoBinary};
+use uv_interpreter::PythonVersion;
+use uv_normalize::{ExtraName, PackageName};
+use uv_requirements::{ExtrasSpecification, RequirementsSource};
+use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, ListFormat, VersionFormat};
 use crate::compat::CompatArgs;

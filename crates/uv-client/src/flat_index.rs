@@ -19,8 +19,8 @@ use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
 use pypi_types::Hashes;
 use uv_cache::{Cache, CacheBucket};
-use uv_normalize::PackageName;
 use uv_config::{NoBinary, NoBuild};
+use uv_normalize::PackageName;
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
