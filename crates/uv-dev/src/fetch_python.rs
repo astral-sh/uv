@@ -8,8 +8,10 @@ use clap::Parser;
 use futures::StreamExt;
 
 use itertools::Itertools;
-use tokio::io::AsyncReadExt;
-use tokio::{fs::File, time::Instant};
+
+use tokio::time::Instant;
+
+use uv_fs::replace_symlink;
 
 #[cfg(windows)]
 use fs_err::tokio::hard_link;
@@ -135,6 +137,12 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
 
             links.insert(target, executable.clone());
         }
+
+        // Create directory symlinks temporarily for compatibility with the old script
+        let target = bootstrap_dir.join(format!("python@{version}"));
+        let _ = fs::remove_dir_all(&target);
+        replace_symlink(&path, &target)?;
+        links.insert(target, path);
     }
     for (target, executable) in links.iter().sorted() {
         info!(
