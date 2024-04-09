@@ -1,27 +1,20 @@
-use fs_err as fs;
-use std::collections::HashMap;
-use std::{path::PathBuf, str::FromStr};
-
 use anyhow::Result;
 use clap::Parser;
-
-use futures::StreamExt;
-
-use itertools::Itertools;
-
-use tokio::time::Instant;
-
-use uv_fs::replace_symlink;
-
-#[cfg(windows)]
-use fs_err::tokio::hard_link;
+use fs_err as fs;
 #[cfg(unix)]
 use fs_err::tokio::symlink;
-
+use futures::StreamExt;
+use itertools::Itertools;
+use std::collections::HashMap;
+use std::str::FromStr;
+use tokio::time::Instant;
 use tracing::{info, info_span, Instrument};
+use uv_fs::replace_symlink;
 
 use uv_fs::Simplified;
-use uv_toolchain::{DownloadResult, Error, PythonDownload, PythonDownloadRequest};
+use uv_toolchain::{
+    DownloadResult, Error, PythonDownload, PythonDownloadRequest, TOOLCHAIN_DIRECTORY,
+};
 
 #[derive(Parser, Debug)]
 pub(crate) struct FetchPythonArgs {
@@ -31,11 +24,9 @@ pub(crate) struct FetchPythonArgs {
 pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let start = Instant::now();
 
-    let bootstrap_dir = std::env::var_os("UV_BOOTSTRAP_DIR")
-        .map(PathBuf::from)
-        .unwrap_or(std::env::current_dir()?.join("bin"));
+    let bootstrap_dir = &*TOOLCHAIN_DIRECTORY;
 
-    fs_err::create_dir_all(&bootstrap_dir)?;
+    fs_err::create_dir_all(bootstrap_dir)?;
 
     let versions = if args.versions.is_empty() {
         info!("Reading versions from file...");
@@ -65,7 +56,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let mut tasks = futures::stream::iter(downloads.iter())
         .map(|download| {
             async {
-                let result = download.fetch(&client, &bootstrap_dir).await;
+                let result = download.fetch(&client, bootstrap_dir).await;
                 (download.python_version(), result)
             }
             .instrument(info_span!("download", key = %download))
@@ -106,13 +97,8 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let mut links = HashMap::new();
     for (version, path) in results {
         // TODO(zanieb): This path should be a part of the download metadata
-        let executable = if cfg!(windows) {
-            path.join("install").join("python.exe")
-        } else if cfg!(unix) {
-            path.join("install").join("bin").join("python3")
-        } else {
-            unimplemented!("Only Windows and Unix systems are supported.")
-        };
+        #[cfg(unix)]
+        let executable = path.join("install").join("bin").join("python3");
 
         // On Windows, linking the executable generally results in broken installations
         // and each toolchain path will need to be added to the PATH separately in the
