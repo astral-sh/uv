@@ -371,6 +371,13 @@ impl Dist {
         }
     }
 
+    pub fn index(&self) -> Option<String> {
+        match self {
+            Self::Built(dist) => dist.index(),
+            Self::Source(dist) => dist.index(),
+        }
+    }
+
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
     pub fn file(&self) -> Option<&File> {
         match self {
@@ -388,6 +395,14 @@ impl Dist {
 }
 
 impl BuiltDist {
+    pub fn index(&self) -> Option<String> {
+        match self {
+            Self::Registry(registry) => Some(registry.index.to_string()),
+            Self::DirectUrl(_) => None,
+            Self::Path(_) => None,
+        }
+    }
+
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
     pub fn file(&self) -> Option<&File> {
         match self {
@@ -406,6 +421,13 @@ impl BuiltDist {
 }
 
 impl SourceDist {
+    pub fn index(&self) -> Option<String> {
+        match self {
+            Self::Registry(registry) => Some(registry.index.to_string()),
+            Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) => None,
+        }
+    }
+
     /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
     pub fn file(&self) -> Option<&File> {
         match self {

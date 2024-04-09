@@ -31,6 +31,13 @@ impl ResolvedDist {
             Self::Installed(dist) => dist.is_editable(),
         }
     }
+
+    pub fn index(&self) -> Option<String> {
+        match self {
+            Self::Installable(dist) => dist.index(),
+            Self::Installed(_) => None,
+        }
+    }
 }
 
 impl ResolvedDistRef<'_> {

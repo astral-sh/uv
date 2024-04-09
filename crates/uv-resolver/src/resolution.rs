@@ -576,6 +576,13 @@ impl<'a> Node<'a> {
             Node::Distribution(name, _, _) => NodeKey::Distribution(name),
         }
     }
+
+    fn index(&self) -> Option<String> {
+        match self {
+            Node::Editable(_, _) => None,
+            Node::Distribution(_, dist, _) => dist.index(),
+        }
+    }
 }
 
 impl Verbatim for Node<'_> {
@@ -670,6 +677,12 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .collect::<Vec<_>>();
                 edges.sort_unstable_by_key(|package| package.name());
 
+                let index = node.index();
+                let index_line = if index.is_some() {
+                    format!("\n    # from {}", index.unwrap())
+                } else {
+                    "".to_string()
+                };
                 match self.annotation_style {
                     AnnotationStyle::Line => {
                         if !edges.is_empty() {
@@ -679,7 +692,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                                 .map(|dependency| dependency.name().to_string())
                                 .collect::<Vec<_>>()
                                 .join(", ");
-                            let comment = format!("# via {deps}").green().to_string();
+                            let comment = format!("# via {deps}{index_line}").green().to_string();
                             annotation = Some((separator, comment));
                         }
                     }
@@ -687,7 +700,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                         [] => {}
                         [edge] => {
                             let separator = "\n";
-                            let comment = format!("    # via {}", edge.name()).green().to_string();
+                            let comment = format!("    # via {}{index_line}", edge.name())
+                                .green()
+                                .to_string();
                             annotation = Some((separator, comment));
                         }
                         edges => {
@@ -697,7 +712,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                                 .map(|dependency| format!("    #   {}", dependency.name()))
                                 .collect::<Vec<_>>()
                                 .join("\n");
-                            let comment = format!("    # via\n{deps}").green().to_string();
+                            let comment =
+                                format!("    # via\n{deps}{index_line}").green().to_string();
                             annotation = Some((separator, comment));
                         }
                     },
