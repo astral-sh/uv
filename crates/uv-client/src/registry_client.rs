@@ -424,11 +424,7 @@ impl RegistryClient {
     ) -> Result<Metadata23, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
-        if file
-            .dist_info_metadata
-            .as_ref()
-            .is_some_and(pypi_types::DistInfoMetadata::is_available)
-        {
+        if file.dist_info_metadata {
             let mut url = url.clone();
             url.set_path(&format!("{}.metadata", url.path()));
 

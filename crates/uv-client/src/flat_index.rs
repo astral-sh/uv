@@ -17,7 +17,7 @@ use distribution_types::{
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
-use pypi_types::Hashes;
+
 use uv_cache::{Cache, CacheBucket};
 use uv_configuration::{NoBinary, NoBuild};
 use uv_normalize::PackageName;
@@ -236,9 +236,9 @@ impl<'a> FlatIndexClient<'a> {
             };
 
             let file = File {
-                dist_info_metadata: None,
+                dist_info_metadata: false,
                 filename: filename.to_string(),
-                hashes: Hashes::default(),
+                hashes: Vec::new(),
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,
@@ -323,10 +323,10 @@ impl FlatIndex {
                 }));
                 match distributions.0.entry(version) {
                     Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_built(dist, None, compatibility);
+                        entry.get_mut().insert_built(dist, vec![], compatibility);
                     }
                     Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_built(dist, None, compatibility));
+                        entry.insert(PrioritizedDist::from_built(dist, vec![], compatibility));
                     }
                 }
             }
@@ -339,10 +339,10 @@ impl FlatIndex {
                 }));
                 match distributions.0.entry(filename.version) {
                     Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_source(dist, None, compatibility);
+                        entry.get_mut().insert_source(dist, vec![], compatibility);
                     }
                     Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_source(dist, None, compatibility));
+                        entry.insert(PrioritizedDist::from_source(dist, vec![], compatibility));
                     }
                 }
             }

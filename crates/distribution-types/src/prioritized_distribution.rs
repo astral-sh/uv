@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use pep440_rs::VersionSpecifiers;
 use platform_tags::{IncompatibleTag, TagCompatibility, TagPriority};
-use pypi_types::{Hashes, Yanked};
+use pypi_types::{HashDigest, Yanked};
 
 use crate::{Dist, InstalledDist, ResolvedDistRef};
 
@@ -18,7 +18,7 @@ struct PrioritizedDistInner {
     /// The highest-priority wheel.
     wheel: Option<(Dist, WheelCompatibility)>,
     /// The hashes for each distribution.
-    hashes: Vec<Hashes>,
+    hashes: Vec<HashDigest>,
 }
 
 /// A distribution that can be used for both resolution and installation.
@@ -141,24 +141,28 @@ pub enum IncompatibleSource {
 
 impl PrioritizedDist {
     /// Create a new [`PrioritizedDist`] from the given wheel distribution.
-    pub fn from_built(dist: Dist, hash: Option<Hashes>, compatibility: WheelCompatibility) -> Self {
+    pub fn from_built(
+        dist: Dist,
+        hashes: Vec<HashDigest>,
+        compatibility: WheelCompatibility,
+    ) -> Self {
         Self(Box::new(PrioritizedDistInner {
             wheel: Some((dist, compatibility)),
             source: None,
-            hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
+            hashes,
         }))
     }
 
     /// Create a new [`PrioritizedDist`] from the given source distribution.
     pub fn from_source(
         dist: Dist,
-        hash: Option<Hashes>,
+        hashes: Vec<HashDigest>,
         compatibility: SourceDistCompatibility,
     ) -> Self {
         Self(Box::new(PrioritizedDistInner {
             wheel: None,
             source: Some((dist, compatibility)),
-            hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
+            hashes,
         }))
     }
 
@@ -166,7 +170,7 @@ impl PrioritizedDist {
     pub fn insert_built(
         &mut self,
         dist: Dist,
-        hash: Option<Hashes>,
+        hashes: Vec<HashDigest>,
         compatibility: WheelCompatibility,
     ) {
         // Track the highest-priority wheel.
@@ -178,16 +182,14 @@ impl PrioritizedDist {
             self.0.wheel = Some((dist, compatibility));
         }
 
-        if let Some(hash) = hash {
-            self.0.hashes.push(hash);
-        }
+        self.0.hashes.extend(hashes);
     }
 
     /// Insert the given source distribution into the [`PrioritizedDist`].
     pub fn insert_source(
         &mut self,
         dist: Dist,
-        hash: Option<Hashes>,
+        hashes: Vec<HashDigest>,
         compatibility: SourceDistCompatibility,
     ) {
         // Track the highest-priority source.
@@ -199,9 +201,7 @@ impl PrioritizedDist {
             self.0.source = Some((dist, compatibility));
         }
 
-        if let Some(hash) = hash {
-            self.0.hashes.push(hash);
-        }
+        self.0.hashes.extend(hashes);
     }
 
     /// Return the highest-priority distribution for the package version, if any.
@@ -274,7 +274,7 @@ impl PrioritizedDist {
     }
 
     /// Return the hashes for each distribution.
-    pub fn hashes(&self) -> &[Hashes] {
+    pub fn hashes(&self) -> &[HashDigest] {
         &self.0.hashes
     }
 
