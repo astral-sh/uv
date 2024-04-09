@@ -44,9 +44,8 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
 
     let requests = versions
         .iter()
-        .map(|version| match PythonDownloadRequest::from_str(version) {
-            Ok(request) => request.fill(),
-            err @ Err(_) => err,
+        .map(|version| {
+            PythonDownloadRequest::from_str(version).and_then(PythonDownloadRequest::fill)
         })
         .collect::<Result<Vec<_>, Error>>()?;
 
