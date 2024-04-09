@@ -18,7 +18,7 @@ pub struct BuiltWheelMetadata {
 }
 
 impl BuiltWheelMetadata {
-    /// Find a compatible wheel in the cache based on the given manifest.
+    /// Find a compatible wheel in the cache.
     pub(crate) fn find_in_cache(tags: &Tags, cache_shard: &CacheShard) -> Option<Self> {
         for directory in files(cache_shard) {
             if let Some(metadata) = Self::from_path(directory, cache_shard) {

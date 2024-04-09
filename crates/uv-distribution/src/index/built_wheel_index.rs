@@ -4,7 +4,7 @@ use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, WheelCache};
 use uv_fs::symlinks;
 
 use crate::index::cached_wheel::CachedWheel;
-use crate::source::{read_http_manifest, read_timestamp_manifest, MANIFEST};
+use crate::source::{read_http_revision, read_timestamped_revision, REVISION};
 use crate::Error;
 
 /// A local index of built distributions for a specific source distribution.
@@ -26,14 +26,14 @@ impl BuiltWheelIndex {
             WheelCache::Url(source_dist.url.raw()).root(),
         );
 
-        // Read the manifest from the cache. There's no need to enforce freshness, since we
+        // Read the revision from the cache. There's no need to enforce freshness, since we
         // enforce freshness on the entries.
-        let manifest_entry = cache_shard.entry(MANIFEST);
-        let Some(manifest) = read_http_manifest(&manifest_entry)? else {
+        let revision_entry = cache_shard.entry(REVISION);
+        let Some(revision) = read_http_revision(&revision_entry)? else {
             return Ok(None);
         };
 
-        Ok(Self::find(&cache_shard.shard(manifest.id()), tags))
+        Ok(Self::find(&cache_shard.shard(revision.id()), tags))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a local path.
@@ -54,14 +54,14 @@ impl BuiltWheelIndex {
             return Err(Error::DirWithoutEntrypoint);
         };
 
-        // Read the manifest from the cache. There's no need to enforce freshness, since we
+        // Read the revision from the cache. There's no need to enforce freshness, since we
         // enforce freshness on the entries.
-        let manifest_entry = cache_shard.entry(MANIFEST);
-        let Some(manifest) = read_timestamp_manifest(&manifest_entry, modified)? else {
+        let revision_entry = cache_shard.entry(REVISION);
+        let Some(revision) = read_timestamped_revision(&revision_entry, modified)? else {
             return Ok(None);
         };
 
-        Ok(Self::find(&cache_shard.shard(manifest.id()), tags))
+        Ok(Self::find(&cache_shard.shard(revision.id()), tags))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.

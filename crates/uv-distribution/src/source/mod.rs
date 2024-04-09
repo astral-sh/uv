@@ -36,11 +36,11 @@ use uv_types::{BuildContext, BuildKind, NoBuild, SourceBuildTrait};
 use crate::error::Error;
 use crate::git::{fetch_git_archive, resolve_precise};
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
-use crate::source::manifest::Manifest;
+use crate::source::revision::Revision;
 use crate::Reporter;
 
 mod built_wheel_metadata;
-mod manifest;
+mod revision;
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub struct SourceDistributionBuilder<'a, T: BuildContext> {
@@ -49,8 +49,10 @@ pub struct SourceDistributionBuilder<'a, T: BuildContext> {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-/// The name of the file that contains the cached manifest, encoded via `MsgPack`.
-pub(crate) const MANIFEST: &str = "manifest.msgpack";
+/// The name of the file that contains the revision ID, encoded via `MsgPack`.
+///
+/// TODO(charlie): Update the filename whenever we bump the cache version.
+pub(crate) const REVISION: &str = "manifest.msgpack";
 
 /// The name of the file that contains the cached distribution metadata, encoded via `MsgPack`.
 pub(crate) const METADATA: &str = "metadata.msgpack";
@@ -328,7 +330,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
         tags: &Tags,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let cache_entry = cache_shard.entry(MANIFEST);
+        let cache_entry = cache_shard.entry(REVISION);
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(
                 self.build_context
@@ -342,22 +344,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let download = |response| {
             async {
                 // At this point, we're seeing a new or updated source distribution. Initialize a
-                // new manifest, to collect the source and built artifacts.
-                let manifest = Manifest::new();
+                // new revision, to collect the source and built artifacts.
+                let revision = Revision::new();
 
                 // Download the source distribution.
                 debug!("Downloading source distribution: {source}");
-                let source_dist_entry = cache_shard.shard(manifest.id()).entry(filename);
+                let source_dist_entry = cache_shard.shard(revision.id()).entry(filename);
                 self.persist_url(response, source, filename, &source_dist_entry)
                     .await?;
 
-                Ok(manifest)
+                Ok(revision)
             }
             .boxed()
             .instrument(info_span!("download", source_dist = %source))
         };
         let req = self.request(url.clone())?;
-        let manifest = self
+        let revision = self
             .client
             .cached_client()
             .get_serde(req, &cache_entry, cache_control, download)
@@ -367,11 +369,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        // From here on, scope all operations to the current build. Within the manifest shard,
+        // From here on, scope all operations to the current build. Within the revision shard,
         // there's no need to check for freshness, since entries have to be fresher than the
-        // manifest itself. There's also no need to lock, since we never replace entries within the
+        // revision itself. There's also no need to lock, since we never replace entries within the
         // shard.
-        let cache_shard = cache_shard.shard(manifest.id());
+        let cache_shard = cache_shard.shard(revision.id());
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
@@ -421,7 +423,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
     ) -> Result<Metadata23, Error> {
-        let cache_entry = cache_shard.entry(MANIFEST);
+        let cache_entry = cache_shard.entry(REVISION);
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(
                 self.build_context
@@ -435,22 +437,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let download = |response| {
             async {
                 // At this point, we're seeing a new or updated source distribution. Initialize a
-                // new manifest, to collect the source and built artifacts.
-                let manifest = Manifest::new();
+                // new revision, to collect the source and built artifacts.
+                let revision = Revision::new();
 
                 // Download the source distribution.
                 debug!("Downloading source distribution: {source}");
-                let source_dist_entry = cache_shard.shard(manifest.id()).entry(filename);
+                let source_dist_entry = cache_shard.shard(revision.id()).entry(filename);
                 self.persist_url(response, source, filename, &source_dist_entry)
                     .await?;
 
-                Ok(manifest)
+                Ok(revision)
             }
             .boxed()
             .instrument(info_span!("download", source_dist = %source))
         };
         let req = self.request(url.clone())?;
-        let manifest = self
+        let revision = self
             .client
             .cached_client()
             .get_serde(req, &cache_entry, cache_control, download)
@@ -460,11 +462,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 CachedClientError::Client(err) => Error::Client(err),
             })?;
 
-        // From here on, scope all operations to the current build. Within the manifest shard,
+        // From here on, scope all operations to the current build. Within the revision shard,
         // there's no need to check for freshness, since entries have to be fresher than the
-        // manifest itself. There's also no need to lock, since we never replace entries within the
+        // revision itself. There's also no need to lock, since we never replace entries within the
         // shard.
-        let cache_shard = cache_shard.shard(manifest.id());
+        let cache_shard = cache_shard.shard(revision.id());
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -540,20 +542,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Read the existing metadata from the cache.
-        let manifest_entry = cache_shard.entry(MANIFEST);
-        let manifest_freshness = self
+        let revision_entry = cache_shard.entry(REVISION);
+        let revision_freshness = self
             .build_context
             .cache()
-            .freshness(&manifest_entry, source.name())
+            .freshness(&revision_entry, source.name())
             .map_err(Error::CacheRead)?;
-        let manifest =
-            refresh_timestamp_manifest(&manifest_entry, manifest_freshness, modified).await?;
+        let revision =
+            refresh_timestamped_revision(&revision_entry, revision_freshness, modified).await?;
 
-        // From here on, scope all operations to the current build. Within the manifest shard,
+        // From here on, scope all operations to the current build. Within the revision shard,
         // there's no need to check for freshness, since entries have to be fresher than the
-        // manifest itself. There's also no need to lock, since we never replace entries within the
+        // revision itself. There's also no need to lock, since we never replace entries within the
         // shard.
-        let cache_shard = cache_shard.shard(manifest.id());
+        let cache_shard = cache_shard.shard(revision.id());
 
         // If the cache contains a compatible wheel, return it.
         if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
@@ -612,20 +614,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Read the existing metadata from the cache, to clear stale entries.
-        let manifest_entry = cache_shard.entry(MANIFEST);
-        let manifest_freshness = self
+        let revision_entry = cache_shard.entry(REVISION);
+        let revision_freshness = self
             .build_context
             .cache()
-            .freshness(&manifest_entry, source.name())
+            .freshness(&revision_entry, source.name())
             .map_err(Error::CacheRead)?;
-        let manifest =
-            refresh_timestamp_manifest(&manifest_entry, manifest_freshness, modified).await?;
+        let revision =
+            refresh_timestamped_revision(&revision_entry, revision_freshness, modified).await?;
 
-        // From here on, scope all operations to the current build. Within the manifest shard,
+        // From here on, scope all operations to the current build. Within the revision shard,
         // there's no need to check for freshness, since entries have to be fresher than the
-        // manifest itself. There's also no need to lock, since we never replace entries within the
+        // revision itself. There's also no need to lock, since we never replace entries within the
         // shard.
-        let cache_shard = cache_shard.shard(manifest.id());
+        let cache_shard = cache_shard.shard(revision.id());
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
@@ -1098,29 +1100,29 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 }
 
-/// Read an existing HTTP-cached [`Manifest`], if it exists.
-pub(crate) fn read_http_manifest(cache_entry: &CacheEntry) -> Result<Option<Manifest>, Error> {
+/// Read an existing HTTP-cached [`Revision`], if it exists.
+pub(crate) fn read_http_revision(cache_entry: &CacheEntry) -> Result<Option<Revision>, Error> {
     match fs_err::File::open(cache_entry.path()) {
         Ok(file) => {
             let data = DataWithCachePolicy::from_reader(file)?.data;
-            Ok(Some(rmp_serde::from_slice::<Manifest>(&data)?))
+            Ok(Some(rmp_serde::from_slice::<Revision>(&data)?))
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(Error::CacheRead(err)),
     }
 }
 
-/// Read an existing timestamped [`Manifest`], if it exists and is up-to-date.
+/// Read an existing timestamped [`Revision`], if it exists and is up-to-date.
 ///
 /// If the cache entry is stale, a new entry will be created.
-pub(crate) fn read_timestamp_manifest(
+pub(crate) fn read_timestamped_revision(
     cache_entry: &CacheEntry,
     modified: ArchiveTimestamp,
-) -> Result<Option<Manifest>, Error> {
+) -> Result<Option<Revision>, Error> {
     // If the cache entry is up-to-date, return it.
     match fs_err::read(cache_entry.path()) {
         Ok(cached) => {
-            let cached = rmp_serde::from_slice::<CachedByTimestamp<Manifest>>(&cached)?;
+            let cached = rmp_serde::from_slice::<CachedByTimestamp<Revision>>(&cached)?;
             if cached.timestamp == modified.timestamp() {
                 return Ok(Some(cached.data));
             }
@@ -1209,20 +1211,20 @@ async fn read_pyproject_toml(
 /// Read an existing timestamped [`Manifest`], if it exists and is up-to-date.
 ///
 /// If the cache entry is stale, a new entry will be created.
-async fn refresh_timestamp_manifest(
+async fn refresh_timestamped_revision(
     cache_entry: &CacheEntry,
     freshness: Freshness,
     modified: ArchiveTimestamp,
-) -> Result<Manifest, Error> {
+) -> Result<Revision, Error> {
     // If we know the exact modification time, we don't need to force a revalidate.
     if matches!(modified, ArchiveTimestamp::Exact(_)) || freshness.is_fresh() {
-        if let Some(manifest) = read_timestamp_manifest(cache_entry, modified)? {
-            return Ok(manifest);
+        if let Some(revision) = read_timestamped_revision(cache_entry, modified)? {
+            return Ok(revision);
         }
     }
 
-    // Otherwise, create a new manifest.
-    let manifest = Manifest::new();
+    // Otherwise, create a new revision.
+    let revision = Revision::new();
     fs::create_dir_all(&cache_entry.dir())
         .await
         .map_err(Error::CacheWrite)?;
@@ -1230,12 +1232,12 @@ async fn refresh_timestamp_manifest(
         cache_entry.path(),
         rmp_serde::to_vec(&CachedByTimestamp {
             timestamp: modified.timestamp(),
-            data: manifest.clone(),
+            data: revision.clone(),
         })?,
     )
     .await
     .map_err(Error::CacheWrite)?;
-    Ok(manifest)
+    Ok(revision)
 }
 
 /// Read an existing cached [`Metadata23`], if it exists.
