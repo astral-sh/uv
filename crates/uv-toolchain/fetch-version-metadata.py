@@ -159,13 +159,18 @@ def sha256(path):
     return h.hexdigest()
 
 
-def _sort_key(info):
-    triple, flavor, url = info
+def _sort_by_flavor_preference(info):
+    _triple, flavor, _url = info
     try:
         pref = FLAVOR_PREFERENCES.index(flavor)
     except ValueError:
         pref = len(FLAVOR_PREFERENCES) + 1
     return pref
+
+
+def _sort_by_interpreter_and_version(info):
+    interpreter, version_tuple, _ = info
+    return (interpreter, version_tuple)
 
 
 def find():
@@ -174,6 +179,7 @@ def find():
     """
     results = {}
 
+    # Collect all available Python downloads
     for page in range(1, 100):
         logging.debug("Reading release page %s...", page)
         resp = urllib.request.urlopen("%s?page=%d" % (RELEASE_URL, page))
@@ -197,25 +203,32 @@ def find():
                     continue
                 results.setdefault(py_ver, []).append((triple, flavor, url))
 
-    cpython_results = {}
+    # Collapse CPython variants to a single URL flavor per triple
+    cpython_results: dict[tuple[int, int, int], dict[tuple[str, str, str], str]] = {}
     for py_ver, choices in results.items():
-        choices.sort(key=_sort_key)
         urls = {}
-        for triple, flavor, url in choices:
+        for triple, flavor, url in sorted(choices, key=_sort_by_flavor_preference):
             triple = tuple(triple.split("-"))
+            # Skip existing triples, preferring the first flavor
             if triple in urls:
                 continue
             urls[triple] = url
         cpython_results[tuple(map(int, py_ver.split(".")))] = urls
 
+    # Collect variants across interpreter kinds
+    # TODO(zanieb): Note we only support CPython downloads at this time
+    #               but this will include PyPy chain in the future.
     final_results = {}
     for interpreter, py_ver, choices in sorted(
         chain(
             (("cpython",) + x for x in cpython_results.items()),
         ),
-        key=lambda x: x[:2],
+        key=_sort_by_interpreter_and_version,
+        # Reverse the ordering so newer versions are first
         reverse=True,
     ):
+        # Sort by the remaining information for determinism
+        # This groups download metadata in triple component order
         for (arch, operating_system, libc), url in sorted(choices.items()):
             key = "%s-%s.%s.%s-%s-%s-%s" % (
                 interpreter,
