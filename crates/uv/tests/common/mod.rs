@@ -312,58 +312,6 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
     }
 }
 
-/// If bootstrapped python build standalone pythons exists in `<project root>/bin`,
-/// return the paths to the directories containing the python binaries (i.e. as paths that
-/// `which::which_in` can use).
-///
-/// Use `scripts/bootstrap/install.py` to bootstrap.
-///
-/// Python versions are sorted from newest to oldest.
-pub fn bootstrapped_pythons() -> Option<Vec<PathBuf>> {
-    // Current dir is `<project root>/crates/uv`.
-    let project_root = std::env::current_dir()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf();
-    let bootstrap_dir = if let Some(bootstrap_dir) = env::var_os("UV_BOOTSTRAP_DIR") {
-        let bootstrap_dir = PathBuf::from(bootstrap_dir);
-        if bootstrap_dir.is_absolute() {
-            bootstrap_dir
-        } else {
-            // cargo test changes directory to the test crate, but doesn't tell us from where the user is running the
-            // tests. We'll assume that it's the project root.
-            project_root.join(bootstrap_dir)
-        }
-    } else {
-        project_root.join("bin")
-    };
-    let bootstrapped_pythons = bootstrap_dir.join("versions");
-    let Ok(bootstrapped_pythons) = fs_err::read_dir(bootstrapped_pythons) else {
-        return None;
-    };
-
-    let mut bootstrapped_pythons: Vec<PathBuf> = bootstrapped_pythons
-        .map(Result::unwrap)
-        .filter(|entry| entry.metadata().unwrap().is_dir())
-        .map(|entry| {
-            if cfg!(unix) {
-                entry.path().join("install").join("bin")
-            } else if cfg!(windows) {
-                entry.path().join("install")
-            } else {
-                unimplemented!("Only Windows and Unix are supported")
-            }
-        })
-        .collect();
-    bootstrapped_pythons.sort();
-    // Prefer the most recent patch version.
-    bootstrapped_pythons.reverse();
-    Some(bootstrapped_pythons)
-}
-
 /// Create a virtual environment named `.venv` in a temporary directory with the given
 /// Python version. Expected format for `python` is "<version>".
 pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path>>(
