@@ -1,0 +1,13 @@
+---
+source: crates/uv-client/tests/user_agent_version.rs
+expression: "&linehaul.distro"
+---
+{
+  "name": "[distro.name]",
+  "version": "[distro.version]",
+  "id": "[distro.id]",
+  "libc": {
+    "lib": "glibc",
+    "version": "2.38"
+  }
+}

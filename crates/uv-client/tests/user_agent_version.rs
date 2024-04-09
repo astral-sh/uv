@@ -4,6 +4,7 @@ use hyper::header::USER_AGENT;
 use hyper::server::conn::Http;
 use hyper::service::service_fn;
 use hyper::{Body, Request, Response};
+use insta::{assert_json_snapshot, assert_snapshot, with_settings};
 use pep508_rs::{MarkerEnvironment, StringVersion};
 use platform_tags::{Arch, Os, Platform};
 use tokio::net::TcpListener;
@@ -161,52 +162,43 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     // Deserializing Linehaul
     let linehaul: LineHaul = serde_json::from_str(uv_linehaul)?;
 
-    // Assert uv version
-    assert_eq!(uv_version, format!("uv/{}", version()));
+    // Assert linehaul user agent
+    let filters = vec![(version(), "[VERSION]")];
+    with_settings!({
+        filters => filters
+    }, {
+        // Assert uv version
+        assert_snapshot!("uv_linehaul_version", uv_version);
+        // Assert linehaul json
+        assert_json_snapshot!("uv_linehaul_json", &linehaul, {
+            ".distro" => "[distro]",
+            ".ci" => "[ci]"
+        });
+    });
 
-    // Assert linehaul
-    let installer_info = linehaul.installer.unwrap();
-    let system_info = linehaul.system.unwrap();
-    let impl_info = linehaul.implementation.unwrap();
-
-    assert_eq!(installer_info.name.as_deref(), Some("uv"));
-    assert_eq!(installer_info.version.as_deref(), Some(version()));
-
-    assert_eq!(system_info.name, Some(markers.platform_system));
-    assert_eq!(system_info.release, Some(markers.platform_release));
-
-    assert_eq!(impl_info.name, Some(markers.platform_python_implementation));
-    assert_eq!(
-        impl_info.version,
-        Some(markers.python_full_version.version.to_string())
-    );
-
-    assert_eq!(
-        linehaul.python,
-        Some(markers.python_full_version.version.to_string())
-    );
-    assert_eq!(linehaul.cpu, Some(markers.platform_machine));
-
-    assert_eq!(linehaul.openssl_version, None);
-    assert_eq!(linehaul.setuptools_version, None);
-    assert_eq!(linehaul.rustc_version, None);
-
+    // Assert distro
     if cfg!(windows) {
-        assert_eq!(linehaul.distro, None);
+        assert_json_snapshot!("uv_linehaul_distro_windows", &linehaul.distro);
     } else if cfg!(target_os = "linux") {
-        let Some(distro_info) = linehaul.distro else {
-            panic!("got no distro, but expected one in linehaul")
-        };
-        assert_eq!(distro_info.id.as_deref(), Some("jammy"));
-        assert_eq!(distro_info.name.as_deref(), Some("Ubuntu"));
-        assert_eq!(distro_info.version.as_deref(), Some("22.04"));
-        assert!(distro_info.libc.is_some());
+        assert_json_snapshot!("uv_linehaul_distro_linux", &linehaul.distro, {
+            ".id" => "[distro.id]",
+            ".name" => "[distro.name]",
+            ".version" => "[distro.version]"
+            // We mock the libc version already
+        });
+        // Check dynamic values
+        let distro_info = linehaul
+            .distro
+            .expect("got no distro, but expected one in linehaul");
+        // Gather distribution info from /etc/os-release.
+        let release_info = sys_info::linux_os_release()
+            .expect("got no os release info, but expected one in linux");
+        assert_eq!(distro_info.id, release_info.version_codename);
+        assert_eq!(distro_info.name, release_info.name);
+        assert_eq!(distro_info.version, release_info.version_id);
     } else if cfg!(target_os = "macos") {
-        let distro_info = linehaul.distro.unwrap();
-        assert_eq!(distro_info.id, None);
-        assert_eq!(distro_info.name.as_deref(), Some("macOS"));
-        assert_eq!(distro_info.version.as_deref(), Some("14.4"));
-        assert_eq!(distro_info.libc, None);
+        // We mock the macOS distro
+        assert_json_snapshot!("uv_linehaul_distro_macos", &linehaul.distro);
     }
 
     Ok(())

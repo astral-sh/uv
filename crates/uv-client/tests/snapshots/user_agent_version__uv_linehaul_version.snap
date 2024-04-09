@@ -1,0 +1,5 @@
+---
+source: crates/uv-client/tests/user_agent_version.rs
+expression: uv_version
+---
+uv/[VERSION]

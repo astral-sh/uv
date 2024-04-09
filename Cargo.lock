@@ -1791,6 +1791,8 @@ dependencies = [
  "console",
  "lazy_static",
  "linked-hash-map",
+ "pest",
+ "pest_derive",
  "regex",
  "serde",
  "similar",
@@ -2466,6 +2468,51 @@ name = "percent-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
+
+[[package]]
+name = "pest"
+version = "2.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56f8023d0fb78c8e03784ea1c7f3fa36e68a723138990b8d5a47d916b651e7a8"
+dependencies = [
+ "memchr",
+ "thiserror",
+ "ucd-trie",
+]
+
+[[package]]
+name = "pest_derive"
+version = "2.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0d24f72393fd16ab6ac5738bc33cdb6a9aa73f8b902e8fe29cf4e67d7dd1026"
+dependencies = [
+ "pest",
+ "pest_generator",
+]
+
+[[package]]
+name = "pest_generator"
+version = "2.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdc17e2a6c7d0a492f0158d7a4bd66cc17280308bbaff78d5bef566dca35ab80"
+dependencies = [
+ "pest",
+ "pest_meta",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.52",
+]
+
+[[package]]
+name = "pest_meta"
+version = "2.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "934cd7631c050f4674352a6e835d5f6711ffbfb9345c2fc0107155ac495ae293"
+dependencies = [
+ "once_cell",
+ "pest",
+ "sha2",
+]
 
 [[package]]
 name = "petgraph"
@@ -4118,6 +4165,12 @@ name = "typenum"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
+
+[[package]]
+name = "ucd-trie"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed646292ffc8188ef8ea4d1e0e0150fb15a5c2e12ad9b8fc191ae7a8a7f3c4b9"
 
 [[package]]
 name = "unicase"
