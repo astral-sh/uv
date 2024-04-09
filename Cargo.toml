@@ -44,6 +44,7 @@ uv-normalize = { path = "crates/uv-normalize" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-resolver = { path = "crates/uv-resolver" }
 uv-types = { path = "crates/uv-types" }
+uv-configuration = { path = "crates/uv-configuration" }
 uv-trampoline = { path = "crates/uv-trampoline" }
 uv-version = { path = "crates/uv-version" }
 uv-virtualenv = { path = "crates/uv-virtualenv" }

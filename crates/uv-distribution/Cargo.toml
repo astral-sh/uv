@@ -28,6 +28,7 @@ uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true, features = ["vendored-openssl"] }
 uv-normalize = { workspace = true }
 uv-types = { workspace = true }
+uv-configuration = { workspace = true }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
@@ -46,4 +47,3 @@ tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true }
-

@@ -13,10 +13,10 @@ use distribution_types::{
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, WheelCache};
+use uv_configuration::{NoBinary, Reinstall};
 use uv_distribution::{BuiltWheelIndex, RegistryWheelIndex};
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
-use uv_types::{NoBinary, Reinstall};
 
 use crate::{ResolvedEditable, SitePackages};
 

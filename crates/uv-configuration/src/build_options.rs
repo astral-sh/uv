@@ -1,23 +1,8 @@
 use std::fmt::{Display, Formatter};
 
 use pep508_rs::PackageName;
-use uv_interpreter::PythonEnvironment;
 
 use crate::{PackageNameSpecifier, PackageNameSpecifiers};
-
-/// Whether to enforce build isolation when building source distributions.
-#[derive(Debug, Copy, Clone)]
-pub enum BuildIsolation<'a> {
-    Isolated,
-    Shared(&'a PythonEnvironment),
-}
-
-impl<'a> BuildIsolation<'a> {
-    /// Returns `true` if build isolation is enforced.
-    pub fn is_isolated(&self) -> bool {
-        matches!(self, Self::Isolated)
-    }
-}
 
 /// The strategy to use when building source distributions that lack a `pyproject.toml`.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]

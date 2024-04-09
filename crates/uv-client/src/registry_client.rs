@@ -22,8 +22,8 @@ use platform_tags::Platform;
 use pypi_types::{Metadata23, SimpleJson};
 use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_configuration::IndexStrategy;
 use uv_normalize::PackageName;
-use uv_types::IndexStrategy;
 
 use crate::base_client::{BaseClient, BaseClientBuilder};
 use crate::cached_client::CacheControl;

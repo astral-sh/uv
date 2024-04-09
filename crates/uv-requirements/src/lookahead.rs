@@ -10,9 +10,10 @@ use distribution_types::{Dist, DistributionMetadata, LocalEditable};
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use pypi_types::Metadata23;
 use uv_client::RegistryClient;
+use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
-use uv_types::{BuildContext, Constraints, Overrides, RequestedRequirements};
+use uv_types::{BuildContext, RequestedRequirements};
 
 /// A resolver for resolving lookahead requirements from direct URLs.
 ///

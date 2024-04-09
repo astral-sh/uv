@@ -22,6 +22,10 @@ use uv_cache::Cache;
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder,
 };
+use uv_configuration::{
+    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, SetupPyStrategy,
+    Upgrade,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::Downloader;
@@ -35,10 +39,7 @@ use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, Exclusions, InMemoryIndex, Manifest,
     OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
-use uv_types::{
-    BuildIsolation, ConfigSettings, Constraints, EmptyInstalledPackages, InFlight, IndexStrategy,
-    NoBinary, NoBuild, Overrides, SetupPyStrategy, Upgrade,
-};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
