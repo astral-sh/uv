@@ -24,6 +24,10 @@ use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClient,
     RegistryClientBuilder,
 };
+use uv_config::{
+    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, Reinstall,
+    SetupPyStrategy, Upgrade,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
@@ -37,11 +41,7 @@ use uv_resolver::{
     DependencyMode, Exclusions, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
     Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_config::{
-    BuildIsolation, ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild,
-    Overrides, Reinstall, SetupPyStrategy, Upgrade,
-};
-use uv_types::{InFlight};
+use uv_types::{BuildIsolation, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};

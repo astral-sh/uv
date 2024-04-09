@@ -9,7 +9,8 @@ use pep508_rs::{PackageName, Requirement};
 use uv_cache::Cache;
 use uv_interpreter::{Interpreter, PythonEnvironment};
 
-use uv_config::{BuildIsolation, BuildKind, NoBinary, NoBuild, SetupPyStrategy};
+use crate::BuildIsolation;
+use uv_config::{BuildKind, NoBinary, NoBuild, SetupPyStrategy};
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///

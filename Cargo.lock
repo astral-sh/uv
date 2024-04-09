@@ -4481,7 +4481,6 @@ dependencies = [
  "serde",
  "serde_json",
  "uv-cache",
- "uv-interpreter",
  "uv-normalize",
 ]
 
