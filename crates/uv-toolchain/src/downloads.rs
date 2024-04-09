@@ -1,10 +1,21 @@
+use std::io;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use thiserror::Error;
+use uv_client::BetterReqwestError;
 use uv_interpreter::PythonVersion;
 
+use futures::{FutureExt, TryStreamExt};
+use reqwest::Response;
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use url::Url;
+use uv_fs::Simplified;
+
 #[derive(Error, Debug)]
-pub enum DownloadMetadataError {
+pub enum Error {
     #[error("operating system not supported: {0}")]
     OsNotSupported(&'static str),
     #[error("architecture not supported: {0}")]
@@ -13,6 +24,22 @@ pub enum DownloadMetadataError {
     LibcNotDetected(),
     #[error("invalid python version: {0}")]
     InvalidPythonVersion(String),
+    #[error("download failed")]
+    NetworkError(#[from] BetterReqwestError),
+    #[error("download failed")]
+    NetworkMiddlewareError(#[source] anyhow::Error),
+    #[error(transparent)]
+    ExtractError(#[from] uv_extract::Error),
+    #[error("invalid download url")]
+    InvalidUrl(#[from] url::ParseError),
+    #[error("failed to create download directory")]
+    DownloadDirError(#[source] io::Error),
+    #[error("failed to copy to: {0}", to.user_display())]
+    CopyError {
+        to: PathBuf,
+        #[source]
+        err: io::Error,
+    },
 }
 
 #[derive(Debug, PartialEq)]
@@ -79,7 +106,7 @@ impl PythonDownloadRequest {
     }
 
     #[must_use]
-    pub fn fill(mut self) -> Result<Self, DownloadMetadataError> {
+    pub fn fill(mut self) -> Result<Self, Error> {
         if self.implementation.is_none() {
             self.implementation = Some(ImplementationName::Cpython)
         }
@@ -97,12 +124,11 @@ impl PythonDownloadRequest {
 }
 
 impl FromStr for PythonDownloadRequest {
-    type Err = DownloadMetadataError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // TOOD(zanieb): Implement parsing of additional request parts
-        let version = PythonVersion::from_str(s)
-            .map_err(|err| DownloadMetadataError::InvalidPythonVersion(err))?;
+        let version = PythonVersion::from_str(s).map_err(|err| Error::InvalidPythonVersion(err))?;
         Ok(Self::new(Some(version), None, None, None, None))
     }
 }
@@ -193,13 +219,70 @@ impl PythonDownloadMetadata {
         }
         None
     }
+
+    pub fn url(&self) -> &str {
+        self.url
+    }
+
+    pub fn sha256(&self) -> Option<&str> {
+        self.sha256
+    }
+
+    /// Download and extract
+    pub async fn fetch(&self) -> Result<(), Error> {
+        let client = uv_client::BaseClientBuilder::new().build();
+        let url = Url::parse(self.url)?;
+
+        let filename = url.path_segments().unwrap().last().unwrap();
+
+        let response = client.get(url.clone()).send().await?;
+
+        // Ensure the request was successful.
+        response.error_for_status_ref()?;
+
+        let path = std::env::current_dir().unwrap().join("pythons");
+
+        if path.is_dir() {
+            // debug!("Download is already present: {path}");
+            dbg!("already present");
+            return Ok(());
+        }
+
+        // Download and extract into a temporary directory.
+        let temp_dir = tempfile::tempdir().map_err(|err| Error::DownloadDirError(err))?;
+        dbg!("streaming to tempdir at", &temp_dir);
+
+        let reader = response
+            .bytes_stream()
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+            .into_async_read();
+
+        uv_extract::stream::archive(reader.compat(), filename, temp_dir.path()).await?;
+
+        // Extract the top-level directory.
+        let extracted = match uv_extract::strip_component(temp_dir.path()) {
+            Ok(top_level) => top_level,
+            Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.into_path(),
+            Err(err) => return Err(err.into()),
+        };
+
+        // Persist it to the cache.
+        fs_err::tokio::rename(extracted, &path)
+            .await
+            .map_err(|err| Error::CopyError {
+                to: path.to_path_buf(),
+                err,
+            })?;
+
+        Ok(())
+    }
 }
 
 impl Platform {
     pub fn new(os: Os, arch: Arch, libc: Libc) -> Self {
         Self { os, arch, libc }
     }
-    pub fn from_env() -> Result<Self, DownloadMetadataError> {
+    pub fn from_env() -> Result<Self, Error> {
         Ok(Self::new(
             Os::from_env()?,
             Arch::from_env()?,
@@ -209,36 +292,53 @@ impl Platform {
 }
 
 impl Arch {
-    fn from_env() -> Result<Self, DownloadMetadataError> {
+    fn from_env() -> Result<Self, Error> {
         match std::env::consts::ARCH {
             "arm64" | "aarch64" => Ok(Arch::Arm64),
             "i686" => Ok(Arch::I686),
             "ppc64le" => Ok(Arch::Ppc64Le),
             "s390x" => Ok(Arch::S390X),
             "x86_64" => Ok(Arch::X86_64),
-            arch => Err(DownloadMetadataError::ArchNotSupported(arch)),
+            arch => Err(Error::ArchNotSupported(arch)),
         }
     }
 }
 
 impl Os {
-    fn from_env() -> Result<Self, DownloadMetadataError> {
+    fn from_env() -> Result<Self, Error> {
         match std::env::consts::OS {
             "linux" => Ok(Os::Linux),
             "windows" => Ok(Os::Windows),
             "macos" => Ok(Os::Darwin),
-            os => Err(DownloadMetadataError::OsNotSupported(os)),
+            os => Err(Error::OsNotSupported(os)),
         }
     }
 }
 
 impl Libc {
-    fn from_env() -> Result<Self, DownloadMetadataError> {
+    fn from_env() -> Result<Self, Error> {
         // TODO(zanieb): Perform this lookup
         match std::env::consts::OS {
             "linux" | "macos" => Ok(Libc::Gnu),
             "windows" => Ok(Libc::None),
-            _ => Err(DownloadMetadataError::LibcNotDetected()),
+            _ => Err(Error::LibcNotDetected()),
+        }
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(error: reqwest::Error) -> Self {
+        Self::NetworkError(BetterReqwestError::from(error))
+    }
+}
+
+impl From<reqwest_middleware::Error> for Error {
+    fn from(error: reqwest_middleware::Error) -> Self {
+        match error {
+            reqwest_middleware::Error::Middleware(error) => Self::NetworkMiddlewareError(error),
+            reqwest_middleware::Error::Reqwest(error) => {
+                Self::NetworkError(BetterReqwestError::from(error))
+            }
         }
     }
 }

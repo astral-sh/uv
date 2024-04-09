@@ -10,8 +10,21 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-thiserror = { workspace = true }
+uv-client = { workspace = true }
+uv-extract = { workspace = true }
 uv-interpreter = { workspace = true }
+uv-fs = { workspace = true }
+
+anyhow = { workspace = true }
+reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+tempfile = { workspace = true }
+fs-err = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true, features = ["compat"] }
+url = { workspace = true }
 
 [lints]
 workspace = true
