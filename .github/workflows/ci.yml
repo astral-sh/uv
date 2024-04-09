@@ -224,35 +224,41 @@ jobs:
           path: ./target/debug/uv.exe
           retention-days: 1
 
-  ecosystem-test-prefect:
+  ecosystem-test:
     needs: build-binary-linux
-    name: "ecosystem test | prefect"
+    name: "ecosystem test | ${{ matrix.repo }}"
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - repo: "prefecthq/prefect"
+            command: "uv pip install -e '.[dev]'"
+            python: "3.9"
+          - repo: "pallets/flask"
+            command: "uv pip install -r requirements/dev.txt"
+            python: "3.12"
+      fail-fast: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.repo }}
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: ${{ matrix.python }}
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
         with:
           name: uv-linux-${{ github.sha }}
 
-      - name: "Clone project"
-        run: gh repo clone prefecthq/prefect
-        env:
-          GH_TOKEN: ${{ github.token }}
-
       - name: "Prepare binary"
         run: chmod +x ./uv
 
       - name: "Test"
         run: |
-          cd prefect
-          ../uv venv
-          ../uv pip install --upgrade -e '.[dev]'
+          ./uv venv
+          ./${{ matrix.command }}
 
   cache-test-ubuntu:
     needs: build-binary-linux
