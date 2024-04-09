@@ -25,7 +25,7 @@ pub enum FileConversionError {
 #[archive(check_bytes)]
 #[archive_attr(derive(Debug))]
 pub struct File {
-    pub dist_info_metadata: Option<DistInfoMetadata>,
+    pub dist_info_metadata: bool,
     pub filename: String,
     pub hashes: Vec<HashDigest>,
     pub requires_python: Option<VersionSpecifiers>,
@@ -43,7 +43,10 @@ impl File {
     /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
     pub fn try_from(file: pypi_types::File, base: &Url) -> Result<Self, FileConversionError> {
         Ok(Self {
-            dist_info_metadata: file.dist_info_metadata,
+            dist_info_metadata: file
+                .dist_info_metadata
+                .as_ref()
+                .is_some_and(DistInfoMetadata::is_available),
             filename: file.filename,
             hashes: file.hashes.into_digests(),
             requires_python: file

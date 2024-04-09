@@ -68,11 +68,7 @@ where
     ))
 }
 
-#[derive(
-    Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
-)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 pub enum DistInfoMetadata {
     Bool(bool),
@@ -125,23 +121,7 @@ impl Default for Yanked {
 /// A dictionary mapping a hash name to a hex encoded digest of the file.
 ///
 /// PEP 691 says multiple hashes can be included and the interpretation is left to the client.
-#[derive(
-    Debug,
-    Clone,
-    Ord,
-    PartialOrd,
-    Eq,
-    PartialEq,
-    Hash,
-    Default,
-    Serialize,
-    Deserialize,
-    rkyv::Archive,
-    rkyv::Deserialize,
-    rkyv::Serialize,
-)]
-#[archive(check_bytes)]
-#[archive_attr(derive(Debug))]
+#[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize)]
 pub struct Hashes {
     pub md5: Option<Box<str>>,
     pub sha256: Option<Box<str>>,
@@ -153,16 +133,10 @@ impl Hashes {
     /// Convert a set of [`Hashes`] into a list of [`HashDigest`]s.
     pub fn into_digests(self) -> Vec<HashDigest> {
         let mut digests = Vec::new();
-        if let Some(md5) = self.md5 {
+        if let Some(sha512) = self.sha512 {
             digests.push(HashDigest {
-                algorithm: HashAlgorithm::Md5,
-                digest: md5,
-            });
-        }
-        if let Some(sha256) = self.sha256 {
-            digests.push(HashDigest {
-                algorithm: HashAlgorithm::Sha256,
-                digest: sha256,
+                algorithm: HashAlgorithm::Sha512,
+                digest: sha512,
             });
         }
         if let Some(sha384) = self.sha384 {
@@ -171,10 +145,16 @@ impl Hashes {
                 digest: sha384,
             });
         }
-        if let Some(sha512) = self.sha512 {
+        if let Some(sha256) = self.sha256 {
             digests.push(HashDigest {
-                algorithm: HashAlgorithm::Sha512,
-                digest: sha512,
+                algorithm: HashAlgorithm::Sha256,
+                digest: sha256,
+            });
+        }
+        if let Some(md5) = self.md5 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Md5,
+                digest: md5,
             });
         }
         digests
@@ -310,7 +290,6 @@ impl std::fmt::Display for HashAlgorithm {
 #[archive_attr(derive(Debug))]
 pub struct HashDigest {
     pub algorithm: HashAlgorithm,
-    // TODO(charlie): This should be a Vec<u8>.
     pub digest: Box<str>,
 }
 

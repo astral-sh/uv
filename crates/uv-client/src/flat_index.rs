@@ -236,7 +236,7 @@ impl<'a> FlatIndexClient<'a> {
             };
 
             let file = File {
-                dist_info_metadata: None,
+                dist_info_metadata: false,
                 filename: filename.to_string(),
                 hashes: Vec::new(),
                 requires_python: None,
