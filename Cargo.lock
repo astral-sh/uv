@@ -295,13 +295,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "axoupdater"
-version = "0.3.6"
+name = "axotag"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01f40156112045abb1409e115d684306b9ff005399fd10ce2caf33bd800742b4"
+checksum = "d888fac0b73e64cbdf36a743fc5a25af5ae955c357535cb420b389bf1e1a6c54"
+dependencies = [
+ "miette",
+ "semver",
+ "thiserror",
+]
+
+[[package]]
+name = "axoupdater"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7306cf5b4c3e7037d27ed5e9f7dc1b24d9941c77601e1e24c7d87839df6d8a2"
 dependencies = [
  "axoasset",
  "axoprocess",
+ "axotag",
  "camino",
  "homedir",
  "miette",
@@ -2667,7 +2679,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset 0.9.0",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.1",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",
@@ -3336,6 +3348,12 @@ dependencies = [
  "core-foundation-sys",
  "libc",
 ]
+
+[[package]]
+name = "semver"
+version = "1.0.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92d43fe69e652f3df9bdc2b85b2854a0825b86e4fb76bc44d945137d053639ca"
 
 [[package]]
 name = "serde"
