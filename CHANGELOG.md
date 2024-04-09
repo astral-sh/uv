@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.31
+
+### Bug fixes
+
+- Ignore direct URL distributions in prefetcher ([#2943](https://github.com/astral-sh/uv/pull/2943))
+
 ## 0.1.30
 
 ### Enhancements
