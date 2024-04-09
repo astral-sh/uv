@@ -63,6 +63,9 @@ brew install uv
 
 # With Pacman.
 pacman -S uv
+
+# With Pixi.
+pixi global install uv
 ```
 
 To create a virtual environment:
