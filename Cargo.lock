@@ -4524,6 +4524,7 @@ dependencies = [
  "uv-interpreter",
  "uv-normalize",
  "uv-resolver",
+ "uv-toolchain",
  "uv-types",
  "walkdir",
 ]
@@ -4806,6 +4807,7 @@ name = "uv-toolchain"
 version = "0.1.0"
 dependencies = [
  "thiserror",
+ "uv-interpreter",
 ]
 
 [[package]]

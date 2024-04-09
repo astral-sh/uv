@@ -157,6 +157,7 @@ pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
 ) -> Result<(), Error> {
     let reader = tokio::io::BufReader::new(reader);
     let decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
+
     let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
         .set_preserve_mtime(false)
         .build();

@@ -11,6 +11,7 @@ license.workspace = true
 
 [dependencies]
 thiserror = { workspace = true }
+uv-interpreter = { workspace = true }
 
 [lints]
 workspace = true

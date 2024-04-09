@@ -23,13 +23,14 @@ pep508_rs = { workspace = true }
 uv-build = { workspace = true }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
+uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-resolver = { workspace = true }
+uv-toolchain = { workspace = true }
 uv-types = { workspace = true }
-uv-configuration = { workspace = true }
 
 # Any dependencies that are exclusively used in `uv-dev` should be listed as non-workspace
 # dependencies, to ensure that we're forced to think twice before including them in other crates.

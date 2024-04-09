@@ -49,6 +49,7 @@ uv-trampoline = { path = "crates/uv-trampoline" }
 uv-version = { path = "crates/uv-version" }
 uv-virtualenv = { path = "crates/uv-virtualenv" }
 uv-warnings = { path = "crates/uv-warnings" }
+uv-toolchain = { path = "crates/uv-toolchain" }
 
 anstream = { version = "0.6.13" }
 anyhow = { version = "1.0.80" }
