@@ -1,8 +1,9 @@
 use distribution_types::LocalEditable;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use pypi_types::Metadata23;
-use uv_configuration::{Constraints, Overrides, RequestedRequirements};
+use uv_configuration::{Constraints, Overrides};
 use uv_normalize::PackageName;
+use uv_types::RequestedRequirements;
 
 use crate::{preferences::Preference, Exclusions};
 

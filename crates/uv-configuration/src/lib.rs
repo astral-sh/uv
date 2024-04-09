@@ -4,7 +4,6 @@ pub use constraints::*;
 pub use name_specifiers::*;
 pub use overrides::*;
 pub use package_options::*;
-pub use requirements::*;
 
 mod build_options;
 mod config_settings;
@@ -12,4 +11,3 @@ mod constraints;
 mod name_specifiers;
 mod overrides;
 mod package_options;
-mod requirements;
