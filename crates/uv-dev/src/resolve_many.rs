@@ -19,8 +19,8 @@ use uv_dispatch::BuildDispatch;
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
 use uv_resolver::InMemoryIndex;
-use uv_types::NoBinary;
-use uv_types::{BuildContext, BuildIsolation, ConfigSettings, InFlight, NoBuild, SetupPyStrategy};
+use uv_types::{BuildContext, InFlight};
+use uv_config::{NoBinary, BuildIsolation, ConfigSettings, NoBuild, SetupPyStrategy};
 
 #[derive(Parser)]
 pub(crate) struct ResolveManyArgs {

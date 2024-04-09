@@ -28,8 +28,9 @@ use uv_cache::{
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
+use uv_config::{BuildKind, NoBuild};
 use uv_fs::write_atomic;
-use uv_types::{BuildContext, BuildKind, NoBuild, SourceBuildTrait};
+use uv_types::{BuildContext, SourceBuildTrait};
 
 use crate::error::Error;
 use crate::git::{fetch_git_archive, resolve_precise};

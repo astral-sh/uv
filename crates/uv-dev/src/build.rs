@@ -10,13 +10,11 @@ use rustc_hash::FxHashMap;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{FlatIndex, RegistryClientBuilder};
+use uv_config::{BuildIsolation, BuildKind, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::InMemoryIndex;
-use uv_types::NoBinary;
-use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy,
-};
+use uv_types::{BuildContext, InFlight};
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {

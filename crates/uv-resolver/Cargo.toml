@@ -30,6 +30,7 @@ uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
+uv-config = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }

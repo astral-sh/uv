@@ -11,7 +11,7 @@ use requirements_txt::{EditableRequirement, FindLink, RequirementsTxt};
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
-use uv_types::{NoBinary, NoBuild};
+use uv_config::{NoBinary, NoBuild};
 
 use crate::pyproject::{Pep621Metadata, PyProjectToml};
 use crate::{ExtrasSpecification, RequirementsSource};

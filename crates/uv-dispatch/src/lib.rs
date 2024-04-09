@@ -21,7 +21,9 @@ use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
 use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, ConfigSettings, EmptyInstalledPackages, InFlight,
+    BuildContext, EmptyInstalledPackages, InFlight,
+};
+use uv_config::{BuildIsolation, BuildKind, ConfigSettings,
     NoBinary, NoBuild, Reinstall, SetupPyStrategy,
 };
 

@@ -12,7 +12,8 @@ use pypi_types::Metadata23;
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
-use uv_types::{BuildContext, Constraints, Overrides, RequestedRequirements};
+use uv_types::{BuildContext};
+use uv_config::{Constraints, Overrides, RequestedRequirements};
 
 /// A resolver for resolving lookahead requirements from direct URLs.
 ///

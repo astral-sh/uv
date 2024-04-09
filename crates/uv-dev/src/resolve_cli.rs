@@ -17,7 +17,8 @@ use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use uv_types::{BuildIsolation, ConfigSettings, InFlight, NoBinary, NoBuild, SetupPyStrategy};
+use uv_config::{BuildIsolation, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
+use uv_types::InFlight;
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {

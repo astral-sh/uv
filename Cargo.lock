@@ -2952,9 +2952,9 @@ dependencies = [
  "unscanny",
  "url",
  "uv-client",
+ "uv-config",
  "uv-fs",
  "uv-normalize",
- "uv-types",
  "uv-warnings",
 ]
 
@@ -4328,6 +4328,7 @@ dependencies = [
  "uv-auth",
  "uv-cache",
  "uv-client",
+ "uv-config",
  "uv-dispatch",
  "uv-distribution",
  "uv-fs",
@@ -4384,6 +4385,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "uv-config",
  "uv-fs",
  "uv-interpreter",
  "uv-types",
@@ -4458,12 +4460,29 @@ dependencies = [
  "urlencoding",
  "uv-auth",
  "uv-cache",
+ "uv-config",
  "uv-fs",
  "uv-normalize",
- "uv-types",
  "uv-version",
  "uv-warnings",
  "webpki-roots",
+]
+
+[[package]]
+name = "uv-config"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "distribution-types",
+ "itertools 0.12.1",
+ "pep508_rs",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "uv-cache",
+ "uv-interpreter",
+ "uv-normalize",
 ]
 
 [[package]]
@@ -4500,6 +4519,7 @@ dependencies = [
  "uv-build",
  "uv-cache",
  "uv-client",
+ "uv-config",
  "uv-dispatch",
  "uv-installer",
  "uv-interpreter",
@@ -4523,9 +4543,9 @@ dependencies = [
  "uv-build",
  "uv-cache",
  "uv-client",
+ "uv-config",
  "uv-installer",
  "uv-interpreter",
- "uv-requirements",
  "uv-resolver",
  "uv-types",
 ]
@@ -4560,6 +4580,7 @@ dependencies = [
  "url",
  "uv-cache",
  "uv-client",
+ "uv-config",
  "uv-extract",
  "uv-fs",
  "uv-git",
@@ -4652,6 +4673,7 @@ dependencies = [
  "url",
  "uv-cache",
  "uv-client",
+ "uv-config",
  "uv-distribution",
  "uv-extract",
  "uv-fs",
@@ -4725,6 +4747,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-client",
+ "uv-config",
  "uv-distribution",
  "uv-fs",
  "uv-normalize",
@@ -4771,6 +4794,7 @@ dependencies = [
  "url",
  "uv-cache",
  "uv-client",
+ "uv-config",
  "uv-distribution",
  "uv-interpreter",
  "uv-normalize",
@@ -4792,6 +4816,7 @@ dependencies = [
  "serde",
  "serde_json",
  "uv-cache",
+ "uv-config",
  "uv-interpreter",
  "uv-normalize",
 ]

@@ -20,9 +20,10 @@ use uv_resolver::{
     DisplayResolutionGraph, Exclusions, InMemoryIndex, Manifest, Options, OptionsBuilder,
     PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, Constraints, EmptyInstalledPackages, NoBinary,
-    NoBuild, Overrides, SetupPyStrategy, SourceBuildTrait,
+use uv_types::{BuildContext, EmptyInstalledPackages, SourceBuildTrait};
+use uv_config::{
+     BuildIsolation, BuildKind, Constraints, NoBinary,
+    NoBuild, Overrides, SetupPyStrategy,
 };
 
 // Exclude any packages uploaded after this date.

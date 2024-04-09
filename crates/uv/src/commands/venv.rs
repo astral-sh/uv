@@ -16,14 +16,14 @@ use pep508_rs::Requirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder};
+use uv_config::{
+    BuildIsolation, ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{InMemoryIndex, OptionsBuilder};
-use uv_types::{
-    BuildContext, BuildIsolation, ConfigSettings, InFlight, IndexStrategy, NoBinary, NoBuild,
-    SetupPyStrategy,
-};
+use uv_types::{BuildContext, InFlight};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;

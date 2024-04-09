@@ -54,7 +54,7 @@ use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
 use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
-use uv_types::{NoBinary, NoBuild, PackageNameSpecifier};
+use uv_config::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_warnings::warn_user;
 
 /// We emit one of those for each requirements.txt entry

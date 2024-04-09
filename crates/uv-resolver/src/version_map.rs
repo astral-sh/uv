@@ -15,8 +15,8 @@ use platform_tags::Tags;
 use pypi_types::{Hashes, Yanked};
 use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use uv_client::{FlatDistributions, OwnedArchive, SimpleMetadata, VersionFiles};
+use uv_config::{NoBinary, NoBuild};
 use uv_normalize::PackageName;
-use uv_types::{NoBinary, NoBuild};
 use uv_warnings::warn_user_once;
 
 use crate::{python_requirement::PythonRequirement, yanks::AllowedYanks};

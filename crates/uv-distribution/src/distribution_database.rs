@@ -18,7 +18,8 @@ use pypi_types::Metadata23;
 use uv_cache::{ArchiveTimestamp, CacheBucket, CacheEntry, CachedByTimestamp, WheelCache};
 use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
 use uv_fs::write_atomic;
-use uv_types::{BuildContext, NoBinary, NoBuild};
+use uv_types::{BuildContext};
+use uv_config::{NoBinary, NoBuild};
 
 use crate::locks::Locks;
 use crate::{Error, LocalWheel, Reporter, SourceDistributionBuilder};
