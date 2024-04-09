@@ -281,6 +281,7 @@ fn create_venv_unknown_python_patch() {
     context.venv.assert(predicates::path::missing());
 }
 
+#[cfg(feature = "python-patch")]
 #[test]
 fn create_venv_python_patch() {
     let context = VenvTestContext::new(&["3.12.1"]);
