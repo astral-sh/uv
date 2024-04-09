@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -6,11 +7,10 @@ use thiserror::Error;
 use uv_client::BetterReqwestError;
 use uv_interpreter::PythonVersion;
 
-use futures::{FutureExt, TryStreamExt};
-use reqwest::Response;
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
-use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use futures::TryStreamExt;
+
+use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tracing::debug;
 use url::Url;
 use uv_fs::Simplified;
 
@@ -43,7 +43,8 @@ pub enum Error {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct PythonDownloadMetadata {
+pub struct PythonDownload {
+    key: &'static str,
     implementation: ImplementationName,
     arch: Arch,
     os: Os,
@@ -172,21 +173,19 @@ pub struct Platform {
 
 include!("python_versions.inc");
 
-impl PythonDownloadMetadata {
-    /// Return the [`PythonDownloadMetadata`] corresponding to the key, if it exists.
-    pub fn from_key(key: &str) -> Option<&PythonDownloadMetadata> {
-        for (ikey, value) in PYTHON_DOWNLOADS {
-            if *ikey == key {
+impl PythonDownload {
+    /// Return the [`PythonDownload`] corresponding to the key, if it exists.
+    pub fn from_key(key: &str) -> Option<&PythonDownload> {
+        for value in PYTHON_DOWNLOADS {
+            if value.key == key {
                 return Some(value);
             }
         }
         None
     }
 
-    pub fn from_request(
-        request: &PythonDownloadRequest,
-    ) -> Option<&'static PythonDownloadMetadata> {
-        for (_, download) in PYTHON_DOWNLOADS {
+    pub fn from_request(request: &PythonDownloadRequest) -> Option<&'static PythonDownload> {
+        for download in PYTHON_DOWNLOADS {
             if let Some(arch) = &request.arch {
                 if download.arch != *arch {
                     continue;
@@ -229,34 +228,38 @@ impl PythonDownloadMetadata {
     }
 
     /// Download and extract
-    pub async fn fetch(&self) -> Result<(), Error> {
-        let client = uv_client::BaseClientBuilder::new().build();
+    pub async fn fetch(
+        &self,
+        client: &uv_client::BaseClient,
+        path: &Path,
+    ) -> Result<PathBuf, Error> {
         let url = Url::parse(self.url)?;
+        let path = path.join(self.key).to_path_buf();
+
+        // If it already exists, return it
+        if path.is_dir() {
+            return Ok(path);
+        }
 
         let filename = url.path_segments().unwrap().last().unwrap();
-
         let response = client.get(url.clone()).send().await?;
 
         // Ensure the request was successful.
         response.error_for_status_ref()?;
 
-        let path = std::env::current_dir().unwrap().join("pythons");
-
-        if path.is_dir() {
-            // debug!("Download is already present: {path}");
-            dbg!("already present");
-            return Ok(());
-        }
-
         // Download and extract into a temporary directory.
         let temp_dir = tempfile::tempdir().map_err(|err| Error::DownloadDirError(err))?;
-        dbg!("streaming to tempdir at", &temp_dir);
 
+        debug!(
+            "Downloading {url} to temporary location {}",
+            temp_dir.path().display()
+        );
         let reader = response
             .bytes_stream()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
             .into_async_read();
 
+        debug!("Extracting {filename}");
         uv_extract::stream::archive(reader.compat(), filename, temp_dir.path()).await?;
 
         // Extract the top-level directory.
@@ -266,15 +269,21 @@ impl PythonDownloadMetadata {
             Err(err) => return Err(err.into()),
         };
 
-        // Persist it to the cache.
+        // Persist it to the target
+        debug!("Moving {} to {}", extracted.display(), &path.user_display());
         fs_err::tokio::rename(extracted, &path)
             .await
             .map_err(|err| Error::CopyError {
-                to: path.to_path_buf(),
+                to: path.clone(),
                 err,
             })?;
 
-        Ok(())
+        Ok(path)
+    }
+
+    pub fn python_version(&self) -> PythonVersion {
+        PythonVersion::from_str(&format!("{}.{}.{}", self.major, self.minor, self.patch))
+            .expect("Python downloads should always have valid versions")
     }
 }
 
@@ -340,5 +349,11 @@ impl From<reqwest_middleware::Error> for Error {
                 Self::NetworkError(BetterReqwestError::from(error))
             }
         }
+    }
+}
+
+impl Display for PythonDownload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.key)
     }
 }

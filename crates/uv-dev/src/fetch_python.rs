@@ -1,18 +1,26 @@
-use std::{
-    path::{self, Path, PathBuf},
-    str::FromStr,
-};
+use std::collections::HashMap;
+use std::fs;
+use std::{path::PathBuf, str::FromStr};
 
 use anyhow::Result;
 use clap::Parser;
-use futures::{FutureExt, TryStreamExt};
-use reqwest::Response;
-use tokio::fs::File;
+
+use fs_err::hard_link;
+use futures::StreamExt;
+
+use itertools::Itertools;
 use tokio::io::AsyncReadExt;
-use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-use url::Url;
-use uv_interpreter::PythonVersion;
-use uv_toolchain::{Error, PythonDownloadMetadata, PythonDownloadRequest};
+use tokio::{fs::File, time::Instant};
+
+use tracing::{info, info_span, Instrument};
+
+#[cfg(windows)]
+use std::fs::hard_link;
+#[cfg(unix)]
+use std::os::unix::fs::symlink;
+
+use uv_fs::Simplified;
+use uv_toolchain::{Error, PythonDownload, PythonDownloadRequest};
 
 #[derive(Parser, Debug)]
 pub(crate) struct FetchPythonArgs {
@@ -20,9 +28,13 @@ pub(crate) struct FetchPythonArgs {
 }
 
 pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
+    let start = Instant::now();
+
     let bootstrap_dir = std::env::var_os("UV_BOOTSTRAP_DIR")
         .map(PathBuf::from)
         .unwrap_or(std::env::current_dir()?.join("bin"));
+
+    fs_err::create_dir_all(&bootstrap_dir)?;
 
     let versions = if args.versions.is_empty() {
         println!("Reading versions from file...");
@@ -39,20 +51,70 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
         })
         .collect::<Result<Vec<_>, Error>>()?;
 
-    // dbg!(&requests);
-
     let downloads = requests
         .iter()
-        .map(
-            |request| match PythonDownloadMetadata::from_request(request) {
-                Some(download) => download,
-                None => panic!("No download found for request {request:?}"),
-            },
-        )
+        .map(|request| match PythonDownload::from_request(request) {
+            Some(download) => download,
+            None => panic!("No download found for request {request:?}"),
+        })
         .collect::<Vec<_>>();
 
-    for download in downloads {
-        download.fetch().await?;
+    let client = uv_client::BaseClientBuilder::new().build();
+
+    let mut tasks = futures::stream::iter(downloads.iter())
+        .map(|download| {
+            async {
+                let result = download.fetch(&client, &bootstrap_dir).await;
+                (download.python_version(), result)
+            }
+            .instrument(info_span!("download", key = %download))
+        })
+        .buffered(2);
+
+    let mut results = Vec::new();
+    while let Some(task) = tasks.next().await {
+        let (version, result) = task;
+        let path = result?;
+        info!("Downloaded {} to {}", version, &path.user_display());
+        results.push((version, path));
+    }
+
+    let s = if downloads.len() == 1 { "" } else { "s" };
+    info!(
+        "Fetched {} in {} ms",
+        format!("{} version{}", downloads.len(), s),
+        start.elapsed().as_millis()
+    );
+
+    // Order matters here, as we overwrite previous links
+    let mut links = HashMap::new();
+    for (version, path) in results {
+        // TODO(zanieb): This path should be a part of the download metadata
+        let executable = path.join("install").join("bin").join("python3");
+        for target in &[
+            bootstrap_dir.join(format!("python{}", version.python_full_version())),
+            bootstrap_dir.join(format!("python{}.{}", version.major(), version.minor())),
+            bootstrap_dir.join(format!("python{}", version.major())),
+            bootstrap_dir.join("python"),
+        ] {
+            // Attempt to remove it, we'll fail on link if we couldn't remove it for some reason
+            // but if it's missing we don't want to error
+            let _ = fs::remove_file(target);
+            if cfg!(unix) {
+                symlink(&executable, target)?;
+            } else {
+                // Windows requires higher permissions for symbolic links
+                hard_link(&executable, target)?;
+            }
+            links.insert(target.clone(), executable.clone());
+        }
+    }
+    for (target, executable) in links.iter().sorted() {
+        info!(
+            "Linked {} to {}",
+            target.user_display(),
+            executable.user_display()
+        );
     }
 
     Ok(())
@@ -66,6 +128,5 @@ async fn read_versions_file() -> Result<Vec<String>> {
     file.read_to_string(&mut contents).await?;
 
     let lines: Vec<String> = contents.lines().map(|line| line.to_string()).collect();
-
     Ok(lines)
 }

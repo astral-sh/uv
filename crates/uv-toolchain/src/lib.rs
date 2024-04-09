@@ -1,3 +1,3 @@
-pub use downloads::{Error, Platform, PythonDownloadMetadata, PythonDownloadRequest};
+pub use downloads::{Error, Platform, PythonDownload, PythonDownloadRequest};
 
 mod downloads;

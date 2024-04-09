@@ -25,6 +25,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 url = { workspace = true }
+tracing = { workspace = true }
 
 [lints]
 workspace = true
