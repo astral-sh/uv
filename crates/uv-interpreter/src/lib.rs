@@ -19,14 +19,12 @@ pub use crate::find_python::{find_best_python, find_default_python, find_request
 pub use crate::interpreter::Interpreter;
 use crate::interpreter::InterpreterInfoError;
 pub use crate::python_environment::PythonEnvironment;
-pub use crate::python_version::PythonVersion;
 pub use crate::virtualenv::Virtualenv;
 
 mod cfg;
 mod find_python;
 mod interpreter;
 mod python_environment;
-mod python_version;
 mod virtualenv;
 
 #[derive(Debug, Error)]

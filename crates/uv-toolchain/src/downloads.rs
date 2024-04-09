@@ -3,9 +3,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use crate::PythonVersion;
 use thiserror::Error;
 use uv_client::BetterReqwestError;
-use uv_interpreter::PythonVersion;
 
 use futures::TryStreamExt;
 

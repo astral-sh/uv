@@ -4337,6 +4337,7 @@ dependencies = [
  "uv-normalize",
  "uv-requirements",
  "uv-resolver",
+ "uv-toolchain",
  "uv-types",
  "uv-virtualenv",
  "uv-warnings",
@@ -4717,6 +4718,7 @@ dependencies = [
  "tracing",
  "uv-cache",
  "uv-fs",
+ "uv-toolchain",
  "which",
  "winapi",
 ]
@@ -4816,6 +4818,8 @@ dependencies = [
  "fs-err",
  "futures",
  "once_cell",
+ "pep440_rs",
+ "pep508_rs",
  "reqwest",
  "reqwest-middleware",
  "tempfile",
@@ -4827,7 +4831,6 @@ dependencies = [
  "uv-client",
  "uv-extract",
  "uv-fs",
- "uv-interpreter",
 ]
 
 [[package]]
