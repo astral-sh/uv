@@ -40,6 +40,12 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
+    #[error("failed to read toolchain directory: {0}", dir.user_display())]
+    ReadError {
+        dir: PathBuf,
+        #[source]
+        err: io::Error,
+    },
 }
 
 #[derive(Debug, PartialEq)]
@@ -391,8 +397,8 @@ impl Libc {
     pub(crate) fn from_env() -> Result<Self, Error> {
         // TODO(zanieb): Perform this lookup
         match std::env::consts::OS {
-            "linux" | "macos" => Ok(Libc::Gnu),
-            "windows" => Ok(Libc::None),
+            "linux" => Ok(Libc::Gnu),
+            "windows" | "macos" => Ok(Libc::None),
             _ => Err(Error::LibcNotDetected()),
         }
     }

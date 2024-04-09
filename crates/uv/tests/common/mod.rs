@@ -4,11 +4,7 @@
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::PathChild;
-#[cfg(unix)]
-use fs_err::os::unix::fs::symlink as symlink_file;
-#[cfg(windows)]
-use fs_err::os::windows::fs::symlink_file;
+
 use regex::Regex;
 use std::borrow::BorrowMut;
 use std::env;
@@ -16,10 +12,10 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
-use uv_fs::Simplified;
 
 use uv_cache::Cache;
-use uv_interpreter::{find_requested_python, PythonVersion};
+use uv_fs::Simplified;
+use uv_toolchain::{toolchains_for_version, PythonVersion};
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
@@ -369,28 +365,25 @@ pub fn bootstrapped_pythons() -> Option<Vec<PathBuf>> {
 }
 
 /// Create a virtual environment named `.venv` in a temporary directory with the given
-/// Python version. Expected format for `python` is "python<version>".
+/// Python version. Expected format for `python` is "<version>".
 pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path>>(
     temp_dir: &Parent,
     cache_dir: &assert_fs::TempDir,
     python: &str,
 ) -> PathBuf {
-    let python = if let Some(bootstrapped_pythons) = bootstrapped_pythons() {
-        bootstrapped_pythons
-            .into_iter()
-            // Good enough since we control the directory
-            .find(|path| path.to_str().unwrap().contains(&format!("@{python}")))
-            .expect("Missing python bootstrap version")
-            .join(if cfg!(unix) {
-                "python3"
-            } else if cfg!(windows) {
-                "python.exe"
-            } else {
-                unimplemented!("Only Windows and Unix are supported")
-            })
-    } else {
-        PathBuf::from(python)
-    };
+    let python = toolchains_for_version(
+        &PythonVersion::from_str(python).expect("Tests should use a valid Python version"),
+    )
+    .expect("Tests are run on a supported platform")
+    .first()
+    .map(|toolchain| {
+        debug!("Found toolchain {toolchain:?}");
+        toolchain.executable()
+    })
+    // We'll search for the request Python on the PATH if not found in the toolchain versions
+    // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
+    .unwrap_or(PathBuf::from(python));
+
     let venv = temp_dir.child(".venv");
     Command::new(get_bin())
         .arg("venv")
@@ -415,33 +408,36 @@ pub fn get_bin() -> PathBuf {
 
 /// Create a `PATH` with the requested Python versions available in order.
 pub fn create_bin_with_executables(
-    temp_dir: &assert_fs::TempDir,
+    _temp_dir: &assert_fs::TempDir,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
-    if let Some(bootstrapped_pythons) = bootstrapped_pythons() {
-        let selected_pythons = python_versions.iter().flat_map(|python_version| {
-            bootstrapped_pythons.iter().filter(move |path| {
-                // Good enough since we control the directory
-                path.to_str()
-                    .unwrap()
-                    .contains(&format!("@{python_version}"))
+    let selected_pythons = python_versions
+        .iter()
+        .flat_map(|python_version| {
+            let inner = toolchains_for_version(
+                &PythonVersion::from_str(python_version)
+                    .expect("Tests should use a valid Python version"),
+            )
+            .expect("Tests are run on a supported platform")
+            .iter()
+            .map(|toolchain| {
+                debug!("Found toolchain {toolchain:?}");
+                toolchain
+                    .executable()
+                    .parent()
+                    .expect("Executables must exist in a directory")
+                    .to_path_buf()
             })
-        });
-        return Ok(env::join_paths(selected_pythons)?);
-    }
+            .collect::<Vec<_>>();
+            assert!(
+                !inner.is_empty(),
+                "No installed toolchain found for {python_version}"
+            );
+            inner
+        })
+        .collect::<Vec<_>>();
 
-    let bin = temp_dir.child("bin");
-    fs_err::create_dir(&bin)?;
-    for &request in python_versions {
-        let interpreter = find_requested_python(request, &Cache::temp().unwrap())?
-            .ok_or(uv_interpreter::Error::NoSuchPython(request.to_string()))?;
-        let name = interpreter
-            .sys_executable()
-            .file_name()
-            .expect("Discovered executable must have a filename");
-        symlink_file(interpreter.sys_executable(), bin.child(name))?;
-    }
-    Ok(bin.canonicalize()?.into())
+    Ok(env::join_paths(selected_pythons)?)
 }
 
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
