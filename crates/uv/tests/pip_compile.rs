@@ -5779,14 +5779,14 @@ requires-python = "<=3.8"
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
 
-    uv_snapshot!(context.compile()
+    uv_snapshot!(context.filters(), context.compile()
         .arg("requirements.in"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Editable `example` requires Python <=3.8, but resolution targets Python 3.12.1
+    error: Editable `example` requires Python <=3.8, but resolution targets Python 3.12.[X]
     "###
     );
 
@@ -6056,7 +6056,7 @@ requires-python = "<=3.8"
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("example @ {}", editable_dir.path().display()))?;
 
-    uv_snapshot!(context.compile()
+    uv_snapshot!(context.filters(), context.compile()
         .arg("requirements.in"), @r###"
     success: false
     exit_code: 1
@@ -6064,7 +6064,7 @@ requires-python = "<=3.8"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.1) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.8 and example==0.0.0 depends on Python<=3.8, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
     "###
     );

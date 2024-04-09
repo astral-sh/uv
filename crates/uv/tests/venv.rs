@@ -1,7 +1,7 @@
 #![cfg(feature = "python")]
 
-use std::ffi::OsString;
 use std::process::Command;
+use std::{ffi::OsString, str::FromStr};
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
@@ -9,6 +9,7 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use fs_err::PathExt;
 use uv_fs::Simplified;
+use uv_interpreter::PythonVersion;
 
 use crate::common::{
     create_bin_with_executables, get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER,
@@ -21,6 +22,7 @@ struct VenvTestContext {
     temp_dir: assert_fs::TempDir,
     venv: ChildPath,
     bin: OsString,
+    python_versions: Vec<PythonVersion>,
 }
 
 impl VenvTestContext {
@@ -29,11 +31,18 @@ impl VenvTestContext {
         let bin = create_bin_with_executables(&temp_dir, python_versions)
             .expect("Failed to create bin dir");
         let venv = temp_dir.child(".venv");
+        let python_versions = python_versions
+            .iter()
+            .map(|version| {
+                PythonVersion::from_str(version).expect("Tests should use valid Python versions")
+            })
+            .collect::<Vec<_>>();
         Self {
             cache_dir: assert_fs::TempDir::new().unwrap(),
             temp_dir,
             venv,
             bin,
+            python_versions,
         }
     }
 
@@ -70,6 +79,25 @@ impl VenvTestContext {
             r"Activate with: (?:.*)\\Scripts\\activate".to_string(),
             "Activate with: source .venv/bin/activate".to_string(),
         ));
+
+        // Add Python patch version filtering unless one was explicitly requested to ensure
+        // snapshots are patch version agnostic when it is not a part of the test.
+        if self
+            .python_versions
+            .iter()
+            .all(|version| version.patch().is_none())
+        {
+            for python_version in &self.python_versions {
+                filters.push((
+                    format!(
+                        r"({})\.\d+",
+                        regex::escape(python_version.to_string().as_str())
+                    ),
+                    "$1.[X]".to_string(),
+                ));
+            }
+        }
+
         filters
     }
 }
@@ -88,7 +116,7 @@ fn create_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.1 interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -107,7 +135,7 @@ fn create_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.1 interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -128,7 +156,7 @@ fn create_venv_defaults_to_cwd() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.1 interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -151,7 +179,7 @@ fn seed() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.1 interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PATH]
     Creating virtualenv at: .venv
      + pip==24.0
     Activate with: source .venv/bin/activate
@@ -175,7 +203,7 @@ fn seed_older_python_version() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.10.13 interpreter at: [PATH]
+    Using Python 3.10.[X] interpreter at: [PATH]
     Creating virtualenv at: .venv
      + pip==24.0
      + setuptools==69.2.0
@@ -293,7 +321,7 @@ fn file_exists() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.1 interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PATH]
     Creating virtualenv at: .venv
     uv::venv::creation
 
@@ -321,7 +349,7 @@ fn empty_dir_exists() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.1 interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -350,7 +378,7 @@ fn non_empty_dir_exists() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.1 interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PATH]
     Creating virtualenv at: .venv
     uv::venv::creation
 
@@ -395,7 +423,7 @@ fn windows_shims() -> Result<()> {
 
     ----- stderr -----
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
-    Using Python 3.8.12 interpreter at: [PATH]
+    Using Python 3.8.[X] interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###
@@ -422,7 +450,7 @@ fn virtualenv_compatibility() {
 
     ----- stderr -----
     warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment).
-    Using Python 3.12.1 interpreter at: [PATH]
+    Using Python 3.12.[X] interpreter at: [PATH]
     Creating virtualenv at: .venv
     Activate with: source .venv/bin/activate
     "###

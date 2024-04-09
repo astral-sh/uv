@@ -2995,14 +2995,14 @@ requires-python = "<=3.5"
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
 
-    uv_snapshot!(command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.in"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Editable `example` requires Python <=3.5, but 3.12.1 is installed
+    error: Editable `example` requires Python <=3.5, but 3.12.[X] is installed
     "###
     );
 
@@ -3071,7 +3071,7 @@ requires-python = "<=3.5"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.1) does not satisfy Python<=3.5 and example==0.0.0 depends on Python<=3.5, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.5 and example==0.0.0 depends on Python<=3.5, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
     "###
     );
