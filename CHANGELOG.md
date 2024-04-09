@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.30
+
+### Enhancements
+
+- Show resolution diagnostics after `pip install` ([#2829](https://github.com/astral-sh/uv/pull/2829))
+
+### Performance
+
+- Speed up cold-cache `urllib3`-`boto3`-`botocore` performance with batched prefetching ([#2452](https://github.com/astral-sh/uv/pull/2452))
+
+### Bug fixes
+
+- Backtrack on distributions with invalid metadata ([#2834](https://github.com/astral-sh/uv/pull/2834))
+- Include LICENSE files in source distribution ([#2855](https://github.com/astral-sh/uv/pull/2855))
+- Respect `--no-build` and `--no-binary` in `--find-links` ([#2826](https://github.com/astral-sh/uv/pull/2826))
+- Respect cached local `--find-links` in install plan ([#2907](https://github.com/astral-sh/uv/pull/2907))
+- Avoid panic with multiple confirmation handlers ([#2903](https://github.com/astral-sh/uv/pull/2903))
+- Use scheme parsing to determine absolute vs. relative URLs ([#2904](https://github.com/astral-sh/uv/pull/2904))
+- Remove additional 'because' in resolution failure messages ([#2849](https://github.com/astral-sh/uv/pull/2849))
+- Use `miette` when printing `pip sync` resolution failures ([#2848](https://github.com/astral-sh/uv/pull/2848))
+
 ## 0.1.29
 
 ### Enhancements
