@@ -8,11 +8,11 @@ use tracing::instrument;
 
 use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
-    Dist, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
+    Dist, Hash, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
     SourceDistCompatibility, WheelCompatibility,
 };
 use pep440_rs::{Version, VersionSpecifiers};
-use platform_tags::Tags;
+use platform_tags::{TagCompatibility, Tags};
 use pypi_types::{HashDigest, Yanked};
 use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::{NoBinary, NoBuild};
@@ -456,19 +456,6 @@ impl VersionMapLazy {
             ));
         }
 
-        // Check if hashes line up
-        if !self.required_hashes.is_empty() {
-            if hashes.is_empty() {
-                return SourceDistCompatibility::Incompatible(IncompatibleSource::MissingHash);
-            }
-            if !hashes
-                .iter()
-                .any(|hash| self.required_hashes.contains(hash))
-            {
-                return SourceDistCompatibility::Incompatible(IncompatibleSource::MismatchedHash);
-            }
-        }
-
         // Check if yanked
         if let Some(yanked) = yanked {
             if yanked.is_yanked() && !self.allowed_yanks.contains(version) {
@@ -489,7 +476,23 @@ impl VersionMapLazy {
             }
         }
 
-        SourceDistCompatibility::Compatible
+        // Check if hashes line up. If hashes aren't required, they're considered matching.
+        let hash = if self.required_hashes.is_empty() {
+            Hash::Matched
+        } else {
+            if hashes.is_empty() {
+                Hash::Missing
+            } else if hashes
+                .iter()
+                .any(|hash| self.required_hashes.contains(hash))
+            {
+                Hash::Matched
+            } else {
+                Hash::Mismatched
+            }
+        };
+
+        SourceDistCompatibility::Compatible(hash)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -513,19 +516,6 @@ impl VersionMapLazy {
             return WheelCompatibility::Incompatible(IncompatibleWheel::ExcludeNewer(upload_time));
         }
 
-        // Check if hashes line up
-        if !self.required_hashes.is_empty() {
-            if hashes.is_empty() {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::MissingHash);
-            }
-            if !hashes
-                .iter()
-                .any(|hash| self.required_hashes.contains(hash))
-            {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::MismatchedHash);
-            }
-        }
-
         // Check if yanked
         if let Some(yanked) = yanked {
             if yanked.is_yanked() && !self.allowed_yanks.contains(version) {
@@ -542,8 +532,31 @@ impl VersionMapLazy {
             }
         }
 
-        // Determine a compatibility for the wheel based on tags
-        WheelCompatibility::from(filename.compatibility(&self.tags))
+        // Determine a compatibility for the wheel based on tags.
+        let priority = match filename.compatibility(&self.tags) {
+            TagCompatibility::Incompatible(tag) => {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
+            }
+            TagCompatibility::Compatible(priority) => priority,
+        };
+
+        // Check if hashes line up. If hashes aren't required, they're considered matching.
+        let hash = if self.required_hashes.is_empty() {
+            Hash::Matched
+        } else {
+            if hashes.is_empty() {
+                Hash::Missing
+            } else if hashes
+                .iter()
+                .any(|hash| self.required_hashes.contains(hash))
+            {
+                Hash::Matched
+            } else {
+                Hash::Mismatched
+            }
+        };
+
+        WheelCompatibility::Compatible(hash, priority)
     }
 }
 

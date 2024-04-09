@@ -6,11 +6,11 @@ use tracing::instrument;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuiltDist, Dist, File, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
+    BuiltDist, Dist, File, Hash, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
     RegistryBuiltDist, RegistrySourceDist, SourceDist, SourceDistCompatibility, WheelCompatibility,
 };
 use pep440_rs::Version;
-use platform_tags::Tags;
+use platform_tags::{TagCompatibility, Tags};
 use pypi_types::HashDigest;
 use uv_client::FlatIndexEntries;
 use uv_configuration::{NoBinary, NoBuild};
@@ -140,20 +140,19 @@ impl FlatIndex {
         }
 
         // Check if hashes line up
-        if let Some(required_hashes) = required_hashes.get(&filename.name) {
-            if !required_hashes.is_empty() {
-                if hashes.is_empty() {
-                    return SourceDistCompatibility::Incompatible(IncompatibleSource::MissingHash);
-                }
-                if !hashes.iter().any(|hash| required_hashes.contains(hash)) {
-                    return SourceDistCompatibility::Incompatible(
-                        IncompatibleSource::MismatchedHash,
-                    );
-                }
+        let hash = if let Some(required_hashes) = required_hashes.get(&filename.name) {
+            if hashes.is_empty() {
+                Hash::Missing
+            } else if hashes.iter().any(|hash| required_hashes.contains(hash)) {
+                Hash::Matched
+            } else {
+                Hash::Mismatched
             }
-        }
+        } else {
+            Hash::Matched
+        };
 
-        SourceDistCompatibility::Compatible
+        SourceDistCompatibility::Compatible(hash)
     }
 
     fn wheel_compatibility(
@@ -174,20 +173,28 @@ impl FlatIndex {
             return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
         }
 
-        // Check if hashes line up
-        if let Some(required_hashes) = required_hashes.get(&filename.name) {
-            if !required_hashes.is_empty() {
-                if hashes.is_empty() {
-                    return WheelCompatibility::Incompatible(IncompatibleWheel::MissingHash);
-                }
-                if !hashes.iter().any(|hash| required_hashes.contains(hash)) {
-                    return WheelCompatibility::Incompatible(IncompatibleWheel::MismatchedHash);
-                }
-            }
-        }
-
         // Determine a compatibility for the wheel based on tags.
-        WheelCompatibility::from(filename.compatibility(tags))
+        let priority = match filename.compatibility(tags) {
+            TagCompatibility::Incompatible(tag) => {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
+            }
+            TagCompatibility::Compatible(priority) => priority,
+        };
+
+        // Check if hashes line up
+        let hash = if let Some(required_hashes) = required_hashes.get(&filename.name) {
+            if hashes.is_empty() {
+                Hash::Missing
+            } else if hashes.iter().any(|hash| required_hashes.contains(hash)) {
+                Hash::Matched
+            } else {
+                Hash::Mismatched
+            }
+        } else {
+            Hash::Matched
+        };
+
+        WheelCompatibility::Compatible(hash, priority)
     }
 
     /// Get the [`FlatDistributions`] for the given package name.
