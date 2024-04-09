@@ -97,13 +97,8 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
     let mut links = HashMap::new();
     for (version, path) in results {
         // TODO(zanieb): This path should be a part of the download metadata
-        let executable = if cfg!(windows) {
-            path.join("install").join("python.exe")
-        } else if cfg!(unix) {
-            path.join("install").join("bin").join("python3")
-        } else {
-            unimplemented!("Only Windows and Unix systems are supported.")
-        };
+        #[cfg(unix)]
+        let executable = path.join("install").join("bin").join("python3");
 
         // On Windows, linking the executable generally results in broken installations
         // and each toolchain path will need to be added to the PATH separately in the
