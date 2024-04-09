@@ -66,6 +66,7 @@ impl<'a> Planner<'a> {
     ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
         let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations);
+        let built_index = BuiltWheelIndex::new(cache, tags);
 
         let mut cached = vec![];
         let mut remote = vec![];
@@ -323,7 +324,7 @@ impl<'a> Planner<'a> {
                         Dist::Source(SourceDist::DirectUrl(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
-                            if let Some(wheel) = BuiltWheelIndex::url(&sdist, cache, tags)? {
+                            if let Some(wheel) = built_index.url(&sdist)? {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("URL source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
@@ -333,7 +334,7 @@ impl<'a> Planner<'a> {
                         Dist::Source(SourceDist::Path(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
-                            if let Some(wheel) = BuiltWheelIndex::path(&sdist, cache, tags)? {
+                            if let Some(wheel) = built_index.path(&sdist)? {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("Path source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
@@ -343,7 +344,7 @@ impl<'a> Planner<'a> {
                         Dist::Source(SourceDist::Git(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
-                            if let Some(wheel) = BuiltWheelIndex::git(&sdist, cache, tags) {
+                            if let Some(wheel) = built_index.git(&sdist) {
                                 let cached_dist = wheel.into_url_dist(url.clone());
                                 debug!("Git source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));

@@ -25,7 +25,7 @@ pub struct RegistryWheelIndex<'a> {
 }
 
 impl<'a> RegistryWheelIndex<'a> {
-    /// Initialize an index of cached distributions from a directory.
+    /// Initialize an index of registry distributions.
     pub fn new(cache: &'a Cache, tags: &'a Tags, index_locations: &'a IndexLocations) -> Self {
         Self {
             cache,
