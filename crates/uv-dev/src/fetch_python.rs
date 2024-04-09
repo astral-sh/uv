@@ -1,25 +1,15 @@
-use fs_err as fs;
-use std::collections::HashMap;
-
-use std::str::FromStr;
-
 use anyhow::Result;
 use clap::Parser;
-
-use futures::StreamExt;
-
-use itertools::Itertools;
-
-use tokio::time::Instant;
-
-use uv_fs::replace_symlink;
-
-#[cfg(windows)]
-use fs_err::tokio::hard_link;
+use fs_err as fs;
 #[cfg(unix)]
 use fs_err::tokio::symlink;
-
+use futures::StreamExt;
+use itertools::Itertools;
+use std::collections::HashMap;
+use std::str::FromStr;
+use tokio::time::Instant;
 use tracing::{info, info_span, Instrument};
+use uv_fs::replace_symlink;
 
 use uv_fs::Simplified;
 use uv_toolchain::{
