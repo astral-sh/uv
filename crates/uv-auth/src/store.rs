@@ -100,14 +100,18 @@ impl AuthenticationStore {
             return;
         }
         let auth = UrlAuthData {
-            // Using the encoded username can break authentication when `@` is converted to `%40`
-            // so we decode it for storage; RFC7617 does not explicitly say that authentication should
-            // not be percent-encoded, but the omission of percent-encoding from all encoding discussion
-            // indicates that it probably should not be done.
+            // Using the encoded credentials can break authentication e.g. when `@` is converted to `%40`
+            // so we decode it for storage; RFC 7617 does not explicitly mention this topic, but this
+            // behavior matches pip.
+            // See <https://github.com/pypa/pip/blob/06d21db4ff1ab69665c22a88718a4ea9757ca293/src/pip/_internal/utils/misc.py#L497-L499>
             username: urlencoding::decode(url.username())
                 .expect("An encoded username should always decode")
                 .into_owned(),
-            password: url.password().map(str::to_string),
+            password: url.password().map(|password| {
+                urlencoding::decode(password)
+                    .expect("An encoded password should always decode")
+                    .into_owned()
+            }),
         };
         credentials.insert(netloc, Some(Credential::UrlEncoded(auth)));
     }
