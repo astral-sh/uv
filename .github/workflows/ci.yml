@@ -94,6 +94,11 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - if: ${{ matrix.os == 'windows' }}
+        run: |
+          powershell -Command Add-MpPreference -ExclusionPath "~/.cargo/bin"
+          powershell -Command Add-MpPreference -ExclusionPath "$pwd"
+
       - if: ${{ matrix.os != 'windows' }}
         uses: rui314/setup-mold@v1
 
