@@ -82,7 +82,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
                 path
             }
             DownloadResult::Fetched(path) => {
-                info!("Downloaded v{} to {}", version, &path.user_display());
+                info!("Downloaded v{} to {}", version, path.user_display());
                 downloaded += 1;
                 path
             }

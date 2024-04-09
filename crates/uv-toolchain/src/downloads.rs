@@ -267,7 +267,7 @@ impl PythonDownload {
         };
 
         // Persist it to the target
-        debug!("Moving {} to {}", extracted.display(), &path.user_display());
+        debug!("Moving {} to {}", extracted.display(), path.user_display());
         fs_err::tokio::rename(extracted, &path)
             .await
             .map_err(|err| Error::CopyError {
