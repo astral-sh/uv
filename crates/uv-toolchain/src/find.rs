@@ -35,7 +35,6 @@ impl Toolchain {
     }
 }
 
-// TODO(zanieb): Implement version requests without patch versions
 pub fn toolchains_for_version(version: &PythonVersion) -> Result<Vec<Toolchain>, Error> {
     let platform_key = platform_key_from_env()?;
 
