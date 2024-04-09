@@ -114,26 +114,21 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
             unimplemented!("Only Windows and Unix systems are supported.")
         };
 
-        for mut target in [
+        // On Windows, linking the executable generally results in broken installations
+        // and each toolchain path will need to be added to the PATH separately in the
+        // desired order.
+        #[cfg(unix)]
+        for target in [
             bootstrap_dir.join(format!("python{}", version.python_full_version())),
             bootstrap_dir.join(format!("python{}.{}", version.major(), version.minor())),
             bootstrap_dir.join(format!("python{}", version.major())),
             bootstrap_dir.join("python"),
         ] {
-            if cfg!(windows) {
-                target = target.with_extension("exe");
-            }
-
             // Attempt to remove it, we'll fail on link if we couldn't remove it for some reason
             // but if it's missing we don't want to error
             let _ = fs::remove_file(&target);
 
-            #[cfg(unix)]
             symlink(&executable, &target).await?;
-
-            #[cfg(windows)]
-            // Windows requires higher permissions for symbolic links
-            hard_link(&executable, &target).await?;
 
             links.insert(target, executable.clone());
         }
