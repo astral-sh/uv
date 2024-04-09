@@ -84,7 +84,7 @@ fn incompatible_python_compatible_override() -> Result<()> {
                  package-a==1.0.0
 
                  ----- stderr -----
-                 warning: The requested Python version 3.11 is not available; 3.9.18 will be used to build dependencies instead.
+                 warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                  Resolved 1 package in [TIME]
                  "###
     );
@@ -130,7 +130,7 @@ fn compatible_python_incompatible_override() -> Result<()> {
                  ----- stdout -----
 
                  ----- stderr -----
-                 warning: The requested Python version 3.9 is not available; 3.11.7 will be used to build dependencies instead.
+                 warning: The requested Python version 3.9 is not available; 3.11.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
                    ╰─▶ Because the requested Python version (3.9) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
@@ -184,9 +184,9 @@ fn incompatible_python_compatible_override_unavailable_no_wheels() -> Result<()>
                  ----- stdout -----
 
                  ----- stderr -----
-                 warning: The requested Python version 3.11 is not available; 3.9.18 will be used to build dependencies instead.
+                 warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
                  "###
     );
@@ -295,9 +295,9 @@ fn incompatible_python_compatible_override_no_compatible_wheels() -> Result<()> 
                  ----- stdout -----
 
                  ----- stderr -----
-                 warning: The requested Python version 3.11 is not available; 3.9.18 will be used to build dependencies instead.
+                 warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
                  "###
     );
@@ -353,9 +353,9 @@ fn incompatible_python_compatible_override_other_wheel() -> Result<()> {
                  ----- stdout -----
 
                  ----- stderr -----
-                 warning: The requested Python version 3.11 is not available; 3.9.18 will be used to build dependencies instead.
+                 warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because only the following versions of package-a are available:
                            package-a==1.0.0
                            package-a==2.0.0

@@ -3671,7 +3671,7 @@ fn python_version_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.8.18) does not satisfy Python>=3.30 and package-a==1.0.0 depends on Python>=3.30, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.8.[X]) does not satisfy Python>=3.30 and package-a==1.0.0 depends on Python>=3.30, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -3713,7 +3713,7 @@ fn python_less_than_current() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.18) does not satisfy Python<=3.8 and package-a==1.0.0 depends on Python<=3.8, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python<=3.8 and package-a==1.0.0 depends on Python<=3.8, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -3755,7 +3755,7 @@ fn python_greater_than_current() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -3961,22 +3961,22 @@ fn python_greater_than_current_excluded() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10,<3.11 and the current Python version (3.9.18) does not satisfy Python>=3.12, we can conclude that any of:
+      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10,<3.11 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that any of:
               Python>=3.10,<3.11
               Python>=3.12
            are incompatible.
-          And because the current Python version (3.9.18) does not satisfy Python>=3.11,<3.12, we can conclude that Python>=3.10 are incompatible.
+          And because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12, we can conclude that Python>=3.10 are incompatible.
           And because package-a==2.0.0 depends on Python>=3.10 and only the following versions of package-a are available:
               package-a<=2.0.0
               package-a==3.0.0
               package-a==4.0.0
           we can conclude that package-a>=2.0.0,<3.0.0 cannot be used. (1)
 
-          Because the current Python version (3.9.18) does not satisfy Python>=3.11,<3.12 and the current Python version (3.9.18) does not satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.
+          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that Python>=3.11 are incompatible.
           And because package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
           And because we know from (1) that package-a>=2.0.0,<3.0.0 cannot be used, we can conclude that package-a>=2.0.0,<4.0.0 cannot be used. (2)
 
-          Because the current Python version (3.9.18) does not satisfy Python>=3.12 and package-a==4.0.0 depends on Python>=3.12, we can conclude that package-a==4.0.0 cannot be used.
+          Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and package-a==4.0.0 depends on Python>=3.12, we can conclude that package-a==4.0.0 cannot be used.
           And because we know from (2) that package-a>=2.0.0,<4.0.0 cannot be used, we can conclude that package-a>=2.0.0 cannot be used.
           And because you require package-a>=2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);

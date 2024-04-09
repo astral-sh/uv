@@ -15,10 +15,11 @@ use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Output;
+use std::str::FromStr;
 use uv_fs::Simplified;
 
 use uv_cache::Cache;
-use uv_interpreter::find_requested_python;
+use uv_interpreter::{find_requested_python, PythonVersion};
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
@@ -68,6 +69,9 @@ impl TestContext {
             .to_path_buf();
 
         let site_packages = site_packages_path(&venv, format!("python{python_version}"));
+
+        let python_version =
+            PythonVersion::from_str(python_version).expect("Tests must use valid Python versions");
 
         let mut filters = Vec::new();
         filters.extend(
@@ -122,6 +126,18 @@ impl TestContext {
 
         // Destroy any remaining UNC prefixes (Windows only)
         filters.push((r"\\\\\?\\".to_string(), String::new()));
+
+        // Add Python patch version filtering unless explicitly requested to ensure
+        // snapshots are patch version agnostic when it is not a part of the test.
+        if python_version.patch().is_none() {
+            filters.push((
+                format!(
+                    r"({})\.\d+",
+                    regex::escape(python_version.to_string().as_str())
+                ),
+                "$1.[X]".to_string(),
+            ));
+        }
 
         Self {
             temp_dir,
