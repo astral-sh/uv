@@ -7,7 +7,7 @@ use url::Url;
 
 use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::split_scheme;
-use pypi_types::{DistInfoMetadata, Hashes, Yanked};
+use pypi_types::{DistInfoMetadata, HashDigest, Yanked};
 
 /// Error converting [`pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, Error)]
@@ -27,7 +27,7 @@ pub enum FileConversionError {
 pub struct File {
     pub dist_info_metadata: Option<DistInfoMetadata>,
     pub filename: String,
-    pub hashes: Hashes,
+    pub hashes: Vec<HashDigest>,
     pub requires_python: Option<VersionSpecifiers>,
     pub size: Option<u64>,
     // N.B. We don't use a chrono DateTime<Utc> here because it's a little
@@ -45,7 +45,7 @@ impl File {
         Ok(Self {
             dist_info_metadata: file.dist_info_metadata,
             filename: file.filename,
-            hashes: file.hashes,
+            hashes: file.hashes.into_digests(),
             requires_python: file
                 .requires_python
                 .transpose()

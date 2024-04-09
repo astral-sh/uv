@@ -150,31 +150,34 @@ pub struct Hashes {
 }
 
 impl Hashes {
-    /// Format as `<algorithm>:<hash>`.
-    pub fn to_string(&self) -> Option<String> {
-        self.sha512
-            .as_ref()
-            .map(|sha512| format!("sha512:{sha512}"))
-            .or_else(|| {
-                self.sha384
-                    .as_ref()
-                    .map(|sha384| format!("sha384:{sha384}"))
-            })
-            .or_else(|| {
-                self.sha256
-                    .as_ref()
-                    .map(|sha256| format!("sha256:{sha256}"))
-            })
-            .or_else(|| self.md5.as_ref().map(|md5| format!("md5:{md5}")))
-    }
-
-    /// Return the hash digest.
-    pub fn as_str(&self) -> Option<&str> {
-        self.sha512
-            .as_deref()
-            .or(self.sha384.as_deref())
-            .or(self.sha256.as_deref())
-            .or(self.md5.as_deref())
+    /// Convert a set of [`Hashes`] into a list of [`HashDigest`]s.
+    pub fn into_digests(self) -> Vec<HashDigest> {
+        let mut digests = Vec::new();
+        if let Some(md5) = self.md5 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Md5,
+                digest: md5,
+            });
+        }
+        if let Some(sha256) = self.sha256 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Sha256,
+                digest: sha256,
+            });
+        }
+        if let Some(sha384) = self.sha384 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Sha384,
+                digest: sha384,
+            });
+        }
+        if let Some(sha512) = self.sha512 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Sha512,
+                digest: sha512,
+            });
+        }
+        digests
     }
 }
 
@@ -236,6 +239,119 @@ impl FromStr for Hashes {
             }
             _ => Err(HashError::UnsupportedHashAlgorithm(s.to_string())),
         }
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
+pub enum HashAlgorithm {
+    Md5,
+    Sha256,
+    Sha384,
+    Sha512,
+}
+
+impl FromStr for HashAlgorithm {
+    type Err = HashError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "md5" => Ok(Self::Md5),
+            "sha256" => Ok(Self::Sha256),
+            "sha384" => Ok(Self::Sha384),
+            "sha512" => Ok(Self::Sha512),
+            _ => Err(HashError::UnsupportedHashAlgorithm(s.to_string())),
+        }
+    }
+}
+
+impl std::fmt::Display for HashAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Md5 => write!(f, "md5"),
+            Self::Sha256 => write!(f, "sha256"),
+            Self::Sha384 => write!(f, "sha384"),
+            Self::Sha512 => write!(f, "sha512"),
+        }
+    }
+}
+
+/// A hash name and hex encoded digest of the file.
+#[derive(
+    Debug,
+    Clone,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[archive(check_bytes)]
+#[archive_attr(derive(Debug))]
+pub struct HashDigest {
+    pub algorithm: HashAlgorithm,
+    // TODO(charlie): This should be a Vec<u8>.
+    pub digest: Box<str>,
+}
+
+impl HashDigest {
+    /// Return the [`HashAlgorithm`] of the digest.
+    pub fn algorithm(&self) -> HashAlgorithm {
+        self.algorithm
+    }
+}
+
+impl std::fmt::Display for HashDigest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.algorithm, self.digest)
+    }
+}
+
+impl FromStr for HashDigest {
+    type Err = HashError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.split(':');
+
+        // Extract the key and value.
+        let name = parts
+            .next()
+            .ok_or_else(|| HashError::InvalidStructure(s.to_string()))?;
+        let value = parts
+            .next()
+            .ok_or_else(|| HashError::InvalidStructure(s.to_string()))?;
+
+        // Ensure there are no more parts.
+        if parts.next().is_some() {
+            return Err(HashError::InvalidStructure(s.to_string()));
+        }
+
+        let algorithm = HashAlgorithm::from_str(name)?;
+
+        Ok(HashDigest {
+            algorithm,
+            digest: value.to_owned().into_boxed_str(),
+        })
     }
 }
 

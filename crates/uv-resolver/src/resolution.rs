@@ -18,7 +18,7 @@ use distribution_types::{
 use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use pypi_types::Hashes;
+use pypi_types::HashDigest;
 use uv_distribution::to_precise;
 use uv_normalize::{ExtraName, PackageName};
 
@@ -50,7 +50,7 @@ pub struct ResolutionGraph {
     /// The underlying graph.
     petgraph: petgraph::graph::Graph<ResolvedDist, Range<Version>, petgraph::Directed>,
     /// The metadata for every distribution in this resolution.
-    hashes: FxHashMap<PackageName, Vec<Hashes>>,
+    hashes: FxHashMap<PackageName, Vec<HashDigest>>,
     /// The enabled extras for every distribution in this resolution.
     extras: FxHashMap<PackageName, Vec<ExtraName>>,
     /// The set of editable requirements in this resolution.
@@ -649,12 +649,10 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .filter(|hashes| !hashes.is_empty())
                 {
                     for hash in hashes {
-                        if let Some(hash) = hash.to_string() {
-                            has_hashes = true;
-                            line.push_str(" \\\n");
-                            line.push_str("    --hash=");
-                            line.push_str(&hash);
-                        }
+                        has_hashes = true;
+                        line.push_str(" \\\n");
+                        line.push_str("    --hash=");
+                        line.push_str(&hash.to_string());
                     }
                 }
             }
