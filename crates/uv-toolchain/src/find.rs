@@ -6,6 +6,7 @@ use crate::python_version::PythonVersion;
 
 use once_cell::sync::Lazy;
 
+/// The directory where Python toolchains are stored.
 pub static TOOLCHAIN_DIRECTORY: Lazy<PathBuf> = Lazy::new(|| {
     std::env::var_os("UV_BOOTSTRAP_DIR").map_or(
         Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -18,6 +19,7 @@ pub static TOOLCHAIN_DIRECTORY: Lazy<PathBuf> = Lazy::new(|| {
     )
 });
 
+/// An installed Python toolchain.
 #[derive(Debug, Clone)]
 pub struct Toolchain {
     path: PathBuf,
@@ -35,8 +37,17 @@ impl Toolchain {
     }
 }
 
+/// Return the toolchains that satisfy the given Python version on this platform.
+///
+/// ## Errors
+///
+/// - The platform metadata cannot be read
+/// - A directory in the toolchain directory cannot be read
 pub fn toolchains_for_version(version: &PythonVersion) -> Result<Vec<Toolchain>, Error> {
     let platform_key = platform_key_from_env()?;
+
+    // TODO(zanieb): Consider returning an iterator instead of a `Vec`
+    //               Note we need to collect paths regardless for sorting by version.
 
     let toolchain_dirs = match fs_err::read_dir(TOOLCHAIN_DIRECTORY.to_path_buf()) {
         Ok(toolchain_dirs) => {
@@ -86,6 +97,7 @@ pub fn toolchains_for_version(version: &PythonVersion) -> Result<Vec<Toolchain>,
         .collect::<Vec<_>>())
 }
 
+/// Generate a platform portion of a key from the environment.
 fn platform_key_from_env() -> Result<String, Error> {
     let os = Os::from_env()?;
     let arch = Arch::from_env()?;

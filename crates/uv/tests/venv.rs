@@ -394,7 +394,7 @@ fn windows_shims() -> Result<()> {
     let context = VenvTestContext::new(&["3.9", "3.8"]);
     let shim_path = context.temp_dir.child("shim");
 
-    let py38 = std::env::split_paths(&context.bin)
+    let py38 = std::env::split_paths(&context.python_path)
         .last()
         .expect("python_path_with_versions to set up the python versions");
     // We want 3.8 and the first version should be 3.9.
@@ -414,7 +414,7 @@ fn windows_shims() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
         .arg("--clear")
-        .env("UV_TEST_PYTHON_PATH", format!("{};{}", shim_path.display(), context.bin.simplified_display())), @r###"
+        .env("UV_TEST_PYTHON_PATH", format!("{};{}", shim_path.display(), context.python_path.simplified_display())), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
