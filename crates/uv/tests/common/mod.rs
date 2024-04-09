@@ -5,6 +5,7 @@ use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
 
+use assert_fs::fixture::PathChild;
 use regex::Regex;
 use std::borrow::BorrowMut;
 use std::env;
@@ -12,6 +13,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
+use uv_interpreter::find_requested_python;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
@@ -324,10 +326,7 @@ pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path
     )
     .expect("Tests are run on a supported platform")
     .first()
-    .map(|toolchain| {
-        debug!("Found toolchain {toolchain:?}");
-        toolchain.executable()
-    })
+    .map(uv_toolchain::Toolchain::executable)
     // We'll search for the request Python on the PATH if not found in the toolchain versions
     // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
     .unwrap_or(PathBuf::from(python));
@@ -355,10 +354,13 @@ pub fn get_bin() -> PathBuf {
 }
 
 /// Create a `PATH` with the requested Python versions available in order.
-pub fn create_bin_with_executables(
-    _temp_dir: &assert_fs::TempDir,
+///
+/// Generally this should be used with `UV_TEST_PYTHON_PATH`.
+pub fn python_path_with_versions(
+    temp_dir: &assert_fs::TempDir,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
+    let cache = Cache::from_path(temp_dir.child("cache").to_path_buf())?;
     let selected_pythons = python_versions
         .iter()
         .flat_map(|python_version| {
@@ -369,7 +371,6 @@ pub fn create_bin_with_executables(
             .expect("Tests are run on a supported platform")
             .iter()
             .map(|toolchain| {
-                debug!("Found toolchain {toolchain:?}");
                 toolchain
                     .executable()
                     .parent()
@@ -377,11 +378,20 @@ pub fn create_bin_with_executables(
                     .to_path_buf()
             })
             .collect::<Vec<_>>();
-            assert!(
-                !inner.is_empty(),
-                "No installed toolchain found for {python_version}"
-            );
-            inner
+            if inner.is_empty() {
+                // Fallback to a system lookup if we failed to find one in the toolchain directory
+                if let Some(interpreter) = find_requested_python(python_version, &cache).unwrap() {
+                    vec![interpreter
+                        .sys_executable()
+                        .parent()
+                        .expect("Python executable should always be in a directory")
+                        .to_path_buf()]
+                } else {
+                    panic!("Could not find Python {python_version} for test");
+                }
+            } else {
+                inner
+            }
         })
         .collect::<Vec<_>>();
 

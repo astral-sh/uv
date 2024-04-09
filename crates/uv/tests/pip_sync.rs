@@ -13,7 +13,7 @@ use indoc::indoc;
 use predicates::Predicate;
 use url::Url;
 
-use common::{create_bin_with_executables, create_venv, uv_snapshot, venv_to_interpreter};
+use common::{create_venv, python_path_with_versions, uv_snapshot, venv_to_interpreter};
 use uv_fs::Simplified;
 
 use crate::common::{copy_dir_all, get_bin, TestContext};
@@ -338,8 +338,8 @@ fn link() -> Result<()> {
         .success();
 
     let venv2 = context.temp_dir.child(".venv2");
-    let bin = create_bin_with_executables(&context.temp_dir, &["3.12"])
-        .expect("Failed to create bin dir");
+    let python_path = python_path_with_versions(&context.temp_dir, &["3.12"])
+        .expect("Failed to create Python test path");
     Command::new(get_bin())
         .arg("venv")
         .arg(venv2.as_os_str())
@@ -347,7 +347,7 @@ fn link() -> Result<()> {
         .arg(context.cache_dir.path())
         .arg("--python")
         .arg("3.12")
-        .env("UV_TEST_PYTHON_PATH", bin)
+        .env("UV_TEST_PYTHON_PATH", python_path)
         .current_dir(&context.temp_dir)
         .assert()
         .success();
