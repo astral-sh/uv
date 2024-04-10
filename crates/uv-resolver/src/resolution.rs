@@ -493,6 +493,7 @@ impl ResolutionGraph {
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolutionGraph,
@@ -528,6 +529,7 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
 
 impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
+    #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
         underlying: &'a ResolutionGraph,
         no_emit_packages: &'a [PackageName],
