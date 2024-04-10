@@ -195,14 +195,24 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
 
     // Assert distro
     if cfg!(windows) {
-        assert_json_snapshot!("uv_linehaul_distro_windows", &linehaul.distro);
+        assert_json_snapshot!(&linehaul.distro, @"null");
     } else if cfg!(target_os = "linux") {
-        assert_json_snapshot!("uv_linehaul_distro_linux", &linehaul.distro, {
+        assert_json_snapshot!(&linehaul.distro, {
             ".id" => "[distro.id]",
             ".name" => "[distro.name]",
             ".version" => "[distro.version]"
             // We mock the libc version already
-        });
+        }, @r###"
+            {
+              "name": "[distro.name]",
+              "version": "[distro.version]",
+              "id": "[distro.id]",
+              "libc": {
+                "lib": "glibc",
+                "version": "2.38"
+              }
+            }"###
+        );
         // Check dynamic values
         let distro_info = linehaul
             .distro
@@ -215,7 +225,14 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         assert_eq!(distro_info.version, release_info.version_id);
     } else if cfg!(target_os = "macos") {
         // We mock the macOS distro
-        assert_json_snapshot!("uv_linehaul_distro_macos", &linehaul.distro);
+        assert_json_snapshot!(&linehaul.distro, @r###"
+            {
+              "name": "macOS",
+              "version": "14.4",
+              "id": null,
+              "libc": null
+            }"###
+        );
     }
 
     Ok(())
