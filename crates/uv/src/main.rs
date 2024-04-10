@@ -21,10 +21,10 @@ use uv_configuration::{
     Upgrade,
 };
 use uv_configuration::{IndexStrategy, NoBinary};
-use uv_interpreter::PythonVersion;
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{ExtrasSpecification, RequirementsSource};
 use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
+use uv_toolchain::PythonVersion;
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, ListFormat, VersionFormat};
 use crate::compat::CompatArgs;

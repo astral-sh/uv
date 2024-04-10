@@ -72,32 +72,22 @@ jobs:
     name: "cargo test | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
-
-      - if: ${{ matrix.os == 'macos' }}
-        name: "Install bootstrap dependencies"
-        run: brew install coreutils
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: "Install required Python versions"
-        run: |
-          python -m pip install "zstandard==0.22.0"
-          python scripts/bootstrap/install.py
-
       - name: "Install Rust toolchain"
         run: rustup show
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
 
       - if: ${{ matrix.os != 'windows' }}
         uses: rui314/setup-mold@v1
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: "Install required Python versions"
+        run: |
+          cargo run -p uv-dev -- fetch-python
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
 
       - name: "Cargo test"
         run: |

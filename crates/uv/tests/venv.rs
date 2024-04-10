@@ -9,11 +9,9 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use fs_err::PathExt;
 use uv_fs::Simplified;
-use uv_interpreter::PythonVersion;
+use uv_toolchain::PythonVersion;
 
-use crate::common::{
-    create_bin_with_executables, get_bin, uv_snapshot, TestContext, EXCLUDE_NEWER,
-};
+use crate::common::{get_bin, python_path_with_versions, uv_snapshot, TestContext, EXCLUDE_NEWER};
 
 mod common;
 
@@ -21,15 +19,15 @@ struct VenvTestContext {
     cache_dir: assert_fs::TempDir,
     temp_dir: assert_fs::TempDir,
     venv: ChildPath,
-    bin: OsString,
+    python_path: OsString,
     python_versions: Vec<PythonVersion>,
 }
 
 impl VenvTestContext {
     fn new(python_versions: &[&str]) -> Self {
         let temp_dir = assert_fs::TempDir::new().unwrap();
-        let bin = create_bin_with_executables(&temp_dir, python_versions)
-            .expect("Failed to create bin dir");
+        let python_path = python_path_with_versions(&temp_dir, python_versions)
+            .expect("Failed to create Python test path");
         let venv = temp_dir.child(".venv");
         let python_versions = python_versions
             .iter()
@@ -41,7 +39,7 @@ impl VenvTestContext {
             cache_dir: assert_fs::TempDir::new().unwrap(),
             temp_dir,
             venv,
-            bin,
+            python_path,
             python_versions,
         }
     }
@@ -54,7 +52,7 @@ impl VenvTestContext {
             .arg(self.cache_dir.path())
             .arg("--exclude-newer")
             .arg(EXCLUDE_NEWER)
-            .env("UV_TEST_PYTHON_PATH", self.bin.clone())
+            .env("UV_TEST_PYTHON_PATH", self.python_path.clone())
             .current_dir(self.temp_dir.path());
         command
     }
@@ -397,9 +395,9 @@ fn windows_shims() -> Result<()> {
     let context = VenvTestContext::new(&["3.9", "3.8"]);
     let shim_path = context.temp_dir.child("shim");
 
-    let py38 = std::env::split_paths(&context.bin)
+    let py38 = std::env::split_paths(&context.python_path)
         .last()
-        .expect("create_bin_with_executables to set up the python versions");
+        .expect("python_path_with_versions to set up the python versions");
     // We want 3.8 and the first version should be 3.9.
     // Picking the last is necessary to prove that shims work because the python version selects
     // the python version from the first path segment by default, so we take the last to prove it's not
@@ -417,7 +415,7 @@ fn windows_shims() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv_command()
         .arg(context.venv.as_os_str())
         .arg("--clear")
-        .env("UV_TEST_PYTHON_PATH", format!("{};{}", shim_path.display(), context.bin.simplified_display())), @r###"
+        .env("UV_TEST_PYTHON_PATH", format!("{};{}", shim_path.display(), context.python_path.simplified_display())), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

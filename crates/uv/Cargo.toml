@@ -34,6 +34,7 @@ uv-resolver = { workspace = true, features = ["clap"] }
 uv-types = { workspace = true, features = ["clap"] }
 uv-configuration = { workspace = true, features = ["clap"] }
 uv-virtualenv = { workspace = true }
+uv-toolchain = { workspace = true }
 uv-warnings = { workspace = true }
 
 anstream = { workspace = true }

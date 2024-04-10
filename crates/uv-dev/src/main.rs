@@ -21,6 +21,7 @@ use resolve_many::ResolveManyArgs;
 use crate::build::{build, BuildArgs};
 use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
+use crate::fetch_python::FetchPythonArgs;
 use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::resolve_cli::ResolveCliArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
@@ -44,6 +45,7 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 mod build;
 mod clear_compile;
 mod compile;
+mod fetch_python;
 mod render_benchmarks;
 mod resolve_cli;
 mod resolve_many;
@@ -72,6 +74,8 @@ enum Cli {
     Compile(CompileArgs),
     /// Remove all `.pyc` in the tree.
     ClearCompile(ClearCompileArgs),
+    /// Fetch Python versions for testing
+    FetchPython(FetchPythonArgs),
 }
 
 #[instrument] // Anchor span to check for overhead
@@ -92,6 +96,7 @@ async fn run() -> Result<()> {
         Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
         Cli::Compile(args) => compile::compile(args).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
+        Cli::FetchPython(args) => fetch_python::fetch_python(args).await?,
     }
     Ok(())
 }

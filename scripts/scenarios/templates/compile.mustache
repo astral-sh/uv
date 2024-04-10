@@ -13,14 +13,14 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use predicates::prelude::predicate;
 
-use common::{create_bin_with_executables, get_bin, uv_snapshot, TestContext};
+use common::{python_path_with_versions, get_bin, uv_snapshot, TestContext};
 
 mod common;
 
 /// Provision python binaries and return a `pip compile` command with options shared across all scenarios.
 fn command(context: &TestContext, python_versions: &[&str]) -> Command {
-    let bin = create_bin_with_executables(&context.temp_dir, python_versions)
-        .expect("Failed to create bin dir");
+    let python_path = python_path_with_versions(&context.temp_dir, python_versions)
+        .expect("Failed to create Python test path");
     let mut command = Command::new(get_bin());
     command
         .arg("pip")
@@ -34,7 +34,7 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
+        .env("UV_TEST_PYTHON_PATH", python_path)
         .current_dir(&context.temp_dir);
 
     if cfg!(all(windows, debug_assertions)) {
