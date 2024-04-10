@@ -84,7 +84,7 @@ pub enum Error {
     Join(#[from] JoinError),
 
     /// An I/O error that occurs while exhausting a reader to compute a hash.
-    #[error("Failed to exhaust hash reader")]
+    #[error("Failed to hash distribution")]
     HashExhaustion(#[source] std::io::Error),
 
     #[error("Hash mismatch for {distribution}\n\nExpected:\n{expected}\n\nComputed:\n{actual}")]

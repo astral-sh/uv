@@ -19,9 +19,11 @@ use uv_configuration::{BuildKind, Constraints, NoBinary, NoBuild, Overrides, Set
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_resolver::{
     DisplayResolutionGraph, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
-    OptionsBuilder, Preference, PreReleaseMode, ResolutionGraph, ResolutionMode, Resolver,
+    OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, RequiredHashes, SourceBuildTrait};
+use uv_types::{
+    BuildContext, BuildIsolation, EmptyInstalledPackages, RequiredHashes, SourceBuildTrait,
+};
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {

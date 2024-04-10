@@ -55,7 +55,7 @@ pub use crate::resolver::provider::{
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
-use crate::{DependencyMode, Exclusions, Options};
+use crate::{DependencyMode, Exclusions, FlatIndex, Options};
 
 mod batch_prefetch;
 mod index;

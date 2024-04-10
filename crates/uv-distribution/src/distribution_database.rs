@@ -621,8 +621,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
                 archive: archive.path,
-                filename: filename.clone(),
                 hashes: archive.hashes,
+                filename: filename.clone(),
             })
         } else if hashes.is_empty() {
             // Otherwise, unzip the wheel.
@@ -632,8 +632,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
                 archive: archive.path,
+                hashes: archive.hashes,
                 filename: filename.clone(),
-                hashes: vec![],
             })
         } else {
             // If necessary, compute the hashes of the wheel.
@@ -676,8 +676,8 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
                 archive: archive.path,
-                filename: filename.clone(),
                 hashes: archive.hashes,
+                filename: filename.clone(),
             })
         }
     }

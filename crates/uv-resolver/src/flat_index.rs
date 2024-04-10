@@ -11,9 +11,11 @@ use distribution_types::{
 };
 use pep440_rs::Version;
 use platform_tags::Tags;
+use pypi_types::HashDigest;
 use uv_client::FlatIndexEntries;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_normalize::PackageName;
+use uv_types::RequiredHashes;
 
 /// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
 /// and [`Version`].
@@ -32,6 +34,7 @@ impl FlatIndex {
     pub fn from_entries(
         entries: FlatIndexEntries,
         tags: &Tags,
+        required_hashes: &RequiredHashes,
         no_build: &NoBuild,
         no_binary: &NoBinary,
     ) -> Self {
@@ -44,6 +47,7 @@ impl FlatIndex {
                 file,
                 filename,
                 tags,
+                required_hashes,
                 no_build,
                 no_binary,
                 url,
@@ -56,11 +60,13 @@ impl FlatIndex {
         Self { index, offline }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn add_file(
         distributions: &mut FlatDistributions,
         file: File,
         filename: DistFilename,
         tags: &Tags,
+        required_hashes: &RequiredHashes,
         no_build: &NoBuild,
         no_binary: &NoBinary,
         index: IndexUrl,
@@ -71,7 +77,13 @@ impl FlatIndex {
             DistFilename::WheelFilename(filename) => {
                 let version = filename.version.clone();
 
-                let compatibility = Self::wheel_compatibility(&filename, tags, no_binary);
+                let compatibility = Self::wheel_compatibility(
+                    &filename,
+                    &file.hashes,
+                    tags,
+                    required_hashes,
+                    no_binary,
+                );
                 let dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
                     filename,
                     file: Box::new(file),
@@ -87,7 +99,12 @@ impl FlatIndex {
                 }
             }
             DistFilename::SourceDistFilename(filename) => {
-                let compatibility = Self::source_dist_compatibility(&filename, no_build);
+                let compatibility = Self::source_dist_compatibility(
+                    &filename,
+                    &file.hashes,
+                    required_hashes,
+                    no_build,
+                );
                 let dist = Dist::Source(SourceDist::Registry(RegistrySourceDist {
                     filename: filename.clone(),
                     file: Box::new(file),
@@ -107,6 +124,8 @@ impl FlatIndex {
 
     fn source_dist_compatibility(
         filename: &SourceDistFilename,
+        hashes: &[HashDigest],
+        required_hashes: &RequiredHashes,
         no_build: &NoBuild,
     ) -> SourceDistCompatibility {
         // Check if source distributions are allowed for this package.
@@ -120,12 +139,28 @@ impl FlatIndex {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::NoBuild);
         }
 
+        // Check if hashes line up
+        if let Some(required_hashes) = required_hashes.get(&filename.name) {
+            if !required_hashes.is_empty() {
+                if hashes.is_empty() {
+                    return SourceDistCompatibility::Incompatible(IncompatibleSource::MissingHash);
+                }
+                if !hashes.iter().any(|hash| required_hashes.contains(hash)) {
+                    return SourceDistCompatibility::Incompatible(
+                        IncompatibleSource::MismatchedHash,
+                    );
+                }
+            }
+        }
+
         SourceDistCompatibility::Compatible
     }
 
     fn wheel_compatibility(
         filename: &WheelFilename,
+        hashes: &[HashDigest],
         tags: &Tags,
+        required_hashes: &RequiredHashes,
         no_binary: &NoBinary,
     ) -> WheelCompatibility {
         // Check if binaries are allowed for this package.
@@ -137,6 +172,18 @@ impl FlatIndex {
 
         if no_binary {
             return WheelCompatibility::Incompatible(IncompatibleWheel::NoBinary);
+        }
+
+        // Check if hashes line up
+        if let Some(required_hashes) = required_hashes.get(&filename.name) {
+            if !required_hashes.is_empty() {
+                if hashes.is_empty() {
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::MissingHash);
+                }
+                if !hashes.iter().any(|hash| required_hashes.contains(hash)) {
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::MismatchedHash);
+                }
+            }
         }
 
         // Determine a compatibility for the wheel based on tags.

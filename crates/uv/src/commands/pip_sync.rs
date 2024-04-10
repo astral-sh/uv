@@ -30,7 +30,9 @@ use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
-use uv_resolver::{DependencyMode, FlatIndex, HashCheckingMode, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
+use uv_resolver::{
+    DependencyMode, FlatIndex, HashCheckingMode, InMemoryIndex, Manifest, OptionsBuilder, Resolver,
+};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight, RequiredHashes};
 use uv_warnings::warn_user;
 

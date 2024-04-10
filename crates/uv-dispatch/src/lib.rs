@@ -3,8 +3,8 @@
 //! implementing [`BuildContext`].
 
 use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::path::Path;
-use std::{ffi::OsString, future::Future};
 
 use anyhow::{bail, Context, Result};
 use futures::FutureExt;
@@ -164,7 +164,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             venv = ?venv.root()
         )
     )]
-    fn install<'data>(
+    async fn install<'data>(
         &'data self,
         resolution: &'data Resolution,
         venv: &'data PythonEnvironment,

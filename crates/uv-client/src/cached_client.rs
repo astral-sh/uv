@@ -300,7 +300,6 @@ impl CachedClient {
     }
 
     /// Make a request without checking whether the cache is fresh.
-    #[instrument(skip_all)]
     pub async fn skip_cache<
         Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError,
