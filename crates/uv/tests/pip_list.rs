@@ -1,8 +1,8 @@
 use std::process::Command;
 
 use anyhow::Result;
+use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
-use assert_fs::fixture::{FileTouch, FileWriteStr};
 
 use common::uv_snapshot;
 
@@ -59,7 +59,6 @@ fn list_single_no_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     uv_snapshot!(install_command(&context)

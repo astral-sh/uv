@@ -3,8 +3,8 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
+use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
-use assert_fs::fixture::{FileTouch, FileWriteStr};
 use indoc::indoc;
 
 use common::uv_snapshot;
@@ -63,7 +63,6 @@ fn show_requires_multiple() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("requests==2.31.0")?;
 
     uv_snapshot!(install_command(&context)
@@ -119,7 +118,6 @@ fn show_python_version_marker() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("click==8.1.7")?;
 
     uv_snapshot!(install_command(&context)
@@ -175,7 +173,6 @@ fn show_found_single_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     uv_snapshot!(install_command(&context)
@@ -226,7 +223,6 @@ fn show_found_multiple_packages() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(indoc! {r"
         MarkupSafe==2.1.3
         pip==21.3.1
@@ -289,7 +285,6 @@ fn show_found_one_out_of_three() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(indoc! {r"
         MarkupSafe==2.1.3
         pip==21.3.1
@@ -348,7 +343,6 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(indoc! {r"
         MarkupSafe==2.1.3
         pip==21.3.1
@@ -402,7 +396,6 @@ fn show_empty_quiet() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(indoc! {r"
         MarkupSafe==2.1.3
         pip==21.3.1
@@ -497,7 +490,6 @@ fn show_required_by_multiple() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(indoc! {r"
         anyio==4.0.0
         requests==2.31.0

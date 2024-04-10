@@ -413,7 +413,6 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     // Install Flask.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("Flask==2.3.2")?;
 
     uv_snapshot!(context.install()
@@ -442,7 +441,6 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     // Re-install Flask. We should respect the existing version.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("Flask")?;
 
     uv_snapshot!(context.install()
@@ -462,7 +460,6 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     // Install a newer version of Flask. We should upgrade it.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("Flask==2.3.3")?;
 
     let filters = if cfg!(windows) {
@@ -494,7 +491,6 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     // Re-install Flask. We should upgrade it.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("Flask")?;
 
     uv_snapshot!(filters, context.install()
@@ -518,7 +514,6 @@ fn respect_installed_and_reinstall() -> Result<()> {
 
     // Re-install Flask. We should install even though the version is current
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("Flask")?;
 
     uv_snapshot!(filters, context.install()
@@ -577,7 +572,6 @@ fn reinstall_extras() -> Result<()> {
 
     // Re-install httpx, with an extra.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("httpx[http2]")?;
 
     uv_snapshot!(context.install()
@@ -610,7 +604,6 @@ fn reinstall_incomplete() -> Result<()> {
 
     // Install anyio.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("anyio==3.7.0")?;
 
     uv_snapshot!(context.install()
@@ -635,7 +628,6 @@ fn reinstall_incomplete() -> Result<()> {
 
     // Re-install anyio.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("anyio==4.0.0")?;
 
     uv_snapshot!(context.filters(), context.install()
@@ -665,7 +657,6 @@ fn allow_incompatibilities() -> Result<()> {
 
     // Install Flask, which relies on `Werkzeug>=3.0.0`.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("Flask")?;
 
     uv_snapshot!(context.install()
@@ -694,7 +685,6 @@ fn allow_incompatibilities() -> Result<()> {
 
     // Install an incompatible version of Jinja2.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("jinja2==2.11.3")?;
 
     uv_snapshot!(context.install()
@@ -2508,7 +2498,6 @@ fn no_build_isolation() -> Result<()> {
 fn install_utf16le_requirements() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli"))?;
 
     uv_snapshot!(context.install_without_exclude_newer()
@@ -2535,7 +2524,6 @@ fn install_utf16le_requirements() -> Result<()> {
 fn install_utf16be_requirements() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli"))?;
 
     uv_snapshot!(context.install_without_exclude_newer()
@@ -2579,7 +2567,6 @@ fn utf8_to_utf16_with_bom_be(s: &str) -> Vec<u8> {
 fn dry_run_install() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("httpx==0.25.1")?;
 
     uv_snapshot!(context.install()
@@ -2612,7 +2599,6 @@ fn dry_run_install() -> std::result::Result<(), Box<dyn std::error::Error>> {
 fn dry_run_install_url_dependency() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz")?;
 
     uv_snapshot!(context.install()
@@ -2641,7 +2627,6 @@ fn dry_run_install_url_dependency() -> std::result::Result<(), Box<dyn std::erro
 fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz")?;
 
     // Install the URL dependency
@@ -2693,7 +2678,6 @@ fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::er
 fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("httpx==0.25.1")?;
 
     // Install the package
@@ -2744,7 +2728,6 @@ fn dry_run_install_transitive_dependency_already_installed(
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("httpcore==1.0.2")?;
 
     // Install a dependency of httpx
@@ -2795,7 +2778,6 @@ fn dry_run_install_transitive_dependency_already_installed(
 fn dry_run_install_then_upgrade() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("httpx==0.25.0")?;
 
     // Install the package

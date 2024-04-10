@@ -127,7 +127,6 @@ fn missing_requirements_txt() -> Result<()> {
 fn invalid_requirements_txt_requirement() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let requirements_txt = temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("flask==1.0.x")?;
 
     uv_snapshot!(Command::new(get_bin())
@@ -155,7 +154,6 @@ fn uninstall() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     sync_command(&context)
@@ -197,7 +195,6 @@ fn missing_record() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     sync_command(&context)
@@ -235,7 +232,6 @@ fn uninstall_editable_by_name() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(&format!(
         "-e {}",
         context
@@ -283,7 +279,6 @@ fn uninstall_by_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(
         context
             .workspace_root
@@ -331,7 +326,6 @@ fn uninstall_duplicate_by_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(
         context
             .workspace_root
@@ -383,7 +377,6 @@ fn uninstall_duplicate() -> Result<()> {
     // Sync a version of `pip` into a virtual environment.
     let context1 = TestContext::new("3.12");
     let requirements_txt = context1.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("pip==21.3.1")?;
 
     // Run `pip sync`.
@@ -395,7 +388,6 @@ fn uninstall_duplicate() -> Result<()> {
     // Sync a different version of `pip` into a virtual environment.
     let context2 = TestContext::new("3.12");
     let requirements_txt = context2.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("pip==22.1.1")?;
 
     // Run `pip sync`.
