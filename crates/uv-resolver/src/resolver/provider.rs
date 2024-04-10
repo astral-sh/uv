@@ -38,6 +38,8 @@ pub enum MetadataResponse {
     Found(Metadata23),
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata(Box<pypi_types::MetadataError>),
+    /// The wheel metadata was found, but the metadata was inconsistent.
+    InconsistentMetadata(Box<uv_distribution::Error>),
     /// The wheel has an invalid structure.
     InvalidStructure(Box<install_wheel_rs::Error>),
     /// The wheel metadata was not found in the cache and the network is not available.
@@ -185,6 +187,12 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                     }
                     kind => Err(uv_client::Error::from(kind).into()),
                 },
+                uv_distribution::Error::VersionMismatch { .. } => {
+                    Ok(MetadataResponse::InconsistentMetadata(Box::new(err)))
+                }
+                uv_distribution::Error::NameMismatch { .. } => {
+                    Ok(MetadataResponse::InconsistentMetadata(Box::new(err)))
+                }
                 uv_distribution::Error::Metadata(err) => {
                     Ok(MetadataResponse::InvalidMetadata(Box::new(err)))
                 }

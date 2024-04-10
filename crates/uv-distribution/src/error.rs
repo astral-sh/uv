@@ -3,6 +3,7 @@ use tokio::task::JoinError;
 use zip::result::ZipError;
 
 use distribution_filename::WheelFilenameError;
+use pep440_rs::Version;
 use uv_client::BetterReqwestError;
 use uv_normalize::PackageName;
 
@@ -47,6 +48,8 @@ pub enum Error {
         given: PackageName,
         metadata: PackageName,
     },
+    #[error("Package metadata version `{metadata}` does not match given version `{given}`")]
+    VersionMismatch { given: Version, metadata: Version },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] pypi_types::MetadataError),
     #[error("Failed to read `dist-info` metadata from built wheel")]

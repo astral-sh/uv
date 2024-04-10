@@ -1109,14 +1109,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata = read_wheel_metadata(&filename, cache_shard.join(&disk_filename))?;
 
         // Validate the metadata.
-        if let Some(name) = source.name() {
-            if metadata.name != *name {
-                return Err(Error::NameMismatch {
-                    metadata: metadata.name,
-                    given: name.clone(),
-                });
-            }
-        }
+        validate(source, &metadata)?;
 
         debug!("Finished building: {source}");
         Ok((disk_filename, filename, metadata))
@@ -1138,14 +1131,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 debug!("Found static `PKG-INFO` for: {source}");
 
                 // Validate the metadata.
-                if let Some(name) = source.name() {
-                    if metadata.name != *name {
-                        return Err(Error::NameMismatch {
-                            metadata: metadata.name,
-                            given: name.clone(),
-                        });
-                    }
-                }
+                validate(source, &metadata)?;
 
                 return Ok(Some(metadata));
             }
@@ -1161,14 +1147,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 debug!("Found static `pyproject.toml` for: {source}");
 
                 // Validate the metadata.
-                if let Some(name) = source.name() {
-                    if metadata.name != *name {
-                        return Err(Error::NameMismatch {
-                            metadata: metadata.name,
-                            given: name.clone(),
-                        });
-                    }
-                }
+                validate(source, &metadata)?;
 
                 return Ok(Some(metadata));
             }
@@ -1208,14 +1187,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata = Metadata23::parse_metadata(&content)?;
 
         // Validate the metadata.
-        if let Some(name) = source.name() {
-            if metadata.name != *name {
-                return Err(Error::NameMismatch {
-                    metadata: metadata.name,
-                    given: name.clone(),
-                });
-            }
-        }
+        validate(source, &metadata)?;
 
         Ok(Some(metadata))
     }
@@ -1276,6 +1248,29 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .build()
     }
+}
+
+/// Validate that the source distribution matches the built metadata.
+fn validate(source: &BuildableSource<'_>, metadata: &Metadata23) -> Result<(), Error> {
+    if let Some(name) = source.name() {
+        if metadata.name != *name {
+            return Err(Error::NameMismatch {
+                metadata: metadata.name.clone(),
+                given: name.clone(),
+            });
+        }
+    }
+
+    if let Some(version) = source.version() {
+        if metadata.version != *version {
+            return Err(Error::VersionMismatch {
+                metadata: metadata.version.clone(),
+                given: version.clone(),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 /// Read an existing HTTP-cached [`Revision`], if it exists.
