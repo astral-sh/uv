@@ -1,9 +1,9 @@
+use http::Extensions;
 use std::path::Path;
 
 use netrc::Netrc;
 use reqwest::{header::HeaderValue, Request, Response};
 use reqwest_middleware::{Middleware, Next};
-use task_local_extensions::Extensions;
 use tracing::{debug, warn};
 
 use crate::{

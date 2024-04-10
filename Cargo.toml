@@ -55,7 +55,7 @@ anyhow = { version = "1.0.80" }
 async-channel = { version = "2.2.0" }
 async-compression = { version = "0.4.6" }
 async-trait = { version = "0.1.78" }
-async_http_range_reader = { version = "0.7.0" }
+async_http_range_reader = { version = "0.7.1" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "1dcb40cfe1bf5325a6fd4bfcf9894db40241f585", features = ["deflate"] }
 axoupdater = { version = "0.4.0", default-features = false }
 backoff = { version = "0.4.0" }
@@ -86,7 +86,7 @@ hex = { version = "0.4.3" }
 hmac = { version = "0.12.1" }
 home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
-http = { version = "0.2.12" }
+http = { version = "1.1.0" }
 indexmap = { version = "2.2.5" }
 indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
@@ -107,9 +107,9 @@ rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.15" }
 regex = { version = "1.10.2" }
-reqwest = { version = "0.11.23", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls", "rustls-tls-native-roots"] }
-reqwest-middleware = { version = "0.2.4" }
-reqwest-retry = { version = "0.3.0" }
+reqwest = { version = "0.12.3", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls", "rustls-tls-native-roots"] }
+reqwest-middleware = { version = "0.3.0" }
+reqwest-retry = { version = "0.5.0" }
 rkyv = { version = "0.7.43", features = ["strict", "validation"] }
 rmp-serde = { version = "1.1.2" }
 rust-netrc = { version = "0.1.1" }
