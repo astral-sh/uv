@@ -5,8 +5,8 @@ use fs_err as fs;
 use fs_err::tokio::symlink;
 use futures::StreamExt;
 use itertools::Itertools;
-use std::collections::HashMap;
 use std::str::FromStr;
+use std::{collections::HashMap, path::PathBuf};
 use tokio::time::Instant;
 use tracing::{info, info_span, Instrument};
 
@@ -93,7 +93,7 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
 
     // Order matters here, as we overwrite previous links
     info!("Installing to `{}`...", bootstrap_dir.user_display());
-    let mut links = HashMap::new();
+    let mut links: HashMap<PathBuf, PathBuf> = HashMap::new();
     for (version, path) in results {
         // TODO(zanieb): This path should be a part of the download metadata
         #[cfg(unix)]
