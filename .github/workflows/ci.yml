@@ -224,6 +224,36 @@ jobs:
           path: ./target/debug/uv.exe
           retention-days: 1
 
+  ecosystem-test-prefect:
+    needs: build-binary-linux
+    name: "ecosystem test | prefect"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Clone project"
+        run: gh repo clone prefecthq/prefect
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Test"
+        run: |
+          cd prefect
+          ../uv venv
+          ../uv pip install --upgrade -e '.[dev]'
+
   cache-test-ubuntu:
     needs: build-binary-linux
     name: "check cache | ubuntu"
