@@ -235,7 +235,7 @@ jobs:
             command: "uv pip install --upgrade -e '.[dev]'"
             python: "3.9"
           - repo: "home-assistant/core"
-            command: "uv pip install -r requirements_all.txt"
+            command: "uv pip install -r requirements_all.txt --no-build"
             python: "3.12"
       fail-fast: false
     steps:
