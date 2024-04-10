@@ -5,10 +5,10 @@ use chrono::{DateTime, Utc};
 
 use distribution_types::{Dist, IndexLocations, Name};
 use platform_tags::Tags;
-use pypi_types::Metadata23;
+
 use uv_client::RegistryClient;
 use uv_configuration::{NoBinary, NoBuild};
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_normalize::PackageName;
 use uv_types::{BuildContext, RequiredHashes};
 
@@ -36,7 +36,7 @@ pub enum VersionsResponse {
 #[derive(Debug)]
 pub enum MetadataResponse {
     /// The wheel metadata was found and parsed successfully.
-    Found(Metadata23),
+    Found(ArchiveMetadata),
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata(Box<pypi_types::MetadataError>),
     /// The wheel metadata was found, but the metadata was inconsistent.

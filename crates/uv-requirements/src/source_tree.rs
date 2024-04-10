@@ -100,30 +100,30 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = PackageId::from_url(source.url());
-            if let Some(metadata) = self
+            if let Some(archive) = self
                 .index
                 .get_metadata(&id)
                 .as_deref()
                 .and_then(|response| {
-                    if let MetadataResponse::Found(metadata) = response {
-                        Some(metadata)
+                    if let MetadataResponse::Found(archive) = response {
+                        Some(archive)
                     } else {
                         None
                     }
                 })
             {
                 // If the metadata is already in the index, return it.
-                metadata.clone()
+                archive.metadata.clone()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
-                let metadata = self.database.build_wheel_metadata(&source, &[]).await?;
+                let archive = self.database.build_wheel_metadata(&source, &[]).await?;
 
                 // Insert the metadata into the index.
                 self.index
-                    .insert_metadata(id, MetadataResponse::Found(metadata.clone()));
+                    .insert_metadata(id, MetadataResponse::Found(archive.clone()));
 
-                metadata
+                archive.metadata
             }
         };
 

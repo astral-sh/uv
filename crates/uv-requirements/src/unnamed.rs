@@ -250,24 +250,24 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
         // Fetch the metadata for the distribution.
         let name = {
             let id = PackageId::from_url(source.url());
-            if let Some(metadata) = index.get_metadata(&id).as_deref().and_then(|response| {
-                if let MetadataResponse::Found(metadata) = response {
-                    Some(metadata)
+            if let Some(archive) = index.get_metadata(&id).as_deref().and_then(|response| {
+                if let MetadataResponse::Found(archive) = response {
+                    Some(archive)
                 } else {
                     None
                 }
             }) {
                 // If the metadata is already in the index, return it.
-                metadata.name.clone()
+                archive.metadata.name.clone()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
-                let metadata = database.build_wheel_metadata(&source, &[]).await?;
+                let archive = database.build_wheel_metadata(&source, &[]).await?;
 
-                let name = metadata.name.clone();
+                let name = archive.metadata.name.clone();
 
                 // Insert the metadata into the index.
-                index.insert_metadata(id, MetadataResponse::Found(metadata));
+                index.insert_metadata(id, MetadataResponse::Found(archive));
 
                 name
             }

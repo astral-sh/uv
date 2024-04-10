@@ -177,14 +177,14 @@ impl ResolutionGraph {
                             )
                         });
 
-                        let MetadataResponse::Found(metadata) = &*response else {
+                        let MetadataResponse::Found(archive) = &*response else {
                             panic!(
                                 "Every package should have metadata: {:?}",
                                 dist.package_id()
                             )
                         };
 
-                        if metadata.provides_extras.contains(extra) {
+                        if archive.metadata.provides_extras.contains(extra) {
                             extras
                                 .entry(package_name.clone())
                                 .or_insert_with(Vec::new)
@@ -231,14 +231,14 @@ impl ResolutionGraph {
                             )
                         });
 
-                        let MetadataResponse::Found(metadata) = &*response else {
+                        let MetadataResponse::Found(archive) = &*response else {
                             panic!(
                                 "Every package should have metadata: {:?}",
                                 dist.package_id()
                             )
                         };
 
-                        if metadata.provides_extras.contains(extra) {
+                        if archive.metadata.provides_extras.contains(extra) {
                             extras
                                 .entry(package_name.clone())
                                 .or_insert_with(Vec::new)
@@ -441,13 +441,13 @@ impl ResolutionGraph {
                 .distributions
                 .get(&package_id)
                 .expect("every package in resolution graph has metadata");
-            let MetadataResponse::Found(md) = &*res else {
+            let MetadataResponse::Found(archive, ..) = &*res else {
                 panic!(
                     "Every package should have metadata: {:?}",
                     dist.package_id()
                 )
             };
-            for req in manifest.apply(&md.requires_dist) {
+            for req in manifest.apply(&archive.metadata.requires_dist) {
                 let Some(ref marker_tree) = req.marker else {
                     continue;
                 };

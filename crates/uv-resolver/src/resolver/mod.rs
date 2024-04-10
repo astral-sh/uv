@@ -28,7 +28,7 @@ use pypi_types::Metadata23;
 pub(crate) use urls::Urls;
 use uv_client::RegistryClient;
 use uv_configuration::{Constraints, Overrides};
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
 use uv_types::{BuildContext, InstalledPackagesProvider, RequiredHashes};
@@ -659,7 +659,7 @@ impl<
 
                 // If we failed to fetch the metadata for a URL, we can't proceed.
                 let metadata = match &*response {
-                    MetadataResponse::Found(metadata) => metadata,
+                    MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Offline => {
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::Offline);
@@ -966,7 +966,7 @@ impl<
                     .ok_or(ResolveError::Unregistered)?;
 
                 let metadata = match &*response {
-                    MetadataResponse::Found(metadata) => metadata,
+                    MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Offline => {
                         self.incomplete_packages
                             .entry(package_name.clone())
@@ -1067,9 +1067,10 @@ impl<
                 }
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
-                    self.index
-                        .distributions
-                        .done(dist.package_id(), MetadataResponse::Found(metadata));
+                    self.index.distributions.done(
+                        dist.package_id(),
+                        MetadataResponse::Found(ArchiveMetadata::from(metadata)),
+                    );
                 }
                 Some(Response::Dist {
                     dist: Dist::Built(dist),
