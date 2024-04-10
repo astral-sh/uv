@@ -12,12 +12,12 @@ use petgraph::dot::{Config as DotConfig, Dot};
 use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl, Resolution};
 use pep508_rs::Requirement;
 use uv_cache::{Cache, CacheArgs};
-use uv_client::{FlatIndex, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
-use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
+use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, Resolver};
 use uv_types::{BuildIsolation, InFlight};
 
 #[derive(ValueEnum, Default, Clone)]
