@@ -3,9 +3,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use crate::PythonVersion;
 use thiserror::Error;
 use uv_client::BetterReqwestError;
-use uv_interpreter::PythonVersion;
 
 use futures::TryStreamExt;
 
@@ -37,6 +37,12 @@ pub enum Error {
     #[error("failed to copy to: {0}", to.user_display())]
     CopyError {
         to: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("failed to read toolchain directory: {0}", dir.user_display())]
+    ReadError {
+        dir: PathBuf,
         #[source]
         err: io::Error,
     },
@@ -391,8 +397,8 @@ impl Libc {
     pub(crate) fn from_env() -> Result<Self, Error> {
         // TODO(zanieb): Perform this lookup
         match std::env::consts::OS {
-            "linux" | "macos" => Ok(Libc::Gnu),
-            "windows" => Ok(Libc::None),
+            "linux" => Ok(Libc::Gnu),
+            "windows" | "macos" => Ok(Libc::None),
             _ => Err(Error::LibcNotDetected()),
         }
     }
