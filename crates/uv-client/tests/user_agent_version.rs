@@ -185,7 +185,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         filters => filters
     }, {
         // Assert uv version
-        assert_snapshot!("uv_linehaul_version", uv_version);
+        assert_snapshot!(uv_version, @"uv/[VERSION]");
         // Assert linehaul json
         assert_json_snapshot!("uv_linehaul_json", &linehaul, {
             ".distro" => "[distro]",
