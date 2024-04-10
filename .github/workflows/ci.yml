@@ -89,9 +89,25 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: "Configure test flags (unix)"
+        if: ${{ matrix.os != 'windows' }}
+        run: |
+          TESTFLAGS=()
+          echo $TESTFLAGS
+          echo $TESTFLAGS >> $GITHUB_ENV
+
+      - name: "Configure test flags (windows)"
+        if: ${{ matrix.os == 'windows' }}
+        run: |
+          TESTFLAGS=("--no-default-features", "--features", "--python")
+          echo $TESTFLAGS
+          echo $TESTFLAGS >> $GITHUB_ENV
+
       - name: "Cargo test"
         run: |
-          cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 16 --final-status-level slow
+          cargo nextest run \
+            "${TESTFLAGS[@]}" \
+            --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 16 --final-status-level slow
 
       - name: "Smoke test (unix)"
         if: ${{ matrix.os != 'windows' }}
