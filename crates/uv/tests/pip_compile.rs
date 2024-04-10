@@ -7361,6 +7361,7 @@ fn include_indices_pypi_org_simple() -> Result<()> {
         # via requests
         # from https://pypi.org/simple
     requests==2.31.0
+        # from https://pypi.org/simple
     urllib3==2.2.1
         # via requests
         # from https://pypi.org/simple
