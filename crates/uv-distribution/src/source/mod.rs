@@ -37,7 +37,7 @@ use crate::error::Error;
 use crate::git::{fetch_git_archive, resolve_precise};
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::revision::Revision;
-use crate::Reporter;
+use crate::{ArchiveMetadata, Reporter};
 
 mod built_wheel_metadata;
 mod revision;
@@ -215,7 +215,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         hashes: &[HashDigest],
-    ) -> Result<Metadata23, Error> {
+    ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
                 let url = match &dist.file.url {
@@ -419,7 +419,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         hashes: &[HashDigest],
-    ) -> Result<Metadata23, Error> {
+    ) -> Result<ArchiveMetadata, Error> {
         // Fetch the revision for the source distribution.
         let revision = self
             .url_revision(source, filename, url, cache_shard, hashes)
@@ -442,7 +442,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
-            return Ok(metadata);
+            return Ok(ArchiveMetadata {
+                metadata,
+                hashes: revision.into_hashes(),
+            });
         }
 
         // Otherwise, we either need to build the metadata or the wheel.
@@ -463,7 +466,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
                 .map_err(Error::CacheWrite)?;
 
-            return Ok(metadata);
+            return Ok(ArchiveMetadata {
+                metadata,
+                hashes: revision.into_hashes(),
+            });
         }
 
         let task = self
@@ -488,7 +494,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
-        Ok(metadata)
+        Ok(ArchiveMetadata {
+            metadata,
+            hashes: revision.into_hashes(),
+        })
     }
 
     /// Return the [`Revision`] for a remote URL, refreshing it if necessary.
@@ -632,7 +641,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
         hashes: &[HashDigest],
-    ) -> Result<Metadata23, Error> {
+    ) -> Result<ArchiveMetadata, Error> {
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
             WheelCache::Path(resource.url).root(),
@@ -660,7 +669,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
-            return Ok(metadata);
+            return Ok(ArchiveMetadata {
+                metadata,
+                hashes: revision.into_hashes(),
+            });
         }
 
         let source_entry = cache_shard.entry("source");
@@ -680,7 +692,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
                 .map_err(Error::CacheWrite)?;
 
-            return Ok(metadata);
+            return Ok(ArchiveMetadata {
+                metadata,
+                hashes: revision.into_hashes(),
+            });
         }
 
         // Otherwise, we need to build a wheel.
@@ -705,7 +720,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
-        Ok(metadata)
+        Ok(ArchiveMetadata {
+            metadata,
+            hashes: revision.into_hashes(),
+        })
     }
 
     /// Return the [`Revision`] for a local archive, refreshing it if necessary.
@@ -826,7 +844,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
         hashes: &[HashDigest],
-    ) -> Result<Metadata23, Error> {
+    ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
         if !hashes.is_empty() {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
@@ -850,7 +868,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
         if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
             debug!("Using cached metadata for: {source}");
-            return Ok(metadata);
+            return Ok(ArchiveMetadata::from(metadata));
         }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
@@ -868,7 +886,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
                 .map_err(Error::CacheWrite)?;
 
-            return Ok(metadata);
+            return Ok(ArchiveMetadata::from(metadata));
         }
 
         // Otherwise, we need to build a wheel.
@@ -893,7 +911,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
-        Ok(metadata)
+        Ok(ArchiveMetadata::from(metadata))
     }
 
     /// Return the [`Revision`] for a local source tree, refreshing it if necessary.
@@ -1000,7 +1018,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &GitSourceUrl<'_>,
         hashes: &[HashDigest],
-    ) -> Result<Metadata23, Error> {
+    ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
         if !hashes.is_empty() {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
@@ -1039,7 +1057,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         {
             if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
                 debug!("Using cached metadata for: {source}");
-                return Ok(metadata);
+                return Ok(ArchiveMetadata::from(metadata));
             }
         }
 
@@ -1058,7 +1076,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
                 .map_err(Error::CacheWrite)?;
 
-            return Ok(metadata);
+            return Ok(ArchiveMetadata::from(metadata));
         }
 
         // Otherwise, we need to build a wheel.
@@ -1083,7 +1101,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
-        Ok(metadata)
+        Ok(ArchiveMetadata::from(metadata))
     }
 
     /// Download and unzip a source distribution into the cache from an HTTP response.

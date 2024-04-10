@@ -25,7 +25,7 @@ use uv_types::BuildContext;
 
 use crate::archive::Archive;
 use crate::locks::Locks;
-use crate::{Error, LocalWheel, Reporter, SourceDistributionBuilder};
+use crate::{ArchiveMetadata, Error, LocalWheel, Reporter, SourceDistributionBuilder};
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -109,7 +109,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         &self,
         dist: &Dist,
         hashes: &[HashDigest],
-    ) -> Result<Metadata23, Error> {
+    ) -> Result<ArchiveMetadata, Error> {
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
             Dist::Source(source) => {
@@ -343,16 +343,18 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         &self,
         dist: &BuiltDist,
         hashes: &[HashDigest],
-    ) -> Result<Metadata23, Error> {
+    ) -> Result<ArchiveMetadata, Error> {
         match self.client.wheel_metadata(dist).boxed().await {
-            Ok(metadata) => Ok(metadata),
+            Ok(metadata) => Ok(ArchiveMetadata::from(metadata)),
             Err(err) if err.is_http_streaming_unsupported() => {
                 warn!("Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})");
 
                 // If the request failed due to an error that could be resolved by
                 // downloading the wheel directly, try that.
                 let wheel = self.get_wheel(dist, hashes).await?;
-                Ok(wheel.metadata()?)
+                let metadata = wheel.metadata()?;
+                let hashes = wheel.hashes;
+                Ok(ArchiveMetadata { metadata, hashes })
             }
             Err(err) => Err(err.into()),
         }
@@ -366,7 +368,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         &self,
         source: &BuildableSource<'_>,
         hashes: &[HashDigest],
-    ) -> Result<Metadata23, Error> {
+    ) -> Result<ArchiveMetadata, Error> {
         let no_build = match self.build_context.no_build() {
             NoBuild::All => true,
             NoBuild::None => false,

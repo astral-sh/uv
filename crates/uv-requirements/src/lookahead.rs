@@ -139,24 +139,24 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let requires_dist = {
             let id = dist.package_id();
-            if let Some(metadata) = self
+            if let Some(archive) = self
                 .index
                 .get_metadata(&id)
                 .as_deref()
                 .and_then(|response| {
-                    if let MetadataResponse::Found(metadata) = response {
-                        Some(metadata)
+                    if let MetadataResponse::Found(archive, ..) = response {
+                        Some(archive)
                     } else {
                         None
                     }
                 })
             {
                 // If the metadata is already in the index, return it.
-                metadata.requires_dist.clone()
+                archive.metadata.requires_dist.clone()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let hashes = self.hashes.get(dist.name()).unwrap_or_default();
-                let metadata = self
+                let archive = self
                     .database
                     .get_or_build_wheel_metadata(&dist, hashes)
                     .await
@@ -165,11 +165,11 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
                         Dist::Source(source) => format!("Failed to download and build: {source}"),
                     })?;
 
-                let requires_dist = metadata.requires_dist.clone();
+                let requires_dist = archive.metadata.requires_dist.clone();
 
                 // Insert the metadata into the index.
                 self.index
-                    .insert_metadata(id, MetadataResponse::Found(metadata));
+                    .insert_metadata(id, MetadataResponse::Found(archive));
 
                 requires_dist
             }
