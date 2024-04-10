@@ -337,7 +337,7 @@ struct PipCompileArgs {
 
     /// Include comment annotations indicating the index of each package.
     #[clap(long)]
-    include_indices: bool,
+    include_indexes: bool,
 
     /// Change header comment to reflect custom command wrapping `uv pip compile`.
     #[clap(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
@@ -1587,7 +1587,7 @@ async fn run() -> Result<ExitStatus> {
                 args.no_strip_extras,
                 !args.no_annotate,
                 !args.no_header,
-                args.include_indices,
+                args.include_indexes,
                 args.custom_compile_command,
                 args.emit_index_url,
                 args.emit_find_links,

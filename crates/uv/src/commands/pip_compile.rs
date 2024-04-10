@@ -63,7 +63,7 @@ pub(crate) async fn pip_compile(
     include_extras: bool,
     include_annotations: bool,
     include_header: bool,
-    include_indices: bool,
+    include_indexes: bool,
     custom_compile_command: Option<String>,
     include_index_url: bool,
     include_find_links: bool,
@@ -502,7 +502,7 @@ pub(crate) async fn pip_compile(
             generate_hashes,
             include_extras,
             include_annotations,
-            include_indices,
+            include_indexes,
             annotation_style,
         )
     )?;

@@ -506,8 +506,8 @@ pub struct DisplayResolutionGraph<'a> {
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
     /// requested each package.
     include_annotations: bool,
-    /// Whether to include indices in the output, to indicate which index was used for each package.
-    include_indices: bool,
+    /// Whether to include indexes in the output, to indicate which index was used for each package.
+    include_indexes: bool,
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
@@ -536,7 +536,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         show_hashes: bool,
         include_extras: bool,
         include_annotations: bool,
-        include_indices: bool,
+        include_indexees: bool,
         annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
         Self {
@@ -545,7 +545,7 @@ impl<'a> DisplayResolutionGraph<'a> {
             show_hashes,
             include_extras,
             include_annotations,
-            include_indices,
+            include_indexes: include_indexees,
             annotation_style,
         }
     }
@@ -729,7 +729,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 writeln!(f, "{line}")?;
             }
 
-            if self.include_indices && node.index().is_some() {
+            if self.include_indexes && node.index().is_some() {
                 writeln!(
                     f,
                     "{}",
