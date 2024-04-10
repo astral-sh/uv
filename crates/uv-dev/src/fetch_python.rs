@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use tokio::time::Instant;
 use tracing::{info, info_span, Instrument};
-use uv_fs::replace_symlink;
 
 use uv_fs::Simplified;
 use uv_toolchain::{
@@ -118,12 +117,6 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
 
             links.insert(target, executable.clone());
         }
-
-        // Create directory symlinks temporarily for compatibility with the old script
-        let target = bootstrap_dir.join(format!("python@{version}"));
-        let _ = fs::remove_dir_all(&target);
-        replace_symlink(&path, &target)?;
-        links.insert(target, path);
     }
     for (target, executable) in links.iter().sorted() {
         info!(
