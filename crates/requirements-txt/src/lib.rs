@@ -52,9 +52,9 @@ use pep508_rs::{
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
+use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
-use uv_types::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_warnings::warn_user;
 
 /// We emit one of those for each requirements.txt entry

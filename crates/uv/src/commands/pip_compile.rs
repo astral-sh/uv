@@ -22,10 +22,14 @@ use uv_cache::Cache;
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder,
 };
+use uv_configuration::{
+    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, SetupPyStrategy,
+    Upgrade,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::Downloader;
-use uv_interpreter::{find_best_python, PythonEnvironment, PythonVersion};
+use uv_interpreter::{find_best_python, PythonEnvironment};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
     upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
@@ -35,10 +39,8 @@ use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, Exclusions, InMemoryIndex, Manifest,
     OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
-use uv_types::{
-    BuildIsolation, ConfigSettings, Constraints, EmptyInstalledPackages, InFlight, IndexStrategy,
-    NoBinary, NoBuild, Overrides, SetupPyStrategy, Upgrade,
-};
+use uv_toolchain::PythonVersion;
+use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
@@ -66,6 +68,7 @@ pub(crate) async fn pip_compile(
     include_index_url: bool,
     include_find_links: bool,
     include_marker_expression: bool,
+    include_index_annotation: bool,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
@@ -500,6 +503,7 @@ pub(crate) async fn pip_compile(
             generate_hashes,
             include_extras,
             include_annotations,
+            include_index_annotation,
             annotation_style,
         )
     )?;

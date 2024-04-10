@@ -4,21 +4,20 @@
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_cmd::Command;
 use assert_fs::assert::PathAssert;
+
 use assert_fs::fixture::PathChild;
-#[cfg(unix)]
-use fs_err::os::unix::fs::symlink as symlink_file;
-#[cfg(windows)]
-use fs_err::os::windows::fs::symlink_file;
 use regex::Regex;
 use std::borrow::BorrowMut;
 use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Output;
-use uv_fs::Simplified;
+use std::str::FromStr;
+use uv_interpreter::find_requested_python;
 
 use uv_cache::Cache;
-use uv_interpreter::find_requested_python;
+use uv_fs::Simplified;
+use uv_toolchain::{toolchains_for_version, PythonVersion};
 
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
@@ -68,6 +67,9 @@ impl TestContext {
             .to_path_buf();
 
         let site_packages = site_packages_path(&venv, format!("python{python_version}"));
+
+        let python_version =
+            PythonVersion::from_str(python_version).expect("Tests must use valid Python versions");
 
         let mut filters = Vec::new();
         filters.extend(
@@ -122,6 +124,18 @@ impl TestContext {
 
         // Destroy any remaining UNC prefixes (Windows only)
         filters.push((r"\\\\\?\\".to_string(), String::new()));
+
+        // Add Python patch version filtering unless explicitly requested to ensure
+        // snapshots are patch version agnostic when it is not a part of the test.
+        if python_version.patch().is_none() {
+            filters.push((
+                format!(
+                    r"({})\.\d+",
+                    regex::escape(python_version.to_string().as_str())
+                ),
+                "$1.[X]".to_string(),
+            ));
+        }
 
         Self {
             temp_dir,
@@ -300,81 +314,23 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
     }
 }
 
-/// If bootstrapped python build standalone pythons exists in `<project root>/bin`,
-/// return the paths to the directories containing the python binaries (i.e. as paths that
-/// `which::which_in` can use).
-///
-/// Use `scripts/bootstrap/install.py` to bootstrap.
-///
-/// Python versions are sorted from newest to oldest.
-pub fn bootstrapped_pythons() -> Option<Vec<PathBuf>> {
-    // Current dir is `<project root>/crates/uv`.
-    let project_root = std::env::current_dir()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf();
-    let bootstrap_dir = if let Some(bootstrap_dir) = env::var_os("UV_BOOTSTRAP_DIR") {
-        let bootstrap_dir = PathBuf::from(bootstrap_dir);
-        if bootstrap_dir.is_absolute() {
-            bootstrap_dir
-        } else {
-            // cargo test changes directory to the test crate, but doesn't tell us from where the user is running the
-            // tests. We'll assume that it's the project root.
-            project_root.join(bootstrap_dir)
-        }
-    } else {
-        project_root.join("bin")
-    };
-    let bootstrapped_pythons = bootstrap_dir.join("versions");
-    let Ok(bootstrapped_pythons) = fs_err::read_dir(bootstrapped_pythons) else {
-        return None;
-    };
-
-    let mut bootstrapped_pythons: Vec<PathBuf> = bootstrapped_pythons
-        .map(Result::unwrap)
-        .filter(|entry| entry.metadata().unwrap().is_dir())
-        .map(|entry| {
-            if cfg!(unix) {
-                entry.path().join("install").join("bin")
-            } else if cfg!(windows) {
-                entry.path().join("install")
-            } else {
-                unimplemented!("Only Windows and Unix are supported")
-            }
-        })
-        .collect();
-    bootstrapped_pythons.sort();
-    // Prefer the most recent patch version.
-    bootstrapped_pythons.reverse();
-    Some(bootstrapped_pythons)
-}
-
 /// Create a virtual environment named `.venv` in a temporary directory with the given
-/// Python version. Expected format for `python` is "python<version>".
+/// Python version. Expected format for `python` is "<version>".
 pub fn create_venv<Parent: assert_fs::prelude::PathChild + AsRef<std::path::Path>>(
     temp_dir: &Parent,
     cache_dir: &assert_fs::TempDir,
     python: &str,
 ) -> PathBuf {
-    let python = if let Some(bootstrapped_pythons) = bootstrapped_pythons() {
-        bootstrapped_pythons
-            .into_iter()
-            // Good enough since we control the directory
-            .find(|path| path.to_str().unwrap().contains(&format!("@{python}")))
-            .expect("Missing python bootstrap version")
-            .join(if cfg!(unix) {
-                "python3"
-            } else if cfg!(windows) {
-                "python.exe"
-            } else {
-                unimplemented!("Only Windows and Unix are supported")
-            })
-    } else {
-        PathBuf::from(python)
-    };
+    let python = toolchains_for_version(
+        &PythonVersion::from_str(python).expect("Tests should use a valid Python version"),
+    )
+    .expect("Tests are run on a supported platform")
+    .first()
+    .map(uv_toolchain::Toolchain::executable)
+    // We'll search for the request Python on the PATH if not found in the toolchain versions
+    // We hack this into a `PathBuf` to satisfy the compiler but it's just a string
+    .unwrap_or(PathBuf::from(python));
+
     let venv = temp_dir.child(".venv");
     Command::new(get_bin())
         .arg("venv")
@@ -398,34 +354,48 @@ pub fn get_bin() -> PathBuf {
 }
 
 /// Create a `PATH` with the requested Python versions available in order.
-pub fn create_bin_with_executables(
+///
+/// Generally this should be used with `UV_TEST_PYTHON_PATH`.
+pub fn python_path_with_versions(
     temp_dir: &assert_fs::TempDir,
     python_versions: &[&str],
 ) -> anyhow::Result<OsString> {
-    if let Some(bootstrapped_pythons) = bootstrapped_pythons() {
-        let selected_pythons = python_versions.iter().flat_map(|python_version| {
-            bootstrapped_pythons.iter().filter(move |path| {
-                // Good enough since we control the directory
-                path.to_str()
-                    .unwrap()
-                    .contains(&format!("@{python_version}"))
+    let cache = Cache::from_path(temp_dir.child("cache").to_path_buf())?;
+    let selected_pythons = python_versions
+        .iter()
+        .flat_map(|python_version| {
+            let inner = toolchains_for_version(
+                &PythonVersion::from_str(python_version)
+                    .expect("Tests should use a valid Python version"),
+            )
+            .expect("Tests are run on a supported platform")
+            .iter()
+            .map(|toolchain| {
+                toolchain
+                    .executable()
+                    .parent()
+                    .expect("Executables must exist in a directory")
+                    .to_path_buf()
             })
-        });
-        return Ok(env::join_paths(selected_pythons)?);
-    }
+            .collect::<Vec<_>>();
+            if inner.is_empty() {
+                // Fallback to a system lookup if we failed to find one in the toolchain directory
+                if let Some(interpreter) = find_requested_python(python_version, &cache).unwrap() {
+                    vec![interpreter
+                        .sys_executable()
+                        .parent()
+                        .expect("Python executable should always be in a directory")
+                        .to_path_buf()]
+                } else {
+                    panic!("Could not find Python {python_version} for test");
+                }
+            } else {
+                inner
+            }
+        })
+        .collect::<Vec<_>>();
 
-    let bin = temp_dir.child("bin");
-    fs_err::create_dir(&bin)?;
-    for &request in python_versions {
-        let interpreter = find_requested_python(request, &Cache::temp().unwrap())?
-            .ok_or(uv_interpreter::Error::NoSuchPython(request.to_string()))?;
-        let name = interpreter
-            .sys_executable()
-            .file_name()
-            .expect("Discovered executable must have a filename");
-        symlink_file(interpreter.sys_executable(), bin.child(name))?;
-    }
-    Ok(bin.canonicalize()?.into())
+    Ok(env::join_paths(selected_pythons)?)
 }
 
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
@@ -434,6 +404,7 @@ pub fn create_bin_with_executables(
 pub fn run_and_format<T: AsRef<str>>(
     mut command: impl BorrowMut<std::process::Command>,
     filters: impl AsRef<[(T, T)]>,
+    function_name: &str,
     windows_filters: bool,
 ) -> (String, Output) {
     let program = command
@@ -441,6 +412,19 @@ pub fn run_and_format<T: AsRef<str>>(
         .get_program()
         .to_string_lossy()
         .to_string();
+
+    // Support profiling test run commands with traces.
+    if let Ok(root) = env::var("TRACING_DURATIONS_TEST_ROOT") {
+        assert!(
+            cfg!(feature = "tracing-durations-export"),
+            "You need to enable the tracing-durations-export feature to use `TRACING_DURATIONS_TEST_ROOT`"
+        );
+        command.borrow_mut().env(
+            "TRACING_DURATIONS_FILE",
+            Path::new(&root).join(function_name).with_extension("jsonl"),
+        );
+    }
+
     let output = command
         .borrow_mut()
         .output()
@@ -511,6 +495,25 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
     Ok(())
 }
 
+/// Utility macro to return the name of the current function.
+///
+/// https://stackoverflow.com/a/40234666/3549270
+#[doc(hidden)]
+#[macro_export]
+macro_rules! function_name {
+    () => {{
+        fn f() {}
+        fn type_name_of_val<T>(_: T) -> &'static str {
+            std::any::type_name::<T>()
+        }
+        let mut name = type_name_of_val(f).strip_suffix("::f").unwrap_or("");
+        while let Some(rest) = name.strip_suffix("::{{closure}}") {
+            name = rest;
+        }
+        name
+    }};
+}
+
 /// Run [`assert_cmd_snapshot!`], with default filters or with custom filters.
 ///
 /// By default, the filters will search for the generally windows-only deps colorama and tzdata,
@@ -522,13 +525,13 @@ macro_rules! uv_snapshot {
     }};
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, true);
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), true);
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
     ($filters:expr, windows_filters=false, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, false);
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), false);
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};

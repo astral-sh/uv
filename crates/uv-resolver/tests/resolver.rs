@@ -15,15 +15,13 @@ use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_tags::{Arch, Os, Platform, Tags};
 use uv_cache::Cache;
 use uv_client::{FlatIndex, RegistryClientBuilder};
+use uv_configuration::{BuildKind, Constraints, NoBinary, NoBuild, Overrides, SetupPyStrategy};
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_resolver::{
     DisplayResolutionGraph, Exclusions, InMemoryIndex, Manifest, Options, OptionsBuilder,
     PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, Constraints, EmptyInstalledPackages, NoBinary,
-    NoBuild, Overrides, SetupPyStrategy, SourceBuildTrait,
-};
+use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, SourceBuildTrait};
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {

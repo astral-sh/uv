@@ -12,11 +12,11 @@ use distribution_types::{
 };
 use pep440_rs::{Version, VersionSpecifiers};
 use platform_tags::Tags;
-use pypi_types::{Hashes, Yanked};
+use pypi_types::{HashDigest, Yanked};
 use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use uv_client::{FlatDistributions, OwnedArchive, SimpleMetadata, VersionFiles};
+use uv_configuration::{NoBinary, NoBuild};
 use uv_normalize::PackageName;
-use uv_types::{NoBinary, NoBuild};
 use uv_warnings::warn_user_once;
 
 use crate::{python_requirement::PythonRequirement, yanks::AllowedYanks};
@@ -176,7 +176,7 @@ impl VersionMap {
     }
 
     /// Return the [`Hashes`] for the given version, if any.
-    pub(crate) fn hashes(&self, version: &Version) -> Option<Vec<Hashes>> {
+    pub(crate) fn hashes(&self, version: &Version) -> Option<Vec<HashDigest>> {
         match self.inner {
             VersionMapInner::Eager(ref map) => map.get(version).map(|file| file.hashes().to_vec()),
             VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(|file| file.hashes().to_vec()),
@@ -378,7 +378,7 @@ impl VersionMapLazy {
                 let version = filename.version().clone();
                 let requires_python = file.requires_python.clone();
                 let yanked = file.yanked.clone();
-                let hash = file.hashes.clone();
+                let hashes = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
                         let compatibility = self.wheel_compatibility(
@@ -394,7 +394,7 @@ impl VersionMapLazy {
                             file,
                             self.index.clone(),
                         );
-                        priority_dist.insert_built(dist, Some(hash), compatibility);
+                        priority_dist.insert_built(dist, hashes, compatibility);
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
@@ -409,7 +409,7 @@ impl VersionMapLazy {
                             file,
                             self.index.clone(),
                         );
-                        priority_dist.insert_source(dist, Some(hash), compatibility);
+                        priority_dist.insert_source(dist, hashes, compatibility);
                     }
                 }
             }

@@ -16,6 +16,7 @@ use platform_tags::{Tags, TagsError};
 use pypi_types::Scheme;
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
+use uv_toolchain::PythonVersion;
 
 use crate::Error;
 use crate::Virtualenv;
@@ -312,6 +313,18 @@ impl Interpreter {
                     self.include().to_path_buf()
                 },
             },
+        }
+    }
+
+    /// Check if the interpreter matches the given Python version.
+    ///
+    /// If a patch version is present, we will require an exact match.
+    /// Otherwise, just the major and minor version numbers need to match.
+    pub fn satisfies(&self, version: &PythonVersion) -> bool {
+        if version.patch().is_some() {
+            version.version() == self.python_version()
+        } else {
+            (version.major(), version.minor()) == self.python_tuple()
         }
     }
 }

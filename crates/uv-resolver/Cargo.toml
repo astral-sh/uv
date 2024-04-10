@@ -30,6 +30,7 @@ uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
+uv-configuration = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
@@ -47,6 +48,7 @@ petgraph = { workspace = true }
 pubgrub = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
+textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
 tokio-stream = { workspace = true }

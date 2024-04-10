@@ -8,20 +8,25 @@ use crate::source::{read_http_revision, read_timestamped_revision, REVISION};
 use crate::Error;
 
 /// A local index of built distributions for a specific source distribution.
-pub struct BuiltWheelIndex;
+#[derive(Debug)]
+pub struct BuiltWheelIndex<'a> {
+    cache: &'a Cache,
+    tags: &'a Tags,
+}
 
-impl BuiltWheelIndex {
+impl<'a> BuiltWheelIndex<'a> {
+    /// Initialize an index of built distributions.
+    pub fn new(cache: &'a Cache, tags: &'a Tags) -> Self {
+        Self { cache, tags }
+    }
+
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a direct URL.
     ///
     /// This method does not perform any freshness checks and assumes that the source distribution
     /// is already up-to-date.
-    pub fn url(
-        source_dist: &DirectUrlSourceDist,
-        cache: &Cache,
-        tags: &Tags,
-    ) -> Result<Option<CachedWheel>, Error> {
+    pub fn url(&self, source_dist: &DirectUrlSourceDist) -> Result<Option<CachedWheel>, Error> {
         // For direct URLs, cache directly under the hash of the URL itself.
-        let cache_shard = cache.shard(
+        let cache_shard = self.cache.shard(
             CacheBucket::BuiltWheels,
             WheelCache::Url(source_dist.url.raw()).root(),
         );
@@ -33,16 +38,12 @@ impl BuiltWheelIndex {
             return Ok(None);
         };
 
-        Ok(Self::find(&cache_shard.shard(revision.id()), tags))
+        Ok(self.find(&cache_shard.shard(revision.id())))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a local path.
-    pub fn path(
-        source_dist: &PathSourceDist,
-        cache: &Cache,
-        tags: &Tags,
-    ) -> Result<Option<CachedWheel>, Error> {
-        let cache_shard = cache.shard(
+    pub fn path(&self, source_dist: &PathSourceDist) -> Result<Option<CachedWheel>, Error> {
+        let cache_shard = self.cache.shard(
             CacheBucket::BuiltWheels,
             WheelCache::Path(&source_dist.url).root(),
         );
@@ -61,21 +62,21 @@ impl BuiltWheelIndex {
             return Ok(None);
         };
 
-        Ok(Self::find(&cache_shard.shard(revision.id()), tags))
+        Ok(self.find(&cache_shard.shard(revision.id())))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.
-    pub fn git(source_dist: &GitSourceDist, cache: &Cache, tags: &Tags) -> Option<CachedWheel> {
+    pub fn git(&self, source_dist: &GitSourceDist) -> Option<CachedWheel> {
         let Ok(Some(git_sha)) = git_reference(&source_dist.url) else {
             return None;
         };
 
-        let cache_shard = cache.shard(
+        let cache_shard = self.cache.shard(
             CacheBucket::BuiltWheels,
             WheelCache::Git(&source_dist.url, &git_sha.to_short_string()).root(),
         );
 
-        Self::find(&cache_shard, tags)
+        self.find(&cache_shard)
     }
 
     /// Find the "best" distribution in the index for a given source distribution.
@@ -94,7 +95,7 @@ impl BuiltWheelIndex {
     /// ```
     ///
     /// The `shard` should be `built-wheels-v0/pypi/django-allauth-0.51.0.tar.gz`.
-    fn find(shard: &CacheShard, tags: &Tags) -> Option<CachedWheel> {
+    fn find(&self, shard: &CacheShard) -> Option<CachedWheel> {
         let mut candidate: Option<CachedWheel> = None;
 
         // Unzipped wheels are stored as symlinks into the archive directory.
@@ -103,7 +104,7 @@ impl BuiltWheelIndex {
                 None => {}
                 Some(dist_info) => {
                     // Pick the wheel with the highest priority
-                    let compatibility = dist_info.filename.compatibility(tags);
+                    let compatibility = dist_info.filename.compatibility(self.tags);
 
                     // Only consider wheels that are compatible with our tags.
                     if !compatibility.is_compatible() {
@@ -113,7 +114,7 @@ impl BuiltWheelIndex {
                     if let Some(existing) = candidate.as_ref() {
                         // Override if the wheel is newer, or "more" compatible.
                         if dist_info.filename.version > existing.filename.version
-                            || compatibility > existing.filename.compatibility(tags)
+                            || compatibility > existing.filename.compatibility(self.tags)
                         {
                             candidate = Some(dist_info);
                         }

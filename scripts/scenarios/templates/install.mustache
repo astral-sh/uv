@@ -3,7 +3,7 @@
 //! Generated with `{{generated_with}}`
 //! Scenarios from <{{generated_from}}>
 //!
-#![cfg(all(feature = "python", feature = "pypi"))]
+#![cfg(all(feature = "python", feature = "pypi", unix))]
 
 use std::path::Path;
 use std::process::Command;
@@ -77,6 +77,9 @@ fn command(context: &TestContext) -> Command {
 /// {{.}}
 {{/tree}}
 /// ```
+{{#python_patch}}
+#[cfg(feature = "python-patch")]
+{{/python_patch}}
 #[test]
 fn {{module_name}}() {
     let context = TestContext::new("{{environment.python}}");

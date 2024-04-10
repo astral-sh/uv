@@ -27,10 +27,11 @@ use platform_tags::Tags;
 use pypi_types::Metadata23;
 pub(crate) use urls::Urls;
 use uv_client::{FlatIndex, RegistryClient};
+use uv_configuration::{Constraints, Overrides};
 use uv_distribution::DistributionDatabase;
 use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
-use uv_types::{BuildContext, Constraints, InstalledPackagesProvider, Overrides};
+use uv_types::{BuildContext, InstalledPackagesProvider};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::editables::Editables;
@@ -70,19 +71,32 @@ pub(crate) enum UnavailableVersion {
     IncompatibleDist(IncompatibleDist),
 }
 
-/// The package is unavailable and cannot be used
+/// The package is unavailable and cannot be used.
 #[derive(Debug, Clone)]
 pub(crate) enum UnavailablePackage {
-    /// Index lookups were disabled (i.e., `--no-index`) and the package was not found in a flat index (i.e. from `--find-links`)
+    /// Index lookups were disabled (i.e., `--no-index`) and the package was not found in a flat index (i.e. from `--find-links`).
     NoIndex,
     /// Network requests were disabled (i.e., `--offline`), and the package was not found in the cache.
     Offline,
-    /// The package was not found in the registry
+    /// The package was not found in the registry.
     NotFound,
+    /// The package metadata was found, but could not be parsed.
+    InvalidMetadata(String),
+    /// The package has an invalid structure.
+    InvalidStructure(String),
+}
+
+/// The package is unavailable at specific versions.
+#[derive(Debug, Clone)]
+pub(crate) enum IncompletePackage {
+    /// Network requests were disabled (i.e., `--offline`), and the wheel metadata was not found in the cache.
+    Offline,
     /// The wheel metadata was found, but could not be parsed.
-    InvalidMetadata,
+    InvalidMetadata(String),
+    /// The wheel metadata was found, but the metadata was inconsistent.
+    InconsistentMetadata(String),
     /// The wheel has an invalid structure.
-    InvalidStructure,
+    InvalidStructure(String),
 }
 
 enum ResolverVersion {
@@ -112,8 +126,10 @@ pub struct Resolver<
     selector: CandidateSelector,
     index: &'a InMemoryIndex,
     installed_packages: &'a InstalledPackages,
-    /// Incompatibilities for packages that are entirely unavailable
+    /// Incompatibilities for packages that are entirely unavailable.
     unavailable_packages: DashMap<PackageName, UnavailablePackage>,
+    /// Incompatibilities for packages that are unavailable at specific versions.
+    incomplete_packages: DashMap<PackageName, DashMap<Version, IncompletePackage>>,
     /// The set of all registry-based packages visited during resolution.
     visited: DashSet<PackageName>,
     reporter: Option<Arc<dyn Reporter>>,
@@ -184,6 +200,7 @@ impl<
         Ok(Self {
             index,
             unavailable_packages: DashMap::default(),
+            incomplete_packages: DashMap::default(),
             visited: DashSet::default(),
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
@@ -246,7 +263,8 @@ impl<
                         .with_selector(self.selector.clone())
                         .with_python_requirement(&self.python_requirement)
                         .with_index_locations(self.provider.index_locations())
-                        .with_unavailable_packages(&self.unavailable_packages),
+                        .with_unavailable_packages(&self.unavailable_packages)
+                        .with_incomplete_packages(&self.incomplete_packages),
                     )
                 } else {
                     err
@@ -351,10 +369,10 @@ impl<
                                     UnavailablePackage::NotFound => {
                                         "was not found in the package registry"
                                     }
-                                    UnavailablePackage::InvalidMetadata => {
+                                    UnavailablePackage::InvalidMetadata(_) => {
                                         "was found, but the metadata could not be parsed"
                                     }
-                                    UnavailablePackage::InvalidStructure => {
+                                    UnavailablePackage::InvalidStructure(_) => {
                                         "was found, but has an invalid format"
                                     }
                                 })
@@ -623,14 +641,25 @@ impl<
                             .insert(package_name.clone(), UnavailablePackage::Offline);
                         return Ok(None);
                     }
-                    MetadataResponse::InvalidMetadata(_) => {
-                        self.unavailable_packages
-                            .insert(package_name.clone(), UnavailablePackage::InvalidMetadata);
+                    MetadataResponse::InvalidMetadata(err) => {
+                        self.unavailable_packages.insert(
+                            package_name.clone(),
+                            UnavailablePackage::InvalidMetadata(err.to_string()),
+                        );
                         return Ok(None);
                     }
-                    MetadataResponse::InvalidStructure(_) => {
-                        self.unavailable_packages
-                            .insert(package_name.clone(), UnavailablePackage::InvalidStructure);
+                    MetadataResponse::InconsistentMetadata(err) => {
+                        self.unavailable_packages.insert(
+                            package_name.clone(),
+                            UnavailablePackage::InvalidMetadata(err.to_string()),
+                        );
+                        return Ok(None);
+                    }
+                    MetadataResponse::InvalidStructure(err) => {
+                        self.unavailable_packages.insert(
+                            package_name.clone(),
+                            UnavailablePackage::InvalidStructure(err.to_string()),
+                        );
                         return Ok(None);
                     }
                 };
@@ -912,20 +941,53 @@ impl<
                     .await
                     .ok_or(ResolveError::Unregistered)?;
 
-                let metadata = match *response {
-                    MetadataResponse::Found(ref metadata) => metadata,
+                let metadata = match &*response {
+                    MetadataResponse::Found(metadata) => metadata,
                     MetadataResponse::Offline => {
+                        self.incomplete_packages
+                            .entry(package_name.clone())
+                            .or_default()
+                            .insert(version.clone(), IncompletePackage::Offline);
                         return Ok(Dependencies::Unavailable(
                             "network connectivity is disabled, but the metadata wasn't found in the cache"
                                 .to_string(),
                         ));
                     }
-                    MetadataResponse::InvalidMetadata(_) => {
+                    MetadataResponse::InvalidMetadata(err) => {
+                        warn!("Unable to extract metadata for {package_name}: {err}");
+                        self.incomplete_packages
+                            .entry(package_name.clone())
+                            .or_default()
+                            .insert(
+                                version.clone(),
+                                IncompletePackage::InvalidMetadata(err.to_string()),
+                            );
                         return Ok(Dependencies::Unavailable(
                             "the package metadata could not be parsed".to_string(),
                         ));
                     }
-                    MetadataResponse::InvalidStructure(_) => {
+                    MetadataResponse::InconsistentMetadata(err) => {
+                        warn!("Unable to extract metadata for {package_name}: {err}");
+                        self.incomplete_packages
+                            .entry(package_name.clone())
+                            .or_default()
+                            .insert(
+                                version.clone(),
+                                IncompletePackage::InconsistentMetadata(err.to_string()),
+                            );
+                        return Ok(Dependencies::Unavailable(
+                            "the package metadata was inconsistent".to_string(),
+                        ));
+                    }
+                    MetadataResponse::InvalidStructure(err) => {
+                        warn!("Unable to extract metadata for {package_name}: {err}");
+                        self.incomplete_packages
+                            .entry(package_name.clone())
+                            .or_default()
+                            .insert(
+                                version.clone(),
+                                IncompletePackage::InvalidStructure(err.to_string()),
+                            );
                         return Ok(Dependencies::Unavailable(
                             "the package has an invalid format".to_string(),
                         ));

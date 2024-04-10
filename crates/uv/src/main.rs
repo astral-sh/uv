@@ -16,15 +16,15 @@ use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheArgs, Refresh};
 use uv_client::Connectivity;
-use uv_interpreter::PythonVersion;
-use uv_normalize::{ExtraName, PackageName};
-use uv_requirements::{ExtrasSpecification, RequirementsSource};
-use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
-use uv_types::{
+use uv_configuration::{
     ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, Reinstall, SetupPyStrategy,
     Upgrade,
 };
-use uv_types::{IndexStrategy, NoBinary};
+use uv_configuration::{IndexStrategy, NoBinary};
+use uv_normalize::{ExtraName, PackageName};
+use uv_requirements::{ExtrasSpecification, RequirementsSource};
+use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
+use uv_toolchain::PythonVersion;
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, ListFormat, VersionFormat};
 use crate::compat::CompatArgs;
@@ -335,6 +335,10 @@ struct PipCompileArgs {
     #[clap(long)]
     no_header: bool,
 
+    /// Choose the style of the annotation comments, which indicate the source of each package.
+    #[clap(long, default_value_t=AnnotationStyle::Split, value_enum)]
+    annotation_style: AnnotationStyle,
+
     /// Change header comment to reflect custom command wrapping `uv pip compile`.
     #[clap(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
     custom_compile_command: Option<String>,
@@ -495,9 +499,10 @@ struct PipCompileArgs {
     #[clap(long, hide = true)]
     emit_marker_expression: bool,
 
-    /// Choose the style of the annotation comments, which indicate the source of each package.
-    #[clap(long, default_value_t=AnnotationStyle::Split, value_enum)]
-    annotation_style: AnnotationStyle,
+    /// Include comment annotations indicating the index used to resolve each package (e.g.,
+    /// `# from https://pypi.org/simple`).
+    #[clap(long)]
+    emit_index_annotation: bool,
 
     #[command(flatten)]
     compat_args: compat::PipCompileCompatArgs,
@@ -1467,7 +1472,7 @@ async fn run() -> Result<ExitStatus> {
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
-    let (duration_layer, _duration_guard) = logging::setup_duration();
+    let (duration_layer, _duration_guard) = logging::setup_duration()?;
     #[cfg(not(feature = "tracing-durations-export"))]
     let duration_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(
@@ -1587,6 +1592,7 @@ async fn run() -> Result<ExitStatus> {
                 args.emit_index_url,
                 args.emit_find_links,
                 args.emit_marker_expression,
+                args.emit_index_annotation,
                 index_urls,
                 args.index_strategy,
                 args.keyring_provider,

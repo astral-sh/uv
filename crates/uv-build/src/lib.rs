@@ -28,11 +28,10 @@ use tracing::{debug, info_span, instrument, Instrument};
 use distribution_types::Resolution;
 use pep440_rs::Version;
 use pep508_rs::{PackageName, Requirement};
+use uv_configuration::{BuildKind, ConfigSettings, SetupPyStrategy};
 use uv_fs::{PythonExt, Simplified};
 use uv_interpreter::{Interpreter, PythonEnvironment};
-use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, ConfigSettings, SetupPyStrategy, SourceBuildTrait,
-};
+use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
@@ -716,7 +715,7 @@ impl SourceBuild {
     ///
     /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
     #[instrument(skip_all, fields(package_id = self.package_id))]
-    pub async fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
+    pub async fn build_wheel(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = fs::canonicalize(wheel_dir)?;
 
@@ -857,7 +856,7 @@ impl SourceBuildTrait for SourceBuild {
     }
 
     async fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> anyhow::Result<String> {
-        Ok(self.build(wheel_dir).await?)
+        Ok(self.build_wheel(wheel_dir).await?)
     }
 }
 

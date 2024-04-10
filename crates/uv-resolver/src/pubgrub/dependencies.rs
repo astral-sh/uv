@@ -5,8 +5,8 @@ use tracing::warn;
 use distribution_types::Verbatim;
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use uv_configuration::{Constraints, Overrides};
 use uv_normalize::{ExtraName, PackageName};
-use uv_types::{Constraints, Overrides};
 
 use crate::pubgrub::specifier::PubGrubSpecifier;
 use crate::pubgrub::PubGrubPackage;

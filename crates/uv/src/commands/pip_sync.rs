@@ -19,6 +19,9 @@ use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClient,
     RegistryClientBuilder,
 };
+use uv_configuration::{
+    ConfigSettings, IndexStrategy, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
+};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{is_dynamic, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
@@ -28,10 +31,7 @@ use uv_requirements::{
     SourceTreeResolver,
 };
 use uv_resolver::{DependencyMode, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
-use uv_types::{
-    BuildIsolation, ConfigSettings, EmptyInstalledPackages, InFlight, IndexStrategy, NoBinary,
-    NoBuild, Reinstall, SetupPyStrategy,
-};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};

@@ -22,8 +22,8 @@ use platform_tags::Platform;
 use pypi_types::{Metadata23, SimpleJson};
 use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_configuration::IndexStrategy;
 use uv_normalize::PackageName;
-use uv_types::IndexStrategy;
 
 use crate::base_client::{BaseClient, BaseClientBuilder};
 use crate::cached_client::CacheControl;
@@ -424,11 +424,7 @@ impl RegistryClient {
     ) -> Result<Metadata23, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
-        if file
-            .dist_info_metadata
-            .as_ref()
-            .is_some_and(pypi_types::DistInfoMetadata::is_available)
-        {
+        if file.dist_info_metadata {
             let mut url = url.clone();
             url.set_path(&format!("{}.metadata", url.path()));
 

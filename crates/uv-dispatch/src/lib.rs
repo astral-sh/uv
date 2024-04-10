@@ -3,8 +3,8 @@
 //! implementing [`BuildContext`].
 
 use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::path::Path;
-use std::{ffi::OsString, future::Future};
 
 use anyhow::{bail, Context, Result};
 use futures::FutureExt;
@@ -17,13 +17,11 @@ use pep508_rs::Requirement;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::{FlatIndex, RegistryClient};
+use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, Reinstall, SetupPyStrategy};
 use uv_installer::{Downloader, Installer, Plan, Planner, SitePackages};
 use uv_interpreter::{Interpreter, PythonEnvironment};
 use uv_resolver::{InMemoryIndex, Manifest, Options, Resolver};
-use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, ConfigSettings, EmptyInstalledPackages, InFlight,
-    NoBinary, NoBuild, Reinstall, SetupPyStrategy,
-};
+use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, InFlight};
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -157,7 +155,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         Ok(Resolution::from(graph))
     }
 
-    #[allow(clippy::manual_async_fn)] // TODO(konstin): rustc 1.75 gets into a type inference cycle with async fn
     #[instrument(
         skip(self, resolution, venv),
         fields(
@@ -165,113 +162,110 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             venv = ?venv.root()
         )
     )]
-    fn install<'data>(
+    async fn install<'data>(
         &'data self,
         resolution: &'data Resolution,
         venv: &'data PythonEnvironment,
-    ) -> impl Future<Output = Result<()>> + Send + 'data {
-        async move {
-            debug!(
-                "Installing in {} in {}",
+    ) -> Result<()> {
+        debug!(
+            "Installing in {} in {}",
+            resolution
+                .distributions()
+                .map(ToString::to_string)
+                .join(", "),
+            venv.root().display(),
+        );
+
+        // Determine the current environment markers.
+        let tags = self.interpreter.tags()?;
+
+        // Determine the set of installed packages.
+        let site_packages = SitePackages::from_executable(venv)?;
+
+        let Plan {
+            cached,
+            remote,
+            installed: _,
+            reinstalls,
+            extraneous: _,
+        } = Planner::with_requirements(&resolution.requirements()).build(
+            site_packages,
+            &Reinstall::None,
+            &NoBinary::None,
+            self.index_locations,
+            self.cache(),
+            venv,
+            tags,
+        )?;
+
+        // Nothing to do.
+        if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
+            debug!("No build requirements to install for build");
+            return Ok(());
+        }
+
+        // Resolve any registry-based requirements.
+        let remote = remote
+            .iter()
+            .map(|dist| {
                 resolution
-                    .distributions()
-                    .map(ToString::to_string)
-                    .join(", "),
-                venv.root().display(),
+                    .get_remote(&dist.name)
+                    .cloned()
+                    .expect("Resolution should contain all packages")
+            })
+            .collect::<Vec<_>>();
+
+        // Download any missing distributions.
+        let wheels = if remote.is_empty() {
+            vec![]
+        } else {
+            // TODO(konstin): Check that there is no endless recursion.
+            let downloader = Downloader::new(self.cache, tags, self.client, self);
+            debug!(
+                "Downloading and building requirement{} for build: {}",
+                if remote.len() == 1 { "" } else { "s" },
+                remote.iter().map(ToString::to_string).join(", ")
             );
 
-            // Determine the current environment markers.
-            let tags = self.interpreter.tags()?;
+            downloader
+                .download(remote, self.in_flight)
+                .await
+                .context("Failed to download and build distributions")?
+        };
 
-            // Determine the set of installed packages.
-            let site_packages = SitePackages::from_executable(venv)?;
-
-            let Plan {
-                cached,
-                remote,
-                installed: _,
-                reinstalls,
-                extraneous: _,
-            } = Planner::with_requirements(&resolution.requirements()).build(
-                site_packages,
-                &Reinstall::None,
-                &NoBinary::None,
-                self.index_locations,
-                self.cache(),
-                venv,
-                tags,
-            )?;
-
-            // Nothing to do.
-            if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {
-                debug!("No build requirements to install for build");
-                return Ok(());
-            }
-
-            // Resolve any registry-based requirements.
-            let remote = remote
-                .iter()
-                .map(|dist| {
-                    resolution
-                        .get_remote(&dist.name)
-                        .cloned()
-                        .expect("Resolution should contain all packages")
-                })
-                .collect::<Vec<_>>();
-
-            // Download any missing distributions.
-            let wheels = if remote.is_empty() {
-                vec![]
-            } else {
-                // TODO(konstin): Check that there is no endless recursion.
-                let downloader = Downloader::new(self.cache, tags, self.client, self);
-                debug!(
-                    "Downloading and building requirement{} for build: {}",
-                    if remote.len() == 1 { "" } else { "s" },
-                    remote.iter().map(ToString::to_string).join(", ")
-                );
-
-                downloader
-                    .download(remote, self.in_flight)
+        // Remove any unnecessary packages.
+        if !reinstalls.is_empty() {
+            for dist_info in &reinstalls {
+                let summary = uv_installer::uninstall(dist_info)
                     .await
-                    .context("Failed to download and build distributions")?
-            };
-
-            // Remove any unnecessary packages.
-            if !reinstalls.is_empty() {
-                for dist_info in &reinstalls {
-                    let summary = uv_installer::uninstall(dist_info)
-                        .await
-                        .context("Failed to uninstall build dependencies")?;
-                    debug!(
-                        "Uninstalled {} ({} file{}, {} director{})",
-                        dist_info.name(),
-                        summary.file_count,
-                        if summary.file_count == 1 { "" } else { "s" },
-                        summary.dir_count,
-                        if summary.dir_count == 1 { "y" } else { "ies" },
-                    );
-                }
-            }
-
-            // Install the resolved distributions.
-            let wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
-            if !wheels.is_empty() {
+                    .context("Failed to uninstall build dependencies")?;
                 debug!(
-                    "Installing build requirement{}: {}",
-                    if wheels.len() == 1 { "" } else { "s" },
-                    wheels.iter().map(ToString::to_string).join(", ")
+                    "Uninstalled {} ({} file{}, {} director{})",
+                    dist_info.name(),
+                    summary.file_count,
+                    if summary.file_count == 1 { "" } else { "s" },
+                    summary.dir_count,
+                    if summary.dir_count == 1 { "y" } else { "ies" },
                 );
-                Installer::new(venv)
-                    .install(&wheels)
-                    .context("Failed to install build dependencies")?;
             }
-
-            Ok(())
         }
+
+        // Install the resolved distributions.
+        let wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
+        if !wheels.is_empty() {
+            debug!(
+                "Installing build requirement{}: {}",
+                if wheels.len() == 1 { "" } else { "s" },
+                wheels.iter().map(ToString::to_string).join(", ")
+            );
+            Installer::new(venv)
+                .install(&wheels)
+                .context("Failed to install build dependencies")?;
+        }
+
+        Ok(())
     }
 
-    #[allow(clippy::manual_async_fn)] // TODO(konstin): rustc 1.75 gets into a type inference cycle with async fn
     #[instrument(skip_all, fields(package_id = package_id, subdirectory = ?subdirectory))]
     async fn setup_build<'data>(
         &'data self,

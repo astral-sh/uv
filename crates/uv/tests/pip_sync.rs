@@ -13,7 +13,7 @@ use indoc::indoc;
 use predicates::Predicate;
 use url::Url;
 
-use common::{create_bin_with_executables, create_venv, uv_snapshot, venv_to_interpreter};
+use common::{create_venv, python_path_with_versions, uv_snapshot, venv_to_interpreter};
 use uv_fs::Simplified;
 
 use crate::common::{copy_dir_all, get_bin, TestContext};
@@ -338,8 +338,8 @@ fn link() -> Result<()> {
         .success();
 
     let venv2 = context.temp_dir.child(".venv2");
-    let bin = create_bin_with_executables(&context.temp_dir, &["3.12"])
-        .expect("Failed to create bin dir");
+    let python_path = python_path_with_versions(&context.temp_dir, &["3.12"])
+        .expect("Failed to create Python test path");
     Command::new(get_bin())
         .arg("venv")
         .arg(venv2.as_os_str())
@@ -347,7 +347,7 @@ fn link() -> Result<()> {
         .arg(context.cache_dir.path())
         .arg("--python")
         .arg("3.12")
-        .env("UV_TEST_PYTHON_PATH", bin)
+        .env("UV_TEST_PYTHON_PATH", python_path)
         .current_dir(&context.temp_dir)
         .assert()
         .success();
@@ -1106,6 +1106,9 @@ fn mismatched_name() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because foo was found, but has an invalid format and you require foo, we can conclude that the requirements are unsatisfiable.
+
+          hint: The structure of foo was invalid:
+            The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
     "###
     );
 
@@ -1601,7 +1604,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 4 files for wheel ([SIZE])
+    Removed 102 files for wheel ([SIZE])
     "###
     );
 
@@ -2995,14 +2998,14 @@ requires-python = "<=3.5"
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
 
-    uv_snapshot!(command(&context)
+    uv_snapshot!(context.filters(), command(&context)
         .arg("requirements.in"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Editable `example` requires Python <=3.5, but 3.12.1 is installed
+    error: Editable `example` requires Python <=3.5, but 3.12.[X] is installed
     "###
     );
 
@@ -3071,7 +3074,7 @@ requires-python = "<=3.5"
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.1) does not satisfy Python<=3.5 and example==0.0.0 depends on Python<=3.5, we can conclude that example==0.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python<=3.5 and example==0.0.0 depends on Python<=3.5, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
     "###
     );

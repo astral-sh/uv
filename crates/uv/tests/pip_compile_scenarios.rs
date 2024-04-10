@@ -1,9 +1,9 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.12/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.13/scenarios>
 //!
-#![cfg(all(feature = "python", feature = "pypi"))]
+#![cfg(all(feature = "python", feature = "pypi", unix))]
 
 use std::env;
 use std::process::Command;
@@ -13,28 +13,28 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use predicates::prelude::predicate;
 
-use common::{create_bin_with_executables, get_bin, uv_snapshot, TestContext};
+use common::{get_bin, python_path_with_versions, uv_snapshot, TestContext};
 
 mod common;
 
 /// Provision python binaries and return a `pip compile` command with options shared across all scenarios.
 fn command(context: &TestContext, python_versions: &[&str]) -> Command {
-    let bin = create_bin_with_executables(&context.temp_dir, python_versions)
-        .expect("Failed to create bin dir");
+    let python_path = python_path_with_versions(&context.temp_dir, python_versions)
+        .expect("Failed to create Python test path");
     let mut command = Command::new(get_bin());
     command
         .arg("pip")
         .arg("compile")
         .arg("requirements.in")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.12/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.13/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.12/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.13/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
         .env("UV_NO_WRAP", "1")
-        .env("UV_TEST_PYTHON_PATH", bin)
+        .env("UV_TEST_PYTHON_PATH", python_path)
         .current_dir(&context.temp_dir);
 
     if cfg!(all(windows, debug_assertions)) {
@@ -84,7 +84,7 @@ fn incompatible_python_compatible_override() -> Result<()> {
                  package-a==1.0.0
 
                  ----- stderr -----
-                 warning: The requested Python version 3.11 is not available; 3.9.18 will be used to build dependencies instead.
+                 warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                  Resolved 1 package in [TIME]
                  "###
     );
@@ -130,7 +130,7 @@ fn compatible_python_incompatible_override() -> Result<()> {
                  ----- stdout -----
 
                  ----- stderr -----
-                 warning: The requested Python version 3.9 is not available; 3.11.7 will be used to build dependencies instead.
+                 warning: The requested Python version 3.9 is not available; 3.11.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
                    ╰─▶ Because the requested Python version (3.9) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
@@ -184,9 +184,9 @@ fn incompatible_python_compatible_override_unavailable_no_wheels() -> Result<()>
                  ----- stdout -----
 
                  ----- stderr -----
-                 warning: The requested Python version 3.11 is not available; 3.9.18 will be used to build dependencies instead.
+                 warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
                  "###
     );
@@ -295,9 +295,9 @@ fn incompatible_python_compatible_override_no_compatible_wheels() -> Result<()> 
                  ----- stdout -----
 
                  ----- stderr -----
-                 warning: The requested Python version 3.11 is not available; 3.9.18 will be used to build dependencies instead.
+                 warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
                  "###
     );
@@ -353,9 +353,9 @@ fn incompatible_python_compatible_override_other_wheel() -> Result<()> {
                  ----- stdout -----
 
                  ----- stderr -----
-                 warning: The requested Python version 3.11 is not available; 3.9.18 will be used to build dependencies instead.
+                 warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the current Python version (3.9.18) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because only the following versions of package-a are available:
                            package-a==1.0.0
                            package-a==2.0.0
@@ -386,6 +386,7 @@ fn incompatible_python_compatible_override_other_wheel() -> Result<()> {
 ///     └── a-1.0.0
 ///         └── requires python>=3.8.4
 /// ```
+#[cfg(feature = "python-patch")]
 #[test]
 fn python_patch_override_no_patch() -> Result<()> {
     let context = TestContext::new("3.8.18");
@@ -433,6 +434,7 @@ fn python_patch_override_no_patch() -> Result<()> {
 ///     └── a-1.0.0
 ///         └── requires python>=3.8.0
 /// ```
+#[cfg(feature = "python-patch")]
 #[test]
 fn python_patch_override_patch_compatible() -> Result<()> {
     let context = TestContext::new("3.8.18");

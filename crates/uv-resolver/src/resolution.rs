@@ -12,13 +12,13 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
-    Dist, DistributionMetadata, LocalEditable, Name, PackageId, ResolvedDist, Verbatim,
+    Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, PackageId, ResolvedDist, Verbatim,
     VersionOrUrl,
 };
 use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use pypi_types::Hashes;
+use pypi_types::HashDigest;
 use uv_distribution::to_precise;
 use uv_normalize::{ExtraName, PackageName};
 
@@ -50,7 +50,7 @@ pub struct ResolutionGraph {
     /// The underlying graph.
     petgraph: petgraph::graph::Graph<ResolvedDist, Range<Version>, petgraph::Directed>,
     /// The metadata for every distribution in this resolution.
-    hashes: FxHashMap<PackageName, Vec<Hashes>>,
+    hashes: FxHashMap<PackageName, Vec<HashDigest>>,
     /// The enabled extras for every distribution in this resolution.
     extras: FxHashMap<PackageName, Vec<ExtraName>>,
     /// The set of editable requirements in this resolution.
@@ -96,14 +96,17 @@ impl ResolutionGraph {
 
                     // Add its hashes to the index, preserving those that were already present in
                     // the lockfile if necessary.
-                    if let Some(hash) = preferences.match_hashes(package_name, version) {
-                        hashes.insert(package_name.clone(), hash.to_vec());
+                    if let Some(digests) = preferences
+                        .match_hashes(package_name, version)
+                        .filter(|digests| !digests.is_empty())
+                    {
+                        hashes.insert(package_name.clone(), digests.to_vec());
                     } else if let Some(versions_response) = packages.get(package_name) {
                         if let VersionsResponse::Found(ref version_maps) = *versions_response {
                             for version_map in version_maps {
-                                if let Some(mut hash) = version_map.hashes(version) {
-                                    hash.sort_unstable();
-                                    hashes.insert(package_name.clone(), hash);
+                                if let Some(mut digests) = version_map.hashes(version) {
+                                    digests.sort_unstable();
+                                    hashes.insert(package_name.clone(), digests);
                                     break;
                                 }
                             }
@@ -126,14 +129,17 @@ impl ResolutionGraph {
 
                     // Add its hashes to the index, preserving those that were already present in
                     // the lockfile if necessary.
-                    if let Some(hash) = preferences.match_hashes(package_name, version) {
-                        hashes.insert(package_name.clone(), hash.to_vec());
+                    if let Some(digests) = preferences
+                        .match_hashes(package_name, version)
+                        .filter(|digests| !digests.is_empty())
+                    {
+                        hashes.insert(package_name.clone(), digests.to_vec());
                     } else if let Some(versions_response) = packages.get(package_name) {
                         if let VersionsResponse::Found(ref version_maps) = *versions_response {
                             for version_map in version_maps {
-                                if let Some(mut hash) = version_map.hashes(version) {
-                                    hash.sort_unstable();
-                                    hashes.insert(package_name.clone(), hash);
+                                if let Some(mut digests) = version_map.hashes(version) {
+                                    digests.sort_unstable();
+                                    hashes.insert(package_name.clone(), digests);
                                     break;
                                 }
                             }
@@ -493,6 +499,7 @@ impl ResolutionGraph {
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolutionGraph,
@@ -505,6 +512,8 @@ pub struct DisplayResolutionGraph<'a> {
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
     /// requested each package.
     include_annotations: bool,
+    /// Whether to include indexes in the output, to indicate which index was used for each package.
+    include_index_annotation: bool,
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
@@ -518,6 +527,7 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
             false,
             false,
             true,
+            false,
             AnnotationStyle::default(),
         )
     }
@@ -525,12 +535,14 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
 
 impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
+    #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
         underlying: &'a ResolutionGraph,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
         include_annotations: bool,
+        include_index_annotation: bool,
         annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
         Self {
@@ -539,6 +551,7 @@ impl<'a> DisplayResolutionGraph<'a> {
             show_hashes,
             include_extras,
             include_annotations,
+            include_index_annotation,
             annotation_style,
         }
     }
@@ -574,6 +587,14 @@ impl<'a> Node<'a> {
         match self {
             Node::Editable(_, editable) => NodeKey::Editable(editable.verbatim()),
             Node::Distribution(name, _, _) => NodeKey::Distribution(name),
+        }
+    }
+
+    /// Return the [`IndexUrl`] of the distribution, if any.
+    fn index(&self) -> Option<&IndexUrl> {
+        match self {
+            Node::Editable(_, _) => None,
+            Node::Distribution(_, dist, _) => dist.index(),
         }
     }
 }
@@ -649,12 +670,10 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .filter(|hashes| !hashes.is_empty())
                 {
                     for hash in hashes {
-                        if let Some(hash) = hash.to_string() {
-                            has_hashes = true;
-                            line.push_str(" \\\n");
-                            line.push_str("    --hash=");
-                            line.push_str(&hash);
-                        }
+                        has_hashes = true;
+                        line.push_str(" \\\n");
+                        line.push_str("    --hash=");
+                        line.push_str(&hash.to_string());
                     }
                 }
             }
@@ -662,6 +681,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // Determine the annotation comment and separator (between comment and requirement).
             let mut annotation = None;
 
+            // If enabled, include annotations to indicate the dependencies that requested each
+            // package (e.g., `# via mypy`).
             if self.include_annotations {
                 // Display all dependencies.
                 let mut edges = self
@@ -715,6 +736,14 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             } else {
                 // Write the line as is.
                 writeln!(f, "{line}")?;
+            }
+
+            // If enabled, include indexes to indicate which index was used for each package (e.g.,
+            // `# from https://pypi.org/simple`).
+            if self.include_index_annotation {
+                if let Some(index) = node.index() {
+                    writeln!(f, "{}", format!("    # from {index}").green())?;
+                }
             }
         }
 

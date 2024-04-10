@@ -4,8 +4,8 @@ use anyhow::Result;
 
 use requirements_txt::RequirementsTxt;
 use uv_client::{BaseClientBuilder, Connectivity};
+use uv_configuration::Upgrade;
 use uv_resolver::{Preference, PreferenceError};
-use uv_types::Upgrade;
 
 /// Load the preferred requirements from an existing lockfile, applying the upgrade strategy.
 pub async fn read_lockfile(
