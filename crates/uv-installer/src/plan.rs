@@ -19,7 +19,7 @@ use uv_configuration::{NoBinary, Reinstall};
 use uv_distribution::{read_timestamped_archive, Archive, BuiltWheelIndex, RegistryWheelIndex};
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
-use uv_types::RequiredHashes;
+use uv_types::HashStrategy;
 
 use crate::{ResolvedEditable, SitePackages};
 
@@ -66,15 +66,15 @@ impl<'a> Planner<'a> {
         mut site_packages: SitePackages<'_>,
         reinstall: &Reinstall,
         no_binary: &NoBinary,
-        hashes: &RequiredHashes,
+        hasher: &HashStrategy,
         index_locations: &IndexLocations,
         cache: &Cache,
         venv: &PythonEnvironment,
         tags: &Tags,
     ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
-        let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations, hashes);
-        let built_index = BuiltWheelIndex::new(cache, tags, hashes);
+        let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations, hasher);
+        let built_index = BuiltWheelIndex::new(cache, tags, hasher);
 
         let mut cached = vec![];
         let mut remote = vec![];
@@ -262,8 +262,7 @@ impl<'a> Planner<'a> {
                                     let archive = rmp_serde::from_slice::<Archive>(&data)?;
 
                                     // Enforce hash checking.
-                                    let hashes = hashes.get(&requirement.name).unwrap_or_default();
-                                    if archive.satisfies(hashes) {
+                                    if archive.satisfies(hasher.get(&requirement.name)) {
                                         let cached_dist = CachedDirectUrlDist::from_url(
                                             wheel.filename,
                                             wheel.url,
@@ -312,8 +311,7 @@ impl<'a> Planner<'a> {
                                 &cache_entry,
                                 ArchiveTimestamp::from_file(&wheel.path)?,
                             )? {
-                                let hashes = hashes.get(&requirement.name).unwrap_or_default();
-                                if archive.satisfies(hashes) {
+                                if archive.satisfies(hasher.get(&requirement.name)) {
                                     let cached_dist = CachedDirectUrlDist::from_url(
                                         wheel.filename,
                                         wheel.url,

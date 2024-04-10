@@ -6,8 +6,9 @@ use tracing::instrument;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuiltDist, Dist, File, Hash, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltDist, RegistrySourceDist, SourceDist, SourceDistCompatibility, WheelCompatibility,
+    BuiltDist, Dist, File, Hash, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
+    PrioritizedDist, RegistryBuiltDist, RegistrySourceDist, SourceDist, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use pep440_rs::Version;
 use platform_tags::{TagCompatibility, Tags};
@@ -15,7 +16,7 @@ use pypi_types::HashDigest;
 use uv_client::FlatIndexEntries;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_normalize::PackageName;
-use uv_types::RequiredHashes;
+use uv_types::HashStrategy;
 
 /// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
 /// and [`Version`].
@@ -34,7 +35,7 @@ impl FlatIndex {
     pub fn from_entries(
         entries: FlatIndexEntries,
         tags: &Tags,
-        required_hashes: &RequiredHashes,
+        hasher: &HashStrategy,
         no_build: &NoBuild,
         no_binary: &NoBinary,
     ) -> Self {
@@ -47,7 +48,7 @@ impl FlatIndex {
                 file,
                 filename,
                 tags,
-                required_hashes,
+                hasher,
                 no_build,
                 no_binary,
                 url,
@@ -66,7 +67,7 @@ impl FlatIndex {
         file: File,
         filename: DistFilename,
         tags: &Tags,
-        required_hashes: &RequiredHashes,
+        hasher: &HashStrategy,
         no_build: &NoBuild,
         no_binary: &NoBinary,
         index: IndexUrl,
@@ -77,13 +78,8 @@ impl FlatIndex {
             DistFilename::WheelFilename(filename) => {
                 let version = filename.version.clone();
 
-                let compatibility = Self::wheel_compatibility(
-                    &filename,
-                    &file.hashes,
-                    tags,
-                    required_hashes,
-                    no_binary,
-                );
+                let compatibility =
+                    Self::wheel_compatibility(&filename, &file.hashes, tags, hasher, no_binary);
                 let dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
                     filename,
                     file: Box::new(file),
@@ -99,12 +95,8 @@ impl FlatIndex {
                 }
             }
             DistFilename::SourceDistFilename(filename) => {
-                let compatibility = Self::source_dist_compatibility(
-                    &filename,
-                    &file.hashes,
-                    required_hashes,
-                    no_build,
-                );
+                let compatibility =
+                    Self::source_dist_compatibility(&filename, &file.hashes, hasher, no_build);
                 let dist = Dist::Source(SourceDist::Registry(RegistrySourceDist {
                     filename: filename.clone(),
                     file: Box::new(file),
@@ -125,7 +117,7 @@ impl FlatIndex {
     fn source_dist_compatibility(
         filename: &SourceDistFilename,
         hashes: &[HashDigest],
-        required_hashes: &RequiredHashes,
+        hasher: &HashStrategy,
         no_build: &NoBuild,
     ) -> SourceDistCompatibility {
         // Check if source distributions are allowed for this package.
@@ -140,10 +132,10 @@ impl FlatIndex {
         }
 
         // Check if hashes line up
-        let hash = if let Some(required_hashes) = required_hashes.get(&filename.name) {
+        let hash = if let HashPolicy::Validate(required) = hasher.get(&filename.name) {
             if hashes.is_empty() {
                 Hash::Missing
-            } else if hashes.iter().any(|hash| required_hashes.contains(hash)) {
+            } else if required.iter().any(|hash| hashes.contains(hash)) {
                 Hash::Matched
             } else {
                 Hash::Mismatched
@@ -159,7 +151,7 @@ impl FlatIndex {
         filename: &WheelFilename,
         hashes: &[HashDigest],
         tags: &Tags,
-        required_hashes: &RequiredHashes,
+        hasher: &HashStrategy,
         no_binary: &NoBinary,
     ) -> WheelCompatibility {
         // Check if binaries are allowed for this package.
@@ -182,10 +174,10 @@ impl FlatIndex {
         };
 
         // Check if hashes line up
-        let hash = if let Some(required_hashes) = required_hashes.get(&filename.name) {
+        let hash = if let HashPolicy::Validate(required) = hasher.get(&filename.name) {
             if hashes.is_empty() {
                 Hash::Missing
-            } else if hashes.iter().any(|hash| required_hashes.contains(hash)) {
+            } else if required.iter().any(|hash| hashes.contains(hash)) {
                 Hash::Matched
             } else {
                 Hash::Mismatched

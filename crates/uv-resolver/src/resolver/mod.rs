@@ -31,12 +31,11 @@ use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
-use uv_types::{BuildContext, InstalledPackagesProvider, RequiredHashes};
+use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::editables::Editables;
 use crate::error::ResolveError;
-use crate::hash_checking_mode::HashCheckingMode;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
@@ -122,8 +121,7 @@ pub struct Resolver<
     urls: Urls,
     locals: Locals,
     dependency_mode: DependencyMode,
-    hash_checking_mode: HashCheckingMode,
-    hashes: &'a RequiredHashes,
+    hasher: &'a HashStrategy,
     markers: &'a MarkerEnvironment,
     python_requirement: PythonRequirement,
     selector: CandidateSelector,
@@ -158,7 +156,7 @@ impl<
         client: &'a RegistryClient,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
-        hashes: &'a RequiredHashes,
+        hasher: &'a HashStrategy,
         build_context: &'a Context,
         installed_packages: &'a InstalledPackages,
     ) -> Result<Self, ResolveError> {
@@ -169,7 +167,7 @@ impl<
             tags,
             PythonRequirement::new(interpreter, markers),
             AllowedYanks::from_manifest(&manifest, markers),
-            hashes,
+            hasher,
             options.exclude_newer,
             build_context.no_binary(),
             build_context.no_build(),
@@ -177,7 +175,7 @@ impl<
         Self::new_custom_io(
             manifest,
             options,
-            hashes,
+            hasher,
             markers,
             PythonRequirement::new(interpreter, markers),
             index,
@@ -198,7 +196,7 @@ impl<
     pub fn new_custom_io(
         manifest: Manifest,
         options: Options,
-        hashes: &'a RequiredHashes,
+        hasher: &'a HashStrategy,
         markers: &'a MarkerEnvironment,
         python_requirement: PythonRequirement,
         index: &'a InMemoryIndex,
@@ -212,7 +210,6 @@ impl<
             visited: DashSet::default(),
             selector: CandidateSelector::for_resolution(options, &manifest, markers),
             dependency_mode: options.dependency_mode,
-            hash_checking_mode: options.hash_checking_mode,
             urls: Urls::from_manifest(&manifest, markers)?,
             locals: Locals::from_manifest(&manifest, markers),
             project: manifest.project,
@@ -222,7 +219,7 @@ impl<
             preferences: Preferences::from_iter(manifest.preferences, markers),
             exclusions: manifest.exclusions,
             editables: Editables::from_requirements(manifest.editables),
-            hashes,
+            hasher,
             markers,
             python_requirement,
             reporter: None,
@@ -528,10 +525,8 @@ impl<
             PubGrubPackage::Python(_) => {}
             PubGrubPackage::Package(package_name, _extra, None) => {
                 // Validate that the package is permitted under hash-checking mode.
-                if self.hash_checking_mode.is_enabled() {
-                    if !self.hashes.contains(package_name) {
-                        return Err(ResolveError::UnhashedPackage(package_name.clone()));
-                    }
+                if !self.hasher.allows(package_name) {
+                    return Err(ResolveError::UnhashedPackage(package_name.clone()));
                 }
 
                 // Emit a request to fetch the metadata for this package.
@@ -544,10 +539,8 @@ impl<
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                 // Validate that the package is permitted under hash-checking mode.
-                if self.hash_checking_mode.is_enabled() {
-                    if !self.hashes.contains(package_name) {
-                        return Err(ResolveError::UnhashedPackage(package_name.clone()));
-                    }
+                if !self.hasher.allows(package_name) {
+                    return Err(ResolveError::UnhashedPackage(package_name.clone()));
                 }
 
                 // Emit a request to fetch the metadata for this distribution.

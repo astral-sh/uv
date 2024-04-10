@@ -22,7 +22,7 @@ use uv_resolver::{
     OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{
-    BuildContext, BuildIsolation, EmptyInstalledPackages, RequiredHashes, SourceBuildTrait,
+    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceBuildTrait,
 };
 
 // Exclude any packages uploaded after this date.
@@ -125,7 +125,7 @@ async fn resolve(
         find_default_python(&Cache::temp().unwrap()).expect("Expected a python to be installed");
     let interpreter = Interpreter::artificial(real_interpreter.platform().clone(), markers.clone());
     let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
-    let hashes = RequiredHashes::default();
+    let hashes = HashStrategy::None;
     let installed_packages = EmptyInstalledPackages;
     let resolver = Resolver::new(
         manifest,

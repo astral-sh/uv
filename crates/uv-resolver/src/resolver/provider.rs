@@ -10,7 +10,7 @@ use uv_client::RegistryClient;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_normalize::PackageName;
-use uv_types::{BuildContext, RequiredHashes};
+use uv_types::{BuildContext, HashStrategy};
 
 use crate::flat_index::FlatIndex;
 use crate::python_requirement::PythonRequirement;
@@ -83,7 +83,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     tags: Tags,
     python_requirement: PythonRequirement,
     allowed_yanks: AllowedYanks,
-    required_hashes: RequiredHashes,
+    hasher: HashStrategy,
     exclude_newer: Option<DateTime<Utc>>,
     no_binary: NoBinary,
     no_build: NoBuild,
@@ -99,7 +99,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
         tags: &'a Tags,
         python_requirement: PythonRequirement,
         allowed_yanks: AllowedYanks,
-        required_hashes: &'a RequiredHashes,
+        hasher: &'a HashStrategy,
         exclude_newer: Option<DateTime<Utc>>,
         no_binary: &'a NoBinary,
         no_build: &'a NoBuild,
@@ -111,7 +111,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
             tags: tags.clone(),
             python_requirement,
             allowed_yanks,
-            required_hashes: required_hashes.clone(),
+            hasher: hasher.clone(),
             exclude_newer,
             no_binary: no_binary.clone(),
             no_build: no_build.clone(),
@@ -139,7 +139,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                             &self.tags,
                             &self.python_requirement,
                             &self.allowed_yanks,
-                            &self.required_hashes,
+                            &self.hasher,
                             self.exclude_newer.as_ref(),
                             self.flat_index.get(package_name).cloned(),
                             &self.no_binary,
@@ -179,8 +179,11 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
 
     /// Fetch the metadata for a distribution, building it if necessary.
     async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
-        let hashes = self.required_hashes.get(dist.name()).unwrap_or_default();
-        match self.fetcher.get_or_build_wheel_metadata(dist, hashes).await {
+        match self
+            .fetcher
+            .get_or_build_wheel_metadata(dist, self.hasher.get(dist.name()))
+            .await
+        {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => match client.into_kind() {

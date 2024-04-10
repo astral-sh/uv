@@ -134,15 +134,13 @@ impl ResolutionGraph {
                         .filter(|digests| !digests.is_empty())
                     {
                         hashes.insert(package_name.clone(), digests.to_vec());
-                    } else if let Some(versions_response) = packages.get(package_name) {
-                        if let VersionsResponse::Found(ref version_maps) = *versions_response {
-                            for version_map in version_maps {
-                                if let Some(mut digests) = version_map.hashes(version) {
-                                    digests.sort_unstable();
-                                    hashes.insert(package_name.clone(), digests);
-                                    break;
-                                }
-                            }
+                    } else if let Some(metadata_response) =
+                        distributions.get(&pinned_package.package_id())
+                    {
+                        if let MetadataResponse::Found(ref archive) = *metadata_response {
+                            let mut digests = archive.hashes.clone();
+                            digests.sort_unstable();
+                            hashes.insert(package_name.clone(), digests);
                         }
                     }
 

@@ -15,7 +15,7 @@ use platform_tags::Tags;
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, LocalWheel};
-use uv_types::{BuildContext, InFlight, RequiredHashes};
+use uv_types::{BuildContext, HashStrategy, InFlight};
 
 use crate::editable::BuiltEditable;
 
@@ -40,7 +40,7 @@ pub enum Error {
 pub struct Downloader<'a, Context: BuildContext + Send + Sync> {
     tags: &'a Tags,
     cache: &'a Cache,
-    hashes: &'a RequiredHashes,
+    hashes: &'a HashStrategy,
     database: DistributionDatabase<'a, Context>,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -49,7 +49,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     pub fn new(
         cache: &'a Cache,
         tags: &'a Tags,
-        hashes: &'a RequiredHashes,
+        hashes: &'a HashStrategy,
         client: &'a RegistryClient,
         build_context: &'a Context,
     ) -> Self {
@@ -170,22 +170,22 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     pub async fn get_wheel(&self, dist: Dist, in_flight: &InFlight) -> Result<CachedDist, Error> {
         let id = dist.distribution_id();
         if in_flight.downloads.register(id.clone()) {
-            let hashes = self.hashes.get(dist.name()).unwrap_or_default();
+            let policy = self.hashes.get(dist.name());
             let result = self
                 .database
-                .get_or_build_wheel(&dist, self.tags, hashes)
+                .get_or_build_wheel(&dist, self.tags, policy)
                 .boxed()
                 .map_err(|err| Error::Fetch(dist.clone(), err))
                 .await
                 .and_then(|wheel: LocalWheel| {
-                    if wheel.satisfies(hashes) {
+                    if wheel.satisfies(policy) {
                         Ok(wheel)
                     } else {
                         Err(Error::Fetch(
                             dist.clone(),
                             uv_distribution::Error::hash_mismatch(
                                 dist.to_string(),
-                                hashes,
+                                policy.digests(),
                                 wheel.hashes(),
                             ),
                         ))

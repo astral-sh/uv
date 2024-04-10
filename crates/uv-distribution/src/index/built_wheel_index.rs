@@ -4,7 +4,7 @@ use distribution_types::{
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, WheelCache};
 use uv_fs::symlinks;
-use uv_types::RequiredHashes;
+use uv_types::HashStrategy;
 
 use crate::index::cached_wheel::CachedWheel;
 use crate::source::{read_http_revision, read_timestamped_revision, REVISION};
@@ -15,16 +15,16 @@ use crate::Error;
 pub struct BuiltWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,
-    hashes: &'a RequiredHashes,
+    hasher: &'a HashStrategy,
 }
 
 impl<'a> BuiltWheelIndex<'a> {
     /// Initialize an index of built distributions.
-    pub fn new(cache: &'a Cache, tags: &'a Tags, hashes: &'a RequiredHashes) -> Self {
+    pub fn new(cache: &'a Cache, tags: &'a Tags, hasher: &'a HashStrategy) -> Self {
         Self {
             cache,
             tags,
-            hashes,
+            hasher,
         }
     }
 
@@ -46,10 +46,8 @@ impl<'a> BuiltWheelIndex<'a> {
         };
 
         // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
-        if let Some(hashes) = self.hashes.get(&source_dist.name) {
-            if !revision.satisfies(hashes) {
-                return Ok(None);
-            }
+        if !revision.satisfies(self.hasher.get(&source_dist.name)) {
+            return Ok(None);
         }
 
         Ok(self.find(&cache_shard.shard(revision.id())))
@@ -76,10 +74,8 @@ impl<'a> BuiltWheelIndex<'a> {
         };
 
         // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
-        if let Some(hashes) = self.hashes.get(&source_dist.name) {
-            if !revision.satisfies(hashes) {
-                return Ok(None);
-            }
+        if !revision.satisfies(self.hasher.get(&source_dist.name)) {
+            return Ok(None);
         }
 
         Ok(self.find(&cache_shard.shard(revision.id())))
@@ -88,7 +84,7 @@ impl<'a> BuiltWheelIndex<'a> {
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.
     pub fn git(&self, source_dist: &GitSourceDist) -> Option<CachedWheel> {
         // Enforce hash-checking, which isn't supported for Git distributions.
-        if self.hashes.get(&source_dist.name).is_some() {
+        if self.hasher.get(&source_dist.name).is_validate() {
             return None;
         }
 

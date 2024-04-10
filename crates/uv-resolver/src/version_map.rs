@@ -17,7 +17,7 @@ use pypi_types::{HashDigest, Yanked};
 use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::{NoBinary, NoBuild};
 use uv_normalize::PackageName;
-use uv_types::RequiredHashes;
+use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
@@ -48,7 +48,7 @@ impl VersionMap {
         tags: &Tags,
         python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
-        required_hashes: &RequiredHashes,
+        hasher: &HashStrategy,
         exclude_newer: Option<&DateTime<Utc>>,
         flat_index: Option<FlatDistributions>,
         no_binary: &NoBinary,
@@ -112,10 +112,7 @@ impl VersionMap {
             .allowed_versions(package_name)
             .cloned()
             .unwrap_or_default();
-        let required_hashes = required_hashes
-            .get(package_name)
-            .unwrap_or_default()
-            .to_vec();
+        let required_hashes = hasher.get(package_name).digests().to_vec();
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,

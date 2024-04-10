@@ -21,7 +21,7 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
-use uv_types::{BuildContext, BuildIsolation, InFlight, RequiredHashes};
+use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -170,7 +170,7 @@ async fn venv_impl(
             FlatIndex::from_entries(
                 entries,
                 tags,
-                &RequiredHashes::default(),
+                &HashStrategy::None,
                 &NoBuild::All,
                 &NoBinary::None,
             )
