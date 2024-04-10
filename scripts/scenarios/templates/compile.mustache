@@ -58,6 +58,9 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
 /// {{.}}
 {{/tree}}
 /// ```
+{{#python_patch}}
+#[cfg(feature = "python-patch")]
+{{/python_patch}}
 #[test]
 fn {{module_name}}() -> Result<()> {
     let context = TestContext::new("{{environment.python}}");

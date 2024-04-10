@@ -133,6 +133,13 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             else []
         )
 
+    # Hack to track which scenarios require a specific Python patch version
+    for scenario in data["scenarios"]:
+        if "patch" in scenario["name"]:
+            scenario["python_patch"] = True
+        else:
+            scenario["python_patch"] = False
+
     # We don't yet support local versions that aren't expressed as direct dependencies.
     for scenario in data["scenarios"]:
         expected = scenario["expected"]
