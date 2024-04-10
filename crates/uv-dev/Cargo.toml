@@ -25,7 +25,6 @@ uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
-uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
@@ -49,18 +48,14 @@ petgraph = { workspace = true }
 poloto = { version = "19.1.2" }
 resvg = { version = "0.29.0" }
 rustc-hash = { workspace = true }
-reqwest = { workspace = true }
-tempfile = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tagu = { version = "0.1.6" }
 tokio = { workspace = true }
-tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"] }
 tracing-indicatif = { workspace = true }
 tracing-subscriber = { workspace = true }
-url = { workspace = true }
 walkdir = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

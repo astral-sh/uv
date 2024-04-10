@@ -2290,16 +2290,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
-name = "os_info"
-version = "3.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "006e42d5b888366f1880eda20371fedde764ed2213dc8496f49622fa0c99cd5e"
-dependencies = [
- "log",
- "winapi",
-]
-
-[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3599,15 +3589,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1fc403891a21bcfb7c37834ba66a547a8f402146eba7265b5a6d88059c9ff2f"
 
 [[package]]
-name = "task-local-extensions"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba323866e5d033818e3240feeb9f7db2c4296674e4d9e16b97b7bf8f490434e8"
-dependencies = [
- "pin-utils",
-]
-
-[[package]]
 name = "temp-dir"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4389,7 +4370,6 @@ dependencies = [
  "hyper-util",
  "insta",
  "install-wheel-rs",
- "os_info",
  "pep440_rs",
  "pep508_rs",
  "platform-tags",
@@ -4403,7 +4383,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sys-info",
- "task-local-extensions",
  "tempfile",
  "thiserror",
  "tl",
@@ -4427,13 +4406,11 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
- "distribution-types",
  "itertools 0.12.1",
  "pep508_rs",
  "rustc-hash",
  "serde",
  "serde_json",
- "uv-cache",
  "uv-normalize",
 ]
 
@@ -4457,27 +4434,22 @@ dependencies = [
  "pep508_rs",
  "petgraph",
  "poloto",
- "reqwest",
  "resvg",
  "rustc-hash",
  "serde",
  "serde_json",
  "tagu",
- "tempfile",
  "tikv-jemallocator",
  "tokio",
- "tokio-util",
  "tracing",
  "tracing-durations-export",
  "tracing-indicatif",
  "tracing-subscriber",
- "url",
  "uv-build",
  "uv-cache",
  "uv-client",
  "uv-configuration",
  "uv-dispatch",
- "uv-extract",
  "uv-fs",
  "uv-installer",
  "uv-interpreter",
