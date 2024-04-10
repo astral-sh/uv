@@ -7,7 +7,7 @@ use uv_fs::symlinks;
 use uv_types::HashStrategy;
 
 use crate::index::cached_wheel::CachedWheel;
-use crate::source::{read_http_revision, read_timestamped_revision, REVISION};
+use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LOCAL_REVISION};
 use crate::Error;
 
 /// A local index of built distributions for a specific source distribution.
@@ -40,12 +40,13 @@ impl<'a> BuiltWheelIndex<'a> {
         );
 
         // Read the revision from the cache.
-        let revision_entry = cache_shard.entry(REVISION);
-        let Some(revision) = read_http_revision(&revision_entry)? else {
+        let Some(pointer) = HttpRevisionPointer::read_from(cache_shard.entry(HTTP_REVISION))?
+        else {
             return Ok(None);
         };
 
         // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
+        let revision = pointer.into_revision();
         if !revision.satisfies(self.hasher.get(&source_dist.name)) {
             return Ok(None);
         }
@@ -60,6 +61,12 @@ impl<'a> BuiltWheelIndex<'a> {
             WheelCache::Path(&source_dist.url).root(),
         );
 
+        // Read the revision from the cache.
+        let Some(pointer) = LocalRevisionPointer::read_from(cache_shard.entry(LOCAL_REVISION))?
+        else {
+            return Ok(None);
+        };
+
         // Determine the last-modified time of the source distribution.
         let Some(modified) =
             ArchiveTimestamp::from_path(&source_dist.path).map_err(Error::CacheRead)?
@@ -67,13 +74,13 @@ impl<'a> BuiltWheelIndex<'a> {
             return Err(Error::DirWithoutEntrypoint);
         };
 
-        // Read the revision from the cache.
-        let revision_entry = cache_shard.entry(REVISION);
-        let Some(revision) = read_timestamped_revision(&revision_entry, modified)? else {
+        // If the distribution is stale, omit it from the index.
+        if !pointer.is_up_to_date(modified) {
             return Ok(None);
-        };
+        }
 
         // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
+        let revision = pointer.into_revision();
         if !revision.satisfies(self.hasher.get(&source_dist.name)) {
             return Ok(None);
         }

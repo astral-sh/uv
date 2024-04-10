@@ -23,7 +23,8 @@ use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
 use pypi_types::{HashDigest, Metadata23};
 use uv_cache::{
-    ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness, WheelCache,
+    ArchiveTimestamp, CacheBucket, CacheEntry, CacheShard, CachedByTimestamp, Freshness, Timestamp,
+    WheelCache,
 };
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
@@ -49,8 +50,11 @@ pub struct SourceDistributionBuilder<'a, T: BuildContext> {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-/// The name of the file that contains the revision ID, encoded via `MsgPack`.
-pub(crate) const REVISION: &str = "revision.msgpack";
+/// The name of the file that contains the revision ID for a remote distribution, encoded via `MsgPack`.
+pub(crate) const HTTP_REVISION: &str = "revision.http";
+
+/// The name of the file that contains the revision ID for a local distribution, encoded via `MsgPack`.
+pub(crate) const LOCAL_REVISION: &str = "revision.rev";
 
 /// The name of the file that contains the cached distribution metadata, encoded via `MsgPack`.
 pub(crate) const METADATA: &str = "metadata.msgpack";
@@ -509,7 +513,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<Revision, Error> {
-        let cache_entry = cache_shard.entry(REVISION);
+        let cache_entry = cache_shard.entry(HTTP_REVISION);
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(
                 self.build_context
@@ -738,13 +742,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let modified = ArchiveTimestamp::from_file(&resource.path).map_err(Error::CacheRead)?;
 
         // Read the existing metadata from the cache.
-        let revision_entry = cache_shard.entry(REVISION);
+        let revision_entry = cache_shard.entry(LOCAL_REVISION);
 
         // If the revision already exists, return it. There's no need to check for freshness, since
         // we use an exact timestamp.
-        if let Some(revision) = read_timestamped_revision(&revision_entry, modified)? {
-            if revision.has_digests(hashes) {
-                return Ok(revision);
+        if let Some(pointer) = LocalRevisionPointer::read_from(&revision_entry)? {
+            if pointer.is_up_to_date(modified) {
+                let revision = pointer.into_revision();
+                if revision.has_digests(hashes) {
+                    return Ok(revision);
+                }
             }
         }
 
@@ -929,14 +936,31 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Read the existing metadata from the cache.
-        let revision_entry = cache_shard.entry(REVISION);
-        let revision_freshness = self
+        let entry = cache_shard.entry(LOCAL_REVISION);
+        let freshness = self
             .build_context
             .cache()
-            .freshness(&revision_entry, source.name())
+            .freshness(&entry, source.name())
             .map_err(Error::CacheRead)?;
 
-        refresh_timestamped_revision(&revision_entry, revision_freshness, modified).await
+        // If the revision is fresh, return it.
+        if freshness.is_fresh() {
+            if let Some(pointer) = LocalRevisionPointer::read_from(&entry)? {
+                if pointer.timestamp == modified.timestamp() {
+                    return Ok(pointer.into_revision());
+                }
+            }
+        }
+
+        // Otherwise, we need to create a new revision.
+        let revision = Revision::new();
+        let pointer = LocalRevisionPointer {
+            timestamp: modified.timestamp(),
+            revision: revision.clone(),
+        };
+        pointer.write_to(&entry).await?;
+
+        Ok(revision)
     }
 
     /// Build a source distribution from a Git repository.
@@ -1418,37 +1442,74 @@ fn validate(source: &BuildableSource<'_>, metadata: &Metadata23) -> Result<(), E
     Ok(())
 }
 
-/// Read an existing HTTP-cached [`Revision`], if it exists.
-pub(crate) fn read_http_revision(cache_entry: &CacheEntry) -> Result<Option<Revision>, Error> {
-    match fs_err::File::open(cache_entry.path()) {
-        Ok(file) => {
-            let data = DataWithCachePolicy::from_reader(file)?.data;
-            Ok(Some(rmp_serde::from_slice::<Revision>(&data)?))
+/// A pointer to a source distribution revision in the cache, fetched from an HTTP archive.
+///
+/// Encoded with `MsgPack`, and represented on disk by a `.http` file.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct HttpRevisionPointer {
+    revision: Revision,
+}
+
+impl HttpRevisionPointer {
+    /// Read an [`HttpRevisionPointer`] from the cache.
+    pub(crate) fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
+        match fs_err::File::open(path.as_ref()) {
+            Ok(file) => {
+                let data = DataWithCachePolicy::from_reader(file)?.data;
+                let revision = rmp_serde::from_slice::<Revision>(&data)?;
+                Ok(Some(Self { revision }))
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(Error::CacheRead(err)),
         }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(Error::CacheRead(err)),
+    }
+
+    /// Return the [`Revision`] from the pointer.
+    pub(crate) fn into_revision(self) -> Revision {
+        self.revision
     }
 }
 
-/// Read an existing timestamped [`Revision`], if it exists and is up-to-date.
+/// A pointer to a source distribution revision in the cache, fetched from a local path.
 ///
-/// If the cache entry is stale, a new entry will be created.
-pub(crate) fn read_timestamped_revision(
-    cache_entry: &CacheEntry,
-    modified: ArchiveTimestamp,
-) -> Result<Option<Revision>, Error> {
-    // If the cache entry is up-to-date, return it.
-    match fs_err::read(cache_entry.path()) {
-        Ok(cached) => {
-            let cached = rmp_serde::from_slice::<CachedByTimestamp<Revision>>(&cached)?;
-            if cached.timestamp == modified.timestamp() {
-                return Ok(Some(cached.data));
-            }
+/// Encoded with `MsgPack`, and represented on disk by a `.rev` file.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct LocalRevisionPointer {
+    timestamp: Timestamp,
+    revision: Revision,
+}
+
+impl LocalRevisionPointer {
+    /// Read an [`LocalRevisionPointer`] from the cache.
+    pub(crate) fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
+        match fs_err::read(path) {
+            Ok(cached) => Ok(Some(rmp_serde::from_slice::<LocalRevisionPointer>(
+                &cached,
+            )?)),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(Error::CacheRead(err)),
         }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(Error::CacheRead(err)),
     }
-    Ok(None)
+
+    /// Write an [`LocalRevisionPointer`] to the cache.
+    async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
+        fs::create_dir_all(&entry.dir())
+            .await
+            .map_err(Error::CacheWrite)?;
+        write_atomic(entry.path(), rmp_serde::to_vec(&self)?)
+            .await
+            .map_err(Error::CacheWrite)
+    }
+
+    /// Returns `true` if the revision is up-to-date with the given modified timestamp.
+    pub(crate) fn is_up_to_date(&self, modified: ArchiveTimestamp) -> bool {
+        self.timestamp == modified.timestamp()
+    }
+
+    /// Return the [`Revision`] from the pointer.
+    pub(crate) fn into_revision(self) -> Revision {
+        self.revision
+    }
 }
 
 /// Read the [`Metadata23`] from a source distribution's `PKG-INFO` file, if it uses Metadata 2.2
@@ -1501,38 +1562,6 @@ async fn read_pyproject_toml(
         Metadata23::parse_pyproject_toml(&content).map_err(Error::DynamicPyprojectToml)?;
 
     Ok(metadata)
-}
-
-/// Read an existing timestamped [`Manifest`], if it exists and is up-to-date.
-///
-/// If the cache entry is stale, a new entry will be created.
-async fn refresh_timestamped_revision(
-    cache_entry: &CacheEntry,
-    freshness: Freshness,
-    modified: ArchiveTimestamp,
-) -> Result<Revision, Error> {
-    // If we know the exact modification time, we don't need to force a revalidate.
-    if matches!(modified, ArchiveTimestamp::Exact(_)) || freshness.is_fresh() {
-        if let Some(revision) = read_timestamped_revision(cache_entry, modified)? {
-            return Ok(revision);
-        }
-    }
-
-    // Otherwise, create a new revision.
-    let revision = Revision::new();
-    fs::create_dir_all(&cache_entry.dir())
-        .await
-        .map_err(Error::CacheWrite)?;
-    write_atomic(
-        cache_entry.path(),
-        rmp_serde::to_vec(&CachedByTimestamp {
-            timestamp: modified.timestamp(),
-            data: revision.clone(),
-        })?,
-    )
-    .await
-    .map_err(Error::CacheWrite)?;
-    Ok(revision)
 }
 
 /// Read an existing cached [`Metadata23`], if it exists.

@@ -1,6 +1,5 @@
 use std::collections::hash_map::Entry;
 use std::hash::BuildHasherDefault;
-use std::io;
 
 use anyhow::{bail, Result};
 use rustc_hash::FxHashMap;
@@ -14,9 +13,11 @@ use distribution_types::{
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, WheelCache};
-use uv_client::DataWithCachePolicy;
+
 use uv_configuration::{NoBinary, Reinstall};
-use uv_distribution::{read_timestamped_archive, Archive, BuiltWheelIndex, RegistryWheelIndex};
+use uv_distribution::{
+    BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
+};
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
 use uv_types::HashStrategy;
@@ -256,31 +257,20 @@ impl<'a> Planner<'a> {
                                 .entry(format!("{}.http", wheel.filename.stem()));
 
                             // Read the HTTP pointer.
-                            match fs_err::File::open(cache_entry.path()) {
-                                Ok(file) => {
-                                    let data = DataWithCachePolicy::from_reader(file)?.data;
-                                    let archive = rmp_serde::from_slice::<Archive>(&data)?;
+                            if let Some(pointer) = HttpArchivePointer::read_from(&cache_entry)? {
+                                let archive = pointer.into_archive();
+                                if archive.satisfies(hasher.get(&requirement.name)) {
+                                    let cached_dist = CachedDirectUrlDist::from_url(
+                                        wheel.filename,
+                                        wheel.url,
+                                        archive.hashes,
+                                        archive.path,
+                                    );
 
-                                    // Enforce hash checking.
-                                    if archive.satisfies(hasher.get(&requirement.name)) {
-                                        let cached_dist = CachedDirectUrlDist::from_url(
-                                            wheel.filename,
-                                            wheel.url,
-                                            archive.hashes,
-                                            archive.path,
-                                        );
-
-                                        debug!(
-                                            "URL wheel requirement already cached: {cached_dist}"
-                                        );
-                                        cached.push(CachedDist::Url(cached_dist));
-                                        continue;
-                                    }
+                                    debug!("URL wheel requirement already cached: {cached_dist}");
+                                    cached.push(CachedDist::Url(cached_dist));
+                                    continue;
                                 }
-                                Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                                    // The cache entry doesn't exist, so it's not fresh.
-                                }
-                                Err(err) => return Err(err.into()),
                             }
                         }
                         Dist::Built(BuiltDist::Path(wheel)) => {
@@ -307,21 +297,24 @@ impl<'a> Planner<'a> {
                                 )
                                 .entry(format!("{}.rev", wheel.filename.stem()));
 
-                            if let Some(archive) = read_timestamped_archive(
-                                &cache_entry,
-                                ArchiveTimestamp::from_file(&wheel.path)?,
-                            )? {
-                                if archive.satisfies(hasher.get(&requirement.name)) {
-                                    let cached_dist = CachedDirectUrlDist::from_url(
-                                        wheel.filename,
-                                        wheel.url,
-                                        archive.hashes,
-                                        archive.path,
-                                    );
+                            if let Some(pointer) = LocalArchivePointer::read_from(&cache_entry)? {
+                                let timestamp = ArchiveTimestamp::from_file(&wheel.path)?;
+                                if pointer.is_up_to_date(timestamp) {
+                                    let archive = pointer.into_archive();
+                                    if archive.satisfies(hasher.get(&requirement.name)) {
+                                        let cached_dist = CachedDirectUrlDist::from_url(
+                                            wheel.filename,
+                                            wheel.url,
+                                            archive.hashes,
+                                            archive.path,
+                                        );
 
-                                    debug!("Path wheel requirement already cached: {cached_dist}");
-                                    cached.push(CachedDist::Url(cached_dist));
-                                    continue;
+                                        debug!(
+                                            "Path wheel requirement already cached: {cached_dist}"
+                                        );
+                                        cached.push(CachedDist::Url(cached_dist));
+                                        continue;
+                                    }
                                 }
                             }
                         }
