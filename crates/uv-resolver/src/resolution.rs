@@ -733,9 +733,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 writeln!(
                     f,
                     "{}",
-                    format!("    # from {}", node.index().unwrap())
-                        .green()
-                        .to_string()
+                    format!("    # from {}", node.index().unwrap()).green()
                 )?;
             }
         }
