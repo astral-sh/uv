@@ -736,7 +736,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // `# from https://pypi.org/simple`).
             if self.include_index_annotation {
                 if let Some(index) = node.index() {
-                    writeln!(f, "{}", format!("    # from {}", index).green())?;
+                    writeln!(f, "{}", format!("    # from {index}").green())?;
                 }
             }
         }
