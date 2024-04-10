@@ -36,7 +36,7 @@ nh3==0.2.17
     # via readme-renderer
 packaging==24.0
     # via hatchling
-packse==0.3.13
+packse==0.3.14
 pathspec==0.12.1
     # via hatchling
 pkginfo==1.10.0
