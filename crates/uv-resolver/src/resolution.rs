@@ -505,6 +505,8 @@ pub struct DisplayResolutionGraph<'a> {
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
     /// requested each package.
     include_annotations: bool,
+    /// Whether to include indices in the output, to indicate which index was used for each package.
+    include_indices: bool,
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
@@ -518,6 +520,7 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
             false,
             false,
             true,
+            false,
             AnnotationStyle::default(),
         )
     }
@@ -531,6 +534,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         show_hashes: bool,
         include_extras: bool,
         include_annotations: bool,
+        include_indices: bool,
         annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
         Self {
@@ -539,6 +543,7 @@ impl<'a> DisplayResolutionGraph<'a> {
             show_hashes,
             include_extras,
             include_annotations,
+            include_indices,
             annotation_style,
         }
     }
@@ -677,12 +682,11 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .collect::<Vec<_>>();
                 edges.sort_unstable_by_key(|package| package.name());
 
-                let index = node.index();
-                let index_line = if index.is_some() {
-                    format!("\n    # from {}", index.unwrap())
-                } else {
-                    String::new()
-                };
+                let mut index_line = String::new();
+                if self.include_indices && node.index().is_some() {
+                    index_line = format!("\n    # from {}", node.index().unwrap());
+                }
+
                 match self.annotation_style {
                     AnnotationStyle::Line => {
                         if !edges.is_empty() {
