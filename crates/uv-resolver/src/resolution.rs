@@ -7,10 +7,8 @@ use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use pubgrub::range::Range;
-use pubgrub::solver::{Kind, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::dependency_provider::UvDependencyProvider;
 use distribution_types::{
     Dist, DistributionMetadata, LocalEditable, Name, PackageId, ResolvedDist, Verbatim,
     VersionOrUrl,
@@ -21,11 +19,10 @@ use pypi_types::Hashes;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::editables::Editables;
-use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage};
 use crate::redirect::apply_redirect;
-use crate::resolver::{InMemoryIndex, VersionsResponse};
+use crate::resolver::{InMemoryIndex, Resolution, VersionsResponse};
 use crate::{Manifest, ResolveError};
 
 /// Indicate the style of annotation comments, used to indicate the dependencies that requested each
@@ -63,29 +60,36 @@ impl ResolutionGraph {
         index: &InMemoryIndex,
         preferences: &Preferences,
         editables: Editables,
-        state: &State<UvDependencyProvider>,
-        pins: &FilePins,
+        resolution: Resolution,
     ) -> Result<Self, ResolveError> {
         // TODO(charlie): petgraph is a really heavy and unnecessary dependency here. We should
         // write our own graph, given that our requirements are so simple.
-        let selection = state.partial_solution.extract_solution();
-        let mut petgraph = petgraph::graph::Graph::with_capacity(selection.len(), selection.len());
-        let mut hashes =
-            FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
+        let mut petgraph = petgraph::graph::Graph::with_capacity(
+            resolution.packages.len(),
+            resolution.packages.len(),
+        );
+        let mut hashes = FxHashMap::with_capacity_and_hasher(
+            resolution.packages.len(),
+            BuildHasherDefault::default(),
+        );
         let mut extras = FxHashMap::default();
         let mut diagnostics = Vec::new();
 
         // Add every package to the graph.
-        let mut inverse =
-            FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
-        for (package, version) in &selection {
+        let mut inverse = FxHashMap::with_capacity_and_hasher(
+            resolution.packages.len(),
+            BuildHasherDefault::default(),
+        );
+        for (package, version) in &resolution.packages {
             match package {
                 PubGrubPackage::Package(package_name, None, None) => {
                     // Create the distribution.
                     let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
                         Dist::from_editable(package_name.clone(), editable.clone())?.into()
                     } else {
-                        pins.get(package_name, version)
+                        resolution
+                            .pins
+                            .get(package_name, version)
                             .expect("Every package should be pinned")
                             .clone()
                     };
@@ -175,7 +179,8 @@ impl ResolutionGraph {
                                 .or_insert_with(Vec::new)
                                 .push(extra.clone());
                         } else {
-                            let pinned_package = pins
+                            let pinned_package = resolution
+                                .pins
                                 .get(package_name, version)
                                 .unwrap_or_else(|| {
                                     panic!("Every package should be pinned: {package_name:?}")
@@ -242,48 +247,12 @@ impl ResolutionGraph {
                 _ => {}
             };
         }
-
-        // Add every edge to the graph.
-        for (package, version) in &selection {
-            for id in &state.incompatibilities[package] {
-                if let Kind::FromDependencyOf(
-                    self_package,
-                    self_version,
-                    dependency_package,
-                    dependency_range,
-                ) = &state.incompatibility_store[*id].kind
-                {
-                    // `Kind::FromDependencyOf` will include inverse dependencies. That is, if we're
-                    // looking for a package `A`, this list will include incompatibilities of
-                    // package `B` _depending on_ `A`. We're only interested in packages that `A`
-                    // depends on.
-                    if package != self_package {
-                        continue;
-                    }
-
-                    let PubGrubPackage::Package(self_package, _, _) = self_package else {
-                        continue;
-                    };
-                    let PubGrubPackage::Package(dependency_package, _, _) = dependency_package
-                    else {
-                        continue;
-                    };
-
-                    // For extras, we include a dependency between the extra and the base package.
-                    if self_package == dependency_package {
-                        continue;
-                    }
-
-                    if self_version.contains(version) {
-                        let self_index = &inverse[self_package];
-                        let dependency_index = &inverse[dependency_package];
-                        petgraph.update_edge(
-                            *self_index,
-                            *dependency_index,
-                            dependency_range.clone(),
-                        );
-                    }
-                }
+        for (names, ranges) in resolution.dependencies {
+            let from_index = inverse[&names.from];
+            let to_index = inverse[&names.to];
+            let edge = petgraph.update_edge(from_index, to_index, Range::empty());
+            for range in ranges {
+                petgraph[edge] = petgraph[edge].union(&range.to);
             }
         }
 
@@ -471,6 +440,10 @@ impl ResolutionGraph {
         }
         MarkerTree::And(conjuncts)
     }
+
+    // pub(crate) fn union(&mut self, from: ResolutionGraph) {
+    // todo!()
+    // }
 }
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.

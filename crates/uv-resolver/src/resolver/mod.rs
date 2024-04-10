@@ -1,5 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
+#![allow(warnings)]
+
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
@@ -115,14 +117,6 @@ pub struct Resolver<
     visited: DashSet<PackageName>,
     reporter: Option<Arc<dyn Reporter>>,
     provider: Provider,
-}
-
-pub(crate) struct ResolverState {
-    pub(crate) pubgrub: State<UvDependencyProvider>,
-    pub(crate) next: PubGrubPackage,
-    pub(crate) pins: FilePins,
-    pub(crate) priorities: PubGrubPriorities,
-    pub(crate) added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>>,
 }
 
 impl<
@@ -282,7 +276,7 @@ impl<
 
         loop {
             // Run unit propagation.
-            state.pubgrub.unit_propagation(state.next)?;
+            state.pubgrub.unit_propagation(state.next.clone())?;
 
             // Pre-visit all candidate packages, to allow metadata to be fetched in parallel. If
             // the dependency mode is direct, we only need to visit the root package.
@@ -306,8 +300,7 @@ impl<
                     &self.index,
                     &self.preferences,
                     self.editables.clone(),
-                    &state.pubgrub,
-                    &state.pins,
+                    state.into_resolution(),
                 );
             };
             state.next = highest_priority_pkg;
@@ -1217,6 +1210,111 @@ impl<
         if let Some(reporter) = self.reporter.as_ref() {
             reporter.on_complete();
         }
+    }
+}
+
+// struct Fork<
+// 'a,
+// Provider: ResolverProvider,
+// InstalledPackages: InstalledPackagesProvider + Send + Sync,
+// > {
+// resolver: Resolver<'a, Provider, InstalledPackages>,
+// state: ResolverState,
+// }
+
+struct Fork {
+    state: ResolverState,
+    deps: Dependencies,
+}
+
+pub(crate) struct ResolverState {
+    pub(crate) pubgrub: State<UvDependencyProvider>,
+    pub(crate) next: PubGrubPackage,
+    pub(crate) pins: FilePins,
+    pub(crate) priorities: PubGrubPriorities,
+    pub(crate) added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>>,
+}
+
+impl ResolverState {
+    fn into_resolution(self) -> Resolution {
+        let packages = self.pubgrub.partial_solution.extract_solution();
+        let mut dependencies = FxHashMap::default();
+        for (package, version) in &packages {
+            for id in &self.pubgrub.incompatibilities[package] {
+                let pubgrub::solver::Kind::FromDependencyOf(
+                    ref self_package,
+                    ref self_range,
+                    ref dep_package,
+                    ref dep_range,
+                ) = self.pubgrub.incompatibility_store[*id].kind
+                else {
+                    continue;
+                };
+                if package != self_package {
+                    continue;
+                }
+                let PubGrubPackage::Package(ref self_name, _, _) = self_package else {
+                    continue;
+                };
+                let PubGrubPackage::Package(ref dep_name, _, _) = dep_package else {
+                    continue;
+                };
+                if self_name == dep_name {
+                    continue;
+                }
+                if self_range.contains(version) {
+                    let names = ResolutionDependencyNames {
+                        from: self_name.clone(),
+                        to: dep_name.clone(),
+                    };
+                    let versions = ResolutionDependencyVersions {
+                        from: self_range.clone(),
+                        to: dep_range.clone(),
+                    };
+                    dependencies
+                        .entry(names)
+                        .or_insert_with(|| vec![])
+                        .push(versions);
+                }
+            }
+        }
+        Resolution {
+            packages,
+            dependencies,
+            pins: self.pins,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct Resolution {
+    pub(crate) packages: FxHashMap<PubGrubPackage, Version>,
+    pub(crate) dependencies:
+        FxHashMap<ResolutionDependencyNames, Vec<ResolutionDependencyVersions>>,
+    pub(crate) pins: FilePins,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct ResolutionDependencyNames {
+    pub(crate) from: PackageName,
+    pub(crate) to: PackageName,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct ResolutionDependencyVersions {
+    pub(crate) from: Range<Version>,
+    pub(crate) to: Range<Version>,
+}
+
+impl Resolution {
+    fn union(&mut self, other: Resolution) {
+        for (package, version) in other.packages {
+            self.packages.insert(package, version);
+        }
+        for (names, ranges) in other.dependencies {
+            self.dependencies.entry(names).or_default().extend(ranges);
+        }
+        self.pins.union(other.pins);
     }
 }
 

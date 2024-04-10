@@ -29,4 +29,10 @@ impl FilePins {
     ) -> Option<&ResolvedDist> {
         self.0.get(name)?.get(version)
     }
+
+    pub(crate) fn union(&mut self, other: FilePins) {
+        for (name, versions) in other.0 {
+            self.0.entry(name).or_default().extend(versions);
+        }
+    }
 }
