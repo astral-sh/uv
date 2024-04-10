@@ -6,11 +6,7 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use tracing::{debug, warn};
 
-use crate::{
-    credentials::Credentials,
-    keyring::{get_keyring_subprocess_auth, KeyringProvider},
-    GLOBAL_AUTH_STORE,
-};
+use crate::{credentials::Credentials, keyring::KeyringProvider, GLOBAL_AUTH_STORE};
 
 /// A middleware that adds basic authentication to requests based on the netrc file and the keyring.
 ///
@@ -68,9 +64,9 @@ impl Middleware for AuthMiddleware {
                 let credentials = Credentials::from(credentials.to_owned());
                 request = credentials.authenticated_request(request);
                 GLOBAL_AUTH_STORE.set(&url, credentials);
-            } else if matches!(self.keyring_provider, KeyringProvider::Subprocess) {
+            } else {
                 // If we have keyring support enabled, we check there as well
-                match get_keyring_subprocess_auth(&url) {
+                match self.keyring_provider.fetch(&url) {
                     Ok(Some(credentials)) => {
                         request = credentials.authenticated_request(request);
                         GLOBAL_AUTH_STORE.set(&url, credentials);
