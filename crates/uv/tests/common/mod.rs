@@ -24,6 +24,9 @@ use uv_interpreter::{find_requested_python, PythonVersion};
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
+pub const PACKSE_FIND_LINKS_URL: &str =
+    "https://raw.githubusercontent.com/astral-sh/packse/0.3.13/vendor/links.html";
+
 #[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"--cache-dir [^\s]+", "--cache-dir [CACHE_DIR]"),

@@ -1,5 +1,7 @@
 #![cfg(all(feature = "python", feature = "pypi"))]
 
+use std::process::Command;
+
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
@@ -7,12 +9,10 @@ use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use indoc::indoc;
 use itertools::Itertools;
 
-use std::process::Command;
-
 use common::{uv_snapshot, TestContext};
 use uv_fs::Simplified;
 
-use crate::common::get_bin;
+use crate::common::{get_bin, PACKSE_FIND_LINKS_URL};
 
 mod common;
 
@@ -3168,7 +3168,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.12/vendor/links.html"), @r###"
+        .arg(PACKSE_FIND_LINKS_URL), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3203,7 +3203,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.12/vendor/links.html"), @r###"
+        .arg(PACKSE_FIND_LINKS_URL), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3264,7 +3264,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.12/vendor/links.html"), @r###"
+        .arg(PACKSE_FIND_LINKS_URL), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3299,7 +3299,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.12/vendor/links.html"), @r###"
+        .arg(PACKSE_FIND_LINKS_URL), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3339,7 +3339,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.12/vendor/links.html"), @r###"
+        .arg(PACKSE_FIND_LINKS_URL), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3361,7 +3361,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.12/vendor/links.html"), @r###"
+        .arg(PACKSE_FIND_LINKS_URL), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
