@@ -1,5 +1,5 @@
 pub use archive::Archive;
-pub use distribution_database::{read_timestamped_archive, DistributionDatabase};
+pub use distribution_database::{DistributionDatabase, HttpArchivePointer, LocalArchivePointer};
 pub use download::LocalWheel;
 pub use error::Error;
 pub use git::{is_same_reference, to_precise};

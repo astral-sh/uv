@@ -13,7 +13,7 @@ use uv_normalize::PackageName;
 use uv_types::HashStrategy;
 
 use crate::index::cached_wheel::CachedWheel;
-use crate::source::{read_http_revision, REVISION};
+use crate::source::{HttpRevisionPointer, HTTP_REVISION};
 
 /// A local index of distributions that originate from a registry, like `PyPI`.
 #[derive(Debug)]
@@ -128,8 +128,7 @@ impl<'a> RegistryWheelIndex<'a> {
                     .extension()
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("rev"))
                 {
-                    if let Some(wheel) = CachedWheel::from_revision_pointer(&wheel_dir.join(&file))
-                    {
+                    if let Some(wheel) = CachedWheel::from_local_pointer(&wheel_dir.join(&file)) {
                         // Enforce hash-checking based on the built distribution.
                         if wheel.satisfies(hasher.get(package)) {
                             Self::add_wheel(wheel, tags, &mut versions);
@@ -149,9 +148,10 @@ impl<'a> RegistryWheelIndex<'a> {
             for shard in directories(&cache_shard) {
                 // Read the existing metadata from the cache, if it exists.
                 let cache_shard = cache_shard.shard(shard);
-                let revision_entry = cache_shard.entry(REVISION);
-                if let Ok(Some(revision)) = read_http_revision(&revision_entry) {
+                let revision_entry = cache_shard.entry(HTTP_REVISION);
+                if let Ok(Some(pointer)) = HttpRevisionPointer::read_from(&revision_entry) {
                     // Enforce hash-checking based on the source distribution.
+                    let revision = pointer.into_revision();
                     if revision.satisfies(hasher.get(package)) {
                         for wheel_dir in symlinks(cache_shard.join(revision.id())) {
                             if let Some(wheel) = CachedWheel::from_built_source(&wheel_dir) {

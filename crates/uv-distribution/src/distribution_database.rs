@@ -16,8 +16,10 @@ use distribution_types::{
 };
 use platform_tags::Tags;
 use pypi_types::{HashDigest, Metadata23};
-use uv_cache::{ArchiveTimestamp, CacheBucket, CacheEntry, CachedByTimestamp, WheelCache};
-use uv_client::{CacheControl, CachedClientError, Connectivity, RegistryClient};
+use uv_cache::{ArchiveTimestamp, CacheBucket, CacheEntry, Timestamp, WheelCache};
+use uv_client::{
+    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
+};
 use uv_configuration::{NoBinary, NoBuild};
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -178,7 +180,6 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
                             wheel.filename.stem(),
                         );
-
                         return self
                             .load_wheel(path, &wheel.filename, cache_entry, dist, hashes)
                             .await;
@@ -618,11 +619,17 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         let modified = ArchiveTimestamp::from_file(path).map_err(Error::CacheRead)?;
 
         // Attempt to read the archive pointer from the cache.
-        let archive_entry = wheel_entry.with_file(format!("{}.rev", filename.stem()));
-        let archive = read_timestamped_archive(&archive_entry, modified)?;
+        let pointer_entry = wheel_entry.with_file(format!("{}.rev", filename.stem()));
+        let pointer = LocalArchivePointer::read_from(&pointer_entry)?;
+
+        // Extract the archive from the pointer.
+        let archive = pointer
+            .filter(|pointer| pointer.is_up_to_date(modified))
+            .map(LocalArchivePointer::into_archive)
+            .filter(|archive| archive.has_digests(hashes));
 
         // If the file is already unzipped, and the cache is up-to-date, return it.
-        if let Some(archive) = archive.filter(|archive| archive.has_digests(hashes)) {
+        if let Some(archive) = archive {
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
                 archive: archive.path,
@@ -632,7 +639,13 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         } else if hashes.is_none() {
             // Otherwise, unzip the wheel.
             let archive = Archive::new(self.unzip_wheel(path, wheel_entry.path()).await?, vec![]);
-            write_timestamped_archive(&archive_entry, archive.clone(), modified).await?;
+
+            // Write the archive pointer to the cache.
+            let pointer = LocalArchivePointer {
+                timestamp: modified.timestamp(),
+                archive: archive.clone(),
+            };
+            pointer.write_to(&pointer_entry).await?;
 
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
@@ -669,9 +682,15 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
             let hashes = hashers.into_iter().map(HashDigest::from).collect();
 
-            // Write the archive pointer to the cache.
+            // Create an archive.
             let archive = Archive::new(archive, hashes);
-            write_timestamped_archive(&archive_entry, archive.clone(), modified).await?;
+
+            // Write the archive pointer to the cache.
+            let pointer = LocalArchivePointer {
+                timestamp: modified.timestamp(),
+                archive: archive.clone(),
+            };
+            pointer.write_to(&pointer_entry).await?;
 
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
@@ -728,37 +747,67 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     }
 }
 
-/// Write a timestamped archive path to the cache.
-async fn write_timestamped_archive(
-    cache_entry: &CacheEntry,
-    data: Archive,
-    modified: ArchiveTimestamp,
-) -> Result<(), Error> {
-    write_atomic(
-        cache_entry.path(),
-        rmp_serde::to_vec(&CachedByTimestamp {
-            timestamp: modified.timestamp(),
-            data,
-        })?,
-    )
-    .await
-    .map_err(Error::CacheWrite)
+/// A pointer to an archive in the cache, fetched from an HTTP archive.
+///
+/// Encoded with `MsgPack`, and represented on disk by a `.http` file.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct HttpArchivePointer {
+    archive: Archive,
 }
 
-/// Read an existing timestamped archive path, if it exists and is up-to-date.
-pub fn read_timestamped_archive(
-    cache_entry: &CacheEntry,
-    modified: ArchiveTimestamp,
-) -> Result<Option<Archive>, Error> {
-    match fs_err::read(cache_entry.path()) {
-        Ok(cached) => {
-            let cached = rmp_serde::from_slice::<CachedByTimestamp<Archive>>(&cached)?;
-            if cached.timestamp == modified.timestamp() {
-                return Ok(Some(cached.data));
+impl HttpArchivePointer {
+    /// Read an [`HttpArchivePointer`] from the cache.
+    pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
+        match fs_err::File::open(path.as_ref()) {
+            Ok(file) => {
+                let data = DataWithCachePolicy::from_reader(file)?.data;
+                let archive = rmp_serde::from_slice::<Archive>(&data)?;
+                Ok(Some(Self { archive }))
             }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(Error::CacheRead(err)),
         }
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-        Err(err) => return Err(Error::CacheRead(err)),
     }
-    Ok(None)
+
+    /// Return the [`Archive`] from the pointer.
+    pub fn into_archive(self) -> Archive {
+        self.archive
+    }
+}
+
+/// A pointer to an archive in the cache, fetched from a local path.
+///
+/// Encoded with `MsgPack`, and represented on disk by a `.rev` file.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LocalArchivePointer {
+    timestamp: Timestamp,
+    archive: Archive,
+}
+
+impl LocalArchivePointer {
+    /// Read an [`LocalArchivePointer`] from the cache.
+    pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
+        match fs_err::read(path) {
+            Ok(cached) => Ok(Some(rmp_serde::from_slice::<LocalArchivePointer>(&cached)?)),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(Error::CacheRead(err)),
+        }
+    }
+
+    /// Write an [`LocalArchivePointer`] to the cache.
+    pub async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
+        write_atomic(entry.path(), rmp_serde::to_vec(&self)?)
+            .await
+            .map_err(Error::CacheWrite)
+    }
+
+    /// Returns `true` if the archive is up-to-date with the given modified timestamp.
+    pub fn is_up_to_date(&self, modified: ArchiveTimestamp) -> bool {
+        self.timestamp == modified.timestamp()
+    }
+
+    /// Return the [`Archive`] from the pointer.
+    pub fn into_archive(self) -> Archive {
+        self.archive
+    }
 }

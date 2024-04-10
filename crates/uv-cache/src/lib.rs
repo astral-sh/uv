@@ -71,6 +71,12 @@ impl CacheEntry {
     }
 }
 
+impl AsRef<Path> for CacheEntry {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
 /// A subdirectory within the cache.
 #[derive(Debug, Clone)]
 pub struct CacheShard(PathBuf);
