@@ -316,7 +316,7 @@ impl Interpreter {
         }
     }
 
-    /// Check if the given Python version is satisfied by this interpreter.
+    /// Check if the interpreter matches the given Python version.
     ///
     /// If a patch version is present, we will require an exact match.
     /// Otherwise, just the major and minor version numbers need to match.
