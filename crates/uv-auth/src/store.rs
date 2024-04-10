@@ -25,7 +25,7 @@ impl AuthenticationStore {
     }
 
     /// Retrieve stored credentials for a URL, if any.
-    pub fn get(&self, url: &Url) -> Option<Arc<Credentials>> {
+    pub(crate) fn get(&self, url: &Url) -> Option<Arc<Credentials>> {
         let netloc = NetLoc::from(url);
         let store = self.store.lock().unwrap();
         if let Some(fetched) = store.get(&netloc) {
@@ -36,7 +36,7 @@ impl AuthenticationStore {
     }
 
     /// Set the stored credentials for a URL.
-    pub fn set(&self, url: &Url, credentials: Credentials) {
+    pub(crate) fn set(&self, url: &Url, credentials: Credentials) {
         let netloc = NetLoc::from(url);
         let mut store = self.store.lock().unwrap();
         store.insert(netloc, Some(Arc::new(credentials)));
@@ -47,7 +47,7 @@ impl AuthenticationStore {
     /// If there are no credentials on the URL, the store will not be updated.
     ///
     /// Returns `true` if the store was updated.
-    pub fn set_from_url(&self, url: &Url) -> bool {
+    pub(crate) fn set_from_url(&self, url: &Url) -> bool {
         let netloc = NetLoc::from(url);
         let mut store = self.store.lock().unwrap();
         if let Some(credentials) = Credentials::from_url(url) {
@@ -58,9 +58,31 @@ impl AuthenticationStore {
         }
     }
 
+    /// Populate the store with credentials in a request, if there are any.
+    ///
+    /// If there are no credentials in the request, the store will not be updated.
+    /// If there are already credentials in the store, they will not be updated.
+    /// If the attached credentials do not conform to the HTTP Basic Authentication scheme,
+    /// they will be ignored.
+    ///
+    /// Returns `true` if the store was updated.
+    pub(crate) fn set_default_from_request(&self, request: &reqwest::Request) -> bool {
+        let netloc = NetLoc::from(request.url());
+        let mut store = self.store.lock().unwrap();
+        if store.contains_key(&netloc) {
+            return false;
+        }
+        if let Some(credentials) = Credentials::from_request(request) {
+            store.insert(netloc, Some(Arc::new(credentials)));
+            true
+        } else {
+            false
+        }
+    }
+
     /// Returns `true` if we do not have credentials for the given URL and we not
     /// have attempted to fetch them before.
-    pub fn should_attempt_fetch(&self, url: &Url) -> bool {
+    pub(crate) fn should_attempt_fetch(&self, url: &Url) -> bool {
         let netloc = NetLoc::from(url);
         let store = self.store.lock().unwrap();
         store.get(&netloc).is_none()
@@ -69,7 +91,7 @@ impl AuthenticationStore {
     /// Track that fetching credentials for the given URL was attempted.
     ///
     /// If already set or if credentials have been populated for this URL, returns `false`.
-    pub fn set_fetch_attempted(&self, url: &Url) -> bool {
+    pub(crate) fn set_fetch_attempted(&self, url: &Url) -> bool {
         let netloc = NetLoc::from(url);
         let mut store = self.store.lock().unwrap();
         if store.get(&netloc).is_none() {
