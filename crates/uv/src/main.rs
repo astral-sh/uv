@@ -831,10 +831,6 @@ struct PipInstallArgs {
     #[clap(long, hide = true, conflicts_with = "prerelease")]
     pre: bool,
 
-    /// Write the compiled requirements to the given `requirements.txt` file.
-    #[clap(long, short)]
-    output_file: Option<PathBuf>,
-
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
     /// The index given by this flag is given lower priority than all other
