@@ -231,19 +231,17 @@ jobs:
     strategy:
       matrix:
         include:
-          - {
-              repo: "prefecthq/prefect",
-              command: "uv pip install --upgrade -e '.[dev]'",
-              python: "3.9",
-            }
-          - {
-              repo: "home-assistant/core",
-              command: "uv pip install -r requirements_all.txt",
-              python: "3.12",
-            }
+          - repo: "prefecthq/prefect"
+            command: "uv pip install --upgrade -e '.[dev]'"
+            python: "3.9"
+          - repo: "home-assistant/core"
+            command: "uv pip install -r requirements_all.txt"
+            python: "3.12"
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.repo }}
 
       - uses: actions/setup-python@v5
         with:
@@ -254,19 +252,13 @@ jobs:
         with:
           name: uv-linux-${{ github.sha }}
 
-      - name: "Clone project"
-        run: gh repo clone ${{ matrix.repo }} repo
-        env:
-          GH_TOKEN: ${{ github.token }}
-
       - name: "Prepare binary"
         run: chmod +x ./uv
 
       - name: "Test"
         run: |
-          cd repo
-          ../uv venv
-          ../${{ matrix.command }}
+          ./uv venv
+          ./${{ matrix.command }}
 
   cache-test-ubuntu:
     needs: build-binary-linux
