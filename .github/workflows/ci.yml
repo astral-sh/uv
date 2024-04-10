@@ -94,8 +94,7 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - if: ${{ matrix.os != 'windows' }}
-        uses: rui314/setup-mold@v1
+      - uses: zanieb/setup-mold@main
 
       - uses: Swatinem/rust-cache@v2
 
@@ -128,7 +127,7 @@ jobs:
         run: |
           rustup target add x86_64-pc-windows-msvc
           rustup component add clippy rust-src --toolchain nightly-2024-03-19-x86_64-pc-windows-msvc
-      - uses: rui314/setup-mold@v1
+      - uses: zanieb/setup-mold@main
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: "crates/uv-trampoline"
@@ -146,7 +145,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: rui314/setup-mold@v1
+      - uses: zanieb/setup-mold@main
 
       - name: "Setup musl"
         run: |
@@ -171,7 +170,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: rui314/setup-mold@v1
+      - uses: zanieb/setup-mold@main
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
@@ -191,7 +190,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: rui314/setup-mold@v1
+      - uses: zanieb/setup-mold@main
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
@@ -211,7 +210,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: rui314/setup-mold@v1
+      - uses: zanieb/setup-mold@main
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
