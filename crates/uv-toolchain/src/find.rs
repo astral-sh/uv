@@ -6,7 +6,7 @@ use crate::python_version::PythonVersion;
 
 use once_cell::sync::Lazy;
 
-/// The directory where Python toolchains are stored.
+/// The directory where Python toolchains we install are stored.
 pub static TOOLCHAIN_DIRECTORY: Lazy<PathBuf> = Lazy::new(|| {
     std::env::var_os("UV_BOOTSTRAP_DIR").map_or(
         Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
