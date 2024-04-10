@@ -96,14 +96,17 @@ impl ResolutionGraph {
 
                     // Add its hashes to the index, preserving those that were already present in
                     // the lockfile if necessary.
-                    if let Some(hash) = preferences.match_hashes(package_name, version) {
-                        hashes.insert(package_name.clone(), hash.to_vec());
+                    if let Some(digests) = preferences
+                        .match_hashes(package_name, version)
+                        .filter(|digests| !digests.is_empty())
+                    {
+                        hashes.insert(package_name.clone(), digests.to_vec());
                     } else if let Some(versions_response) = packages.get(package_name) {
                         if let VersionsResponse::Found(ref version_maps) = *versions_response {
                             for version_map in version_maps {
-                                if let Some(mut hash) = version_map.hashes(version) {
-                                    hash.sort_unstable();
-                                    hashes.insert(package_name.clone(), hash);
+                                if let Some(mut digests) = version_map.hashes(version) {
+                                    digests.sort_unstable();
+                                    hashes.insert(package_name.clone(), digests);
                                     break;
                                 }
                             }
@@ -126,14 +129,17 @@ impl ResolutionGraph {
 
                     // Add its hashes to the index, preserving those that were already present in
                     // the lockfile if necessary.
-                    if let Some(hash) = preferences.match_hashes(package_name, version) {
-                        hashes.insert(package_name.clone(), hash.to_vec());
+                    if let Some(digests) = preferences
+                        .match_hashes(package_name, version)
+                        .filter(|digests| !digests.is_empty())
+                    {
+                        hashes.insert(package_name.clone(), digests.to_vec());
                     } else if let Some(versions_response) = packages.get(package_name) {
                         if let VersionsResponse::Found(ref version_maps) = *versions_response {
                             for version_map in version_maps {
-                                if let Some(mut hash) = version_map.hashes(version) {
-                                    hash.sort_unstable();
-                                    hashes.insert(package_name.clone(), hash);
+                                if let Some(mut digests) = version_map.hashes(version) {
+                                    digests.sort_unstable();
+                                    hashes.insert(package_name.clone(), digests);
                                     break;
                                 }
                             }
