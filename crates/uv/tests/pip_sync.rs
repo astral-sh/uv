@@ -142,7 +142,6 @@ fn install() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     uv_snapshot!(command(&context)
@@ -184,7 +183,6 @@ fn install_copy() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     uv_snapshot!(command(&context)
@@ -220,7 +218,6 @@ fn install_hardlink() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     uv_snapshot!(command(&context)
@@ -256,7 +253,6 @@ fn install_many() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
     uv_snapshot!(command(&context)
@@ -288,7 +284,6 @@ fn noop() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     command(&context)
@@ -322,7 +317,6 @@ fn link() -> Result<()> {
     let venv1 = &context.venv;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     Command::new(get_bin())
@@ -384,7 +378,6 @@ fn add_remove() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     command(&context)
@@ -394,7 +387,6 @@ fn add_remove() -> Result<()> {
         .success();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("tomli==2.0.1")?;
 
     uv_snapshot!(command(&context)
@@ -427,7 +419,6 @@ fn install_sequential() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     command(&context)
@@ -437,7 +428,6 @@ fn install_sequential() -> Result<()> {
         .success();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
     uv_snapshot!(command(&context)
@@ -469,7 +459,6 @@ fn upgrade() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("tomli==2.0.0")?;
 
     command(&context)
@@ -479,7 +468,6 @@ fn upgrade() -> Result<()> {
         .success();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("tomli==2.0.1")?;
 
     uv_snapshot!(command(&context)
@@ -510,7 +498,6 @@ fn install_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(command(&context)
@@ -540,7 +527,6 @@ fn install_git_commit() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
 
     uv_snapshot!(command(&context)
@@ -570,7 +556,6 @@ fn install_git_tag() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/WerkZeug.git@2.0.0")?;
 
     uv_snapshot!(command(&context)
@@ -600,7 +585,6 @@ fn install_git_subdirectories() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\nexample-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
 
     uv_snapshot!(command(&context)
@@ -632,7 +616,6 @@ fn install_sdist() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("Werkzeug==0.9.6")?;
 
     uv_snapshot!(command(&context)
@@ -661,7 +644,6 @@ fn install_sdist_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("Werkzeug @ https://files.pythonhosted.org/packages/63/69/5702e5eb897d1a144001e21d676676bcb87b88c0862f947509ea95ea54fc/Werkzeug-0.9.6.tar.gz")?;
 
     uv_snapshot!(command(&context)
@@ -691,7 +673,6 @@ fn install_url_then_install_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     command(&context)
@@ -724,7 +705,6 @@ fn install_url_then_install_version() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     command(&context)
@@ -734,7 +714,6 @@ fn install_url_then_install_version() -> Result<()> {
         .success();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug==2.0.0")?;
 
     uv_snapshot!(command(&context)
@@ -761,7 +740,6 @@ fn install_version_then_install_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug==2.0.0")?;
 
     command(&context)
@@ -771,7 +749,6 @@ fn install_version_then_install_url() -> Result<()> {
         .success();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(command(&context)
@@ -803,7 +780,6 @@ fn install_numpy_py38() -> Result<()> {
     let context = TestContext::new("3.8");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("numpy")?;
 
     uv_snapshot!(command(&context)
@@ -832,7 +808,6 @@ fn install_no_index() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     uv_snapshot!(command(&context)
@@ -863,7 +838,6 @@ fn install_no_index_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     uv_snapshot!(command(&context)
@@ -913,10 +887,8 @@ fn install_no_index_cached() -> Result<()> {
 fn warn_on_yanked_version() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let requirements_in = context.temp_dir.child("requirements.txt");
-    requirements_in.touch()?;
-
     // This version is yanked.
+    let requirements_in = context.temp_dir.child("requirements.txt");
     requirements_in.write_str("colorama==0.4.2")?;
 
     uv_snapshot!(context.filters(), windows_filters=false, command(&context)
@@ -1167,7 +1139,6 @@ fn install_ujson() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("ujson @ https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz")?;
 
     uv_snapshot!(command(&context)
@@ -1207,7 +1178,6 @@ fn install_build_system_no_backend() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("build-system-no-backend @ https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz")?;
 
     uv_snapshot!(command(&context)
@@ -1238,7 +1208,6 @@ fn install_url_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz")?;
 
     let filters = if cfg!(windows) {
@@ -1336,7 +1305,6 @@ fn install_git_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
 
     uv_snapshot!(command(&context)
@@ -1433,7 +1401,6 @@ fn install_registry_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("future==0.18.3")?;
 
     uv_snapshot!(command(&context)
@@ -1742,7 +1709,6 @@ fn install_url_built_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl")?;
 
     let filters = if cfg!(windows) {
@@ -1839,7 +1805,6 @@ fn duplicate_package_overlap() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2")?;
 
     uv_snapshot!(command(&context)
@@ -1864,7 +1829,6 @@ fn duplicate_package_disjoint() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\nMarkupSafe==2.1.2 ; python_version < '3.6'")?;
 
     uv_snapshot!(command(&context)
@@ -1891,7 +1855,6 @@ fn reinstall() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
     uv_snapshot!(command(&context)
@@ -1944,7 +1907,6 @@ fn reinstall_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
     uv_snapshot!(command(&context)
@@ -1997,7 +1959,6 @@ fn reinstall_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@af160e0b6b7ddd81c22f1652c728ff5ac72d5c74")?;
 
     uv_snapshot!(command(&context)
@@ -2046,7 +2007,6 @@ fn refresh() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
     uv_snapshot!(command(&context)
@@ -2104,7 +2064,6 @@ fn refresh_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
 
     uv_snapshot!(command(&context)
@@ -2787,7 +2746,6 @@ fn pip_entrypoints() -> Result<()> {
     // TODO(konstin): Remove git dep when the next pip version is released.
     for pip_requirement in ["pip==24.0", "pip @ git+https://github.com/pypa/pip"] {
         let requirements_txt = context.temp_dir.child("requirements.txt");
-        requirements_txt.touch()?;
         requirements_txt.write_str(pip_requirement)?;
 
         command(&context)
@@ -2899,7 +2857,6 @@ fn compile() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     uv_snapshot!(command(&context)
