@@ -371,7 +371,8 @@ impl Dist {
         }
     }
 
-    pub fn index(&self) -> Option<String> {
+    /// Returns the [`IndexUrl`], if the distribution is from a registry.
+    pub fn index(&self) -> Option<&IndexUrl> {
         match self {
             Self::Built(dist) => dist.index(),
             Self::Source(dist) => dist.index(),
@@ -395,15 +396,16 @@ impl Dist {
 }
 
 impl BuiltDist {
-    pub fn index(&self) -> Option<String> {
+    /// Returns the [`IndexUrl`], if the distribution is from a registry.
+    pub fn index(&self) -> Option<&IndexUrl> {
         match self {
-            Self::Registry(registry) => Some(registry.index.to_string()),
+            Self::Registry(registry) => Some(&registry.index),
             Self::DirectUrl(_) => None,
             Self::Path(_) => None,
         }
     }
 
-    /// Returns the [`File`] instance, if this dist is from a registry with simple json api support
+    /// Returns the [`File`] instance, if this distribution is from a registry.
     pub fn file(&self) -> Option<&File> {
         match self {
             Self::Registry(registry) => Some(&registry.file),
@@ -421,9 +423,10 @@ impl BuiltDist {
 }
 
 impl SourceDist {
-    pub fn index(&self) -> Option<String> {
+    /// Returns the [`IndexUrl`], if the distribution is from a registry.
+    pub fn index(&self) -> Option<&IndexUrl> {
         match self {
-            Self::Registry(registry) => Some(registry.index.to_string()),
+            Self::Registry(registry) => Some(&registry.index),
             Self::DirectUrl(_) | Self::Git(_) | Self::Path(_) => None,
         }
     }

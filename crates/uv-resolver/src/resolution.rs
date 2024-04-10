@@ -12,7 +12,7 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
-    Dist, DistributionMetadata, LocalEditable, Name, PackageId, ResolvedDist, Verbatim,
+    Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, PackageId, ResolvedDist, Verbatim,
     VersionOrUrl,
 };
 use once_map::OnceMap;
@@ -584,7 +584,8 @@ impl<'a> Node<'a> {
         }
     }
 
-    fn index(&self) -> Option<String> {
+    /// Return the [`IndexUrl`] of the distribution, if any.
+    fn index(&self) -> Option<&IndexUrl> {
         match self {
             Node::Editable(_, _) => None,
             Node::Distribution(_, dist, _) => dist.index(),
