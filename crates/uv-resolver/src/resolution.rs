@@ -507,7 +507,7 @@ pub struct DisplayResolutionGraph<'a> {
     /// requested each package.
     include_annotations: bool,
     /// Whether to include indexes in the output, to indicate which index was used for each package.
-    include_indexes: bool,
+    include_index_annotation: bool,
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
@@ -536,7 +536,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         show_hashes: bool,
         include_extras: bool,
         include_annotations: bool,
-        include_indexees: bool,
+        include_index_annotation: bool,
         annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
         Self {
@@ -545,7 +545,7 @@ impl<'a> DisplayResolutionGraph<'a> {
             show_hashes,
             include_extras,
             include_annotations,
-            include_indexes: include_indexees,
+            include_index_annotation,
             annotation_style,
         }
     }
@@ -675,6 +675,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // Determine the annotation comment and separator (between comment and requirement).
             let mut annotation = None;
 
+            // If enabled, include annotations to indicate the dependencies that requested each
+            // package (e.g., `# via mypy`).
             if self.include_annotations {
                 // Display all dependencies.
                 let mut edges = self
@@ -730,12 +732,12 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 writeln!(f, "{line}")?;
             }
 
-            if self.include_indexes && node.index().is_some() {
-                writeln!(
-                    f,
-                    "{}",
-                    format!("    # from {}", node.index().unwrap()).green()
-                )?;
+            // If enabled, include indexes to indicate which index was used for each package (e.g.,
+            // `# from https://pypi.org/simple`).
+            if self.include_index_annotation {
+                if let Some(index) = node.index() {
+                    writeln!(f, "{}", format!("    # from {}", index).green())?;
+                }
             }
         }
 
