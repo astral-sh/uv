@@ -681,7 +681,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 let index_line = if index.is_some() {
                     format!("\n    # from {}", index.unwrap())
                 } else {
-                    "".to_string()
+                    String::new()
                 };
                 match self.annotation_style {
                     AnnotationStyle::Line => {
