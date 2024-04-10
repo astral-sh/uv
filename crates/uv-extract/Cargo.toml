@@ -13,12 +13,16 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
+pypi-types = { workspace = true }
+
 async-compression = { workspace = true, features = ["gzip", "zstd"] }
 async_zip = { workspace = true, features = ["tokio"] }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+md-5.workspace = true
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
+sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["io-util"] }
 tokio-tar = { workspace = true }

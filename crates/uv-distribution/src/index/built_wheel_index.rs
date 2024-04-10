@@ -1,7 +1,10 @@
-use distribution_types::{git_reference, DirectUrlSourceDist, GitSourceDist, PathSourceDist};
+use distribution_types::{
+    git_reference, DirectUrlSourceDist, GitSourceDist, Hashed, PathSourceDist,
+};
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, WheelCache};
 use uv_fs::symlinks;
+use uv_types::RequiredHashes;
 
 use crate::index::cached_wheel::CachedWheel;
 use crate::source::{read_http_revision, read_timestamped_revision, REVISION};
@@ -12,12 +15,17 @@ use crate::Error;
 pub struct BuiltWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,
+    hashes: &'a RequiredHashes,
 }
 
 impl<'a> BuiltWheelIndex<'a> {
     /// Initialize an index of built distributions.
-    pub fn new(cache: &'a Cache, tags: &'a Tags) -> Self {
-        Self { cache, tags }
+    pub fn new(cache: &'a Cache, tags: &'a Tags, hashes: &'a RequiredHashes) -> Self {
+        Self {
+            cache,
+            tags,
+            hashes,
+        }
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a direct URL.
@@ -31,12 +39,18 @@ impl<'a> BuiltWheelIndex<'a> {
             WheelCache::Url(source_dist.url.raw()).root(),
         );
 
-        // Read the revision from the cache. There's no need to enforce freshness, since we
-        // enforce freshness on the entries.
+        // Read the revision from the cache.
         let revision_entry = cache_shard.entry(REVISION);
         let Some(revision) = read_http_revision(&revision_entry)? else {
             return Ok(None);
         };
+
+        // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
+        if let Some(hashes) = self.hashes.get(&source_dist.name) {
+            if !revision.satisfies(hashes) {
+                return Ok(None);
+            }
+        }
 
         Ok(self.find(&cache_shard.shard(revision.id())))
     }
@@ -55,18 +69,29 @@ impl<'a> BuiltWheelIndex<'a> {
             return Err(Error::DirWithoutEntrypoint);
         };
 
-        // Read the revision from the cache. There's no need to enforce freshness, since we
-        // enforce freshness on the entries.
+        // Read the revision from the cache.
         let revision_entry = cache_shard.entry(REVISION);
         let Some(revision) = read_timestamped_revision(&revision_entry, modified)? else {
             return Ok(None);
         };
+
+        // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
+        if let Some(hashes) = self.hashes.get(&source_dist.name) {
+            if !revision.satisfies(hashes) {
+                return Ok(None);
+            }
+        }
 
         Ok(self.find(&cache_shard.shard(revision.id())))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.
     pub fn git(&self, source_dist: &GitSourceDist) -> Option<CachedWheel> {
+        // Enforce hash-checking, which isn't supported for Git distributions.
+        if self.hashes.get(&source_dist.name).is_some() {
+            return None;
+        }
+
         let Ok(Some(git_sha)) = git_reference(&source_dist.url) else {
             return None;
         };
@@ -100,7 +125,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // Unzipped wheels are stored as symlinks into the archive directory.
         for subdir in symlinks(shard) {
-            match CachedWheel::from_path(&subdir) {
+            match CachedWheel::from_built_source(&subdir) {
                 None => {}
                 Some(dist_info) => {
                     // Pick the wheel with the highest priority

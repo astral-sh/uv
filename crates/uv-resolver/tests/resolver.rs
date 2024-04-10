@@ -21,7 +21,9 @@ use uv_resolver::{
     DisplayResolutionGraph, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
     OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, SourceBuildTrait};
+use uv_types::{
+    BuildContext, BuildIsolation, EmptyInstalledPackages, RequiredHashes, SourceBuildTrait,
+};
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
@@ -123,6 +125,7 @@ async fn resolve(
         find_default_python(&Cache::temp().unwrap()).expect("Expected a python to be installed");
     let interpreter = Interpreter::artificial(real_interpreter.platform().clone(), markers.clone());
     let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
+    let hashes = RequiredHashes::default();
     let installed_packages = EmptyInstalledPackages;
     let resolver = Resolver::new(
         manifest,
@@ -133,6 +136,7 @@ async fn resolve(
         &client,
         &flat_index,
         &index,
+        &hashes,
         &build_context,
         &installed_packages,
     )?;

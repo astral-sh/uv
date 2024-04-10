@@ -2,15 +2,12 @@ use std::path::PathBuf;
 
 use futures::{FutureExt, StreamExt};
 use reqwest::Response;
-
 use tracing::{debug, info_span, warn, Instrument};
 use url::Url;
 
 use distribution_filename::DistFilename;
 use distribution_types::{File, FileLocation, FlatIndexLocation, IndexUrl};
-
 use pep508_rs::VerbatimUrl;
-
 use uv_cache::{Cache, CacheBucket};
 
 use crate::cached_client::{CacheControl, CachedClientError};

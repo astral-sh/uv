@@ -18,7 +18,7 @@ use uv_dispatch::BuildDispatch;
 use uv_installer::SitePackages;
 use uv_interpreter::PythonEnvironment;
 use uv_resolver::{FlatIndex, InMemoryIndex, Manifest, Options, Resolver};
-use uv_types::{BuildIsolation, InFlight};
+use uv_types::{BuildIsolation, InFlight, RequiredHashes};
 
 #[derive(ValueEnum, Default, Clone)]
 pub(crate) enum ResolveCliFormat {
@@ -58,6 +58,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
     let index_locations =
         IndexLocations::new(args.index_url, args.extra_index_url, args.find_links, false);
     let index = InMemoryIndex::default();
+    let hashes = RequiredHashes::default();
     let in_flight = InFlight::default();
     let no_build = if args.no_build {
         NoBuild::All
@@ -73,6 +74,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         FlatIndex::from_entries(
             entries,
             venv.interpreter().tags()?,
+            &RequiredHashes::default(),
             &no_build,
             &NoBinary::None,
         )
@@ -107,6 +109,7 @@ pub(crate) async fn resolve_cli(args: ResolveCliArgs) -> Result<()> {
         &client,
         &flat_index,
         &index,
+        &hashes,
         &build_dispatch,
         &site_packages,
     )?;

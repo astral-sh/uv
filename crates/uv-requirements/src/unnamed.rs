@@ -27,6 +27,8 @@ use uv_types::BuildContext;
 pub struct NamedRequirementsResolver<'a, Context: BuildContext + Send + Sync> {
     /// The requirements for the project.
     requirements: Vec<RequirementsTxtRequirement>,
+    /// Whether to check hashes for distributions.
+    require_hashes: bool,
     /// The in-memory index for resolving dependencies.
     index: &'a InMemoryIndex,
     /// The database for fetching and building distributions.
@@ -37,12 +39,14 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
     /// Instantiate a new [`NamedRequirementsResolver`] for a given set of requirements.
     pub fn new(
         requirements: Vec<RequirementsTxtRequirement>,
+        require_hashes: bool,
         context: &'a Context,
         client: &'a RegistryClient,
         index: &'a InMemoryIndex,
     ) -> Self {
         Self {
             requirements,
+            require_hashes,
             index,
             database: DistributionDatabase::new(client, context),
         }
@@ -61,6 +65,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
     pub async fn resolve(self) -> Result<Vec<Requirement>> {
         let Self {
             requirements,
+            require_hashes,
             index,
             database,
         } = self;
@@ -69,7 +74,8 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                 match requirement {
                     RequirementsTxtRequirement::Pep508(requirement) => Ok(requirement),
                     RequirementsTxtRequirement::Unnamed(requirement) => {
-                        Self::resolve_requirement(requirement, index, &database).await
+                        Self::resolve_requirement(requirement, require_hashes, index, &database)
+                            .await
                     }
                 }
             })
@@ -81,6 +87,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
     /// Infer the package name for a given "unnamed" requirement.
     async fn resolve_requirement(
         requirement: UnnamedRequirement,
+        require_hashes: bool,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'a, Context>,
     ) -> Result<Requirement> {
@@ -233,6 +240,13 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
             }
         };
 
+        // TODO(charlie): Support `--require-hashes` for unnamed requirements.
+        if require_hashes {
+            return Err(anyhow::anyhow!(
+                "Unnamed requirements are not supported with `--require-hashes`"
+            ));
+        }
+
         // Fetch the metadata for the distribution.
         let name = {
             let id = PackageId::from_url(source.url());
@@ -248,7 +262,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
-                let metadata = database.build_wheel_metadata(&source).await?;
+                let metadata = database.build_wheel_metadata(&source, &[]).await?;
 
                 let name = metadata.name.clone();
 

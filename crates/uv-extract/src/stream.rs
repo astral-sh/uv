@@ -161,7 +161,8 @@ pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
     let mut archive = tokio_tar::ArchiveBuilder::new(decompressed_bytes)
         .set_preserve_mtime(false)
         .build();
-    Ok(untar_in(&mut archive, target.as_ref()).await?)
+    untar_in(&mut archive, target.as_ref()).await?;
+    Ok(())
 }
 
 /// Unzip a `.tar.zst` archive into the target directory, without requiring `Seek`.

@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 
+use crate::hash_checking_mode::HashCheckingMode;
 use crate::{DependencyMode, PreReleaseMode, ResolutionMode};
 
 /// Options for resolving a manifest.
@@ -8,8 +9,8 @@ pub struct Options {
     pub resolution_mode: ResolutionMode,
     pub prerelease_mode: PreReleaseMode,
     pub dependency_mode: DependencyMode,
+    pub hash_checking_mode: HashCheckingMode,
     pub exclude_newer: Option<DateTime<Utc>>,
-    pub require_hashes: bool,
 }
 
 /// Builder for [`Options`].
@@ -18,8 +19,8 @@ pub struct OptionsBuilder {
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
     dependency_mode: DependencyMode,
+    hash_checking_mode: HashCheckingMode,
     exclude_newer: Option<DateTime<Utc>>,
-    require_hashes: bool,
 }
 
 impl OptionsBuilder {
@@ -49,17 +50,17 @@ impl OptionsBuilder {
         self
     }
 
+    /// Sets the hash-checking mode.
+    #[must_use]
+    pub fn hash_checking_mode(mut self, hash_checking_mode: HashCheckingMode) -> Self {
+        self.hash_checking_mode = hash_checking_mode;
+        self
+    }
+
     /// Sets the exclusion date.
     #[must_use]
     pub fn exclude_newer(mut self, exclude_newer: Option<DateTime<Utc>>) -> Self {
         self.exclude_newer = exclude_newer;
-        self
-    }
-
-    /// Sets the `--requires-hash` flag.
-    #[must_use]
-    pub fn require_hashes(mut self, require_hashes: bool) -> Self {
-        self.require_hashes = require_hashes;
         self
     }
 
@@ -69,8 +70,8 @@ impl OptionsBuilder {
             resolution_mode: self.resolution_mode,
             prerelease_mode: self.prerelease_mode,
             dependency_mode: self.dependency_mode,
+            hash_checking_mode: self.hash_checking_mode,
             exclude_newer: self.exclude_newer,
-            require_hashes: self.require_hashes,
         }
     }
 }

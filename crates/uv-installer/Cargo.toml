@@ -22,6 +22,7 @@ pypi-types = { workspace = true }
 requirements-txt = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
+uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
@@ -29,13 +30,13 @@ uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
-uv-configuration = { workspace = true }
 
 anyhow = { workspace = true }
 async-channel = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 rayon = { workspace = true }
+rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 tempfile = { workspace = true }

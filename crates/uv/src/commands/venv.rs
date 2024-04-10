@@ -21,7 +21,7 @@ use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
-use uv_types::{BuildContext, BuildIsolation, InFlight};
+use uv_types::{BuildContext, BuildIsolation, InFlight, RequiredHashes};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -167,7 +167,13 @@ async fn venv_impl(
                 .fetch(index_locations.flat_index())
                 .await
                 .map_err(VenvError::FlatIndex)?;
-            FlatIndex::from_entries(entries, tags, &NoBuild::All, &NoBinary::None)
+            FlatIndex::from_entries(
+                entries,
+                tags,
+                &RequiredHashes::default(),
+                &NoBuild::All,
+                &NoBinary::None,
+            )
         };
 
         // Create a shared in-memory index.

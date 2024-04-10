@@ -8,13 +8,14 @@ use tracing::instrument;
 use url::Url;
 
 use distribution_types::{
-    BuildableSource, CachedDist, Dist, Identifier, LocalEditable, LocalEditables, RemoteSource,
+    BuildableSource, CachedDist, Dist, Hashed, Identifier, LocalEditable, LocalEditables, Name,
+    RemoteSource,
 };
 use platform_tags::Tags;
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_distribution::DistributionDatabase;
-use uv_types::{BuildContext, InFlight};
+use uv_distribution::{DistributionDatabase, LocalWheel};
+use uv_types::{BuildContext, InFlight, RequiredHashes};
 
 use crate::editable::BuiltEditable;
 
@@ -39,6 +40,7 @@ pub enum Error {
 pub struct Downloader<'a, Context: BuildContext + Send + Sync> {
     tags: &'a Tags,
     cache: &'a Cache,
+    hashes: &'a RequiredHashes,
     database: DistributionDatabase<'a, Context>,
     reporter: Option<Arc<dyn Reporter>>,
 }
@@ -47,12 +49,14 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     pub fn new(
         cache: &'a Cache,
         tags: &'a Tags,
+        hashes: &'a RequiredHashes,
         client: &'a RegistryClient,
         build_context: &'a Context,
     ) -> Self {
         Self {
             tags,
             cache,
+            hashes,
             database: DistributionDatabase::new(client, build_context),
             reporter: None,
         }
@@ -65,6 +69,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
         Self {
             tags: self.tags,
             cache: self.cache,
+            hashes: self.hashes,
             database: self.database.with_reporter(Facade::from(reporter.clone())),
             reporter: Some(reporter.clone()),
         }
@@ -165,12 +170,27 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     pub async fn get_wheel(&self, dist: Dist, in_flight: &InFlight) -> Result<CachedDist, Error> {
         let id = dist.distribution_id();
         if in_flight.downloads.register(id.clone()) {
+            let hashes = self.hashes.get(dist.name()).unwrap_or_default();
             let result = self
                 .database
-                .get_or_build_wheel(&dist, self.tags)
+                .get_or_build_wheel(&dist, self.tags, hashes)
                 .boxed()
                 .map_err(|err| Error::Fetch(dist.clone(), err))
                 .await
+                .and_then(|wheel: LocalWheel| {
+                    if wheel.satisfies(hashes) {
+                        Ok(wheel)
+                    } else {
+                        Err(Error::Fetch(
+                            dist.clone(),
+                            uv_distribution::Error::hash_mismatch(
+                                dist.to_string(),
+                                hashes,
+                                wheel.hashes(),
+                            ),
+                        ))
+                    }
+                })
                 .map(CachedDist::from);
             match result {
                 Ok(cached) => {

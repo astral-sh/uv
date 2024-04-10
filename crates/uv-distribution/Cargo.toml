@@ -33,6 +33,7 @@ uv-configuration = { workspace = true }
 anyhow = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
+md-5 = { workspace = true }
 nanoid = { workspace = true }
 once_cell = { workspace = true }
 reqwest = { workspace = true }
@@ -40,6 +41,7 @@ reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+sha2 = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

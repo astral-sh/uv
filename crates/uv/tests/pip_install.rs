@@ -3756,3 +3756,204 @@ fn find_links_no_binary() -> Result<()> {
 
     Ok(())
 }
+
+/// Provide the wrong hash with `--require-hashes`.
+#[test]
+fn require_hashes_mismatch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write to a requirements file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    // Raise an error.
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio==4.0.0 is unusable because the hash does not match and you require anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Omit a transitive dependency in `--require-hashes`.
+#[test]
+fn require_hashes_missing_dependency() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write to a requirements file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    // Install without error when `--require-hashes` is omitted.
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: idna
+    "###
+    );
+
+    Ok(())
+}
+
+/// We disallow `--require-hashes` for editables' dependencies.
+#[test]
+fn require_hashes_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&indoc::formatdoc! {r"
+        -e file://{workspace_root}/scripts/packages/black_editable[d]
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: aiohttp
+    "###
+    );
+
+    Ok(())
+}
+
+/// If a hash is only included as a constraint, that's not good enough for `--require-hashes`.
+#[test]
+fn require_hashes_constraint() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Include the hash in the constraint file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==4.0.0")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--require-hashes")
+        .arg("-c")
+        .arg(constraints_txt.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: anyio==4.0.0
+    "###
+    );
+
+    // Include the hash in the requirements file, but pin the version in the constraint file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("anyio==4.0.0")?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--require-hashes")
+        .arg("-c")
+        .arg(constraints_txt.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    "###
+    );
+
+    Ok(())
+}
+
+/// If a hash is only included as a override, that's not good enough for `--require-hashes`.
+///
+/// TODO(charlie): This _should_ be allowed. It's a bug.
+#[test]
+fn require_hashes_override() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Include the hash in the override file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==4.0.0")?;
+
+    let overrides_txt = context.temp_dir.child("overrides.txt");
+    overrides_txt.write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--require-hashes")
+        .arg("--override")
+        .arg(overrides_txt.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: anyio==4.0.0
+    "###
+    );
+
+    // Include the hash in the requirements file, but pin the version in the override file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    let overrides_txt = context.temp_dir.child("overrides.txt");
+    overrides_txt.write_str("anyio==4.0.0")?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg(requirements_txt.path())
+        .arg("--require-hashes")
+        .arg("--override")
+        .arg(overrides_txt.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    "###
+    );
+
+    Ok(())
+}

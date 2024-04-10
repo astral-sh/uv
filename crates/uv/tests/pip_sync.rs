@@ -3081,3 +3081,1389 @@ requires-python = "<=3.5"
 
     Ok(())
 }
+
+/// Omit the hash with `--require-hashes`.
+#[test]
+fn require_hashes_missing_hash() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==4.0.0")?;
+
+    // Install without error when `--require-hashes` is omitted.
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
+    "###
+    );
+
+    // Error when `--require-hashes` is provided.
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirement must have a hash, but none were provided for: anyio==4.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Omit the version with `--require-hashes`.
+#[test]
+fn require_hashes_missing_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    // Install without error when `--require-hashes` is omitted.
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.3.0
+    "###
+    );
+
+    // Error when `--require-hashes` is provided.
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the hash for _just_ the wheel with `--no-binary`.
+#[test]
+fn require_hashes_wheel_no_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--no-binary")
+        .arg(":all:")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio==4.0.0 is unusable because the hash does not match and you require anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the hash for _just_ the wheel with `--only-binary`.
+#[test]
+fn require_hashes_wheel_only_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--only-binary")
+        .arg(":all:")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the hash for _just_ the source distribution with `--no-binary`.
+#[test]
+fn require_hashes_source_no_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--no-binary")
+        .arg(":all:")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the hash for _just_ the source distribution, with `--binary-only`.
+#[test]
+fn require_hashes_source_only_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--only-binary")
+        .arg(":all:")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio==4.0.0 is unusable because no wheels are usable and building from source is disabled and you require anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the correct hash algorithm, but the wrong digest.
+#[test]
+fn require_hashes_wrong_digest() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio==4.0.0 is unusable because the hash does not match and you require anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the correct hash, but the wrong algorithm.
+#[test]
+fn require_hashes_wrong_algorithm() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio==4.0.0 is unusable because the hash does not match and you require anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the hash for a source distribution specified as a direct URL dependency.
+#[test]
+fn require_hashes_source_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz)
+    "###
+    );
+
+    // Reinstall with the right hash, and verify that it's reused.
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.0.0 (from https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz)
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz)
+    "###
+    );
+
+    // Reinstall with the wrong hash, and verify that it's rejected despite being cached.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz
+      Caused by: Hash mismatch for anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz
+
+    Expected:
+      sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+
+    Computed:
+      sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the _wrong_ hash for a source distribution specified as a direct URL dependency.
+#[test]
+fn require_hashes_source_url_mismatch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz
+      Caused by: Hash mismatch for anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz
+
+    Expected:
+      sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+
+    Computed:
+      sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the hash for a built distribution specified as a direct URL dependency.
+#[test]
+fn require_hashes_wheel_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+    "###
+    );
+
+    // Reinstall with the right hash, and verify that it's reused.
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+    "###
+    );
+
+    // Reinstall with the wrong hash, and verify that it's rejected despite being cached.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+      Caused by: Hash mismatch for anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+
+    Expected:
+      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+
+    Computed:
+      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+    "###
+    );
+
+    // Sync a new dependency and include the wrong hash for anyio. Verify that we reuse anyio
+    // despite the wrong hash, like pip, since we don't validate hashes for already-installed
+    // distributions.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f\niniconfig==2.0.0 --hash=sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the _wrong_ hash for a built distribution specified as a direct URL dependency.
+#[test]
+fn require_hashes_wheel_url_mismatch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+      Caused by: Hash mismatch for anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+
+    Expected:
+      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+
+    Computed:
+      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+    "###
+    );
+
+    Ok(())
+}
+
+/// Reject Git dependencies when `--require-hashes` is provided.
+#[test]
+fn require_hashes_git() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82
+      Caused by: Hash-checking is not supported for Git repositories: anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82
+    "###
+    );
+
+    Ok(())
+}
+
+/// Reject local directory dependencies when `--require-hashes` is provided.
+#[test]
+fn require_hashes_source_tree() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "black @ {} --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a",
+        context
+            .workspace_root
+            .join("scripts/packages/black_editable")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to build: black @ file://[WORKSPACE]/scripts/packages/black_editable
+      Caused by: Hash-checking is not supported for local directories: black @ file://[WORKSPACE]/scripts/packages/black_editable
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the hash for _just_ the wheel with `--only-binary`.
+#[test]
+fn require_hashes_re_download() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==4.0.0")?;
+
+    // Install without `--require-hashes`.
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
+    "###
+    );
+
+    // Reinstall with `--require-hashes`, and the wrong hash.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio==4.0.0 is unusable because the hash does not match and you require anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    // Reinstall with `--require-hashes`, and the right hash.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.0.0
+     + anyio==4.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the hash for a built distribution specified as a local path dependency.
+#[test]
+fn require_hashes_wheel_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "tqdm @ {} --hash=sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13",
+        context
+            .workspace_root
+            .join("scripts/links/tqdm-1000.0.0-py3-none-any.whl")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0 (from file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl)
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the _wrong_ hash for a built distribution specified as a local path dependency.
+#[test]
+fn require_hashes_wheel_path_mismatch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "tqdm @ {} --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        context
+            .workspace_root
+            .join("scripts/links/tqdm-1000.0.0-py3-none-any.whl")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl
+      Caused by: Hash mismatch for tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl
+
+    Expected:
+      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+
+    Computed:
+      sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the hash for a source distribution specified as a local path dependency.
+#[test]
+fn require_hashes_source_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "tqdm @ {} --hash=sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b",
+        context
+            .workspace_root
+            .join("scripts/links/tqdm-999.0.0.tar.gz")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==999.0.0 (from file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz)
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include the _wrong_ hash for a source distribution specified as a local path dependency.
+#[test]
+fn require_hashes_source_path_mismatch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "tqdm @ {} --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+        context
+            .workspace_root
+            .join("scripts/links/tqdm-999.0.0.tar.gz")
+            .display()
+    ))?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to build: tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz
+      Caused by: Hash mismatch for tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz
+
+    Expected:
+      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+
+    Computed:
+      sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
+    "###
+    );
+
+    Ok(())
+}
+
+/// `--require-hashes` isn't supported for unnamed requirements (yet).
+#[test]
+fn require_hashes_unnamed() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("https://foo.com --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unnamed requirements are not supported with `--require-hashes`
+    "###
+    );
+
+    Ok(())
+}
+
+/// We allow `--require-hashes` for editables, as long as no dependencies are included.
+#[test]
+fn require_hashes_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&indoc::formatdoc! {r"
+        -e file://{workspace_root}/scripts/packages/black_editable[d]
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(requirements_txt.path())
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    "###
+    );
+
+    Ok(())
+}
+
+/// If a dependency is repeated, the hash should be required for both instances.
+#[test]
+fn require_hashes_repeated_dependency() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a\nanyio")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    "###
+    );
+
+    // Reverse the order.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio\nanyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    "###
+    );
+
+    Ok(())
+}
+
+/// If a dependency is repeated, use the last hash provided. pip seems to use the _first_ hash.
+#[test]
+fn require_hashes_repeated_hash() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Use the same hash in both cases.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(indoc::indoc! { r"
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+    " })?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+    "###
+    );
+
+    // Use a different hash, but both are correct.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(indoc::indoc! { r"
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+    " })?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+    "###
+    );
+
+    // Use a different hash. The first hash is wrong, but that's fine, since we use the last hash.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(indoc::indoc! { r"
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=md5:420d85e19168705cdf0223621b18831a
+    " })?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+    "###
+    );
+
+    // Use a different hash. The second hash is wrong. This should fail, since we use the last hash.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(indoc::indoc! { r"
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+            anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=md5:520d85e19168705cdf0223621b18831a
+    " })?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--reinstall"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+      Caused by: Hash mismatch for anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+
+    Expected:
+      md5:520d85e19168705cdf0223621b18831a
+
+    Computed:
+      md5:420d85e19168705cdf0223621b18831a
+    "###
+    );
+
+    Ok(())
+}
+
+/// If a dependency is repeated, the hash should be required for both instances.
+#[test]
+fn require_hashes_at_least_one() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Request `anyio` with a `sha256` hash.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
+    "###
+    );
+
+    // Reinstall, requesting both `sha256` and `sha512`. We should reinstall from the cache, since
+    // at least one hash matches.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a --hash=md5:420d85e19168705cdf0223621b18831a")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.0.0
+     + anyio==4.0.0
+    "###
+    );
+
+    // This should be true even if the second hash is wrong.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("anyio==4.0.0 --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a --hash=md5:1234")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.0.0
+     + anyio==4.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Using `--find-links`, but the registry doesn't provide us with a hash.
+#[test]
+fn require_hashes_find_links_no_hash() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because example-a-961b4c22==1.0.0 is unusable because it has no hash and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Using `--find-links`, and the registry serves us a correct hash.
+#[test]
+fn require_hashes_find_links_valid_hash() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/valid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example-a-961b4c22==1.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Using `--find-links`, and the registry serves us an incorrect hash.
+#[test]
+fn require_hashes_find_links_invalid_hash() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // First, request some other hash.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because example-a-961b4c22==1.0.0 is unusable because the hash does not match and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    // Second, request the invalid hash, that the registry _thinks_ is correct. We should reject it.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+
+    Expected:
+      sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
+
+    Computed:
+      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+    "###
+    );
+
+    // Third, request the correct hash, that the registry _thinks_ is correct. We should accept
+    // it, since it's already cached under this hash.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + example-a-961b4c22==1.0.0
+    "###
+    );
+
+    // Fourth, request the correct hash, that the registry _thinks_ is correct, but without the
+    // cache. We _should_ accept it, but we currently don't.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--refresh")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because example-a-961b4c22==1.0.0 is unusable because the hash does not match and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    // Finally, request the correct hash, along with the incorrect hash for the source distribution.
+    // Resolution will fail, since the incorrect hash matches the registry's hash.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e --hash=sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--refresh")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+
+    Expected:
+      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+      sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
+
+    Computed:
+      sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+    "###
+    );
+
+    Ok(())
+}
+
+/// Using `--index-url`, but the registry doesn't provide us with a hash.
+#[test]
+fn require_hashes_registry_no_hash() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--index-url")
+        .arg("https://astral-test.github.io/astral-test-hash/no-hash/simple-html/"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because example-a-961b4c22==1.0.0 is unusable because it has no hash and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Using `--index-url`, and the registry serves us a correct hash.
+#[test]
+fn require_hashes_registry_valid_hash() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes")
+        .arg("--find-links")
+        .arg("https://astral-test.github.io/astral-test-hash/valid-hash/simple-html/"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because example-a-961b4c22==1.0.0 was not found in the package registry and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Using `--index-url`, and the registry serves us an incorrect hash.
+#[test]
+fn require_hashes_registry_invalid_hash() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // First, request some other hash.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--index-url")
+        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because example-a-961b4c22==1.0.0 is unusable because the hash does not match and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    // Second, request the invalid hash, that the registry _thinks_ is correct. We should reject it.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--index-url")
+        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+
+    Expected:
+      sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
+
+    Computed:
+      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+    "###
+    );
+
+    // Third, request the correct hash, that the registry _thinks_ is correct. We should accept
+    // it, since it's already cached under this hash.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--index-url")
+        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + example-a-961b4c22==1.0.0
+    "###
+    );
+
+    // Fourth, request the correct hash, that the registry _thinks_ is correct, but without the
+    // cache. We _should_ accept it, but we currently don't.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--refresh")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--index-url")
+        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because example-a-961b4c22==1.0.0 is unusable because the hash does not match and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    "###
+    );
+
+    // Finally, request the correct hash, along with the incorrect hash for the source distribution.
+    // Resolution will fail, since the incorrect hash matches the registry's hash.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e --hash=sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--refresh")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--index-url")
+        .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+
+    Expected:
+      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+      sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
+
+    Computed:
+      sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+    "###
+    );
+
+    Ok(())
+}
