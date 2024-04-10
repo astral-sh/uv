@@ -93,6 +93,8 @@ pub(crate) enum IncompletePackage {
     Offline,
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata(String),
+    /// The wheel metadata was found, but the metadata was inconsistent.
+    InconsistentMetadata(String),
     /// The wheel has an invalid structure.
     InvalidStructure(String),
 }
@@ -646,6 +648,13 @@ impl<
                         );
                         return Ok(None);
                     }
+                    MetadataResponse::InconsistentMetadata(err) => {
+                        self.unavailable_packages.insert(
+                            package_name.clone(),
+                            UnavailablePackage::InvalidMetadata(err.to_string()),
+                        );
+                        return Ok(None);
+                    }
                     MetadataResponse::InvalidStructure(err) => {
                         self.unavailable_packages.insert(
                             package_name.clone(),
@@ -945,6 +954,7 @@ impl<
                         ));
                     }
                     MetadataResponse::InvalidMetadata(err) => {
+                        warn!("Unable to extract metadata for {package_name}: {err}");
                         self.incomplete_packages
                             .entry(package_name.clone())
                             .or_default()
@@ -956,7 +966,21 @@ impl<
                             "the package metadata could not be parsed".to_string(),
                         ));
                     }
+                    MetadataResponse::InconsistentMetadata(err) => {
+                        warn!("Unable to extract metadata for {package_name}: {err}");
+                        self.incomplete_packages
+                            .entry(package_name.clone())
+                            .or_default()
+                            .insert(
+                                version.clone(),
+                                IncompletePackage::InconsistentMetadata(err.to_string()),
+                            );
+                        return Ok(Dependencies::Unavailable(
+                            "the package metadata was inconsistent".to_string(),
+                        ));
+                    }
                     MetadataResponse::InvalidStructure(err) => {
+                        warn!("Unable to extract metadata for {package_name}: {err}");
                         self.incomplete_packages
                             .entry(package_name.clone())
                             .or_default()

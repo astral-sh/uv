@@ -446,6 +446,15 @@ impl PubGrubReportFormatter<'_> {
                                                     reason: reason.clone(),
                                                 });
                                             }
+                                            IncompletePackage::InconsistentMetadata(reason) => {
+                                                hints.insert(
+                                                    PubGrubHint::InconsistentVersionMetadata {
+                                                        package: package.clone(),
+                                                        version: version.clone(),
+                                                        reason: reason.clone(),
+                                                    },
+                                                );
+                                            }
                                             IncompletePackage::InvalidStructure(reason) => {
                                                 hints.insert(
                                                     PubGrubHint::InvalidVersionStructure {
@@ -524,6 +533,15 @@ pub(crate) enum PubGrubHint {
     },
     /// Metadata for a package version could not be parsed.
     InvalidVersionMetadata {
+        package: PubGrubPackage,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        version: Version,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        reason: String,
+    },
+    /// Metadata for a package version was inconsistent (e.g., the package name did not match that
+    /// of the file).
+    InconsistentVersionMetadata {
         package: PubGrubPackage,
         #[derivative(PartialEq = "ignore", Hash = "ignore")]
         version: Version,
@@ -622,6 +640,21 @@ impl std::fmt::Display for PubGrubHint {
                 write!(
                     f,
                     "{}{} The structure of {}=={} was invalid:\n{}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.bold(),
+                    version.bold(),
+                    textwrap::indent(reason, "  ")
+                )
+            }
+            PubGrubHint::InconsistentVersionMetadata {
+                package,
+                version,
+                reason,
+            } => {
+                write!(
+                    f,
+                    "{}{} Metadata for {}=={} was inconsistent:\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.bold(),
