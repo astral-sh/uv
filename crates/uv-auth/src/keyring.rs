@@ -4,7 +4,7 @@ use thiserror::Error;
 use tracing::debug;
 use url::Url;
 
-use crate::store::{BasicAuthData, Credential};
+use crate::credentials::Credentials;
 
 /// Keyring provider to use for authentication
 ///
@@ -24,7 +24,7 @@ pub enum KeyringProvider {
 }
 
 #[derive(Debug, Error)]
-pub enum Error {
+pub(crate) enum Error {
     #[error("Url is not valid Keyring target: {0}")]
     NotKeyringTarget(String),
     #[error(transparent)]
@@ -37,7 +37,7 @@ pub enum Error {
 ///
 /// See `pip`'s KeyringCLIProvider
 /// <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L102>
-pub fn get_keyring_subprocess_auth(url: &Url) -> Result<Option<Credential>, Error> {
+pub(crate) fn get_keyring_subprocess_auth(url: &Url) -> Result<Option<Credentials>, Error> {
     let host = url.host_str();
     if host.is_none() {
         return Err(Error::NotKeyringTarget(
@@ -76,12 +76,7 @@ pub fn get_keyring_subprocess_auth(url: &Url) -> Result<Option<Credential>, Erro
     };
 
     output.map(|password| {
-        password.map(|password| {
-            Credential::Basic(BasicAuthData {
-                username: username.to_string(),
-                password: Some(password),
-            })
-        })
+        password.map(|password| Credentials::new(username.to_string(), Some(password)))
     })
 }
 

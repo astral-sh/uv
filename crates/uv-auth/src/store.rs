@@ -1,69 +1,14 @@
+use std::sync::Arc;
 use std::{collections::HashMap, sync::Mutex};
 
-use netrc::Authenticator;
-use tracing::warn;
 use url::Url;
 
+use crate::credentials::Credentials;
 use crate::NetLoc;
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Credential {
-    Basic(BasicAuthData),
-    UrlEncoded(UrlAuthData),
-}
-
-impl Credential {
-    pub fn username(&self) -> &str {
-        match self {
-            Credential::Basic(auth) => &auth.username,
-            Credential::UrlEncoded(auth) => &auth.username,
-        }
-    }
-    pub fn password(&self) -> Option<&str> {
-        match self {
-            Credential::Basic(auth) => auth.password.as_deref(),
-            Credential::UrlEncoded(auth) => auth.password.as_deref(),
-        }
-    }
-}
-
-impl From<Authenticator> for Credential {
-    fn from(auth: Authenticator) -> Self {
-        Credential::Basic(BasicAuthData {
-            username: auth.login,
-            password: Some(auth.password),
-        })
-    }
-}
-
-// Used for URL encoded auth in User info
-// <https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.1>
-#[derive(Clone, Debug, PartialEq)]
-pub struct UrlAuthData {
-    pub username: String,
-    pub password: Option<String>,
-}
-
-impl UrlAuthData {
-    pub fn apply_to_url(&self, mut url: Url) -> Url {
-        url.set_username(&self.username)
-            .unwrap_or_else(|()| warn!("Failed to set username"));
-        url.set_password(self.password.as_deref())
-            .unwrap_or_else(|()| warn!("Failed to set password"));
-        url
-    }
-}
-
-// HttpBasicAuth - Used for netrc and keyring auth
-// <https://datatracker.ietf.org/doc/html/rfc7617>
-#[derive(Clone, Debug, PartialEq)]
-pub struct BasicAuthData {
-    pub username: String,
-    pub password: Option<String>,
-}
-
 pub struct AuthenticationStore {
-    credentials: Mutex<HashMap<NetLoc, Option<Credential>>>,
+    // `None` is used to track that a fetch was attempted for a `NetLoc` but no credentials were found
+    store: Mutex<HashMap<NetLoc, Option<Arc<Credentials>>>>,
 }
 
 impl Default for AuthenticationStore {
@@ -75,41 +20,64 @@ impl Default for AuthenticationStore {
 impl AuthenticationStore {
     pub fn new() -> Self {
         Self {
-            credentials: Mutex::new(HashMap::new()),
+            store: Mutex::new(HashMap::new()),
         }
     }
 
-    pub fn get(&self, url: &Url) -> Option<Option<Credential>> {
+    /// Retrieve stored credentials for a URL, if any.
+    pub fn get(&self, url: &Url) -> Option<Arc<Credentials>> {
         let netloc = NetLoc::from(url);
-        let credentials = self.credentials.lock().unwrap();
-        credentials.get(&netloc).cloned()
-    }
-
-    pub fn set(&self, url: &Url, auth: Option<Credential>) {
-        let netloc = NetLoc::from(url);
-        let mut credentials = self.credentials.lock().unwrap();
-        credentials.insert(netloc, auth);
-    }
-
-    /// Store in-URL credentials for future use.
-    pub fn save_from_url(&self, url: &Url) {
-        let netloc = NetLoc::from(url);
-        let mut credentials = self.credentials.lock().unwrap();
-        if url.username().is_empty() {
-            // No credentials to save
-            return;
+        let store = self.store.lock().unwrap();
+        if let Some(fetched) = store.get(&netloc) {
+            fetched.clone()
+        } else {
+            None
         }
-        let auth = UrlAuthData {
-            // Using the encoded username can break authentication when `@` is converted to `%40`
-            // so we decode it for storage; RFC7617 does not explicitly say that authentication should
-            // not be percent-encoded, but the omission of percent-encoding from all encoding discussion
-            // indicates that it probably should not be done.
-            username: urlencoding::decode(url.username())
-                .expect("An encoded username should always decode")
-                .into_owned(),
-            password: url.password().map(str::to_string),
-        };
-        credentials.insert(netloc, Some(Credential::UrlEncoded(auth)));
+    }
+
+    /// Set the stored credentials for a URL.
+    pub fn set(&self, url: &Url, credentials: Credentials) {
+        let netloc = NetLoc::from(url);
+        let mut store = self.store.lock().unwrap();
+        store.insert(netloc, Some(Arc::new(credentials)));
+    }
+
+    /// Populate the store with credentials on a URL, if there are any.
+    ///
+    /// If there are no credentials on the URL, the store will not be updated.
+    ///
+    /// Returns `true` if the store was updated.
+    pub fn set_from_url(&self, url: &Url) -> bool {
+        let netloc = NetLoc::from(url);
+        let mut store = self.store.lock().unwrap();
+        if let Some(credentials) = Credentials::from_url(url) {
+            store.insert(netloc, Some(Arc::new(credentials)));
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Returns `true` if we do not have credentials for the given URL and we not
+    /// have attempted to fetch them before.
+    pub fn should_attempt_fetch(&self, url: &Url) -> bool {
+        let netloc = NetLoc::from(url);
+        let store = self.store.lock().unwrap();
+        store.get(&netloc).is_none()
+    }
+
+    /// Track that fetching credentials for the given URL was attempted.
+    ///
+    /// If already set or if credentials have been populated for this URL, returns `false`.
+    pub fn set_fetch_attempted(&self, url: &Url) -> bool {
+        let netloc = NetLoc::from(url);
+        let mut store = self.store.lock().unwrap();
+        if store.get(&netloc).is_none() {
+            store.insert(netloc, None);
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -118,53 +86,118 @@ mod test {
     use super::*;
 
     #[test]
-    fn store_set_and_get() {
+    fn get_does_not_exist() {
         let store = AuthenticationStore::new();
-        let url = Url::parse("https://example1.com/simple/").unwrap();
-        let not_set_res = store.get(&url);
-        assert!(not_set_res.is_none());
 
-        let found_first_url = Url::parse("https://example2.com/simple/first/").unwrap();
-        let not_found_first_url = Url::parse("https://example3.com/simple/first/").unwrap();
-
-        store.set(
-            &found_first_url,
-            Some(Credential::Basic(BasicAuthData {
-                username: "u".to_string(),
-                password: Some("p".to_string()),
-            })),
-        );
-        store.set(&not_found_first_url, None);
-
-        let found_second_url = Url::parse("https://example2.com/simple/second/").unwrap();
-        let not_found_second_url = Url::parse("https://example3.com/simple/second/").unwrap();
-
-        let found_res = store.get(&found_second_url);
-        assert!(found_res.is_some());
-        let found_res = found_res.unwrap();
-        assert!(matches!(found_res, Some(Credential::Basic(_))));
-
-        let not_found_res = store.get(&not_found_second_url);
-        assert!(not_found_res.is_some());
-        let not_found_res = not_found_res.unwrap();
-        assert!(not_found_res.is_none());
+        // An empty store should return `None`
+        let url = Url::parse("https://example.com/simple/").unwrap();
+        assert!(store.get(&url).is_none());
     }
 
     #[test]
-    fn store_save_from_url() {
+    fn set_get_username() {
         let store = AuthenticationStore::new();
-        let url = Url::parse("https://u:p@example.com/simple/").unwrap();
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let credentials = Credentials::new("u".to_string(), None);
+        store.set(url, credentials.clone());
+        assert_eq!(store.get(url).as_deref(), Some(&credentials));
+    }
 
-        store.save_from_url(&url);
+    #[test]
+    fn set_get_password() {
+        let store = AuthenticationStore::new();
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let credentials = Credentials::new("".to_string(), Some("p".to_string()));
+        store.set(url, credentials.clone());
+        assert_eq!(store.get(url).as_deref(), Some(&credentials));
+    }
 
-        let found_res = store.get(&url);
-        assert!(found_res.is_some());
-        let found_res = found_res.unwrap();
-        assert!(matches!(found_res, Some(Credential::UrlEncoded(_))));
+    #[test]
+    fn set_get_username_and_password() {
+        let store = AuthenticationStore::new();
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let credentials = Credentials::new("".to_string(), Some("p".to_string()));
+        store.set(url, credentials.clone());
+        assert_eq!(store.get(url).as_deref(), Some(&credentials));
+    }
 
-        let url = Url::parse("https://example2.com/simple/").unwrap();
-        store.save_from_url(&url);
-        let found_res = store.get(&url);
-        assert!(found_res.is_none());
+    #[test]
+    fn set_from_url_username_and_password() {
+        let store = AuthenticationStore::new();
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let mut auth_url = url.clone();
+        auth_url.set_username("u").unwrap();
+        auth_url.set_password(Some("p")).unwrap();
+        store.set_from_url(&auth_url);
+        assert_eq!(
+            store.get(url).as_deref(),
+            Some(&Credentials::new("u".to_string(), Some("p".to_string())))
+        );
+    }
+
+    #[test]
+    fn set_from_url_password() {
+        let store = AuthenticationStore::new();
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let mut auth_url = url.clone();
+        auth_url.set_password(Some("p")).unwrap();
+        store.set_from_url(&auth_url);
+        assert_eq!(
+            store.get(url).as_deref(),
+            Some(&Credentials::new("".to_string(), Some("p".to_string())))
+        );
+    }
+
+    #[test]
+    fn set_from_url_username() {
+        let store = AuthenticationStore::new();
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let mut auth_url = url.clone();
+        auth_url.set_username("u").unwrap();
+        store.set_from_url(&auth_url);
+        assert_eq!(
+            store.get(url).as_deref(),
+            Some(&Credentials::new("u".to_string(), None,))
+        );
+    }
+
+    #[test]
+    fn set_from_url_no_credentials() {
+        let store = AuthenticationStore::new();
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        assert!(!store.set_from_url(url));
+        assert_eq!(store.get(url), None);
+    }
+
+    #[test]
+    fn set_from_url_does_not_clear_existing() {
+        let store = AuthenticationStore::new();
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let credentials = Credentials::new("".to_string(), Some("p".to_string()));
+        store.set(url, credentials.clone());
+        assert_eq!(store.get(url).as_deref(), Some(&credentials));
+
+        // Set from a url with no credentials, should return `false`
+        assert!(!store.set_from_url(url));
+        // The credentials should not be removed
+        assert_eq!(store.get(url).as_deref(), Some(&credentials));
+    }
+
+    #[test]
+    fn should_attempt_fetch() {
+        let store = AuthenticationStore::new();
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let credentials = Credentials::new("u".to_string(), None);
+        assert!(store.should_attempt_fetch(url));
+        store.set(url, credentials.clone());
+        assert!(!store.should_attempt_fetch(url));
+    }
+    #[test]
+    fn set_fetch_attempted() {
+        let store = AuthenticationStore::new();
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        assert!(store.should_attempt_fetch(url));
+        assert!(store.set_fetch_attempted(url));
+        assert!(!store.should_attempt_fetch(url));
     }
 }

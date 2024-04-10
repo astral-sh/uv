@@ -2,13 +2,13 @@ use http::Extensions;
 use std::path::Path;
 
 use netrc::Netrc;
-use reqwest::{header::HeaderValue, Request, Response};
+use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use tracing::{debug, warn};
 
 use crate::{
+    credentials::Credentials,
     keyring::{get_keyring_subprocess_auth, KeyringProvider},
-    store::Credential,
     GLOBAL_AUTH_STORE,
 };
 
@@ -40,94 +40,55 @@ impl AuthMiddleware {
 impl Middleware for AuthMiddleware {
     async fn handle(
         &self,
-        mut req: Request,
-        _extensions: &mut Extensions,
+        mut request: Request,
+        extensions: &mut Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
-        let url = req.url().clone();
+        let url = request.url().clone();
 
         // If the request already has an authorization header, we don't need to do anything.
         // This gives in-URL credentials precedence over the netrc file.
-        if req.headers().contains_key(reqwest::header::AUTHORIZATION) {
-            debug!("Request already has an authorization header: {url}");
-            return next.run(req, _extensions).await;
+        if request
+            .headers()
+            .contains_key(reqwest::header::AUTHORIZATION)
+        {
+            debug!("Credentials are already present for {url}");
+            return next.run(request, extensions).await;
         }
 
-        // Try auth strategies in order of precedence:
-        if let Some(stored_auth) = GLOBAL_AUTH_STORE.get(&url) {
-            // If we've already seen this URL, we can use the stored credentials
-            if let Some(auth) = stored_auth {
-                debug!("Adding authentication to already-seen URL: {url}");
-                req.headers_mut().insert(
-                    reqwest::header::AUTHORIZATION,
-                    basic_auth(auth.username(), auth.password()),
-                );
-            } else {
-                debug!("No credentials found for already-seen URL: {url}");
-            }
-        } else if let Some(auth) = self.nrc.as_ref().and_then(|nrc| {
-            // If we find a matching entry in the netrc file, we can use it
-            url.host_str()
-                .and_then(|host| nrc.hosts.get(host).or_else(|| nrc.hosts.get("default")))
-        }) {
-            let auth = Credential::from(auth.to_owned());
-            req.headers_mut().insert(
-                reqwest::header::AUTHORIZATION,
-                basic_auth(auth.username(), auth.password()),
-            );
-            GLOBAL_AUTH_STORE.set(&url, Some(auth));
-        } else if matches!(self.keyring_provider, KeyringProvider::Subprocess) {
-            // If we have keyring support enabled, we check there as well
-            match get_keyring_subprocess_auth(&url) {
-                Ok(Some(auth)) => {
-                    req.headers_mut().insert(
-                        reqwest::header::AUTHORIZATION,
-                        basic_auth(auth.username(), auth.password()),
-                    );
-                    GLOBAL_AUTH_STORE.set(&url, Some(auth));
-                }
-                Ok(None) => {
-                    debug!("No keyring credentials found for {url}");
-                }
-                Err(e) => {
-                    warn!("Failed to get keyring credentials for {url}: {e}");
+        if let Some(credentials) = GLOBAL_AUTH_STORE.get(&url) {
+            debug!("Adding stored credentials to {url}");
+            request = credentials.authenticated_request(request)
+        } else if GLOBAL_AUTH_STORE.should_attempt_fetch(&url) {
+            if let Some(credentials) = self.nrc.as_ref().and_then(|nrc| {
+                // If we find a matching entry in the netrc file, we can use it
+                url.host_str()
+                    .and_then(|host| nrc.hosts.get(host).or_else(|| nrc.hosts.get("default")))
+            }) {
+                let credentials = Credentials::from(credentials.to_owned());
+                request = credentials.authenticated_request(request);
+                GLOBAL_AUTH_STORE.set(&url, credentials);
+            } else if matches!(self.keyring_provider, KeyringProvider::Subprocess) {
+                // If we have keyring support enabled, we check there as well
+                match get_keyring_subprocess_auth(&url) {
+                    Ok(Some(credentials)) => {
+                        request = credentials.authenticated_request(request);
+                        GLOBAL_AUTH_STORE.set(&url, credentials);
+                    }
+                    Ok(None) => {
+                        debug!("No keyring credentials found for {url}");
+                    }
+                    Err(e) => {
+                        warn!("Failed to get keyring credentials for {url}: {e}");
+                    }
                 }
             }
+
+            GLOBAL_AUTH_STORE.set_fetch_attempted(&url);
         }
 
-        // If we still don't have any credentials, we save the URL so we don't have to check netrc or keyring again
-        if !req.headers().contains_key(reqwest::header::AUTHORIZATION) {
-            debug!("No credentials found for: {url}");
-            GLOBAL_AUTH_STORE.set(&url, None);
-        }
-
-        next.run(req, _extensions).await
+        next.run(request, extensions).await
     }
-}
-
-/// Create a `HeaderValue` for basic authentication.
-///
-/// Source: <https://github.com/seanmonstar/reqwest/blob/2c11ef000b151c2eebeed2c18a7b81042220c6b0/src/util.rs#L3>
-fn basic_auth<U, P>(username: U, password: Option<P>) -> HeaderValue
-where
-    U: std::fmt::Display,
-    P: std::fmt::Display,
-{
-    use base64::prelude::BASE64_STANDARD;
-    use base64::write::EncoderWriter;
-    use std::io::Write;
-
-    let mut buf = b"Basic ".to_vec();
-    {
-        let mut encoder = EncoderWriter::new(&mut buf, &BASE64_STANDARD);
-        let _ = write!(encoder, "{}:", username);
-        if let Some(password) = password {
-            let _ = write!(encoder, "{}", password);
-        }
-    }
-    let mut header = HeaderValue::from_bytes(&buf).expect("base64 is always valid HeaderValue");
-    header.set_sensitive(true);
-    header
 }
 
 #[cfg(test)]
