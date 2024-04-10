@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use crate::downloads::{Arch, Error, Libc, Os};
@@ -22,6 +23,7 @@ pub static TOOLCHAIN_DIRECTORY: Lazy<PathBuf> = Lazy::new(|| {
 /// An installed Python toolchain.
 #[derive(Debug, Clone)]
 pub struct Toolchain {
+    /// The path to the top-level directory of the installed toolchain.
     path: PathBuf,
 }
 
@@ -83,12 +85,14 @@ pub fn toolchains_for_version(version: &PythonVersion) -> Result<Vec<Toolchain>,
         // Sort "newer" versions of Python first
         .rev()
         .filter_map(|path| {
-            if path.file_name().is_some_and(|filename| {
-                filename
-                    .to_string_lossy()
-                    .starts_with(&format!("cpython-{version}"))
-                    && filename.to_string_lossy().ends_with(&platform_key)
-            }) {
+            if path
+                .file_name()
+                .map(OsStr::to_string_lossy)
+                .is_some_and(|filename| {
+                    filename.starts_with(&format!("cpython-{version}"))
+                        && filename.ends_with(&platform_key)
+                })
+            {
                 Some(Toolchain { path })
             } else {
                 None
