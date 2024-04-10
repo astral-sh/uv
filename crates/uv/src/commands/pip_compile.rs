@@ -19,9 +19,7 @@ use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
-use uv_client::{
-    BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder,
-};
+use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, SetupPyStrategy,
     Upgrade,
@@ -36,8 +34,8 @@ use uv_requirements::{
     RequirementsSource, RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, DisplayResolutionGraph, Exclusions, InMemoryIndex, Manifest,
-    OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
+    AnnotationStyle, DependencyMode, DisplayResolutionGraph, Exclusions, FlatIndex, InMemoryIndex,
+    Manifest, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
 use uv_toolchain::PythonVersion;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight};

@@ -16,8 +16,7 @@ use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
 use uv_client::{
-    BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClient,
-    RegistryClientBuilder,
+    BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
 };
 use uv_configuration::{
     ConfigSettings, IndexStrategy, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
@@ -30,7 +29,7 @@ use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
-use uv_resolver::{DependencyMode, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
+use uv_resolver::{DependencyMode, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight};
 use uv_warnings::warn_user;
 

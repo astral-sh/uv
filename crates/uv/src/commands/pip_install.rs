@@ -21,8 +21,7 @@ use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{
-    BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClient,
-    RegistryClientBuilder,
+    BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
 };
 use uv_configuration::{
     ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, Reinstall,
@@ -38,8 +37,8 @@ use uv_requirements::{
     RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    DependencyMode, Exclusions, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
-    Preference, ResolutionGraph, ResolutionMode, Resolver,
+    DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, OptionsBuilder,
+    PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{BuildIsolation, InFlight};
 use uv_warnings::warn_user;

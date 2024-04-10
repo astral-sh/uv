@@ -6,12 +6,13 @@ use chrono::{DateTime, Utc};
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
 use pypi_types::Metadata23;
-use uv_client::{FlatIndex, RegistryClient};
+use uv_client::RegistryClient;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_distribution::DistributionDatabase;
 use uv_normalize::PackageName;
 use uv_types::BuildContext;
 
+use crate::flat_index::FlatIndex;
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;

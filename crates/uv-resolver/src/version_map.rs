@@ -14,11 +14,12 @@ use pep440_rs::{Version, VersionSpecifiers};
 use platform_tags::Tags;
 use pypi_types::{HashDigest, Yanked};
 use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
-use uv_client::{FlatDistributions, OwnedArchive, SimpleMetadata, VersionFiles};
+use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::{NoBinary, NoBuild};
 use uv_normalize::PackageName;
 use uv_warnings::warn_user_once;
 
+use crate::flat_index::FlatDistributions;
 use crate::{python_requirement::PythonRequirement, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
