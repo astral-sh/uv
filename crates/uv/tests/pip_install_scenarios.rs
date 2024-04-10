@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.12/scenarios>
+//! Scenarios from <https://github.com/zanieb/packse/tree/0.3.13/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -46,9 +46,9 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.12/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.13/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.12/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/zanieb/packse/0.3.13/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -1752,7 +1752,7 @@ fn local_transitive_confounding() {
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
     "###);
 
-    // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
+    // The version '2.0.0+foo' satisfies the constraint '==2.0.0'.
     assert_not_installed(
         &context.venv,
         "local_transitive_confounding_a",
