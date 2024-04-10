@@ -715,7 +715,7 @@ impl SourceBuild {
     ///
     /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
     #[instrument(skip_all, fields(package_id = self.package_id))]
-    pub async fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
+    pub async fn build_wheel(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = fs::canonicalize(wheel_dir)?;
 
@@ -856,7 +856,7 @@ impl SourceBuildTrait for SourceBuild {
     }
 
     async fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> anyhow::Result<String> {
-        Ok(self.build(wheel_dir).await?)
+        Ok(self.build_wheel(wheel_dir).await?)
     }
 }
 

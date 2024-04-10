@@ -1467,7 +1467,7 @@ async fn run() -> Result<ExitStatus> {
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
-    let (duration_layer, _duration_guard) = logging::setup_duration();
+    let (duration_layer, _duration_guard) = logging::setup_duration()?;
     #[cfg(not(feature = "tracing-durations-export"))]
     let duration_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(

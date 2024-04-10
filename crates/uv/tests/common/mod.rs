@@ -450,6 +450,7 @@ pub fn create_bin_with_executables(
 pub fn run_and_format<T: AsRef<str>>(
     mut command: impl BorrowMut<std::process::Command>,
     filters: impl AsRef<[(T, T)]>,
+    function_name: &str,
     windows_filters: bool,
 ) -> (String, Output) {
     let program = command
@@ -457,6 +458,19 @@ pub fn run_and_format<T: AsRef<str>>(
         .get_program()
         .to_string_lossy()
         .to_string();
+
+    // Support profiling test run commands with traces.
+    if let Ok(root) = env::var("TRACING_DURATIONS_TEST_ROOT") {
+        assert!(
+            cfg!(feature = "tracing-durations-export"),
+            "You need to enable the tracing-durations-export feature to use `TRACING_DURATIONS_TEST_ROOT`"
+        );
+        command.borrow_mut().env(
+            "TRACING_DURATIONS_FILE",
+            Path::new(&root).join(function_name).with_extension("jsonl"),
+        );
+    }
+
     let output = command
         .borrow_mut()
         .output()
@@ -527,6 +541,25 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
     Ok(())
 }
 
+/// Utility macro to return the name of the current function.
+///
+/// https://stackoverflow.com/a/40234666/3549270
+#[doc(hidden)]
+#[macro_export]
+macro_rules! function_name {
+    () => {{
+        fn f() {}
+        fn type_name_of_val<T>(_: T) -> &'static str {
+            std::any::type_name::<T>()
+        }
+        let mut name = type_name_of_val(f).strip_suffix("::f").unwrap_or("");
+        while let Some(rest) = name.strip_suffix("::{{closure}}") {
+            name = rest;
+        }
+        name
+    }};
+}
+
 /// Run [`assert_cmd_snapshot!`], with default filters or with custom filters.
 ///
 /// By default, the filters will search for the generally windows-only deps colorama and tzdata,
@@ -538,13 +571,13 @@ macro_rules! uv_snapshot {
     }};
     ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, true);
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), true);
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
     ($filters:expr, windows_filters=false, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
-        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, false);
+        let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, function_name!(), false);
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
