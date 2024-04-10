@@ -1,3 +1,4 @@
+use distribution_types::HashPolicy;
 use rustc_hash::FxHashMap;
 use std::str::FromStr;
 
@@ -5,18 +6,45 @@ use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use pypi_types::{HashDigest, HashError};
 use uv_normalize::PackageName;
 
-/// A set of package versions that are permitted, even if they're marked as yanked by the
-/// relevant index.
-#[derive(Debug, Default, Clone)]
-pub struct RequiredHashes(FxHashMap<PackageName, Vec<HashDigest>>);
+#[derive(Debug, Clone)]
+pub enum HashStrategy {
+    /// No hash policy is specified.
+    None,
+    /// Hashes should be generated (specifically, a SHA-256 hash), but not validated.
+    Generate,
+    /// Hashes should be validated against a pre-defined list of hashes. If necessary, hashes should
+    /// be generated so as to ensure that the archive is valid.
+    Validate(FxHashMap<PackageName, Vec<HashDigest>>),
+}
 
-impl RequiredHashes {
-    /// Generate the [`RequiredHashes`] from a set of requirement entries.
+impl HashStrategy {
+    /// Return the [`HashPolicy`] for the given package.
+    pub fn get(&self, package_name: &PackageName) -> HashPolicy {
+        match self {
+            Self::None => HashPolicy::None,
+            Self::Generate => HashPolicy::Generate,
+            Self::Validate(hashes) => hashes
+                .get(package_name)
+                .map(Vec::as_slice)
+                .map_or(HashPolicy::None, HashPolicy::Validate),
+        }
+    }
+
+    /// Returns `true` if the given package is allowed.
+    pub fn allows(&self, package_name: &PackageName) -> bool {
+        match self {
+            Self::None => true,
+            Self::Generate => true,
+            Self::Validate(hashes) => hashes.contains_key(package_name),
+        }
+    }
+
+    /// Generate the required hashes from a set of [`Requirement`] entries.
     pub fn from_requirements(
         requirements: impl Iterator<Item = (Requirement, Vec<String>)>,
         markers: &MarkerEnvironment,
-    ) -> Result<Self, RequiredHashesError> {
-        let mut allowed_hashes = FxHashMap::<PackageName, Vec<HashDigest>>::default();
+    ) -> Result<Self, HashStrategyError> {
+        let mut hashes = FxHashMap::<PackageName, Vec<HashDigest>>::default();
 
         // For each requirement, map from name to allowed hashes. We use the last entry for each
         // package.
@@ -26,7 +54,7 @@ impl RequiredHashes {
         //
         // TODO(charlie): Preserve hashes from `requirements.txt` through to this pass, so that we
         // can iterate over requirements directly, rather than iterating over the entries.
-        for (requirement, hashes) in requirements {
+        for (requirement, digests) in requirements {
             if !requirement.evaluate_markers(markers, &[]) {
                 continue;
             }
@@ -43,51 +71,40 @@ impl RequiredHashes {
                     {
                         // Pinned versions are allowed.
                     } else {
-                        return Err(RequiredHashesError::UnpinnedRequirement(
+                        return Err(HashStrategyError::UnpinnedRequirement(
                             requirement.to_string(),
                         ));
                     }
                 }
                 None => {
-                    return Err(RequiredHashesError::UnpinnedRequirement(
+                    return Err(HashStrategyError::UnpinnedRequirement(
                         requirement.to_string(),
                     ))
                 }
             }
 
             // Every requirement must include a hash.
-            if hashes.is_empty() {
-                return Err(RequiredHashesError::MissingHashes(requirement.to_string()));
+            if digests.is_empty() {
+                return Err(HashStrategyError::MissingHashes(requirement.to_string()));
             }
 
             // Parse the hashes.
-            let hashes = hashes
+            let digests = digests
                 .iter()
-                .map(|hash| HashDigest::from_str(hash))
+                .map(|digest| HashDigest::from_str(digest))
                 .collect::<Result<Vec<_>, _>>()
                 .unwrap();
 
             // TODO(charlie): Extract hashes from URL fragments.
-            allowed_hashes.insert(requirement.name, hashes);
+            hashes.insert(requirement.name, digests);
         }
 
-        Ok(Self(allowed_hashes))
-    }
-
-    /// Returns versions for the given package which are allowed even if marked as yanked by the
-    /// relevant index.
-    pub fn get(&self, package_name: &PackageName) -> Option<&[HashDigest]> {
-        self.0.get(package_name).map(Vec::as_slice)
-    }
-
-    /// Returns whether the given package is allowed even if marked as yanked by the relevant index.
-    pub fn contains(&self, package_name: &PackageName) -> bool {
-        self.0.contains_key(package_name)
+        Ok(Self::Validate(hashes))
     }
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum RequiredHashesError {
+pub enum HashStrategyError {
     #[error(transparent)]
     Hash(#[from] HashError),
     #[error("Unnamed requirements are not supported in `--require-hashes`")]

@@ -5,13 +5,13 @@ use anyhow::{Context, Result};
 use futures::{StreamExt, TryStreamExt};
 use url::Url;
 
-use distribution_types::{BuildableSource, PackageId, PathSourceUrl, SourceUrl};
+use distribution_types::{BuildableSource, HashPolicy, PackageId, PathSourceUrl, SourceUrl};
 use pep508_rs::Requirement;
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_fs::Simplified;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
-use uv_types::BuildContext;
+use uv_types::{BuildContext, HashStrategy};
 
 use crate::ExtrasSpecification;
 
@@ -24,8 +24,8 @@ pub struct SourceTreeResolver<'a, Context: BuildContext + Send + Sync> {
     source_trees: Vec<PathBuf>,
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification<'a>,
-    /// Whether to require hashes for all dependencies.
-    require_hashes: bool,
+    /// The hash policy to enforce.
+    hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
     index: &'a InMemoryIndex,
     /// The database for fetching and building distributions.
@@ -37,7 +37,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
     pub fn new(
         source_trees: Vec<PathBuf>,
         extras: &'a ExtrasSpecification<'a>,
-        require_hashes: bool,
+        hasher: &'a HashStrategy,
         context: &'a Context,
         client: &'a RegistryClient,
         index: &'a InMemoryIndex,
@@ -45,7 +45,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
         Self {
             source_trees,
             extras,
-            require_hashes,
+            hasher,
             index,
             database: DistributionDatabase::new(client, context),
         }
@@ -87,15 +87,19 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
             path: Cow::Owned(path),
         });
 
-        // TODO(charlie): Should we enforce this earlier? If the metadata can be extracted
-        // statically, it won't go through this resolver. But we'll fail anyway, since the
-        // dependencies (when extracted from a `pyproject.toml` or `setup.py`) won't include hashes.
-        if self.require_hashes {
-            return Err(anyhow::anyhow!(
-                "Hash-checking is not supported for local directories: {}",
-                source_tree.user_display()
-            ));
-        }
+        // Determine the hash policy. Since we don't have a package name, we perform a
+        // manual match.
+        let hashes = match self.hasher {
+            HashStrategy::None => HashPolicy::None,
+            HashStrategy::Generate => HashPolicy::Generate,
+            HashStrategy::Validate(_) => {
+                // TODO(charlie): Support `--require-hashes` for unnamed requirements.
+                return Err(anyhow::anyhow!(
+                    "Hash-checking is not supported for local directories: {}",
+                    source_tree.user_display()
+                ));
+            }
+        };
 
         // Fetch the metadata for the distribution.
         let metadata = {
@@ -117,7 +121,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
-                let archive = self.database.build_wheel_metadata(&source, &[]).await?;
+                let archive = self.database.build_wheel_metadata(&source, hashes).await?;
 
                 // Insert the metadata into the index.
                 self.index

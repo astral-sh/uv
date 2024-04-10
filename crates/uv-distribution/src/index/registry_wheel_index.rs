@@ -10,7 +10,7 @@ use platform_tags::Tags;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_fs::{directories, files, symlinks};
 use uv_normalize::PackageName;
-use uv_types::RequiredHashes;
+use uv_types::HashStrategy;
 
 use crate::index::cached_wheel::CachedWheel;
 use crate::source::{read_http_revision, REVISION};
@@ -21,7 +21,7 @@ pub struct RegistryWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,
     index_locations: &'a IndexLocations,
-    hashes: &'a RequiredHashes,
+    hasher: &'a HashStrategy,
     index: FxHashMap<&'a PackageName, BTreeMap<Version, CachedRegistryDist>>,
 }
 
@@ -31,13 +31,13 @@ impl<'a> RegistryWheelIndex<'a> {
         cache: &'a Cache,
         tags: &'a Tags,
         index_locations: &'a IndexLocations,
-        hashes: &'a RequiredHashes,
+        hasher: &'a HashStrategy,
     ) -> Self {
         Self {
             cache,
             tags,
             index_locations,
-            hashes,
+            hasher,
             index: FxHashMap::default(),
         }
     }
@@ -72,7 +72,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 self.cache,
                 self.tags,
                 self.index_locations,
-                self.hashes,
+                self.hasher,
             )),
         };
         versions
@@ -84,10 +84,9 @@ impl<'a> RegistryWheelIndex<'a> {
         cache: &Cache,
         tags: &Tags,
         index_locations: &IndexLocations,
-        hashes: &RequiredHashes,
+        hasher: &HashStrategy,
     ) -> BTreeMap<Version, CachedRegistryDist> {
         let mut versions = BTreeMap::new();
-        let hashes = hashes.get(package).unwrap_or_default();
 
         // Collect into owned `IndexUrl`
         let flat_index_urls: Vec<IndexUrl> = index_locations
@@ -119,7 +118,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 {
                     if let Some(wheel) = CachedWheel::from_http_pointer(&wheel_dir.join(&file)) {
                         // Enforce hash-checking based on the built distribution.
-                        if wheel.satisfies(hashes) {
+                        if wheel.satisfies(hasher.get(package)) {
                             Self::add_wheel(wheel, tags, &mut versions);
                         }
                     }
@@ -132,7 +131,7 @@ impl<'a> RegistryWheelIndex<'a> {
                     if let Some(wheel) = CachedWheel::from_revision_pointer(&wheel_dir.join(&file))
                     {
                         // Enforce hash-checking based on the built distribution.
-                        if wheel.satisfies(hashes) {
+                        if wheel.satisfies(hasher.get(package)) {
                             Self::add_wheel(wheel, tags, &mut versions);
                         }
                     }
@@ -153,7 +152,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 let revision_entry = cache_shard.entry(REVISION);
                 if let Ok(Some(revision)) = read_http_revision(&revision_entry) {
                     // Enforce hash-checking based on the source distribution.
-                    if revision.satisfies(hashes) {
+                    if revision.satisfies(hasher.get(package)) {
                         for wheel_dir in symlinks(cache_shard.join(revision.id())) {
                             if let Some(wheel) = CachedWheel::from_built_source(&wheel_dir) {
                                 Self::add_wheel(wheel, tags, &mut versions);

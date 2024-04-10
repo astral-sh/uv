@@ -38,7 +38,7 @@ use uv_resolver::{
     Manifest, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
 use uv_toolchain::PythonVersion;
-use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight, RequiredHashes};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
@@ -199,8 +199,12 @@ pub(crate) async fn pip_compile(
         |python_version| Cow::Owned(python_version.markers(interpreter.markers())),
     );
 
-    // Don't enforce hashes during resolution.
-    let hashes = RequiredHashes::default();
+    // Generate, but don't enforce hashes for the requirements.
+    let hasher = if generate_hashes {
+        HashStrategy::Generate
+    } else {
+        HashStrategy::None
+    };
 
     // Incorporate any index locations from the provided sources.
     let index_locations =
@@ -233,7 +237,7 @@ pub(crate) async fn pip_compile(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, &tags, &hashes, &no_build, &NoBinary::None)
+        FlatIndex::from_entries(entries, &tags, &hasher, &no_build, &NoBinary::None)
     };
 
     // Track in-flight downloads, builds, etc., across resolutions.
@@ -272,7 +276,7 @@ pub(crate) async fn pip_compile(
         // Convert from unnamed to named requirements.
         let mut requirements = NamedRequirementsResolver::new(
             requirements,
-            false,
+            &hasher,
             &build_dispatch,
             &client,
             &top_level_index,
@@ -287,7 +291,7 @@ pub(crate) async fn pip_compile(
                 SourceTreeResolver::new(
                     source_trees,
                     &extras,
-                    false,
+                    &hasher,
                     &build_dispatch,
                     &client,
                     &top_level_index,
@@ -312,7 +316,7 @@ pub(crate) async fn pip_compile(
             LocalEditable { url, path, extras }
         }));
 
-        let downloader = Downloader::new(&cache, &tags, &hashes, &client, &build_dispatch)
+        let downloader = Downloader::new(&cache, &tags, &hasher, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
         // Build all editables.
@@ -360,7 +364,7 @@ pub(crate) async fn pip_compile(
         &constraints,
         &overrides,
         &editables,
-        &hashes,
+        &hasher,
         &build_dispatch,
         &client,
         &top_level_index,
@@ -399,7 +403,7 @@ pub(crate) async fn pip_compile(
         &client,
         &flat_index,
         &top_level_index,
-        &hashes,
+        &hasher,
         &build_dispatch,
         &EmptyInstalledPackages,
     )?

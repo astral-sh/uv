@@ -8,7 +8,7 @@ use pypi_types::HashDigest;
 use uv_normalize::PackageName;
 
 use crate::direct_url::{DirectUrl, LocalFileUrl};
-use crate::hashed::Hashed;
+use crate::hash::Hashed;
 use crate::{
     BuiltDist, Dist, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, SourceDist,
     VersionOrUrl,

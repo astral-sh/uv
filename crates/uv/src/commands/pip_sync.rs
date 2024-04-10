@@ -30,10 +30,8 @@ use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
-use uv_resolver::{
-    DependencyMode, FlatIndex, HashCheckingMode, InMemoryIndex, Manifest, OptionsBuilder, Resolver,
-};
-use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight, RequiredHashes};
+use uv_resolver::{DependencyMode, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
@@ -138,8 +136,8 @@ pub(crate) async fn pip_sync(
     let markers = venv.interpreter().markers();
 
     // Collect the set of required hashes.
-    let hashes = if require_hashes {
-        RequiredHashes::from_requirements(
+    let hasher = if require_hashes {
+        HashStrategy::from_requirements(
             entries
                 .into_iter()
                 .filter_map(|requirement| match requirement.requirement {
@@ -149,7 +147,7 @@ pub(crate) async fn pip_sync(
             markers,
         )?
     } else {
-        RequiredHashes::default()
+        HashStrategy::None
     };
 
     // Incorporate any index locations from the provided sources.
@@ -176,7 +174,7 @@ pub(crate) async fn pip_sync(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &hashes, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, tags, &hasher, &no_build, &no_binary)
     };
 
     // Create a shared in-memory index.
@@ -218,16 +216,11 @@ pub(crate) async fn pip_sync(
     // Convert from unnamed to named requirements.
     let requirements = {
         // Convert from unnamed to named requirements.
-        let mut requirements = NamedRequirementsResolver::new(
-            requirements,
-            require_hashes,
-            &build_dispatch,
-            &client,
-            &index,
-        )
-        .with_reporter(ResolverReporter::from(printer))
-        .resolve()
-        .await?;
+        let mut requirements =
+            NamedRequirementsResolver::new(requirements, &hasher, &build_dispatch, &client, &index)
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?;
 
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
@@ -235,7 +228,7 @@ pub(crate) async fn pip_sync(
                 SourceTreeResolver::new(
                     source_trees,
                     &ExtrasSpecification::None,
-                    require_hashes,
+                    &hasher,
                     &build_dispatch,
                     &client,
                     &index,
@@ -254,7 +247,7 @@ pub(crate) async fn pip_sync(
         editables,
         &site_packages,
         reinstall,
-        &hashes,
+        &hasher,
         venv.interpreter(),
         tags,
         &cache,
@@ -278,7 +271,7 @@ pub(crate) async fn pip_sync(
             site_packages,
             reinstall,
             &no_binary,
-            &hashes,
+            &hasher,
             &index_locations,
             &cache,
             &venv,
@@ -317,11 +310,6 @@ pub(crate) async fn pip_sync(
         // Resolve with `--no-deps`.
         let options = OptionsBuilder::new()
             .dependency_mode(DependencyMode::Direct)
-            .hash_checking_mode(if require_hashes {
-                HashCheckingMode::Enabled
-            } else {
-                HashCheckingMode::Disabled
-            })
             .build();
 
         // Create a bound on the progress bar, since we know the number of packages upfront.
@@ -337,7 +325,7 @@ pub(crate) async fn pip_sync(
             &client,
             &flat_index,
             &index,
-            &hashes,
+            &hasher,
             &build_dispatch,
             // TODO(zanieb): We should consider support for installed packages in pip sync
             &EmptyInstalledPackages,
@@ -381,7 +369,7 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(&cache, tags, &hashes, &client, &build_dispatch)
+        let downloader = Downloader::new(&cache, tags, &hasher, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader
@@ -577,7 +565,7 @@ async fn resolve_editables(
     editables: Vec<EditableRequirement>,
     site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
-    hashes: &RequiredHashes,
+    hasher: &HashStrategy,
     interpreter: &Interpreter,
     tags: &Tags,
     cache: &Cache,
@@ -644,7 +632,7 @@ async fn resolve_editables(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(cache, tags, hashes, client, build_dispatch)
+        let downloader = Downloader::new(cache, tags, hasher, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(uninstalled.len() as u64));
 
         let editables = LocalEditables::from_editables(uninstalled.iter().map(|editable| {

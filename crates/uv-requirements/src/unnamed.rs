@@ -10,8 +10,8 @@ use tracing::debug;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuildableSource, DirectSourceUrl, GitSourceUrl, PackageId, PathSourceUrl, RemoteSource,
-    SourceUrl,
+    BuildableSource, DirectSourceUrl, GitSourceUrl, HashPolicy, PackageId, PathSourceUrl,
+    RemoteSource, SourceUrl,
 };
 use pep508_rs::{
     Requirement, RequirementsTxtRequirement, Scheme, UnnamedRequirement, VersionOrUrl,
@@ -21,14 +21,14 @@ use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_normalize::PackageName;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
-use uv_types::BuildContext;
+use uv_types::{BuildContext, HashStrategy};
 
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
 pub struct NamedRequirementsResolver<'a, Context: BuildContext + Send + Sync> {
     /// The requirements for the project.
     requirements: Vec<RequirementsTxtRequirement>,
     /// Whether to check hashes for distributions.
-    require_hashes: bool,
+    hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
     index: &'a InMemoryIndex,
     /// The database for fetching and building distributions.
@@ -39,14 +39,14 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
     /// Instantiate a new [`NamedRequirementsResolver`] for a given set of requirements.
     pub fn new(
         requirements: Vec<RequirementsTxtRequirement>,
-        require_hashes: bool,
+        hasher: &'a HashStrategy,
         context: &'a Context,
         client: &'a RegistryClient,
         index: &'a InMemoryIndex,
     ) -> Self {
         Self {
             requirements,
-            require_hashes,
+            hasher,
             index,
             database: DistributionDatabase::new(client, context),
         }
@@ -65,7 +65,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
     pub async fn resolve(self) -> Result<Vec<Requirement>> {
         let Self {
             requirements,
-            require_hashes,
+            hasher,
             index,
             database,
         } = self;
@@ -74,8 +74,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                 match requirement {
                     RequirementsTxtRequirement::Pep508(requirement) => Ok(requirement),
                     RequirementsTxtRequirement::Unnamed(requirement) => {
-                        Self::resolve_requirement(requirement, require_hashes, index, &database)
-                            .await
+                        Self::resolve_requirement(requirement, hasher, index, &database).await
                     }
                 }
             })
@@ -87,7 +86,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
     /// Infer the package name for a given "unnamed" requirement.
     async fn resolve_requirement(
         requirement: UnnamedRequirement,
-        require_hashes: bool,
+        hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'a, Context>,
     ) -> Result<Requirement> {
@@ -240,13 +239,6 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
             }
         };
 
-        // TODO(charlie): Support `--require-hashes` for unnamed requirements.
-        if require_hashes {
-            return Err(anyhow::anyhow!(
-                "Unnamed requirements are not supported with `--require-hashes`"
-            ));
-        }
-
         // Fetch the metadata for the distribution.
         let name = {
             let id = PackageId::from_url(source.url());
@@ -260,9 +252,22 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                 // If the metadata is already in the index, return it.
                 archive.metadata.name.clone()
             } else {
+                // Determine the hash policy. Since we don't have a package name, we perform a
+                // manual match.
+                let hashes = match hasher {
+                    HashStrategy::None => HashPolicy::None,
+                    HashStrategy::Generate => HashPolicy::Generate,
+                    HashStrategy::Validate(_) => {
+                        // TODO(charlie): Support `--require-hashes` for unnamed requirements.
+                        return Err(anyhow::anyhow!(
+                            "Unnamed requirements are not supported with `--require-hashes`"
+                        ));
+                    }
+                };
+
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
-                let archive = database.build_wheel_metadata(&source, &[]).await?;
+                let archive = database.build_wheel_metadata(&source, hashes).await?;
 
                 let name = archive.metadata.name.clone();
 

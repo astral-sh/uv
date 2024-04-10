@@ -12,7 +12,7 @@ use uv_client::RegistryClient;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
-use uv_types::{BuildContext, RequestedRequirements, RequiredHashes};
+use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
 /// A resolver for resolving lookahead requirements from direct URLs.
 ///
@@ -40,7 +40,7 @@ pub struct LookaheadResolver<'a, Context: BuildContext + Send + Sync> {
     /// The editable requirements for the project.
     editables: &'a [(LocalEditable, Metadata23)],
     /// The required hashes for the project.
-    hashes: &'a RequiredHashes,
+    hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
     index: &'a InMemoryIndex,
     /// The database for fetching and building distributions.
@@ -55,7 +55,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
         constraints: &'a Constraints,
         overrides: &'a Overrides,
         editables: &'a [(LocalEditable, Metadata23)],
-        hashes: &'a RequiredHashes,
+        hasher: &'a HashStrategy,
         context: &'a Context,
         client: &'a RegistryClient,
         index: &'a InMemoryIndex,
@@ -65,7 +65,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
             constraints,
             overrides,
             editables,
-            hashes,
+            hasher,
             index,
             database: DistributionDatabase::new(client, context),
         }
@@ -155,10 +155,9 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
                 archive.metadata.requires_dist.clone()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
-                let hashes = self.hashes.get(dist.name()).unwrap_or_default();
                 let archive = self
                     .database
-                    .get_or_build_wheel_metadata(&dist, hashes)
+                    .get_or_build_wheel_metadata(&dist, self.hasher.get(dist.name()))
                     .await
                     .with_context(|| match &dist {
                         Dist::Built(built) => format!("Failed to download: {built}"),

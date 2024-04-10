@@ -1,4 +1,5 @@
 use std::fmt::Write;
+
 use std::path::Path;
 
 use anstream::eprint;
@@ -37,10 +38,10 @@ use uv_requirements::{
     RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    DependencyMode, Exclusions, FlatIndex, HashCheckingMode, InMemoryIndex, Manifest, Options,
-    OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
+    DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, OptionsBuilder,
+    PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_types::{BuildIsolation, InFlight, RequiredHashes};
+use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
@@ -186,8 +187,8 @@ pub(crate) async fn pip_install(
     let markers = venv.interpreter().markers();
 
     // Collect the set of required hashes.
-    let hashes = if require_hashes {
-        RequiredHashes::from_requirements(
+    let hasher = if require_hashes {
+        HashStrategy::from_requirements(
             entries
                 .into_iter()
                 .filter_map(|requirement| match requirement.requirement {
@@ -197,7 +198,7 @@ pub(crate) async fn pip_install(
             markers,
         )?
     } else {
-        RequiredHashes::default()
+        HashStrategy::None
     };
 
     // Incorporate any index locations from the provided sources.
@@ -224,7 +225,7 @@ pub(crate) async fn pip_install(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &hashes, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, tags, &hasher, &no_build, &no_binary)
     };
 
     // Determine whether to enable build isolation.
@@ -266,7 +267,7 @@ pub(crate) async fn pip_install(
         // Convert from unnamed to named requirements.
         let mut requirements = NamedRequirementsResolver::new(
             requirements,
-            require_hashes,
+            &hasher,
             &resolve_dispatch,
             &client,
             &index,
@@ -281,7 +282,7 @@ pub(crate) async fn pip_install(
                 SourceTreeResolver::new(
                     source_trees,
                     extras,
-                    require_hashes,
+                    &hasher,
                     &resolve_dispatch,
                     &client,
                     &index,
@@ -306,7 +307,7 @@ pub(crate) async fn pip_install(
         build_editables(
             &editables,
             editable_wheel_dir.path(),
-            &hashes,
+            &hasher,
             &cache,
             &interpreter,
             tags,
@@ -321,11 +322,6 @@ pub(crate) async fn pip_install(
         .resolution_mode(resolution_mode)
         .prerelease_mode(prerelease_mode)
         .dependency_mode(dependency_mode)
-        .hash_checking_mode(if require_hashes {
-            HashCheckingMode::Enabled
-        } else {
-            HashCheckingMode::Disabled
-        })
         .exclude_newer(exclude_newer)
         .build();
 
@@ -336,7 +332,7 @@ pub(crate) async fn pip_install(
         overrides,
         project,
         &editables,
-        &hashes,
+        &hasher,
         &site_packages,
         &reinstall,
         &upgrade,
@@ -397,7 +393,7 @@ pub(crate) async fn pip_install(
         link_mode,
         compile,
         &index_locations,
-        &hashes,
+        &hasher,
         tags,
         &client,
         &in_flight,
@@ -473,7 +469,7 @@ async fn read_requirements(
 async fn build_editables(
     editables: &[EditableRequirement],
     editable_wheel_dir: &Path,
-    hashes: &RequiredHashes,
+    hasher: &HashStrategy,
     cache: &Cache,
     interpreter: &Interpreter,
     tags: &Tags,
@@ -483,7 +479,7 @@ async fn build_editables(
 ) -> Result<Vec<BuiltEditable>, Error> {
     let start = std::time::Instant::now();
 
-    let downloader = Downloader::new(cache, tags, hashes, client, build_dispatch)
+    let downloader = Downloader::new(cache, tags, hasher, client, build_dispatch)
         .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
     let editables = LocalEditables::from_editables(editables.iter().map(|editable| {
@@ -540,7 +536,7 @@ async fn resolve(
     overrides: Vec<Requirement>,
     project: Option<PackageName>,
     editables: &[BuiltEditable],
-    hashes: &RequiredHashes,
+    hasher: &HashStrategy,
     site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
     upgrade: &Upgrade,
@@ -587,7 +583,7 @@ async fn resolve(
         &constraints,
         &overrides,
         &editables,
-        hashes,
+        hasher,
         build_dispatch,
         client,
         index,
@@ -618,7 +614,7 @@ async fn resolve(
         client,
         flat_index,
         index,
-        hashes,
+        hasher,
         build_dispatch,
         site_packages,
     )?
@@ -662,7 +658,7 @@ async fn install(
     link_mode: LinkMode,
     compile: bool,
     index_urls: &IndexLocations,
-    hashes: &RequiredHashes,
+    hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
     in_flight: &InFlight,
@@ -690,7 +686,7 @@ async fn install(
             site_packages,
             reinstall,
             no_binary,
-            hashes,
+            hasher,
             index_urls,
             cache,
             venv,
@@ -743,7 +739,7 @@ async fn install(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(cache, tags, hashes, client, build_dispatch)
+        let downloader = Downloader::new(cache, tags, hasher, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader
@@ -1060,7 +1056,7 @@ enum Error {
     Platform(#[from] platform_tags::PlatformError),
 
     #[error(transparent)]
-    RequiredHashes(#[from] uv_types::RequiredHashesError),
+    Hash(#[from] uv_types::HashStrategyError),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

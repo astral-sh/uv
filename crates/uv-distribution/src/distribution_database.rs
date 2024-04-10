@@ -11,8 +11,8 @@ use url::Url;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, Hashed, IndexLocations, LocalEditable, Name,
-    SourceDist,
+    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, IndexLocations,
+    LocalEditable, Name, SourceDist,
 };
 use platform_tags::Tags;
 use pypi_types::{HashDigest, Metadata23};
@@ -91,7 +91,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         &self,
         dist: &Dist,
         tags: &Tags,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         match dist {
             Dist::Built(built) => self.get_wheel(built, hashes).await,
@@ -108,7 +108,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     pub async fn get_or_build_wheel_metadata(
         &self,
         dist: &Dist,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         match dist {
             Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
@@ -147,12 +147,12 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
     /// Fetch a wheel from the cache or download it from the index.
     ///
-    /// While hashes will be generated in some cases, hash-checking is _not_ enforced and should
+    /// While hashes will be generated in all cases, hash-checking is _not_ enforced and should
     /// instead be enforced by the caller.
     async fn get_wheel(
         &self,
         dist: &BuiltDist,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         let no_binary = match self.build_context.no_binary() {
             NoBinary::None => false,
@@ -298,7 +298,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         &self,
         dist: &SourceDist,
         tags: &Tags,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         let lock = self.locks.acquire(&Dist::Source(dist.clone())).await;
         let _guard = lock.lock().await;
@@ -342,8 +342,21 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     pub async fn get_wheel_metadata(
         &self,
         dist: &BuiltDist,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        // If hash generation is enabled, and the distribution isn't hosted on an index, get the
+        // entire wheel to ensure that the hashes are included in the response. If the distribution
+        // is hosted on an index, the hashes will be included in the simple metadata response.
+        // For hash _validation_, callers are expected to enforce the policy when retrieving the
+        // wheel.
+        // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
+        if hashes.is_generate() && matches!(dist, BuiltDist::DirectUrl(_) | BuiltDist::Path(_)) {
+            let wheel = self.get_wheel(dist, hashes).await?;
+            let metadata = wheel.metadata()?;
+            let hashes = wheel.hashes;
+            return Ok(ArchiveMetadata { metadata, hashes });
+        }
+
         match self.client.wheel_metadata(dist).boxed().await {
             Ok(metadata) => Ok(ArchiveMetadata::from(metadata)),
             Err(err) if err.is_http_streaming_unsupported() => {
@@ -367,7 +380,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     pub async fn build_wheel_metadata(
         &self,
         source: &BuildableSource<'_>,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let no_build = match self.build_context.no_build() {
             NoBuild::All => true,
@@ -400,7 +413,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         filename: &WheelFilename,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<Archive, Error> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
@@ -413,12 +426,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .into_async_read();
 
                 // Create a hasher for each hash algorithm.
-                let algorithms = {
-                    let mut hash = hashes.iter().map(HashDigest::algorithm).collect::<Vec<_>>();
-                    hash.sort();
-                    hash.dedup();
-                    hash
-                };
+                let algorithms = hashes.algorithms();
                 let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
                 let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
@@ -428,7 +436,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 uv_extract::stream::unzip(&mut hasher, temp_dir.path()).await?;
 
                 // If necessary, exhaust the reader to compute the hash.
-                if !hashes.is_empty() {
+                if !hashes.is_none() {
                     hasher.finish().await.map_err(Error::HashExhaustion)?;
                 }
 
@@ -492,7 +500,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         filename: &WheelFilename,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<Archive, Error> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
@@ -521,7 +529,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     .map_err(Error::CacheWrite)?;
 
                 // If no hashes are required, parallelize the unzip operation.
-                let hashes = if hashes.is_empty() {
+                let hashes = if hashes.is_none() {
                     let file = file.into_std().await;
                     tokio::task::spawn_blocking({
                         let target = temp_dir.path().to_owned();
@@ -536,12 +544,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                     vec![]
                 } else {
                     // Create a hasher for each hash algorithm.
-                    let algorithms = {
-                        let mut hash = hashes.iter().map(HashDigest::algorithm).collect::<Vec<_>>();
-                        hash.sort();
-                        hash.dedup();
-                        hash
-                    };
+                    let algorithms = hashes.algorithms();
                     let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
                     let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
                     uv_extract::stream::unzip(&mut hasher, temp_dir.path()).await?;
@@ -609,7 +612,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         filename: &WheelFilename,
         wheel_entry: CacheEntry,
         dist: &BuiltDist,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         // Determine the last-modified time of the wheel.
         let modified = ArchiveTimestamp::from_file(path).map_err(Error::CacheRead)?;
@@ -626,7 +629,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 hashes: archive.hashes,
                 filename: filename.clone(),
             })
-        } else if hashes.is_empty() {
+        } else if hashes.is_none() {
             // Otherwise, unzip the wheel.
             let archive = Archive::new(self.unzip_wheel(path, wheel_entry.path()).await?, vec![]);
             write_timestamped_archive(&archive_entry, archive.clone(), modified).await?;
@@ -646,12 +649,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 .map_err(Error::CacheWrite)?;
 
             // Create a hasher for each hash algorithm.
-            let algorithms = {
-                let mut hash = hashes.iter().map(HashDigest::algorithm).collect::<Vec<_>>();
-                hash.sort();
-                hash.dedup();
-                hash
-            };
+            let algorithms = hashes.algorithms();
             let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 

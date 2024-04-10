@@ -16,8 +16,8 @@ use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, DirectArchiveUrl, Dist, FileLocation, GitSourceUrl, Hashed, LocalEditable,
-    PathSourceDist, PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
+    BuildableSource, DirectArchiveUrl, Dist, FileLocation, GitSourceUrl, HashPolicy, Hashed,
+    LocalEditable, PathSourceDist, PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
 };
 use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
@@ -79,7 +79,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         tags: &Tags,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
@@ -214,7 +214,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     pub(super) async fn download_and_build_metadata(
         &self,
         source: &BuildableSource<'_>,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
@@ -350,7 +350,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         tags: &Tags,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Fetch the revision for the source distribution.
         let revision = self
@@ -361,7 +361,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if !revision.satisfies(hashes) {
             return Err(Error::hash_mismatch(
                 source.to_string(),
-                hashes,
+                hashes.digests(),
                 revision.hashes(),
             ));
         }
@@ -418,7 +418,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         url: &'data Url,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // Fetch the revision for the source distribution.
         let revision = self
@@ -429,7 +429,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if !revision.satisfies(hashes) {
             return Err(Error::hash_mismatch(
                 source.to_string(),
-                hashes,
+                hashes.digests(),
                 revision.hashes(),
             ));
         }
@@ -507,7 +507,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         filename: &str,
         url: &Url,
         cache_shard: &CacheShard,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<Revision, Error> {
         let cache_entry = cache_shard.entry(REVISION);
         let cache_control = match self.client.connectivity() {
@@ -570,7 +570,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
         tags: &Tags,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
@@ -586,7 +586,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if !revision.satisfies(hashes) {
             return Err(Error::hash_mismatch(
                 source.to_string(),
-                hashes,
+                hashes.digests(),
                 revision.hashes(),
             ));
         }
@@ -640,7 +640,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::BuiltWheels,
@@ -656,7 +656,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if !revision.satisfies(hashes) {
             return Err(Error::hash_mismatch(
                 source.to_string(),
-                hashes,
+                hashes.digests(),
                 revision.hashes(),
             ));
         }
@@ -732,7 +732,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
         cache_shard: &CacheShard,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<Revision, Error> {
         // Determine the last-modified time of the source distribution.
         let modified = ArchiveTimestamp::from_file(&resource.path).map_err(Error::CacheRead)?;
@@ -779,10 +779,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
         tags: &Tags,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
-        if !hashes.is_empty() {
+        if hashes.is_validate() {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
         }
 
@@ -843,10 +843,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
-        if !hashes.is_empty() {
+        if hashes.is_validate() {
             return Err(Error::HashesNotSupportedSourceTree(source.to_string()));
         }
 
@@ -945,10 +945,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &GitSourceUrl<'_>,
         tags: &Tags,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         // Before running the build, check that the hashes match.
-        if !hashes.is_empty() {
+        if hashes.is_validate() {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
@@ -1017,10 +1017,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &GitSourceUrl<'_>,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
-        if !hashes.is_empty() {
+        if hashes.is_validate() {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
@@ -1111,7 +1111,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         filename: &str,
         target: &Path,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<Vec<HashDigest>, Error> {
         let temp_dir =
             tempfile::tempdir_in(self.build_context.cache().bucket(CacheBucket::BuiltWheels))
@@ -1122,12 +1122,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .into_async_read();
 
         // Create a hasher for each hash algorithm.
-        let algorithms = {
-            let mut hash = hashes.iter().map(HashDigest::algorithm).collect::<Vec<_>>();
-            hash.sort();
-            hash.dedup();
-            hash
-        };
+        let algorithms = hashes.algorithms();
         let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
         let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
@@ -1137,7 +1132,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         drop(span);
 
         // If necessary, exhaust the reader to compute the hash.
-        if !hashes.is_empty() {
+        if !hashes.is_none() {
             hasher.finish().await.map_err(Error::HashExhaustion)?;
         }
 
@@ -1166,7 +1161,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         path: &Path,
         target: &Path,
-        hashes: &[HashDigest],
+        hashes: HashPolicy<'_>,
     ) -> Result<Vec<HashDigest>, Error> {
         debug!("Unpacking for build: {}", path.display());
 
@@ -1178,12 +1173,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheRead)?;
 
         // Create a hasher for each hash algorithm.
-        let algorithms = {
-            let mut hash = hashes.iter().map(HashDigest::algorithm).collect::<Vec<_>>();
-            hash.sort();
-            hash.dedup();
-            hash
-        };
+        let algorithms = hashes.algorithms();
         let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
         let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
@@ -1191,7 +1181,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         uv_extract::stream::archive(&mut hasher, path, &temp_dir.path()).await?;
 
         // If necessary, exhaust the reader to compute the hash.
-        if !hashes.is_empty() {
+        if !hashes.is_none() {
             hasher.finish().await.map_err(Error::HashExhaustion)?;
         }
 
