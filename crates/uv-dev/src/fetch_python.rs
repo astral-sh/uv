@@ -4,8 +4,10 @@ use fs_err as fs;
 #[cfg(unix)]
 use fs_err::tokio::symlink;
 use futures::StreamExt;
+#[cfg(unix)]
 use itertools::Itertools;
 use std::str::FromStr;
+#[cfg(unix)]
 use std::{collections::HashMap, path::PathBuf};
 use tokio::time::Instant;
 use tracing::{info, info_span, Instrument};
@@ -93,38 +95,37 @@ pub(crate) async fn fetch_python(args: FetchPythonArgs) -> Result<()> {
 
     // Order matters here, as we overwrite previous links
     info!("Installing to `{}`...", bootstrap_dir.user_display());
-    let mut links: HashMap<PathBuf, PathBuf> = HashMap::new();
-    for (version, path) in results {
-        // TODO(zanieb): This path should be a part of the download metadata
-        #[cfg(unix)]
-        let executable = path.join("install").join("bin").join("python3");
 
-        // On Windows, linking the executable generally results in broken installations
-        // and each toolchain path will need to be added to the PATH separately in the
-        // desired order.
-        #[cfg(unix)]
-        for target in [
-            bootstrap_dir.join(format!("python{}", version.python_full_version())),
-            bootstrap_dir.join(format!("python{}.{}", version.major(), version.minor())),
-            bootstrap_dir.join(format!("python{}", version.major())),
-            bootstrap_dir.join("python"),
-        ] {
-            // Attempt to remove it, we'll fail on link if we couldn't remove it for some reason
-            // but if it's missing we don't want to error
-            let _ = fs::remove_file(&target);
-
-            symlink(&executable, &target).await?;
-
-            links.insert(target, executable.clone());
+    // On Windows, linking the executable generally results in broken installations
+    // and each toolchain path will need to be added to the PATH separately in the
+    // desired order
+    #[cfg(unix)]
+    {
+        let mut links: HashMap<PathBuf, PathBuf> = HashMap::new();
+        for (version, path) in results {
+            // TODO(zanieb): This path should be a part of the download metadata
+            let executable = path.join("install").join("bin").join("python3");
+            for target in [
+                bootstrap_dir.join(format!("python{}", version.python_full_version())),
+                bootstrap_dir.join(format!("python{}.{}", version.major(), version.minor())),
+                bootstrap_dir.join(format!("python{}", version.major())),
+                bootstrap_dir.join("python"),
+            ] {
+                // Attempt to remove it, we'll fail on link if we couldn't remove it for some reason
+                // but if it's missing we don't want to error
+                let _ = fs::remove_file(&target);
+                symlink(&executable, &target).await?;
+                links.insert(target, executable.clone());
+            }
         }
-    }
-    for (target, executable) in links.iter().sorted() {
-        info!(
-            "Linked `{}` to `{}`",
-            target.user_display(),
-            executable.user_display()
-        );
-    }
+        for (target, executable) in links.iter().sorted() {
+            info!(
+                "Linked `{}` to `{}`",
+                target.user_display(),
+                executable.user_display()
+            );
+        }
+    };
 
     info!("Installed {} versions", requests.len());
 
