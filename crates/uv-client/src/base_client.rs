@@ -169,7 +169,7 @@ impl<'a> BaseClientBuilder<'a> {
                 let client = client.with(retry_strategy);
 
                 // Initialize the authentication middleware to set headers.
-                let client = client.with(AuthMiddleware::new(self.keyring_provider));
+                let client = client.with(AuthMiddleware::new().with_keyring(self.keyring_provider));
 
                 client.build()
             }

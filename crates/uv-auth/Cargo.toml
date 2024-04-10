@@ -22,3 +22,4 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 wiremock = { workspace = true }
 insta = { version = "1.36.1" }
+test-log = { version = "0.2.15", features = ["trace"], default-features = false }
