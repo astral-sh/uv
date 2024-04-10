@@ -20,9 +20,14 @@ pub struct CachedWheel {
 
 impl CachedWheel {
     /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any`).
-    pub fn from_built_source(path: &Path) -> Option<Self> {
+    pub fn from_built_source(path: impl AsRef<Path>) -> Option<Self> {
+        let path = path.as_ref();
+
+        // Determine the wheel filename.
         let filename = path.file_name()?.to_str()?;
         let filename = WheelFilename::from_stem(filename).ok()?;
+
+        // Convert to a cached wheel.
         let archive = path.canonicalize().ok()?;
         let entry = CacheEntry::from_path(archive);
         let hashes = Vec::new();
@@ -54,7 +59,9 @@ impl CachedWheel {
     }
 
     /// Read a cached wheel from a `.http` pointer (e.g., `anyio-4.0.0-py3-none-any.http`).
-    pub fn from_http_pointer(path: &Path, cache: &Cache) -> Option<Self> {
+    pub fn from_http_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
+        let path = path.as_ref();
+
         // Determine the wheel filename.
         let filename = path.file_name()?.to_str()?;
         let filename = WheelFilename::from_stem(filename).ok()?;
@@ -73,7 +80,9 @@ impl CachedWheel {
     }
 
     /// Read a cached wheel from a `.rev` pointer (e.g., `anyio-4.0.0-py3-none-any.rev`).
-    pub fn from_local_pointer(path: &Path, cache: &Cache) -> Option<Self> {
+    pub fn from_local_pointer(path: impl AsRef<Path>, cache: &Cache) -> Option<Self> {
+        let path = path.as_ref();
+
         // Determine the wheel filename.
         let filename = path.file_name()?.to_str()?;
         let filename = WheelFilename::from_stem(filename).ok()?;

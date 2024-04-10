@@ -285,6 +285,7 @@ impl RegistryClient {
             Path::new(&match index {
                 IndexUrl::Pypi(_) => "pypi".to_string(),
                 IndexUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
+                IndexUrl::Path(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
             }),
             format!("{package_name}.rkyv"),
         );
