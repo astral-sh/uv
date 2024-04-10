@@ -164,6 +164,9 @@ impl SimpleHtml {
             .last()
             .ok_or_else(|| Error::MissingFilename(href.to_string()))?;
 
+        // Strip any query string from the filename.
+        let filename = filename.split('?').next().unwrap_or(filename);
+
         // Unquote the filename.
         let filename = urlencoding::decode(filename)
             .map_err(|_| Error::UnsupportedFilename(filename.to_string()))?;
@@ -674,6 +677,60 @@ mod tests {
                     size: None,
                     upload_time: None,
                     url: "/whl/Jinja2-3.1.2-py3-none-any.whl#",
+                    yanked: None,
+                },
+            ],
+        }
+        "###);
+    }
+
+    #[test]
+    fn parse_query_string() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+  <body>
+    <h1>Links for jinja2</h1>
+    <a href="/whl/Jinja2-3.1.2-py3-none-any.whl?project=legacy">Jinja2-3.1.2-py3-none-any.whl</a><br/>
+  </body>
+</html>
+<!--TIMESTAMP 1703347410-->
+        "#;
+        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleHtml::parse(text, &base).unwrap();
+        insta::assert_debug_snapshot!(result, @r###"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [
+                File {
+                    dist_info_metadata: None,
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl?project=legacy",
                     yanked: None,
                 },
             ],
