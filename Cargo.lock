@@ -4786,6 +4786,7 @@ dependencies = [
  "requirements-txt",
  "rkyv",
  "rustc-hash",
+ "textwrap",
  "thiserror",
  "tokio",
  "tokio-stream",

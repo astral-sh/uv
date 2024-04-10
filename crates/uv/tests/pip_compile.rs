@@ -4555,6 +4555,12 @@ fn invalid_metadata_requires_python() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because validation==2.0.0 is unusable because the package metadata could not be parsed and you require validation==2.0.0, we can conclude that the requirements are unsatisfiable.
+
+          hint: Metadata for validation==2.0.0 could not be parsed:
+            Failed to parse version: Unexpected end of version specifier, expected operator:
+            12
+            ^^
+
     "###
     );
 
@@ -4581,6 +4587,9 @@ fn invalid_metadata_multiple_dist_info() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because validation==3.0.0 is unusable because the package has an invalid format and you require validation==3.0.0, we can conclude that the requirements are unsatisfiable.
+
+          hint: The structure of validation==3.0.0 was invalid:
+            Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
     "###
     );
 
