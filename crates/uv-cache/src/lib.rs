@@ -71,6 +71,12 @@ impl CacheEntry {
     }
 }
 
+impl AsRef<Path> for CacheEntry {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
 /// A subdirectory within the cache.
 #[derive(Debug, Clone)]
 pub struct CacheShard(PathBuf);
@@ -594,12 +600,12 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            Self::BuiltWheels => "built-wheels-v2",
+            Self::BuiltWheels => "built-wheels-v3",
             Self::FlatIndex => "flat-index-v0",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v0",
             Self::Simple => "simple-v7",
-            Self::Wheels => "wheels-v0",
+            Self::Wheels => "wheels-v1",
             Self::Archive => "archive-v0",
         }
     }

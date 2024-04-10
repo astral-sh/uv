@@ -94,6 +94,7 @@ indoc = { version = "2.0.4" }
 itertools = { version = "0.12.1" }
 junction = { version = "1.0.0" }
 mailparse = { version = "0.14.0" }
+md-5 = { version = "0.10.6" }
 miette = { version = "7.2.0" }
 nanoid = { version = "0.4.0" }
 once_cell = { version = "1.19.0" }
@@ -122,7 +123,6 @@ serde_json = { version = "1.0.114" }
 sha1 = { version = "0.10.6" }
 sha2 = { version = "0.10.8" }
 sys-info = { version = "0.9.1" }
-task-local-extensions = { version = "0.1.4" }
 tempfile = { version = "3.9.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "1.0.56" }

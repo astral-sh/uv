@@ -26,12 +26,12 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use pypi_types::Metadata23;
 pub(crate) use urls::Urls;
-use uv_client::{FlatIndex, RegistryClient};
+use uv_client::RegistryClient;
 use uv_configuration::{Constraints, Overrides};
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_interpreter::Interpreter;
 use uv_normalize::PackageName;
-use uv_types::{BuildContext, InstalledPackagesProvider};
+use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::editables::Editables;
@@ -54,7 +54,7 @@ pub use crate::resolver::provider::{
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
-use crate::{DependencyMode, Exclusions, Options};
+use crate::{DependencyMode, Exclusions, FlatIndex, Options};
 
 mod batch_prefetch;
 mod index;
@@ -121,6 +121,7 @@ pub struct Resolver<
     urls: Urls,
     locals: Locals,
     dependency_mode: DependencyMode,
+    hasher: &'a HashStrategy,
     markers: &'a MarkerEnvironment,
     python_requirement: PythonRequirement,
     selector: CandidateSelector,
@@ -155,6 +156,7 @@ impl<
         client: &'a RegistryClient,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
+        hasher: &'a HashStrategy,
         build_context: &'a Context,
         installed_packages: &'a InstalledPackages,
     ) -> Result<Self, ResolveError> {
@@ -165,6 +167,7 @@ impl<
             tags,
             PythonRequirement::new(interpreter, markers),
             AllowedYanks::from_manifest(&manifest, markers),
+            hasher,
             options.exclude_newer,
             build_context.no_binary(),
             build_context.no_build(),
@@ -172,6 +175,7 @@ impl<
         Self::new_custom_io(
             manifest,
             options,
+            hasher,
             markers,
             PythonRequirement::new(interpreter, markers),
             index,
@@ -188,9 +192,11 @@ impl<
     > Resolver<'a, Provider, InstalledPackages>
 {
     /// Initialize a new resolver using a user provided backend.
+    #[allow(clippy::too_many_arguments)]
     pub fn new_custom_io(
         manifest: Manifest,
         options: Options,
+        hasher: &'a HashStrategy,
         markers: &'a MarkerEnvironment,
         python_requirement: PythonRequirement,
         index: &'a InMemoryIndex,
@@ -213,6 +219,7 @@ impl<
             preferences: Preferences::from_iter(manifest.preferences, markers),
             exclusions: manifest.exclusions,
             editables: Editables::from_requirements(manifest.editables),
+            hasher,
             markers,
             python_requirement,
             reporter: None,
@@ -517,6 +524,11 @@ impl<
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Python(_) => {}
             PubGrubPackage::Package(package_name, _extra, None) => {
+                // Validate that the package is permitted under hash-checking mode.
+                if !self.hasher.allows(package_name) {
+                    return Err(ResolveError::UnhashedPackage(package_name.clone()));
+                }
+
                 // Emit a request to fetch the metadata for this package.
                 if self.index.packages.register(package_name.clone()) {
                     priorities.add(package_name.clone());
@@ -526,6 +538,11 @@ impl<
                 }
             }
             PubGrubPackage::Package(package_name, _extra, Some(url)) => {
+                // Validate that the package is permitted under hash-checking mode.
+                if !self.hasher.allows(package_name) {
+                    return Err(ResolveError::UnhashedPackage(package_name.clone()));
+                }
+
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(package_name.clone(), url.clone())?;
                 if self.index.distributions.register(dist.package_id()) {
@@ -635,7 +652,7 @@ impl<
 
                 // If we failed to fetch the metadata for a URL, we can't proceed.
                 let metadata = match &*response {
-                    MetadataResponse::Found(metadata) => metadata,
+                    MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Offline => {
                         self.unavailable_packages
                             .insert(package_name.clone(), UnavailablePackage::Offline);
@@ -942,7 +959,7 @@ impl<
                     .ok_or(ResolveError::Unregistered)?;
 
                 let metadata = match &*response {
-                    MetadataResponse::Found(metadata) => metadata,
+                    MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Offline => {
                         self.incomplete_packages
                             .entry(package_name.clone())
@@ -1043,9 +1060,10 @@ impl<
                 }
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
-                    self.index
-                        .distributions
-                        .done(dist.package_id(), MetadataResponse::Found(metadata));
+                    self.index.distributions.done(
+                        dist.package_id(),
+                        MetadataResponse::Found(ArchiveMetadata::from(metadata)),
+                    );
                 }
                 Some(Response::Dist {
                     dist: Dist::Built(dist),

@@ -299,6 +299,34 @@ impl CachedClient {
         }
     }
 
+    /// Make a request without checking whether the cache is fresh.
+    pub async fn skip_cache<
+        Payload: Serialize + DeserializeOwned + Send + 'static,
+        CallBackError,
+        Callback,
+        CallbackReturn,
+    >(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+        response_callback: Callback,
+    ) -> Result<Payload, CachedClientError<CallBackError>>
+    where
+        Callback: FnOnce(Response) -> CallbackReturn + Send,
+        CallbackReturn: Future<Output = Result<Payload, CallBackError>> + Send,
+    {
+        let (response, cache_policy) = self.fresh_request(req).await?;
+
+        let payload = self
+            .run_response_callback(cache_entry, cache_policy, response, move |resp| async {
+                let payload = response_callback(resp).await?;
+                Ok(SerdeCacheable { inner: payload })
+            })
+            .await?;
+
+        Ok(payload)
+    }
+
     async fn resend_and_heal_cache<Payload: Cacheable, CallBackError, Callback, CallbackReturn>(
         &self,
         req: Request,

@@ -14,14 +14,16 @@ use distribution_types::{IndexLocations, Resolution, SourceDist};
 use pep508_rs::{MarkerEnvironment, Requirement, StringVersion};
 use platform_tags::{Arch, Os, Platform, Tags};
 use uv_cache::Cache;
-use uv_client::{FlatIndex, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
 use uv_configuration::{BuildKind, Constraints, NoBinary, NoBuild, Overrides, SetupPyStrategy};
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_resolver::{
-    DisplayResolutionGraph, Exclusions, InMemoryIndex, Manifest, Options, OptionsBuilder,
-    PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
+    DisplayResolutionGraph, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
+    OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, SourceBuildTrait};
+use uv_types::{
+    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceBuildTrait,
+};
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
@@ -123,6 +125,7 @@ async fn resolve(
         find_default_python(&Cache::temp().unwrap()).expect("Expected a python to be installed");
     let interpreter = Interpreter::artificial(real_interpreter.platform().clone(), markers.clone());
     let build_context = DummyContext::new(Cache::temp()?, interpreter.clone());
+    let hashes = HashStrategy::None;
     let installed_packages = EmptyInstalledPackages;
     let resolver = Resolver::new(
         manifest,
@@ -133,6 +136,7 @@ async fn resolve(
         &client,
         &flat_index,
         &index,
+        &hashes,
         &build_context,
         &installed_packages,
     )?;

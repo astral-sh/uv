@@ -1,10 +1,13 @@
-use distribution_types::{git_reference, DirectUrlSourceDist, GitSourceDist, PathSourceDist};
+use distribution_types::{
+    git_reference, DirectUrlSourceDist, GitSourceDist, Hashed, PathSourceDist,
+};
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, WheelCache};
 use uv_fs::symlinks;
+use uv_types::HashStrategy;
 
 use crate::index::cached_wheel::CachedWheel;
-use crate::source::{read_http_revision, read_timestamped_revision, REVISION};
+use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LOCAL_REVISION};
 use crate::Error;
 
 /// A local index of built distributions for a specific source distribution.
@@ -12,12 +15,17 @@ use crate::Error;
 pub struct BuiltWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,
+    hasher: &'a HashStrategy,
 }
 
 impl<'a> BuiltWheelIndex<'a> {
     /// Initialize an index of built distributions.
-    pub fn new(cache: &'a Cache, tags: &'a Tags) -> Self {
-        Self { cache, tags }
+    pub fn new(cache: &'a Cache, tags: &'a Tags, hasher: &'a HashStrategy) -> Self {
+        Self {
+            cache,
+            tags,
+            hasher,
+        }
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a direct URL.
@@ -31,12 +39,17 @@ impl<'a> BuiltWheelIndex<'a> {
             WheelCache::Url(source_dist.url.raw()).root(),
         );
 
-        // Read the revision from the cache. There's no need to enforce freshness, since we
-        // enforce freshness on the entries.
-        let revision_entry = cache_shard.entry(REVISION);
-        let Some(revision) = read_http_revision(&revision_entry)? else {
+        // Read the revision from the cache.
+        let Some(pointer) = HttpRevisionPointer::read_from(cache_shard.entry(HTTP_REVISION))?
+        else {
             return Ok(None);
         };
+
+        // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
+        let revision = pointer.into_revision();
+        if !revision.satisfies(self.hasher.get(&source_dist.name)) {
+            return Ok(None);
+        }
 
         Ok(self.find(&cache_shard.shard(revision.id())))
     }
@@ -48,6 +61,12 @@ impl<'a> BuiltWheelIndex<'a> {
             WheelCache::Path(&source_dist.url).root(),
         );
 
+        // Read the revision from the cache.
+        let Some(pointer) = LocalRevisionPointer::read_from(cache_shard.entry(LOCAL_REVISION))?
+        else {
+            return Ok(None);
+        };
+
         // Determine the last-modified time of the source distribution.
         let Some(modified) =
             ArchiveTimestamp::from_path(&source_dist.path).map_err(Error::CacheRead)?
@@ -55,18 +74,27 @@ impl<'a> BuiltWheelIndex<'a> {
             return Err(Error::DirWithoutEntrypoint);
         };
 
-        // Read the revision from the cache. There's no need to enforce freshness, since we
-        // enforce freshness on the entries.
-        let revision_entry = cache_shard.entry(REVISION);
-        let Some(revision) = read_timestamped_revision(&revision_entry, modified)? else {
+        // If the distribution is stale, omit it from the index.
+        if !pointer.is_up_to_date(modified) {
             return Ok(None);
-        };
+        }
+
+        // Enforce hash-checking by omitting any wheels that don't satisfy the required hashes.
+        let revision = pointer.into_revision();
+        if !revision.satisfies(self.hasher.get(&source_dist.name)) {
+            return Ok(None);
+        }
 
         Ok(self.find(&cache_shard.shard(revision.id())))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.
     pub fn git(&self, source_dist: &GitSourceDist) -> Option<CachedWheel> {
+        // Enforce hash-checking, which isn't supported for Git distributions.
+        if self.hasher.get(&source_dist.name).is_validate() {
+            return None;
+        }
+
         let Ok(Some(git_sha)) = git_reference(&source_dist.url) else {
             return None;
         };
@@ -100,7 +128,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // Unzipped wheels are stored as symlinks into the archive directory.
         for subdir in symlinks(shard) {
-            match CachedWheel::from_path(&subdir) {
+            match CachedWheel::from_built_source(&subdir) {
                 None => {}
                 Some(dist_info) => {
                     // Pick the wheel with the highest priority

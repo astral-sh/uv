@@ -1,8 +1,8 @@
 use std::process::Command;
 
 use anyhow::Result;
+use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
-use assert_fs::fixture::{FileTouch, FileWriteStr};
 
 use common::uv_snapshot;
 
@@ -53,7 +53,6 @@ fn check_compatible_packages() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("requests==2.31.0")?;
 
     uv_snapshot!(install_command(&context)
@@ -97,7 +96,6 @@ fn check_incompatible_packages() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("requests==2.31.0")?;
 
     uv_snapshot!(install_command(&context)
@@ -121,7 +119,6 @@ fn check_incompatible_packages() -> Result<()> {
     );
 
     let requirements_txt_idna = context.temp_dir.child("requirements_idna.txt");
-    requirements_txt_idna.touch()?;
     requirements_txt_idna.write_str("idna==2.4")?;
 
     uv_snapshot!(install_command(&context)
@@ -165,7 +162,6 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("requests==2.31.0")?;
 
     uv_snapshot!(install_command(&context)
@@ -189,7 +185,6 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     );
 
     let requirements_txt_two = context.temp_dir.child("requirements_two.txt");
-    requirements_txt_two.touch()?;
     requirements_txt_two.write_str("idna==2.4\nurllib3==1.20")?;
 
     uv_snapshot!(install_command(&context)

@@ -1,19 +1,18 @@
 use std::collections::VecDeque;
 
 use anyhow::{Context, Result};
-
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 
-use distribution_types::{Dist, DistributionMetadata, LocalEditable};
+use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name};
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use pypi_types::Metadata23;
 use uv_client::RegistryClient;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
-use uv_types::{BuildContext, RequestedRequirements};
+use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
 /// A resolver for resolving lookahead requirements from direct URLs.
 ///
@@ -40,6 +39,8 @@ pub struct LookaheadResolver<'a, Context: BuildContext + Send + Sync> {
     overrides: &'a Overrides,
     /// The editable requirements for the project.
     editables: &'a [(LocalEditable, Metadata23)],
+    /// The required hashes for the project.
+    hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
     index: &'a InMemoryIndex,
     /// The database for fetching and building distributions.
@@ -48,11 +49,13 @@ pub struct LookaheadResolver<'a, Context: BuildContext + Send + Sync> {
 
 impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
     /// Instantiate a new [`LookaheadResolver`] for a given set of requirements.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         requirements: &'a [Requirement],
         constraints: &'a Constraints,
         overrides: &'a Overrides,
         editables: &'a [(LocalEditable, Metadata23)],
+        hasher: &'a HashStrategy,
         context: &'a Context,
         client: &'a RegistryClient,
         index: &'a InMemoryIndex,
@@ -62,6 +65,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
             constraints,
             overrides,
             editables,
+            hasher,
             index,
             database: DistributionDatabase::new(client, context),
         }
@@ -135,36 +139,36 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let requires_dist = {
             let id = dist.package_id();
-            if let Some(metadata) = self
+            if let Some(archive) = self
                 .index
                 .get_metadata(&id)
                 .as_deref()
                 .and_then(|response| {
-                    if let MetadataResponse::Found(metadata) = response {
-                        Some(metadata)
+                    if let MetadataResponse::Found(archive, ..) = response {
+                        Some(archive)
                     } else {
                         None
                     }
                 })
             {
                 // If the metadata is already in the index, return it.
-                metadata.requires_dist.clone()
+                archive.metadata.requires_dist.clone()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
-                let metadata = self
+                let archive = self
                     .database
-                    .get_or_build_wheel_metadata(&dist)
+                    .get_or_build_wheel_metadata(&dist, self.hasher.get(dist.name()))
                     .await
                     .with_context(|| match &dist {
                         Dist::Built(built) => format!("Failed to download: {built}"),
                         Dist::Source(source) => format!("Failed to download and build: {source}"),
                     })?;
 
-                let requires_dist = metadata.requires_dist.clone();
+                let requires_dist = archive.metadata.requires_dist.clone();
 
                 // Insert the metadata into the index.
                 self.index
-                    .insert_metadata(id, MetadataResponse::Found(metadata));
+                    .insert_metadata(id, MetadataResponse::Found(archive));
 
                 requires_dist
             }

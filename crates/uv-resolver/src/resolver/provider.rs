@@ -3,15 +3,16 @@ use std::future::Future;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 
-use distribution_types::{Dist, IndexLocations};
+use distribution_types::{Dist, IndexLocations, Name};
 use platform_tags::Tags;
-use pypi_types::Metadata23;
-use uv_client::{FlatIndex, RegistryClient};
-use uv_configuration::{NoBinary, NoBuild};
-use uv_distribution::DistributionDatabase;
-use uv_normalize::PackageName;
-use uv_types::BuildContext;
 
+use uv_client::RegistryClient;
+use uv_configuration::{NoBinary, NoBuild};
+use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_normalize::PackageName;
+use uv_types::{BuildContext, HashStrategy};
+
+use crate::flat_index::FlatIndex;
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
@@ -35,7 +36,7 @@ pub enum VersionsResponse {
 #[derive(Debug)]
 pub enum MetadataResponse {
     /// The wheel metadata was found and parsed successfully.
-    Found(Metadata23),
+    Found(ArchiveMetadata),
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata(Box<pypi_types::MetadataError>),
     /// The wheel metadata was found, but the metadata was inconsistent.
@@ -82,6 +83,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     tags: Tags,
     python_requirement: PythonRequirement,
     allowed_yanks: AllowedYanks,
+    hasher: HashStrategy,
     exclude_newer: Option<DateTime<Utc>>,
     no_binary: NoBinary,
     no_build: NoBuild,
@@ -97,6 +99,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
         tags: &'a Tags,
         python_requirement: PythonRequirement,
         allowed_yanks: AllowedYanks,
+        hasher: &'a HashStrategy,
         exclude_newer: Option<DateTime<Utc>>,
         no_binary: &'a NoBinary,
         no_build: &'a NoBuild,
@@ -108,6 +111,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
             tags: tags.clone(),
             python_requirement,
             allowed_yanks,
+            hasher: hasher.clone(),
             exclude_newer,
             no_binary: no_binary.clone(),
             no_build: no_build.clone(),
@@ -135,6 +139,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                             &self.tags,
                             &self.python_requirement,
                             &self.allowed_yanks,
+                            &self.hasher,
                             self.exclude_newer.as_ref(),
                             self.flat_index.get(package_name).cloned(),
                             &self.no_binary,
@@ -174,7 +179,11 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
 
     /// Fetch the metadata for a distribution, building it if necessary.
     async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
-        match self.fetcher.get_or_build_wheel_metadata(dist).await {
+        match self
+            .fetcher
+            .get_or_build_wheel_metadata(dist, self.hasher.get(dist.name()))
+            .await
+        {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => match client.into_kind() {

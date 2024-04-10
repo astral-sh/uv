@@ -93,6 +93,9 @@ pub enum ResolveError {
     #[error("Attempted to construct an invalid version specifier")]
     InvalidVersion(#[from] pep440_rs::VersionSpecifierBuildError),
 
+    #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: {0}")]
+    UnhashedPackage(PackageName),
+
     /// Something unexpected happened.
     #[error("{0}")]
     Failure(String),

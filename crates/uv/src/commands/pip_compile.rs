@@ -19,9 +19,7 @@ use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
-use uv_client::{
-    BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClientBuilder,
-};
+use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, SetupPyStrategy,
     Upgrade,
@@ -36,11 +34,11 @@ use uv_requirements::{
     RequirementsSource, RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, DisplayResolutionGraph, Exclusions, InMemoryIndex, Manifest,
-    OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
+    AnnotationStyle, DependencyMode, DisplayResolutionGraph, Exclusions, FlatIndex, InMemoryIndex,
+    Manifest, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
 };
 use uv_toolchain::PythonVersion;
-use uv_types::{BuildIsolation, EmptyInstalledPackages, InFlight};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
@@ -103,6 +101,7 @@ pub(crate) async fn pip_compile(
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project,
+        entries: _,
         requirements,
         constraints,
         overrides,
@@ -200,6 +199,13 @@ pub(crate) async fn pip_compile(
         |python_version| Cow::Owned(python_version.markers(interpreter.markers())),
     );
 
+    // Generate, but don't enforce hashes for the requirements.
+    let hasher = if generate_hashes {
+        HashStrategy::Generate
+    } else {
+        HashStrategy::None
+    };
+
     // Incorporate any index locations from the provided sources.
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
@@ -231,7 +237,7 @@ pub(crate) async fn pip_compile(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, &tags, &no_build, &NoBinary::None)
+        FlatIndex::from_entries(entries, &tags, &hasher, &no_build, &NoBinary::None)
     };
 
     // Track in-flight downloads, builds, etc., across resolutions.
@@ -270,6 +276,7 @@ pub(crate) async fn pip_compile(
         // Convert from unnamed to named requirements.
         let mut requirements = NamedRequirementsResolver::new(
             requirements,
+            &hasher,
             &build_dispatch,
             &client,
             &top_level_index,
@@ -284,6 +291,7 @@ pub(crate) async fn pip_compile(
                 SourceTreeResolver::new(
                     source_trees,
                     &extras,
+                    &hasher,
                     &build_dispatch,
                     &client,
                     &top_level_index,
@@ -308,7 +316,7 @@ pub(crate) async fn pip_compile(
             LocalEditable { url, path, extras }
         }));
 
-        let downloader = Downloader::new(&cache, &tags, &client, &build_dispatch)
+        let downloader = Downloader::new(&cache, &tags, &hasher, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
         // Build all editables.
@@ -356,6 +364,7 @@ pub(crate) async fn pip_compile(
         &constraints,
         &overrides,
         &editables,
+        &hasher,
         &build_dispatch,
         &client,
         &top_level_index,
@@ -372,7 +381,7 @@ pub(crate) async fn pip_compile(
         preferences,
         project,
         editables,
-        // Do not consider any installed packages during compilation
+        // Do not consider any installed packages during resolution.
         Exclusions::All,
         lookaheads,
     );
@@ -394,6 +403,7 @@ pub(crate) async fn pip_compile(
         &client,
         &flat_index,
         &top_level_index,
+        &hasher,
         &build_dispatch,
         &EmptyInstalledPackages,
     )?

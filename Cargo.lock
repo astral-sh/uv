@@ -2027,6 +2027,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "md-5"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
+dependencies = [
+ "cfg-if",
+ "digest",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3636,15 +3646,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1fc403891a21bcfb7c37834ba66a547a8f402146eba7265b5a6d88059c9ff2f"
 
 [[package]]
-name = "task-local-extensions"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba323866e5d033818e3240feeb9f7db2c4296674e4d9e16b97b7bf8f490434e8"
-dependencies = [
- "pin-utils",
-]
-
-[[package]]
 name = "temp-dir"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4441,11 +4442,9 @@ dependencies = [
  "reqwest-retry",
  "rkyv",
  "rmp-serde",
- "rustc-hash",
  "serde",
  "serde_json",
  "sys-info",
- "task-local-extensions",
  "tempfile",
  "thiserror",
  "tl",
@@ -4469,13 +4468,11 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
- "distribution-types",
  "itertools 0.12.1",
  "pep508_rs",
  "rustc-hash",
  "serde",
  "serde_json",
- "uv-cache",
  "uv-normalize",
 ]
 
@@ -4499,27 +4496,22 @@ dependencies = [
  "pep508_rs",
  "petgraph",
  "poloto",
- "reqwest",
  "resvg",
  "rustc-hash",
  "serde",
  "serde_json",
  "tagu",
- "tempfile",
  "tikv-jemallocator",
  "tokio",
- "tokio-util",
  "tracing",
  "tracing-durations-export",
  "tracing-indicatif",
  "tracing-subscriber",
- "url",
  "uv-build",
  "uv-cache",
  "uv-client",
  "uv-configuration",
  "uv-dispatch",
- "uv-extract",
  "uv-fs",
  "uv-installer",
  "uv-interpreter",
@@ -4562,6 +4554,7 @@ dependencies = [
  "fs-err",
  "futures",
  "install-wheel-rs",
+ "md-5",
  "nanoid",
  "once_cell",
  "pep440_rs",
@@ -4573,6 +4566,7 @@ dependencies = [
  "rmp-serde",
  "rustc-hash",
  "serde",
+ "sha2",
  "tempfile",
  "thiserror",
  "tokio",
@@ -4598,8 +4592,11 @@ dependencies = [
  "async_zip",
  "fs-err",
  "futures",
+ "md-5",
+ "pypi-types",
  "rayon",
  "rustc-hash",
+ "sha2",
  "thiserror",
  "tokio",
  "tokio-tar",
@@ -4664,6 +4661,7 @@ dependencies = [
  "pypi-types",
  "rayon",
  "requirements-txt",
+ "rmp-serde",
  "rustc-hash",
  "serde",
  "tempfile",
@@ -4837,10 +4835,13 @@ dependencies = [
  "distribution-types",
  "itertools 0.12.1",
  "once-map",
+ "pep440_rs",
  "pep508_rs",
+ "pypi-types",
  "rustc-hash",
  "serde",
  "serde_json",
+ "thiserror",
  "uv-cache",
  "uv-configuration",
  "uv-interpreter",

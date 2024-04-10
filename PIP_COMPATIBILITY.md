@@ -259,14 +259,6 @@ When uv resolutions differ from `pip` in undesirable ways, it's often a sign tha
 are too loose, and that the user should consider tightening them. For example, in the case of
 `starlette` and `fastapi`, the user could require `fastapi>=0.110.0`.
 
-## Hash-checking mode
-
-While uv will include hashes via `uv pip compile --generate-hashes`, it does not support
-hash-checking mode, which is a feature of `pip` that allows users to verify the integrity of
-downloaded packages by checking their hashes against those provided in the `requirements.txt` file.
-
-In the future, uv will support hash-checking mode. For more, see [#474](https://github.com/astral-sh/uv/issues/474).
-
 ## `pip check`
 
 At present, `uv pip check` will surface the following diagnostics:
