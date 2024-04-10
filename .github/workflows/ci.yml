@@ -83,7 +83,6 @@ jobs:
       - name: "Install required Python versions"
         run: |
           cargo run -p uv-dev -- fetch-python
-          echo "$PWD/bin" >> $GITHUB_PATH
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@v2
