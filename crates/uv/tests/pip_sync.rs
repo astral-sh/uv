@@ -3177,12 +3177,20 @@ fn require_hashes_wheel_no_binary() -> Result<()> {
         .arg(":all:")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==4.0.0 is unusable because the hash does not match and you require anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Hash mismatch for anyio==4.0.0
+
+    Expected:
+      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+
+    Computed:
+      sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
     "###
     );
 
@@ -3262,12 +3270,20 @@ fn require_hashes_source_only_binary() -> Result<()> {
         .arg(":all:")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==4.0.0 is unusable because no wheels are usable and building from source is disabled and you require anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Hash mismatch for anyio==4.0.0
+
+    Expected:
+      sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+
+    Computed:
+      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -3287,12 +3303,20 @@ fn require_hashes_wrong_digest() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==4.0.0 is unusable because the hash does not match and you require anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Hash mismatch for anyio==4.0.0
+
+    Expected:
+      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+
+    Computed:
+      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -3312,12 +3336,20 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==4.0.0 is unusable because the hash does not match and you require anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Hash mismatch for anyio==4.0.0
+
+    Expected:
+      sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+
+    Computed:
+      sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     "###
     );
 
@@ -3638,12 +3670,20 @@ fn require_hashes_re_download() -> Result<()> {
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==4.0.0 is unusable because the hash does not match and you require anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Hash mismatch for anyio==4.0.0
+
+    Expected:
+      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+
+    Computed:
+      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -3661,8 +3701,6 @@ fn require_hashes_re_download() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.0.0
@@ -4095,22 +4133,111 @@ fn require_hashes_at_least_one() -> Result<()> {
 fn require_hashes_find_links_no_hash() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    // First, use the correct hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example-a-961b4c22==1.0.0
+    "###
+    );
+
+    // Second, use an incorrect hash.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
         .arg("--require-hashes")
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because example-a-961b4c22==1.0.0 is unusable because it has no hash and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+
+    Expected:
+      sha256:123
+
+    Computed:
+      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+    "###
+    );
+
+    // Third, use the hash from the source distribution. This will actually fail, when it _could_
+    // succeed, but pip has the same behavior.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+
+    Expected:
+      sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+
+    Computed:
+      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+    "###
+    );
+
+    // Fourth, use the hash from the source distribution, and disable wheels. This should succeed.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--no-binary")
+        .arg(":all:")
+        .arg("--reinstall")
+        .arg("--require-hashes")
+        .arg("--find-links")
+        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - example-a-961b4c22==1.0.0
+     + example-a-961b4c22==1.0.0
     "###
     );
 
@@ -4162,12 +4289,20 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because example-a-961b4c22==1.0.0 is unusable because the hash does not match and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+
+    Expected:
+      sha256:123
+
+    Computed:
+      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -4235,13 +4370,17 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
         .arg("--require-hashes")
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because example-a-961b4c22==1.0.0 is unusable because the hash does not match and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - example-a-961b4c22==1.0.0
+     + example-a-961b4c22==1.0.0
     "###
     );
 
@@ -4263,9 +4402,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to download distributions
-      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+    error: Failed to download and build: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for example-a-961b4c22==1.0.0
 
     Expected:
@@ -4294,13 +4431,15 @@ fn require_hashes_registry_no_hash() -> Result<()> {
         .arg("--require-hashes")
         .arg("--index-url")
         .arg("https://astral-test.github.io/astral-test-hash/no-hash/simple-html/"), @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because example-a-961b4c22==1.0.0 is unusable because it has no hash and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example-a-961b4c22==1.0.0
     "###
     );
 
@@ -4350,12 +4489,20 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .arg("--index-url")
         .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because example-a-961b4c22==1.0.0 is unusable because the hash does not match and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    error: Failed to download distributions
+      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+
+    Expected:
+      sha256:123
+
+    Computed:
+      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -4423,13 +4570,17 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .arg("--require-hashes")
         .arg("--index-url")
         .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because example-a-961b4c22==1.0.0 is unusable because the hash does not match and you require example-a-961b4c22==1.0.0, we can conclude that the requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - example-a-961b4c22==1.0.0
+     + example-a-961b4c22==1.0.0
     "###
     );
 
@@ -4451,9 +4602,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    error: Failed to download distributions
-      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+    error: Failed to download and build: example-a-961b4c22==1.0.0
       Caused by: Hash mismatch for example-a-961b4c22==1.0.0
 
     Expected:

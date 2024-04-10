@@ -3774,12 +3774,11 @@ fn require_hashes_mismatch() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==4.0.0 is unusable because the hash does not match and you require anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: idna
     "###
     );
 
