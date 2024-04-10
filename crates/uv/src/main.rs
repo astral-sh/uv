@@ -335,6 +335,10 @@ struct PipCompileArgs {
     #[clap(long)]
     no_header: bool,
 
+    /// Choose the style of the annotation comments, which indicate the source of each package.
+    #[clap(long, default_value_t=AnnotationStyle::Split, value_enum)]
+    annotation_style: AnnotationStyle,
+
     /// Change header comment to reflect custom command wrapping `uv pip compile`.
     #[clap(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
     custom_compile_command: Option<String>,
@@ -495,9 +499,10 @@ struct PipCompileArgs {
     #[clap(long, hide = true)]
     emit_marker_expression: bool,
 
-    /// Choose the style of the annotation comments, which indicate the source of each package.
-    #[clap(long, default_value_t=AnnotationStyle::Split, value_enum)]
-    annotation_style: AnnotationStyle,
+    /// Include comment annotations indicating the index used to resolve each package (e.g.,
+    /// `# from https://pypi.org/simple`).
+    #[clap(long)]
+    emit_index_annotation: bool,
 
     #[command(flatten)]
     compat_args: compat::PipCompileCompatArgs,
@@ -1587,6 +1592,7 @@ async fn run() -> Result<ExitStatus> {
                 args.emit_index_url,
                 args.emit_find_links,
                 args.emit_marker_expression,
+                args.emit_index_annotation,
                 index_urls,
                 args.index_strategy,
                 args.keyring_provider,

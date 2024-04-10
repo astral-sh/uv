@@ -12,7 +12,7 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
-    Dist, DistributionMetadata, LocalEditable, Name, PackageId, ResolvedDist, Verbatim,
+    Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, PackageId, ResolvedDist, Verbatim,
     VersionOrUrl,
 };
 use once_map::OnceMap;
@@ -499,6 +499,7 @@ impl ResolutionGraph {
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolutionGraph,
@@ -511,6 +512,8 @@ pub struct DisplayResolutionGraph<'a> {
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
     /// requested each package.
     include_annotations: bool,
+    /// Whether to include indexes in the output, to indicate which index was used for each package.
+    include_index_annotation: bool,
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
@@ -524,6 +527,7 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
             false,
             false,
             true,
+            false,
             AnnotationStyle::default(),
         )
     }
@@ -531,12 +535,14 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
 
 impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
+    #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
         underlying: &'a ResolutionGraph,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
         include_annotations: bool,
+        include_index_annotation: bool,
         annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
         Self {
@@ -545,6 +551,7 @@ impl<'a> DisplayResolutionGraph<'a> {
             show_hashes,
             include_extras,
             include_annotations,
+            include_index_annotation,
             annotation_style,
         }
     }
@@ -580,6 +587,14 @@ impl<'a> Node<'a> {
         match self {
             Node::Editable(_, editable) => NodeKey::Editable(editable.verbatim()),
             Node::Distribution(name, _, _) => NodeKey::Distribution(name),
+        }
+    }
+
+    /// Return the [`IndexUrl`] of the distribution, if any.
+    fn index(&self) -> Option<&IndexUrl> {
+        match self {
+            Node::Editable(_, _) => None,
+            Node::Distribution(_, dist, _) => dist.index(),
         }
     }
 }
@@ -666,6 +681,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // Determine the annotation comment and separator (between comment and requirement).
             let mut annotation = None;
 
+            // If enabled, include annotations to indicate the dependencies that requested each
+            // package (e.g., `# via mypy`).
             if self.include_annotations {
                 // Display all dependencies.
                 let mut edges = self
@@ -719,6 +736,14 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             } else {
                 // Write the line as is.
                 writeln!(f, "{line}")?;
+            }
+
+            // If enabled, include indexes to indicate which index was used for each package (e.g.,
+            // `# from https://pypi.org/simple`).
+            if self.include_index_annotation {
+                if let Some(index) = node.index() {
+                    writeln!(f, "{}", format!("    # from {index}").green())?;
+                }
             }
         }
 

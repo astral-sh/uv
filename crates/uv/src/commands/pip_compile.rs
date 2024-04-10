@@ -67,6 +67,7 @@ pub(crate) async fn pip_compile(
     include_index_url: bool,
     include_find_links: bool,
     include_marker_expression: bool,
+    include_index_annotation: bool,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
@@ -501,6 +502,7 @@ pub(crate) async fn pip_compile(
             generate_hashes,
             include_extras,
             include_annotations,
+            include_index_annotation,
             annotation_style,
         )
     )?;
