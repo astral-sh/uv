@@ -14,7 +14,7 @@ use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
-use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
+use uv_auth::{store_credentials_from_url, KeyringProvider};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
@@ -152,7 +152,7 @@ pub(crate) async fn pip_sync(
 
     // Add all authenticated sources to the store.
     for url in index_locations.urls() {
-        GLOBAL_AUTH_STORE.save_from_url(url);
+        store_credentials_from_url(url);
     }
 
     // Initialize the registry client.

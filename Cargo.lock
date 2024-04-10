@@ -4365,6 +4365,7 @@ dependencies = [
  "base64 0.22.0",
  "clap",
  "http",
+ "insta",
  "once_cell",
  "reqwest",
  "reqwest-middleware",

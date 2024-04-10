@@ -13,7 +13,7 @@ use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name, ResolvedDist};
 use pep508_rs::Requirement;
-use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
+use uv_auth::{store_credentials_from_url, KeyringProvider};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy};
@@ -145,7 +145,7 @@ async fn venv_impl(
 
         // Add all authenticated sources to the store.
         for url in index_locations.urls() {
-            GLOBAL_AUTH_STORE.save_from_url(url);
+            store_credentials_from_url(url);
         }
 
         // Instantiate a client.

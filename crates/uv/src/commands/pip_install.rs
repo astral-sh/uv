@@ -19,7 +19,7 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use pypi_types::{Metadata23, Yanked};
 use requirements_txt::EditableRequirement;
-use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
+use uv_auth::{store_credentials_from_url, KeyringProvider};
 use uv_cache::Cache;
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
@@ -205,7 +205,7 @@ pub(crate) async fn pip_install(
 
     // Add all authenticated sources to the store.
     for url in index_locations.urls() {
-        GLOBAL_AUTH_STORE.save_from_url(url);
+        store_credentials_from_url(url);
     }
 
     // Initialize the registry client.
