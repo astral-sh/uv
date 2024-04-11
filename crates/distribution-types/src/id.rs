@@ -1,9 +1,11 @@
 use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
 
-use cache_key::CanonicalUrl;
+use cache_key::{CanonicalUrl, RepositoryUrl};
 use url::Url;
 
 use pep440_rs::Version;
+use pypi_types::HashDigest;
 use uv_normalize::PackageName;
 
 /// A unique identifier for a package. A package can either be identified by a name (e.g., `black`)
@@ -13,7 +15,7 @@ pub enum PackageId {
     /// The identifier consists of a package name.
     Name(PackageName),
     /// The identifier consists of a URL.
-    Url(String),
+    Url(CanonicalUrl),
 }
 
 impl PackageId {
@@ -24,7 +26,7 @@ impl PackageId {
 
     /// Create a new [`PackageId`] from a URL.
     pub fn from_url(url: &Url) -> Self {
-        Self::Url(cache_key::digest(&CanonicalUrl::new(url)))
+        Self::Url(CanonicalUrl::new(url))
     }
 }
 
@@ -43,7 +45,7 @@ pub enum VersionId {
     /// The identifier consists of a package name and version.
     NameVersion(PackageName, Version),
     /// The identifier consists of a URL.
-    Url(String),
+    Url(CanonicalUrl),
 }
 
 impl VersionId {
@@ -54,7 +56,7 @@ impl VersionId {
 
     /// Create a new [`VersionId`] from a URL.
     pub fn from_url(url: &Url) -> Self {
-        Self::Url(cache_key::digest(&CanonicalUrl::new(url)))
+        Self::Url(CanonicalUrl::new(url))
     }
 }
 
@@ -81,28 +83,22 @@ impl Display for VersionId {
 /// that the ID is unique within a single invocation of the resolver (and so, e.g., a hash of
 /// the URL would also be sufficient).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct DistributionId(String);
-
-impl DistributionId {
-    pub fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
-    }
-}
-
-impl DistributionId {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+pub enum DistributionId {
+    Url(CanonicalUrl),
+    PathBuf(PathBuf),
+    Digest(HashDigest),
+    AbsoluteUrl(String),
+    RelativeUrl(String, String),
 }
 
 /// A unique identifier for a resource, like a URL or a Git repository.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ResourceId(String);
-
-impl ResourceId {
-    pub fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
-    }
+pub enum ResourceId {
+    Url(RepositoryUrl),
+    PathBuf(PathBuf),
+    Digest(HashDigest),
+    AbsoluteUrl(String),
+    RelativeUrl(String, String),
 }
 
 impl From<&Self> for VersionId {
