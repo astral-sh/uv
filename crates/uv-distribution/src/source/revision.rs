@@ -1,5 +1,6 @@
 use distribution_types::Hashed;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 use pypi_types::HashDigest;
 
@@ -11,7 +12,7 @@ use pypi_types::HashDigest;
 /// the distribution, despite the reported version number remaining the same.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Revision {
-    id: String,
+    id: RevisionId,
     hashes: Vec<HashDigest>,
 }
 
@@ -19,13 +20,13 @@ impl Revision {
     /// Initialize a new [`Revision`] with a random UUID.
     pub(crate) fn new() -> Self {
         Self {
-            id: nanoid::nanoid!(),
+            id: RevisionId::new(),
             hashes: vec![],
         }
     }
 
     /// Return the unique ID of the manifest.
-    pub(crate) fn id(&self) -> &str {
+    pub(crate) fn id(&self) -> &RevisionId {
         &self.id
     }
 
@@ -50,5 +51,22 @@ impl Revision {
 impl Hashed for Revision {
     fn hashes(&self) -> &[HashDigest] {
         &self.hashes
+    }
+}
+
+/// A unique identifier for a revision of a source distribution.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct RevisionId(String);
+
+impl RevisionId {
+    /// Generate a new unique identifier for an archive.
+    fn new() -> Self {
+        Self(nanoid::nanoid!())
+    }
+}
+
+impl AsRef<Path> for RevisionId {
+    fn as_ref(&self) -> &Path {
+        self.0.as_ref()
     }
 }

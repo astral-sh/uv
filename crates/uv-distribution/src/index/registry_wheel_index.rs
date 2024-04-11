@@ -116,7 +116,9 @@ impl<'a> RegistryWheelIndex<'a> {
                     .extension()
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("http"))
                 {
-                    if let Some(wheel) = CachedWheel::from_http_pointer(&wheel_dir.join(&file)) {
+                    if let Some(wheel) =
+                        CachedWheel::from_http_pointer(&wheel_dir.join(&file), cache)
+                    {
                         // Enforce hash-checking based on the built distribution.
                         if wheel.satisfies(hasher.get(package)) {
                             Self::add_wheel(wheel, tags, &mut versions);
@@ -128,7 +130,9 @@ impl<'a> RegistryWheelIndex<'a> {
                     .extension()
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("rev"))
                 {
-                    if let Some(wheel) = CachedWheel::from_local_pointer(&wheel_dir.join(&file)) {
+                    if let Some(wheel) =
+                        CachedWheel::from_local_pointer(&wheel_dir.join(&file), cache)
+                    {
                         // Enforce hash-checking based on the built distribution.
                         if wheel.satisfies(hasher.get(package)) {
                             Self::add_wheel(wheel, tags, &mut versions);

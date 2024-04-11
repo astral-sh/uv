@@ -4,9 +4,9 @@ use distribution_filename::WheelFilename;
 use distribution_types::{CachedDirectUrlDist, CachedRegistryDist, Hashed};
 use pep508_rs::VerbatimUrl;
 use pypi_types::HashDigest;
-use uv_cache::CacheEntry;
+use uv_cache::{Cache, CacheBucket, CacheEntry};
 
-use crate::{HttpArchivePointer, LocalArchivePointer};
+use crate::{Archive, HttpArchivePointer, LocalArchivePointer};
 
 #[derive(Debug, Clone)]
 pub struct CachedWheel {
@@ -54,18 +54,17 @@ impl CachedWheel {
     }
 
     /// Read a cached wheel from a `.http` pointer (e.g., `anyio-4.0.0-py3-none-any.http`).
-    pub fn from_http_pointer(path: &Path) -> Option<Self> {
+    pub fn from_http_pointer(path: &Path, cache: &Cache) -> Option<Self> {
         // Determine the wheel filename.
         let filename = path.file_name()?.to_str()?;
         let filename = WheelFilename::from_stem(filename).ok()?;
 
         // Read the pointer.
         let pointer = HttpArchivePointer::read_from(path).ok()??;
-        let archive = pointer.into_archive();
+        let Archive { id, hashes } = pointer.into_archive();
 
         // Convert to a cached wheel.
-        let entry = CacheEntry::from_path(archive.path);
-        let hashes = archive.hashes;
+        let entry = cache.entry(CacheBucket::Archive, "", id);
         Some(Self {
             filename,
             entry,
@@ -74,18 +73,17 @@ impl CachedWheel {
     }
 
     /// Read a cached wheel from a `.rev` pointer (e.g., `anyio-4.0.0-py3-none-any.rev`).
-    pub fn from_local_pointer(path: &Path) -> Option<Self> {
+    pub fn from_local_pointer(path: &Path, cache: &Cache) -> Option<Self> {
         // Determine the wheel filename.
         let filename = path.file_name()?.to_str()?;
         let filename = WheelFilename::from_stem(filename).ok()?;
 
         // Read the pointer.
         let pointer = LocalArchivePointer::read_from(path).ok()??;
-        let archive = pointer.into_archive();
+        let Archive { id, hashes } = pointer.into_archive();
 
         // Convert to a cached wheel.
-        let entry = CacheEntry::from_path(archive.path);
-        let hashes = archive.hashes;
+        let entry = cache.entry(CacheBucket::Archive, "", id);
         Some(Self {
             filename,
             entry,
