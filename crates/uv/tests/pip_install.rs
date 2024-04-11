@@ -12,7 +12,7 @@ use itertools::Itertools;
 use common::{uv_snapshot, TestContext};
 use uv_fs::Simplified;
 
-use crate::common::{get_bin, PACKSE_FIND_LINKS_URL};
+use crate::common::{get_bin, BUILD_VENDOR_LINKS_URL};
 
 mod common;
 
@@ -3168,7 +3168,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(PACKSE_FIND_LINKS_URL), @r###"
+        .arg(BUILD_VENDOR_LINKS_URL), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3203,7 +3203,7 @@ fn already_installed_dependent_editable() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(PACKSE_FIND_LINKS_URL), @r###"
+        .arg(BUILD_VENDOR_LINKS_URL), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3264,7 +3264,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(PACKSE_FIND_LINKS_URL), @r###"
+        .arg(BUILD_VENDOR_LINKS_URL), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3299,7 +3299,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(PACKSE_FIND_LINKS_URL), @r###"
+        .arg(BUILD_VENDOR_LINKS_URL), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3339,7 +3339,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(PACKSE_FIND_LINKS_URL), @r###"
+        .arg(BUILD_VENDOR_LINKS_URL), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3361,7 +3361,7 @@ fn already_installed_local_path_dependent() {
         // Disable the index to guard this test against dependency confusion attacks
         .arg("--no-index")
         .arg("--find-links")
-        .arg(PACKSE_FIND_LINKS_URL), @r###"
+        .arg(BUILD_VENDOR_LINKS_URL), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
