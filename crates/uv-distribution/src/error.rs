@@ -88,9 +88,26 @@ pub enum Error {
     HashExhaustion(#[source] std::io::Error),
 
     #[error("Hash mismatch for {distribution}\n\nExpected:\n{expected}\n\nComputed:\n{actual}")]
-    HashMismatch {
+    MismatchedHashes {
         distribution: String,
         expected: String,
+        actual: String,
+    },
+
+    #[error(
+        "Hash-checking is enabled, but no hashes were provided or computed for: {distribution}"
+    )]
+    MissingHashes { distribution: String },
+
+    #[error("Hash-checking is enabled, but no hashes were computed for: {distribution}\n\nExpected:\n{expected}")]
+    MissingActualHashes {
+        distribution: String,
+        expected: String,
+    },
+
+    #[error("Hash-checking is enabled, but no hashes were provided for: {distribution}\n\nComputed:\n{actual}")]
+    MissingExpectedHashes {
+        distribution: String,
         actual: String,
     },
 
@@ -125,22 +142,51 @@ impl Error {
         expected: &[HashDigest],
         actual: &[HashDigest],
     ) -> Error {
-        let expected = expected
-            .iter()
-            .map(|hash| format!("  {hash}"))
-            .collect::<Vec<_>>()
-            .join("\n");
+        match (expected.is_empty(), actual.is_empty()) {
+            (true, true) => Self::MissingHashes { distribution },
+            (true, false) => {
+                let actual = actual
+                    .iter()
+                    .map(|hash| format!("  {hash}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
 
-        let actual = actual
-            .iter()
-            .map(|hash| format!("  {hash}"))
-            .collect::<Vec<_>>()
-            .join("\n");
+                Self::MissingExpectedHashes {
+                    distribution,
+                    actual,
+                }
+            }
+            (false, true) => {
+                let expected = expected
+                    .iter()
+                    .map(|hash| format!("  {hash}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
 
-        Self::HashMismatch {
-            distribution,
-            expected,
-            actual,
+                Self::MissingActualHashes {
+                    distribution,
+                    expected,
+                }
+            }
+            (false, false) => {
+                let expected = expected
+                    .iter()
+                    .map(|hash| format!("  {hash}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                let actual = actual
+                    .iter()
+                    .map(|hash| format!("  {hash}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                Self::MismatchedHashes {
+                    distribution,
+                    expected,
+                    actual,
+                }
+            }
         }
     }
 }

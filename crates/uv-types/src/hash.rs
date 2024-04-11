@@ -25,10 +25,12 @@ impl HashStrategy {
         match self {
             Self::None => HashPolicy::None,
             Self::Generate => HashPolicy::Generate,
-            Self::Validate(hashes) => hashes
-                .get(&distribution.package_id())
-                .map(Vec::as_slice)
-                .map_or(HashPolicy::None, HashPolicy::Validate),
+            Self::Validate(hashes) => HashPolicy::Validate(
+                hashes
+                    .get(&distribution.package_id())
+                    .map(Vec::as_slice)
+                    .unwrap_or_default(),
+            ),
         }
     }
 
@@ -37,10 +39,12 @@ impl HashStrategy {
         match self {
             Self::None => HashPolicy::None,
             Self::Generate => HashPolicy::Generate,
-            Self::Validate(hashes) => hashes
-                .get(&PackageId::from_registry(name.clone()))
-                .map(Vec::as_slice)
-                .map_or(HashPolicy::None, HashPolicy::Validate),
+            Self::Validate(hashes) => HashPolicy::Validate(
+                hashes
+                    .get(&PackageId::from_registry(name.clone()))
+                    .map(Vec::as_slice)
+                    .unwrap_or_default(),
+            ),
         }
     }
 
@@ -49,10 +53,12 @@ impl HashStrategy {
         match self {
             Self::None => HashPolicy::None,
             Self::Generate => HashPolicy::Generate,
-            Self::Validate(hashes) => hashes
-                .get(&PackageId::from_url(url))
-                .map(Vec::as_slice)
-                .map_or(HashPolicy::None, HashPolicy::Validate),
+            Self::Validate(hashes) => HashPolicy::Validate(
+                hashes
+                    .get(&PackageId::from_url(url))
+                    .map(Vec::as_slice)
+                    .unwrap_or_default(),
+            ),
         }
     }
 
