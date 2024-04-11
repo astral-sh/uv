@@ -453,10 +453,17 @@ uv accepts the following command-line arguments as environment variables:
   `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
 - `UV_PRERELEASE`: Equivalent to the `--prerelease` command-line argument. For example, if set to
   `allow`, uv will allow pre-release versions for all dependencies.
-- `UV_SYSTEM_PYTHON`:  Equivalent to the `--system` command-line argument. If set to `true`, uv
+- `UV_SYSTEM_PYTHON`: Equivalent to the `--system` command-line argument. If set to `true`, uv
   will use the first Python interpreter found in the system `PATH`.
-  WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI) environments and
-  should be used with caution, as it can modify the system Python installation.
+  WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI) or
+  containerized environments and should be used with caution, as modifying the system Python
+  can lead to unexpected behavior.
+- `UV_BREAK_SYSTEM_PACKAGES`: Equivalent to the `--break-system-packages` command-line argument. If
+  set to `true`, uv will allow the installation of packages that conflict with system-installed
+  packages.
+  WARNING: `UV_BREAK_SYSTEM_PACKAGES=true` is intended for use in continuous integration (CI) or
+  containerized environments and should be used with caution, as modifying the system Python
+  can lead to unexpected behavior.
 - `UV_NATIVE_TLS`: Equivalent to the `--native-tls` command-line argument. If set to `true`, uv
   will use the system's trust store instead of the bundled `webpki-roots` crate.
 - `UV_INDEX_STRATEGY`: Equivalent to the `--index-strategy` command-line argument. For example, if
