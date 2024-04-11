@@ -1,5 +1,5 @@
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use futures::{FutureExt, TryStreamExt};
@@ -16,7 +16,7 @@ use distribution_types::{
 };
 use platform_tags::Tags;
 use pypi_types::{HashDigest, Metadata23};
-use uv_cache::{ArchiveTimestamp, CacheBucket, CacheEntry, Timestamp, WheelCache};
+use uv_cache::{ArchiveId, ArchiveTimestamp, CacheBucket, CacheEntry, Timestamp, WheelCache};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
@@ -136,11 +136,11 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         // Unzip into the editable wheel directory.
         let path = editable_wheel_dir.join(&disk_filename);
         let target = editable_wheel_dir.join(cache_key::digest(&editable.path));
-        let archive = self.unzip_wheel(&path, &target).await?;
+        let id = self.unzip_wheel(&path, &target).await?;
         let wheel = LocalWheel {
             dist,
             filename,
-            archive,
+            archive: self.build_context.cache().archive(&id),
             hashes: vec![],
         };
 
@@ -200,7 +200,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 {
                     Ok(archive) => Ok(LocalWheel {
                         dist: Dist::Built(dist.clone()),
-                        archive: archive.path,
+                        archive: self.build_context.cache().archive(&archive.id),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
                     }),
@@ -216,7 +216,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             .await?;
                         Ok(LocalWheel {
                             dist: Dist::Built(dist.clone()),
-                            archive: archive.path,
+                            archive: self.build_context.cache().archive(&archive.id),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
                         })
@@ -246,7 +246,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 {
                     Ok(archive) => Ok(LocalWheel {
                         dist: Dist::Built(dist.clone()),
-                        archive: archive.path,
+                        archive: self.build_context.cache().archive(&archive.id),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
                     }),
@@ -268,7 +268,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                             .await?;
                         Ok(LocalWheel {
                             dist: Dist::Built(dist.clone()),
-                            archive: archive.path,
+                            archive: self.build_context.cache().archive(&archive.id),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
                         })
@@ -326,11 +326,13 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         }
 
         // Otherwise, unzip the wheel.
+        let id = self
+            .unzip_wheel(&built_wheel.path, &built_wheel.target)
+            .await?;
+
         Ok(LocalWheel {
             dist: Dist::Source(dist.clone()),
-            archive: self
-                .unzip_wheel(&built_wheel.path, &built_wheel.target)
-                .await?,
+            archive: self.build_context.cache().archive(&id),
             hashes: built_wheel.hashes,
             filename: built_wheel.filename,
         })
@@ -442,14 +444,15 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 }
 
                 // Persist the temporary directory to the directory store.
-                let path = self
+                let id = self
                     .build_context
                     .cache()
                     .persist(temp_dir.into_path(), wheel_entry.path())
                     .await
                     .map_err(Error::CacheRead)?;
+
                 Ok(Archive::new(
-                    path,
+                    id,
                     hashers.into_iter().map(HashDigest::from).collect(),
                 ))
             }
@@ -557,14 +560,14 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
                 };
 
                 // Persist the temporary directory to the directory store.
-                let path = self
+                let id = self
                     .build_context
                     .cache()
                     .persist(temp_dir.into_path(), wheel_entry.path())
                     .await
                     .map_err(Error::CacheRead)?;
 
-                Ok(Archive::new(path, hashes))
+                Ok(Archive::new(id, hashes))
             }
             .instrument(info_span!("wheel", wheel = %dist))
         };
@@ -632,7 +635,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         if let Some(archive) = archive {
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
-                archive: archive.path,
+                archive: self.build_context.cache().archive(&archive.id),
                 hashes: archive.hashes,
                 filename: filename.clone(),
             })
@@ -649,7 +652,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
-                archive: archive.path,
+                archive: self.build_context.cache().archive(&archive.id),
                 hashes: archive.hashes,
                 filename: filename.clone(),
             })
@@ -672,18 +675,18 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
             // Exhaust the reader to compute the hash.
             hasher.finish().await.map_err(Error::HashExhaustion)?;
 
+            let hashes = hashers.into_iter().map(HashDigest::from).collect();
+
             // Persist the temporary directory to the directory store.
-            let archive = self
+            let id = self
                 .build_context
                 .cache()
                 .persist(temp_dir.into_path(), wheel_entry.path())
                 .await
                 .map_err(Error::CacheWrite)?;
 
-            let hashes = hashers.into_iter().map(HashDigest::from).collect();
-
             // Create an archive.
-            let archive = Archive::new(archive, hashes);
+            let archive = Archive::new(id, hashes);
 
             // Write the archive pointer to the cache.
             let pointer = LocalArchivePointer {
@@ -694,7 +697,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
-                archive: archive.path,
+                archive: self.build_context.cache().archive(&archive.id),
                 hashes: archive.hashes,
                 filename: filename.clone(),
             })
@@ -702,7 +705,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
     }
 
     /// Unzip a wheel into the cache, returning the path to the unzipped directory.
-    async fn unzip_wheel(&self, path: &Path, target: &Path) -> Result<PathBuf, Error> {
+    async fn unzip_wheel(&self, path: &Path, target: &Path) -> Result<ArchiveId, Error> {
         let temp_dir = tokio::task::spawn_blocking({
             let path = path.to_owned();
             let root = self.build_context.cache().root().to_path_buf();
@@ -716,14 +719,14 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
         .await??;
 
         // Persist the temporary directory to the directory store.
-        let archive = self
+        let id = self
             .build_context
             .cache()
             .persist(temp_dir.into_path(), target)
             .await
             .map_err(Error::CacheWrite)?;
 
-        Ok(archive)
+        Ok(id)
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.

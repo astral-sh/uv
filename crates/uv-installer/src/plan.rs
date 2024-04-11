@@ -264,7 +264,7 @@ impl<'a> Planner<'a> {
                                         wheel.filename,
                                         wheel.url,
                                         archive.hashes,
-                                        archive.path,
+                                        cache.archive(&archive.id),
                                     );
 
                                     debug!("URL wheel requirement already cached: {cached_dist}");
@@ -306,7 +306,7 @@ impl<'a> Planner<'a> {
                                             wheel.filename,
                                             wheel.url,
                                             archive.hashes,
-                                            archive.path,
+                                            cache.archive(&archive.id),
                                         );
 
                                         debug!(
