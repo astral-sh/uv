@@ -24,7 +24,9 @@ use uv_interpreter::{find_requested_python, PythonVersion};
 // Exclude any packages uploaded after this date.
 pub static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_FIND_LINKS_URL: &str =
+/// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
+/// to prevent dependency confusion attacks against our test suite.
+pub const BUILD_VENDOR_LINKS_URL: &str =
     "https://raw.githubusercontent.com/astral-sh/packse/0.3.14/vendor/links.html";
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
