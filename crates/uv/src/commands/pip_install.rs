@@ -94,7 +94,6 @@ pub(crate) async fn pip_install(
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project,
-        entries,
         requirements,
         constraints,
         overrides,
@@ -161,6 +160,7 @@ pub(crate) async fn pip_install(
     if reinstall.is_none()
         && upgrade.is_none()
         && source_trees.is_empty()
+        && overrides.is_empty()
         && site_packages.satisfies(&requirements, &editables, &constraints)?
     {
         let num_requirements = requirements.len() + editables.len();
@@ -189,9 +189,10 @@ pub(crate) async fn pip_install(
     // Collect the set of required hashes.
     let hasher = if require_hashes {
         HashStrategy::from_requirements(
-            entries
-                .into_iter()
-                .map(|entry| (entry.requirement, entry.hashes)),
+            requirements
+                .iter()
+                .chain(overrides.iter())
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             markers,
         )?
     } else {
@@ -292,6 +293,13 @@ pub(crate) async fn pip_install(
 
         requirements
     };
+
+    // Resolve the overrides from the provided sources.
+    let overrides =
+        NamedRequirementsResolver::new(overrides, &hasher, &resolve_dispatch, &client, &index)
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve()
+            .await?;
 
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command. If an editable is already

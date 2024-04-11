@@ -10,7 +10,7 @@ use url::Url;
 use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, RequirementsTxtRequirement, VerbatimUrl};
-use requirements_txt::EditableRequirement;
+use requirements_txt::{EditableRequirement, RequirementEntry};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
@@ -296,19 +296,22 @@ impl<'a> SitePackages<'a> {
     /// Returns `true` if the installed packages satisfy the given requirements.
     pub fn satisfies(
         &self,
-        requirements: &[RequirementsTxtRequirement],
+        requirements: &[RequirementEntry],
         editables: &[EditableRequirement],
         constraints: &[Requirement],
     ) -> Result<bool> {
-        let mut stack = Vec::<RequirementsTxtRequirement>::with_capacity(requirements.len());
+        let mut stack = Vec::<RequirementEntry>::with_capacity(requirements.len());
         let mut seen =
             FxHashSet::with_capacity_and_hasher(requirements.len(), BuildHasherDefault::default());
 
         // Add the direct requirements to the queue.
-        for dependency in requirements {
-            if dependency.evaluate_markers(self.venv.interpreter().markers(), &[]) {
-                if seen.insert(dependency.clone()) {
-                    stack.push(dependency.clone());
+        for entry in requirements {
+            if entry
+                .requirement
+                .evaluate_markers(self.venv.interpreter().markers(), &[])
+            {
+                if seen.insert(entry.clone()) {
+                    stack.push(entry.clone());
                 }
             }
         }
@@ -346,7 +349,10 @@ impl<'a> SitePackages<'a> {
                             self.venv.interpreter().markers(),
                             &requirement.extras,
                         ) {
-                            let dependency = RequirementsTxtRequirement::from(dependency);
+                            let dependency = RequirementEntry {
+                                requirement: RequirementsTxtRequirement::Pep508(dependency),
+                                hashes: vec![],
+                            };
                             if seen.insert(dependency.clone()) {
                                 stack.push(dependency);
                             }
@@ -361,8 +367,8 @@ impl<'a> SitePackages<'a> {
         }
 
         // Verify that all non-editable requirements are met.
-        while let Some(requirement) = stack.pop() {
-            let installed = match &requirement {
+        while let Some(entry) = stack.pop() {
+            let installed = match &entry.requirement {
                 RequirementsTxtRequirement::Pep508(requirement) => {
                     self.get_packages(&requirement.name)
                 }
@@ -377,7 +383,7 @@ impl<'a> SitePackages<'a> {
                 }
                 [distribution] => {
                     // Validate that the installed version matches the requirement.
-                    match requirement.version_or_url() {
+                    match entry.requirement.version_or_url() {
                         // Accept any installed version.
                         None => {}
 
@@ -463,9 +469,12 @@ impl<'a> SitePackages<'a> {
                     for dependency in metadata.requires_dist {
                         if dependency.evaluate_markers(
                             self.venv.interpreter().markers(),
-                            requirement.extras(),
+                            entry.requirement.extras(),
                         ) {
-                            let dependency = RequirementsTxtRequirement::from(dependency);
+                            let dependency = RequirementEntry {
+                                requirement: RequirementsTxtRequirement::Pep508(dependency),
+                                hashes: vec![],
+                            };
                             if seen.insert(dependency.clone()) {
                                 stack.push(dependency);
                             }

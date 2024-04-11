@@ -82,7 +82,7 @@ pub(crate) async fn pip_uninstall(
     let (named, unnamed): (Vec<Requirement>, Vec<UnnamedRequirement>) = spec
         .requirements
         .into_iter()
-        .partition_map(|requirement| match requirement {
+        .partition_map(|entry| match entry.requirement {
             RequirementsTxtRequirement::Pep508(requirement) => Either::Left(requirement),
             RequirementsTxtRequirement::Unnamed(requirement) => Either::Right(requirement),
         });

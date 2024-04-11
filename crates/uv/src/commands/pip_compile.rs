@@ -101,7 +101,6 @@ pub(crate) async fn pip_compile(
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project,
-        entries: _,
         requirements,
         constraints,
         overrides,
@@ -229,10 +228,6 @@ pub(crate) async fn pip_compile(
     // Read the lockfile, if present.
     let preferences = read_lockfile(output_file, upgrade).await?;
 
-    // Collect constraints and overrides.
-    let constraints = Constraints::from_requirements(constraints);
-    let overrides = Overrides::from_requirements(overrides);
-
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
@@ -304,6 +299,22 @@ pub(crate) async fn pip_compile(
 
         requirements
     };
+
+    // Resolve the overrides from the provided sources.
+    let overrides = NamedRequirementsResolver::new(
+        overrides,
+        &hasher,
+        &build_dispatch,
+        &client,
+        &top_level_index,
+    )
+    .with_reporter(ResolverReporter::from(printer))
+    .resolve()
+    .await?;
+
+    // Collect constraints and overrides.
+    let constraints = Constraints::from_requirements(constraints);
+    let overrides = Overrides::from_requirements(overrides);
 
     // Build the editables and add their requirements
     let editables = if editables.is_empty() {

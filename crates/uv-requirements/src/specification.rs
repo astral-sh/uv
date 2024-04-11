@@ -20,14 +20,12 @@ use crate::{ExtrasSpecification, RequirementsSource};
 pub struct RequirementsSpecification {
     /// The name of the project specifying requirements.
     pub project: Option<PackageName>,
-    /// The `requirements.txt` entries for the project.
-    pub entries: Vec<RequirementEntry>,
     /// The requirements for the project.
-    pub requirements: Vec<RequirementsTxtRequirement>,
+    pub requirements: Vec<RequirementEntry>,
     /// The constraints for the project.
     pub constraints: Vec<Requirement>,
     /// The overrides for the project.
-    pub overrides: Vec<Requirement>,
+    pub overrides: Vec<RequirementEntry>,
     /// Package to install as editable installs
     pub editables: Vec<EditableRequirement>,
     /// The source trees from which to extract requirements.
@@ -62,8 +60,10 @@ impl RequirementsSpecification {
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
                     project: None,
-                    entries: vec![],
-                    requirements: vec![requirement],
+                    requirements: vec![RequirementEntry {
+                        requirement,
+                        hashes: vec![],
+                    }],
                     constraints: vec![],
                     overrides: vec![],
                     editables: vec![],
@@ -82,7 +82,6 @@ impl RequirementsSpecification {
                     .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
                     project: None,
-                    entries: vec![],
                     requirements: vec![],
                     constraints: vec![],
                     overrides: vec![],
@@ -102,12 +101,7 @@ impl RequirementsSpecification {
                     RequirementsTxt::parse(path, std::env::current_dir()?, client_builder).await?;
                 Self {
                     project: None,
-                    entries: requirements_txt.requirements.clone(),
-                    requirements: requirements_txt
-                        .requirements
-                        .into_iter()
-                        .map(|entry| entry.requirement)
-                        .collect(),
+                    requirements: requirements_txt.requirements,
                     constraints: requirements_txt.constraints,
                     overrides: vec![],
                     editables: requirements_txt.editables,
@@ -153,11 +147,13 @@ impl RequirementsSpecification {
                 {
                     Self {
                         project: Some(project.name),
-                        entries: vec![],
                         requirements: project
                             .requirements
                             .into_iter()
-                            .map(RequirementsTxtRequirement::Pep508)
+                            .map(|requirement| RequirementEntry {
+                                requirement: RequirementsTxtRequirement::Pep508(requirement),
+                                hashes: vec![],
+                            })
                             .collect(),
                         constraints: vec![],
                         overrides: vec![],
@@ -181,7 +177,6 @@ impl RequirementsSpecification {
                     })?;
                     Self {
                         project: None,
-                        entries: vec![],
                         requirements: vec![],
                         constraints: vec![],
                         overrides: vec![],
@@ -207,7 +202,6 @@ impl RequirementsSpecification {
                 })?;
                 Self {
                     project: None,
-                    entries: vec![],
                     requirements: vec![],
                     constraints: vec![],
                     overrides: vec![],
@@ -240,7 +234,6 @@ impl RequirementsSpecification {
         // a requirements file can also add constraints.
         for source in requirements {
             let source = Self::from_source(source, extras, client_builder).await?;
-            spec.entries.extend(source.entries);
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
@@ -270,12 +263,12 @@ impl RequirementsSpecification {
             spec.no_build.extend(source.no_build);
         }
 
-        // Read all constraints, treating _everything_ as a constraint. The raw entries (i.e.,
-        // hashes) are ignored, as they are not relevant for constraints.
+        // Read all constraints, treating both requirements _and_ constraints as constraints.
+        // Overrides are ignored, as are the hashes, as they are not relevant for constraints.
         for source in constraints {
             let source = Self::from_source(source, extras, client_builder).await?;
-            for requirement in source.requirements {
-                match requirement {
+            for entry in source.requirements {
+                match entry.requirement {
                     RequirementsTxtRequirement::Pep508(requirement) => {
                         spec.constraints.push(requirement);
                     }
@@ -287,7 +280,6 @@ impl RequirementsSpecification {
                 }
             }
             spec.constraints.extend(source.constraints);
-            spec.constraints.extend(source.overrides);
 
             if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url {
@@ -306,23 +298,11 @@ impl RequirementsSpecification {
             spec.no_build.extend(source.no_build);
         }
 
-        // Read all overrides, treating both requirements _and_ constraints as overrides.
+        // Read all overrides, treating both requirements _and_ overrides as overrides.
+        // Constraints are ignored.
         for source in overrides {
             let source = Self::from_source(source, extras, client_builder).await?;
-            for requirement in source.requirements {
-                match requirement {
-                    RequirementsTxtRequirement::Pep508(requirement) => {
-                        spec.overrides.push(requirement);
-                    }
-                    RequirementsTxtRequirement::Unnamed(requirement) => {
-                        return Err(anyhow::anyhow!(
-                            "Unnamed requirements are not allowed as overrides (found: `{requirement}`)"
-                        ));
-                    }
-                }
-            }
-            spec.entries.extend(source.entries);
-            spec.overrides.extend(source.constraints);
+            spec.overrides.extend(source.requirements);
             spec.overrides.extend(source.overrides);
 
             if let Some(index_url) = source.index_url {

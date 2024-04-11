@@ -73,7 +73,6 @@ pub(crate) async fn pip_sync(
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
         project: _,
-        entries,
         requirements,
         constraints: _,
         overrides: _,
@@ -138,9 +137,9 @@ pub(crate) async fn pip_sync(
     // Collect the set of required hashes.
     let hasher = if require_hashes {
         HashStrategy::from_requirements(
-            entries
-                .into_iter()
-                .map(|entry| (entry.requirement, entry.hashes)),
+            requirements
+                .iter()
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
             markers,
         )?
     } else {

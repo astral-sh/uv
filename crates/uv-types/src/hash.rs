@@ -81,8 +81,8 @@ impl HashStrategy {
     }
 
     /// Generate the required hashes from a set of [`RequirementsTxtRequirement`] entries.
-    pub fn from_requirements(
-        requirements: impl Iterator<Item = (RequirementsTxtRequirement, Vec<String>)>,
+    pub fn from_requirements<'a>(
+        requirements: impl Iterator<Item = (&'a RequirementsTxtRequirement, &'a [String])>,
         markers: &MarkerEnvironment,
     ) -> Result<Self, HashStrategyError> {
         let mut hashes = FxHashMap::<PackageId, Vec<HashDigest>>::default();
