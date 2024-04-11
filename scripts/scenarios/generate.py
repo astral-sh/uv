@@ -65,7 +65,6 @@ except ImportError:
     )
     exit(1)
 
-
 try:
     import chevron_blue
 except ImportError:
@@ -175,11 +174,11 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
 
         # Add generated metadata
         data["generated_from"] = (
-            f"https://github.com/zanieb/packse/tree/{ref}/scenarios"
+            f"https://github.com/astral-sh/packse/tree/{ref}/scenarios"
         )
         data["generated_with"] = "./scripts/sync_scenarios.sh"
         data["vendor_links"] = (
-            f"https://raw.githubusercontent.com/zanieb/packse/{ref}/vendor/links.html"
+            f"https://raw.githubusercontent.com/astral-sh/packse/{ref}/vendor/links.html"
         )
 
         data["index_url"] = f"https://astral-sh.github.io/packse/{ref}/simple-html/"
