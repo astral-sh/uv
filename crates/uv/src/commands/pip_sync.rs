@@ -14,7 +14,6 @@ use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
-use uv_auth::store_credentials_from_url;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
@@ -150,11 +149,6 @@ pub(crate) async fn pip_sync(
     // Incorporate any index locations from the provided sources.
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
-
-    // Add all authenticated sources to the store.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
-    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())

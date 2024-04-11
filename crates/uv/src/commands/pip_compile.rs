@@ -17,7 +17,6 @@ use tracing::debug;
 use distribution_types::{IndexLocations, LocalEditable, LocalEditables, Verbatim};
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::KeyringProviderType;
@@ -210,11 +209,6 @@ pub(crate) async fn pip_compile(
     // Incorporate any index locations from the provided sources.
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
-
-    // Add all authenticated sources to the store.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
-    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())

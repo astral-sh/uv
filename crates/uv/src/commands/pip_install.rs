@@ -19,7 +19,6 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use pypi_types::{Metadata23, Yanked};
 use requirements_txt::EditableRequirement;
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
@@ -203,11 +202,6 @@ pub(crate) async fn pip_install(
     // Incorporate any index locations from the provided sources.
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
-
-    // Add all authenticated sources to the store.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
-    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
