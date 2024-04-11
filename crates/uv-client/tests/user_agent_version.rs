@@ -187,10 +187,32 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         // Assert uv version
         assert_snapshot!(uv_version, @"uv/[VERSION]");
         // Assert linehaul json
-        assert_json_snapshot!("uv_linehaul_json", &linehaul, {
+        assert_json_snapshot!(&linehaul, {
             ".distro" => "[distro]",
             ".ci" => "[ci]"
-        });
+        }, @r###"
+        {
+          "installer": {
+            "name": "uv",
+            "version": "[VERSION]"
+          },
+          "python": "3.12.2",
+          "implementation": {
+            "name": "CPython",
+            "version": "3.12.2"
+          },
+          "distro": "[distro]",
+          "system": {
+            "name": "Linux",
+            "release": "6.5.0-1016-azure"
+          },
+          "cpu": "x86_64",
+          "openssl_version": null,
+          "setuptools_version": null,
+          "rustc_version": null,
+          "ci": "[ci]"
+        }
+        "###);
     });
 
     // Assert distro
