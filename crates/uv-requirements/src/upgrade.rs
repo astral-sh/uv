@@ -30,7 +30,6 @@ pub async fn read_lockfile(
     let preferences = requirements_txt
         .requirements
         .into_iter()
-        .filter(|entry| !entry.editable)
         .map(Preference::from_entry)
         .collect::<Result<Vec<_>, PreferenceError>>()?;
 

@@ -299,15 +299,10 @@ pub struct RequirementEntry {
     pub requirement: RequirementsTxtRequirement,
     /// Hashes of the downloadable packages
     pub hashes: Vec<String>,
-    /// Editable installation, see e.g. <https://stackoverflow.com/q/35064426/3549270>
-    pub editable: bool,
 }
 
 impl Display for RequirementEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.editable {
-            write!(f, "-e ")?;
-        }
         write!(f, "{}", self.requirement)?;
         for hash in &self.hashes {
             write!(f, " --hash {hash}")?;
@@ -670,7 +665,6 @@ fn parse_entry(
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
             requirement,
             hashes,
-            editable: false,
         })
     } else if let Some(char) = s.peek() {
         let (line, column) = calculate_row_column(content, s.cursor());
@@ -1743,7 +1737,6 @@ mod test {
                         },
                     ),
                     hashes: [],
-                    editable: false,
                 },
             ],
             constraints: [],
@@ -1798,7 +1791,6 @@ mod test {
                         },
                     ),
                     hashes: [],
-                    editable: false,
                 },
             ],
             constraints: [],

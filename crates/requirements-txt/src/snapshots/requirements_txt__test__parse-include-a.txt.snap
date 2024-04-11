@@ -16,7 +16,6 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
-            editable: false,
         },
         RequirementEntry {
             requirement: Pep508(
@@ -41,7 +40,6 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
-            editable: false,
         },
     ],
     constraints: [],
