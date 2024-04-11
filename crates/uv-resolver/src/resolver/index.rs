@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use distribution_types::PackageId;
+use distribution_types::VersionId;
 use once_map::OnceMap;
 use uv_normalize::PackageName;
 
@@ -14,7 +14,7 @@ pub struct InMemoryIndex {
     pub(crate) packages: OnceMap<PackageName, VersionsResponse>,
 
     /// A map from package ID to metadata for that distribution.
-    pub(crate) distributions: OnceMap<PackageId, MetadataResponse>,
+    pub(crate) distributions: OnceMap<VersionId, MetadataResponse>,
 }
 
 impl InMemoryIndex {
@@ -24,8 +24,8 @@ impl InMemoryIndex {
     }
 
     /// Insert a [`Metadata23`] into the index.
-    pub fn insert_metadata(&self, package_id: PackageId, response: MetadataResponse) {
-        self.distributions.done(package_id, response);
+    pub fn insert_metadata(&self, version_id: VersionId, response: MetadataResponse) {
+        self.distributions.done(version_id, response);
     }
 
     /// Get the [`VersionsResponse`] for a given package name, without waiting.
@@ -34,7 +34,7 @@ impl InMemoryIndex {
     }
 
     /// Get the [`MetadataResponse`] for a given package ID, without waiting.
-    pub fn get_metadata(&self, package_id: &PackageId) -> Option<Arc<MetadataResponse>> {
-        self.distributions.get(package_id)
+    pub fn get_metadata(&self, version_id: &VersionId) -> Option<Arc<MetadataResponse>> {
+        self.distributions.get(version_id)
     }
 }

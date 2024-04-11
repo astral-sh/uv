@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use futures::{StreamExt, TryStreamExt};
 use url::Url;
 
-use distribution_types::{BuildableSource, HashPolicy, PackageId, PathSourceUrl, SourceUrl};
+use distribution_types::{BuildableSource, HashPolicy, PathSourceUrl, SourceUrl, VersionId};
 use pep508_rs::Requirement;
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
@@ -102,7 +102,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
 
         // Fetch the metadata for the distribution.
         let metadata = {
-            let id = PackageId::from_url(source.url());
+            let id = VersionId::from_url(source.url());
             if let Some(archive) = self
                 .index
                 .get_metadata(&id)

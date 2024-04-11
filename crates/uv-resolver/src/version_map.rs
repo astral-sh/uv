@@ -112,8 +112,7 @@ impl VersionMap {
             .allowed_versions(package_name)
             .cloned()
             .unwrap_or_default();
-        // let required_hashes = hasher.get(package_name).digests().to_vec();
-        let required_hashes = Vec::new();
+        let required_hashes = hasher.get_package(package_name).digests().to_vec();
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
@@ -309,8 +308,7 @@ struct VersionMapLazy {
     /// Which yanked versions are allowed
     allowed_yanks: FxHashSet<Version>,
     /// The hashes of allowed distributions.
-    /// STOPSHIP(charlie): We'd need to clone the entire policy.
-    hasher: HashStrategy,
+    required_hashes: Vec<HashDigest>,
 }
 
 impl VersionMapLazy {

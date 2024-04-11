@@ -10,7 +10,7 @@ use distribution_types::{
     IndexLocations, InstalledMetadata, LocalDist, LocalEditable, LocalEditables, Name, ResolvedDist,
 };
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::RequirementsTxtRequirement;
+
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;

@@ -5,7 +5,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 
-use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name};
+use distribution_types::{Dist, DistributionMetadata, LocalEditable};
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use pypi_types::Metadata23;
 use uv_client::RegistryClient;
@@ -138,7 +138,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
 
         // Fetch the metadata for the distribution.
         let requires_dist = {
-            let id = dist.package_id();
+            let id = dist.version_id();
             if let Some(archive) = self
                 .index
                 .get_metadata(&id)

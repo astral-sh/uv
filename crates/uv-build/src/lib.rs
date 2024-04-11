@@ -112,7 +112,7 @@ pub enum MissingLibrary {
 #[derive(Debug, Error)]
 pub struct MissingHeaderCause {
     missing_library: MissingLibrary,
-    package_id: String,
+    version_id: String,
 }
 
 impl Display for MissingHeaderCause {
@@ -122,22 +122,22 @@ impl Display for MissingHeaderCause {
                 write!(
                     f,
                     "This error likely indicates that you need to install a library that provides \"{}\" for {}",
-                    header, self.package_id
+                    header, self.version_id
                 )
             }
             MissingLibrary::Linker(library) => {
                 write!(
                     f,
                     "This error likely indicates that you need to install the library that provides a shared library \
-                    for {library} for {package_id} (e.g. lib{library}-dev)",
-                    library = library, package_id = self.package_id
+                    for {library} for {version_id} (e.g. lib{library}-dev)",
+                    library = library, version_id = self.version_id
                 )
             }
             MissingLibrary::PythonPackage(package) => {
                 write!(
                     f,
-                    "This error likely indicates that you need to `uv pip install {package}` into the build environment for {package_id}",
-                    package = package, package_id = self.package_id
+                    "This error likely indicates that you need to `uv pip install {package}` into the build environment for {version_id}",
+                    package = package, version_id = self.version_id
                 )
             }
         }
@@ -148,7 +148,7 @@ impl Error {
     fn from_command_output(
         message: String,
         output: &Output,
-        package_id: impl Into<String>,
+        version_id: impl Into<String>,
     ) -> Self {
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -178,7 +178,7 @@ impl Error {
                 stderr,
                 missing_header_cause: MissingHeaderCause {
                     missing_library,
-                    package_id: package_id.into(),
+                    version_id: version_id.into(),
                 },
             };
         }
@@ -364,7 +364,7 @@ pub struct SourceBuild {
     /// > it created.
     metadata_directory: Option<PathBuf>,
     /// Package id such as `foo-1.2.3`, for error reporting
-    package_id: String,
+    version_id: String,
     /// Whether we do a regular PEP 517 build or an PEP 660 editable build
     build_kind: BuildKind,
     /// Modified PATH that contains the `venv_bin`, `user_path` and `system_path` variables in that order
@@ -385,7 +385,7 @@ impl SourceBuild {
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
-        package_id: String,
+        version_id: String,
         setup_py: SetupPyStrategy,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
@@ -477,7 +477,7 @@ impl SourceBuild {
                     &venv,
                     pep517_backend,
                     build_context,
-                    &package_id,
+                    &version_id,
                     build_kind,
                     &config_settings,
                     &environment_variables,
@@ -497,7 +497,7 @@ impl SourceBuild {
             build_kind,
             config_settings,
             metadata_directory: None,
-            package_id,
+            version_id,
             environment_variables,
             modified_path,
         })
@@ -695,7 +695,7 @@ impl SourceBuild {
             return Err(Error::from_command_output(
                 "Build backend failed to determine metadata through `prepare_metadata_for_build_wheel`".to_string(),
                 &output,
-                &self.package_id,
+                &self.version_id,
             ));
         }
 
@@ -714,7 +714,7 @@ impl SourceBuild {
     /// dir.
     ///
     /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
-    #[instrument(skip_all, fields(package_id = self.package_id))]
+    #[instrument(skip_all, fields(version_id = self.version_id))]
     pub async fn build_wheel(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = fs::canonicalize(wheel_dir)?;
@@ -750,7 +750,7 @@ impl SourceBuild {
                 return Err(Error::from_command_output(
                     "Failed building wheel through setup.py".to_string(),
                     &output,
-                    &self.package_id,
+                    &self.version_id,
                 ));
             }
             let dist = fs::read_dir(self.source_tree.join("dist"))?;
@@ -761,7 +761,7 @@ impl SourceBuild {
                         "Expected exactly wheel in `dist/` after invoking setup.py, found {dist_dir:?}"
                     ),
                     &output,
-                    &self.package_id)
+                    &self.version_id)
                 );
             };
 
@@ -831,7 +831,7 @@ impl SourceBuild {
                     self.build_kind
                 ),
                 &output,
-                &self.package_id,
+                &self.version_id,
             ));
         }
 
@@ -843,7 +843,7 @@ impl SourceBuild {
                     self.build_kind
                 ),
                 &output,
-                &self.package_id,
+                &self.version_id,
             ));
         }
         Ok(distribution_filename)
@@ -873,7 +873,7 @@ async fn create_pep517_build_environment(
     venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
-    package_id: &str,
+    version_id: &str,
     build_kind: BuildKind,
     config_settings: &ConfigSettings,
     environment_variables: &FxHashMap<OsString, OsString>,
@@ -927,7 +927,7 @@ async fn create_pep517_build_environment(
         return Err(Error::from_command_output(
             format!("Build backend failed to determine extra requires with `build_{build_kind}()`"),
             &output,
-            package_id,
+            version_id,
         ));
     }
 
@@ -938,7 +938,7 @@ async fn create_pep517_build_environment(
                 "Build backend failed to read extra requires from `get_requires_for_build_{build_kind}`: {err}"
             ),
             &output,
-            package_id,
+            version_id,
         )
     })?;
 
@@ -949,7 +949,7 @@ async fn create_pep517_build_environment(
                 "Build backend failed to return extra requires with `get_requires_for_build_{build_kind}`: {err}"
             ),
             &output,
-            package_id,
+            version_id,
         )
     })?;
 

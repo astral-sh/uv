@@ -1,5 +1,5 @@
 use distribution_types::{
-    git_reference, DirectUrlSourceDist, DistributionMetadata, GitSourceDist, Hashed, PathSourceDist,
+    git_reference, DirectUrlSourceDist, GitSourceDist, Hashed, PathSourceDist,
 };
 use platform_tags::Tags;
 use uv_cache::{ArchiveTimestamp, Cache, CacheBucket, CacheShard, WheelCache};

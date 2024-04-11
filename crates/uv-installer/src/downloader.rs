@@ -8,8 +8,8 @@ use tracing::instrument;
 use url::Url;
 
 use distribution_types::{
-    BuildableSource, CachedDist, Dist, DistributionMetadata, Hashed, Identifier, LocalEditable,
-    LocalEditables, Name, RemoteSource,
+    BuildableSource, CachedDist, Dist, Hashed, Identifier, LocalEditable, LocalEditables,
+    RemoteSource,
 };
 use platform_tags::Tags;
 use uv_cache::Cache;

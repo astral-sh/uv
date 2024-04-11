@@ -1083,30 +1083,6 @@ impl Identifier for BuildableSource<'_> {
     }
 }
 
-impl Name for SourceDistFilename {
-    fn name(&self) -> &PackageName {
-        &self.name
-    }
-}
-
-impl DistributionMetadata for SourceDistFilename {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.version)
-    }
-}
-
-impl Name for WheelFilename {
-    fn name(&self) -> &PackageName {
-        &self.name
-    }
-}
-
-impl DistributionMetadata for WheelFilename {
-    fn version_or_url(&self) -> VersionOrUrl {
-        VersionOrUrl::Version(&self.version)
-    }
-}
-
 #[cfg(test)]
 mod test {
     use crate::{BuiltDist, Dist, SourceDist};

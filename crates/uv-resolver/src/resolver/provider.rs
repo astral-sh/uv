@@ -3,7 +3,7 @@ use std::future::Future;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 
-use distribution_types::{Dist, DistributionMetadata, IndexLocations, Name};
+use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
 
 use uv_client::RegistryClient;

@@ -3855,24 +3855,29 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
     Ok(())
 }
 
-/// `--require-hashes` isn't supported for unnamed requirements (yet).
+/// We allow `--require-hashes` for direct URL dependencies.
 #[test]
 fn require_hashes_unnamed() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
-        .write_str("https://foo.com --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f")?;
+        .write_str(indoc::indoc! {r"
+            https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        "} )?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Unnamed requirements are not supported with `--require-hashes`
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
     "###
     );
 

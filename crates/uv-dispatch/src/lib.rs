@@ -269,12 +269,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         Ok(())
     }
 
-    #[instrument(skip_all, fields(package_id = package_id, subdirectory = ?subdirectory))]
+    #[instrument(skip_all, fields(version_id = version_id, subdirectory = ?subdirectory))]
     async fn setup_build<'data>(
         &'data self,
         source: &'data Path,
         subdirectory: Option<&'data Path>,
-        package_id: &'data str,
+        version_id: &'data str,
         dist: Option<&'data SourceDist>,
         build_kind: BuildKind,
     ) -> Result<SourceBuild> {
@@ -304,7 +304,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.interpreter,
             self,
             self.source_build_context.clone(),
-            package_id.to_string(),
+            version_id.to_string(),
             self.setup_py,
             self.config_settings.clone(),
             self.build_isolation,

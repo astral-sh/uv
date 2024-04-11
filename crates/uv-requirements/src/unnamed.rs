@@ -10,8 +10,8 @@ use tracing::debug;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuildableSource, DirectSourceUrl, GitSourceUrl, HashPolicy, PackageId, PathSourceUrl,
-    RemoteSource, SourceUrl,
+    BuildableSource, DirectSourceUrl, GitSourceUrl, PathSourceUrl, RemoteSource, SourceUrl,
+    VersionId,
 };
 use pep508_rs::{
     Requirement, RequirementsTxtRequirement, Scheme, UnnamedRequirement, VersionOrUrl,
@@ -241,7 +241,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
 
         // Fetch the metadata for the distribution.
         let name = {
-            let id = PackageId::from_url(source.url());
+            let id = VersionId::from_url(source.url());
             if let Some(archive) = index.get_metadata(&id).as_deref().and_then(|response| {
                 if let MetadataResponse::Found(archive) = response {
                     Some(archive)
@@ -253,10 +253,9 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                 archive.metadata.name.clone()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
+                let hashes = hasher.get_url(source.url());
                 let source = BuildableSource::Url(source);
-                let archive = database
-                    .build_wheel_metadata(&source, hasher.by_id(&id))
-                    .await?;
+                let archive = database.build_wheel_metadata(&source, hashes).await?;
 
                 let name = archive.metadata.name.clone();
 
