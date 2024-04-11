@@ -657,7 +657,7 @@ struct PipSyncArgs {
     /// environments, when installing into Python installations that are managed by an external
     /// package manager, like `apt`. It should be used with caution, as such Python installations
     /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
-    #[clap(long, requires = "discovery")]
+    #[clap(long, env = "UV_BREAK_SYSTEM_PACKAGES", requires = "discovery")]
     break_system_packages: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
@@ -941,7 +941,7 @@ struct PipInstallArgs {
     /// environments, when installing into Python installations that are managed by an external
     /// package manager, like `apt`. It should be used with caution, as such Python installations
     /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
-    #[clap(long, requires = "discovery")]
+    #[clap(long, env = "UV_BREAK_SYSTEM_PACKAGES", requires = "discovery")]
     break_system_packages: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
@@ -1086,7 +1086,7 @@ struct PipUninstallArgs {
     /// environments, when installing into Python installations that are managed by an external
     /// package manager, like `apt`. It should be used with caution, as such Python installations
     /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
-    #[clap(long, requires = "discovery")]
+    #[clap(long, env = "UV_BREAK_SYSTEM_PACKAGES", requires = "discovery")]
     break_system_packages: bool,
 
     /// Run offline, i.e., without accessing the network.
