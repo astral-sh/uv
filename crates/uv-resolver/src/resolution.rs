@@ -12,7 +12,7 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
-    Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, PackageId, ResolvedDist, Verbatim,
+    Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, ResolvedDist, Verbatim, VersionId,
     VersionOrUrl,
 };
 use once_map::OnceMap;
@@ -66,7 +66,7 @@ impl ResolutionGraph {
         selection: &SelectedDependencies<UvDependencyProvider>,
         pins: &FilePins,
         packages: &OnceMap<PackageName, VersionsResponse>,
-        distributions: &OnceMap<PackageId, MetadataResponse>,
+        distributions: &OnceMap<VersionId, MetadataResponse>,
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
         editables: Editables,
@@ -135,7 +135,7 @@ impl ResolutionGraph {
                     {
                         hashes.insert(package_name.clone(), digests.to_vec());
                     } else if let Some(metadata_response) =
-                        distributions.get(&pinned_package.package_id())
+                        distributions.get(&pinned_package.version_id())
                     {
                         if let MetadataResponse::Found(ref archive) = *metadata_response {
                             let mut digests = archive.hashes.clone();
@@ -168,17 +168,17 @@ impl ResolutionGraph {
                             });
                         }
                     } else {
-                        let response = distributions.get(&dist.package_id()).unwrap_or_else(|| {
+                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
                             panic!(
                                 "Every package should have metadata: {:?}",
-                                dist.package_id()
+                                dist.version_id()
                             )
                         });
 
                         let MetadataResponse::Found(archive) = &*response else {
                             panic!(
                                 "Every package should have metadata: {:?}",
-                                dist.package_id()
+                                dist.version_id()
                             )
                         };
 
@@ -222,17 +222,17 @@ impl ResolutionGraph {
                             });
                         }
                     } else {
-                        let response = distributions.get(&dist.package_id()).unwrap_or_else(|| {
+                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
                             panic!(
                                 "Every package should have metadata: {:?}",
-                                dist.package_id()
+                                dist.version_id()
                             )
                         });
 
                         let MetadataResponse::Found(archive) = &*response else {
                             panic!(
                                 "Every package should have metadata: {:?}",
-                                dist.package_id()
+                                dist.version_id()
                             )
                         };
 
@@ -429,20 +429,20 @@ impl ResolutionGraph {
         let mut seen_marker_values = FxHashSet::default();
         for i in self.petgraph.node_indices() {
             let dist = &self.petgraph[i];
-            let package_id = match dist.version_or_url() {
+            let version_id = match dist.version_or_url() {
                 VersionOrUrl::Version(version) => {
-                    PackageId::from_registry(dist.name().clone(), version.clone())
+                    VersionId::from_registry(dist.name().clone(), version.clone())
                 }
-                VersionOrUrl::Url(verbatim_url) => PackageId::from_url(verbatim_url.raw()),
+                VersionOrUrl::Url(verbatim_url) => VersionId::from_url(verbatim_url.raw()),
             };
             let res = index
                 .distributions
-                .get(&package_id)
+                .get(&version_id)
                 .expect("every package in resolution graph has metadata");
             let MetadataResponse::Found(archive, ..) = &*res else {
                 panic!(
                     "Every package should have metadata: {:?}",
-                    dist.package_id()
+                    dist.version_id()
                 )
             };
             for req in manifest.apply(&archive.metadata.requires_dist) {

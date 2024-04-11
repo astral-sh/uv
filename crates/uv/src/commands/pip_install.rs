@@ -15,7 +15,7 @@ use distribution_types::{
     LocalEditables, Name, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::{MarkerEnvironment, Requirement, RequirementsTxtRequirement};
+use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use pypi_types::{Metadata23, Yanked};
 use requirements_txt::EditableRequirement;
@@ -191,10 +191,7 @@ pub(crate) async fn pip_install(
         HashStrategy::from_requirements(
             entries
                 .into_iter()
-                .filter_map(|requirement| match requirement.requirement {
-                    RequirementsTxtRequirement::Pep508(req) => Some((req, requirement.hashes)),
-                    RequirementsTxtRequirement::Unnamed(_) => None,
-                }),
+                .map(|entry| (entry.requirement, entry.hashes)),
             markers,
         )?
     } else {

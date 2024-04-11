@@ -5,7 +5,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 
-use distribution_types::{Dist, DistributionMetadata, LocalEditable, Name};
+use distribution_types::{Dist, DistributionMetadata, LocalEditable};
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use pypi_types::Metadata23;
 use uv_client::RegistryClient;
@@ -138,7 +138,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
 
         // Fetch the metadata for the distribution.
         let requires_dist = {
-            let id = dist.package_id();
+            let id = dist.version_id();
             if let Some(archive) = self
                 .index
                 .get_metadata(&id)
@@ -157,7 +157,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = self
                     .database
-                    .get_or_build_wheel_metadata(&dist, self.hasher.get(dist.name()))
+                    .get_or_build_wheel_metadata(&dist, self.hasher.get(&dist))
                     .await
                     .with_context(|| match &dist {
                         Dist::Built(built) => format!("Failed to download: {built}"),

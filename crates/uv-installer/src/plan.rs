@@ -13,7 +13,6 @@ use distribution_types::{
 use pep508_rs::{Requirement, VersionOrUrl};
 use platform_tags::Tags;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, WheelCache};
-
 use uv_configuration::{NoBinary, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
@@ -259,7 +258,7 @@ impl<'a> Planner<'a> {
                             // Read the HTTP pointer.
                             if let Some(pointer) = HttpArchivePointer::read_from(&cache_entry)? {
                                 let archive = pointer.into_archive();
-                                if archive.satisfies(hasher.get(&requirement.name)) {
+                                if archive.satisfies(hasher.get(&wheel)) {
                                     let cached_dist = CachedDirectUrlDist::from_url(
                                         wheel.filename,
                                         wheel.url,
@@ -301,7 +300,7 @@ impl<'a> Planner<'a> {
                                 let timestamp = ArchiveTimestamp::from_file(&wheel.path)?;
                                 if pointer.is_up_to_date(timestamp) {
                                     let archive = pointer.into_archive();
-                                    if archive.satisfies(hasher.get(&requirement.name)) {
+                                    if archive.satisfies(hasher.get(&wheel)) {
                                         let cached_dist = CachedDirectUrlDist::from_url(
                                             wheel.filename,
                                             wheel.url,

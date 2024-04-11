@@ -112,7 +112,7 @@ impl VersionMap {
             .allowed_versions(package_name)
             .cloned()
             .unwrap_or_default();
-        let required_hashes = hasher.get(package_name).digests().to_vec();
+        let required_hashes = hasher.get_package(package_name).digests().to_vec();
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,

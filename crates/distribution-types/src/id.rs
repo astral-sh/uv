@@ -1,32 +1,64 @@
 use std::fmt::{Display, Formatter};
 
+use cache_key::CanonicalUrl;
 use url::Url;
 
 use pep440_rs::Version;
 use uv_normalize::PackageName;
 
-/// A unique identifier for a package at a specific version (e.g., `black==23.10.0`).
+/// A unique identifier for a package. A package can either be identified by a name (e.g., `black`)
+/// or a URL (e.g., `git+https://github.com/psf/black`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PackageId {
-    /// The identifier consists of a package name and version.
-    NameVersion(PackageName, Version),
+    /// The identifier consists of a package name.
+    Name(PackageName),
     /// The identifier consists of a URL.
     Url(String),
 }
 
 impl PackageId {
     /// Create a new [`PackageId`] from a package name and version.
-    pub fn from_registry(name: PackageName, version: Version) -> Self {
-        Self::NameVersion(name, version)
+    pub fn from_registry(name: PackageName) -> Self {
+        Self::Name(name)
     }
 
     /// Create a new [`PackageId`] from a URL.
     pub fn from_url(url: &Url) -> Self {
-        Self::Url(cache_key::digest(&cache_key::CanonicalUrl::new(url)))
+        Self::Url(cache_key::digest(&CanonicalUrl::new(url)))
     }
 }
 
 impl Display for PackageId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Name(name) => write!(f, "{name}"),
+            Self::Url(url) => write!(f, "{url}"),
+        }
+    }
+}
+
+/// A unique identifier for a package at a specific version (e.g., `black==23.10.0`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum VersionId {
+    /// The identifier consists of a package name and version.
+    NameVersion(PackageName, Version),
+    /// The identifier consists of a URL.
+    Url(String),
+}
+
+impl VersionId {
+    /// Create a new [`VersionId`] from a package name and version.
+    pub fn from_registry(name: PackageName, version: Version) -> Self {
+        Self::NameVersion(name, version)
+    }
+
+    /// Create a new [`VersionId`] from a URL.
+    pub fn from_url(url: &Url) -> Self {
+        Self::Url(cache_key::digest(&CanonicalUrl::new(url)))
+    }
+}
+
+impl Display for VersionId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NameVersion(name, version) => write!(f, "{name}-{version}"),
@@ -73,7 +105,7 @@ impl ResourceId {
     }
 }
 
-impl From<&Self> for PackageId {
+impl From<&Self> for VersionId {
     /// Required for `WaitMap::wait`.
     fn from(value: &Self) -> Self {
         value.clone()

@@ -523,29 +523,27 @@ impl<
         match package {
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Python(_) => {}
-            PubGrubPackage::Package(package_name, _extra, None) => {
-                // Validate that the package is permitted under hash-checking mode.
-                if !self.hasher.allows(package_name) {
-                    return Err(ResolveError::UnhashedPackage(package_name.clone()));
+            PubGrubPackage::Package(name, _extra, None) => {
+                // Verify that the package is allowed under the hash-checking policy.
+                if !self.hasher.allows_package(name) {
+                    return Err(ResolveError::UnhashedPackage(name.clone()));
                 }
 
                 // Emit a request to fetch the metadata for this package.
-                if self.index.packages.register(package_name.clone()) {
-                    priorities.add(package_name.clone());
-                    request_sink
-                        .send(Request::Package(package_name.clone()))
-                        .await?;
+                if self.index.packages.register(name.clone()) {
+                    priorities.add(name.clone());
+                    request_sink.send(Request::Package(name.clone())).await?;
                 }
             }
-            PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-                // Validate that the package is permitted under hash-checking mode.
-                if !self.hasher.allows(package_name) {
-                    return Err(ResolveError::UnhashedPackage(package_name.clone()));
+            PubGrubPackage::Package(name, _extra, Some(url)) => {
+                // Verify that the package is allowed under the hash-checking policy.
+                if !self.hasher.allows_url(url) {
+                    return Err(ResolveError::UnhashedPackage(name.clone()));
                 }
 
                 // Emit a request to fetch the metadata for this distribution.
-                let dist = Dist::from_url(package_name.clone(), url.clone())?;
-                if self.index.distributions.register(dist.package_id()) {
+                let dist = Dist::from_url(name.clone(), url.clone())?;
+                if self.index.distributions.register(dist.version_id()) {
                     priorities.add(dist.name().clone());
                     request_sink.send(Request::Dist(dist)).await?;
                 }
@@ -646,7 +644,7 @@ impl<
                 let response = self
                     .index
                     .distributions
-                    .wait(&dist.package_id())
+                    .wait(&dist.version_id())
                     .await
                     .ok_or(ResolveError::Unregistered)?;
 
@@ -796,7 +794,7 @@ impl<
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
-                if self.index.distributions.register(candidate.package_id()) {
+                if self.index.distributions.register(candidate.version_id()) {
                     let request = match dist.for_resolution() {
                         ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
                         ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
@@ -880,13 +878,13 @@ impl<
                             Some(url) => PubGrubDistribution::from_url(package_name, url),
                             None => PubGrubDistribution::from_registry(package_name, version),
                         };
-                        let package_id = dist.package_id();
+                        let version_id = dist.version_id();
 
                         // Wait for the metadata to be available.
                         self.index
                             .distributions
-                            .wait(&package_id)
-                            .instrument(info_span!("distributions_wait", %package_id))
+                            .wait(&version_id)
+                            .instrument(info_span!("distributions_wait", %version_id))
                             .await
                             .ok_or(ResolveError::Unregistered)?;
                     }
@@ -931,7 +929,7 @@ impl<
                     Some(url) => PubGrubDistribution::from_url(package_name, url),
                     None => PubGrubDistribution::from_registry(package_name, version),
                 };
-                let package_id = dist.package_id();
+                let version_id = dist.version_id();
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
                 if self.unavailable_packages.get(package_name).is_some()
@@ -953,8 +951,8 @@ impl<
                 let response = self
                     .index
                     .distributions
-                    .wait(&package_id)
-                    .instrument(info_span!("distributions_wait", %package_id))
+                    .wait(&version_id)
+                    .instrument(info_span!("distributions_wait", %version_id))
                     .await
                     .ok_or(ResolveError::Unregistered)?;
 
@@ -1061,7 +1059,7 @@ impl<
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
                     self.index.distributions.done(
-                        dist.package_id(),
+                        dist.version_id(),
                         MetadataResponse::Found(ArchiveMetadata::from(metadata)),
                     );
                 }
@@ -1079,7 +1077,7 @@ impl<
                         }
                         _ => {}
                     }
-                    self.index.distributions.done(dist.package_id(), metadata);
+                    self.index.distributions.done(dist.version_id(), metadata);
                 }
                 Some(Response::Dist {
                     dist: Dist::Source(dist),
@@ -1095,7 +1093,7 @@ impl<
                         }
                         _ => {}
                     }
-                    self.index.distributions.done(dist.package_id(), metadata);
+                    self.index.distributions.done(dist.version_id(), metadata);
                 }
                 None => {}
             }
@@ -1200,7 +1198,7 @@ impl<
                 };
 
                 // Emit a request to fetch the metadata for this version.
-                if self.index.distributions.register(candidate.package_id()) {
+                if self.index.distributions.register(candidate.version_id()) {
                     let dist = dist.for_resolution().to_owned();
 
                     let response = match dist {

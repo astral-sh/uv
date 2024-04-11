@@ -141,7 +141,7 @@ impl BatchPrefetcher {
                 dist
             );
             prefetch_count += 1;
-            if index.distributions.register(candidate.package_id()) {
+            if index.distributions.register(candidate.version_id()) {
                 let request = match dist {
                     ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
                     ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),

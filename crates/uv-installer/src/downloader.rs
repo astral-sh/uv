@@ -8,7 +8,7 @@ use tracing::instrument;
 use url::Url;
 
 use distribution_types::{
-    BuildableSource, CachedDist, Dist, Hashed, Identifier, LocalEditable, LocalEditables, Name,
+    BuildableSource, CachedDist, Dist, Hashed, Identifier, LocalEditable, LocalEditables,
     RemoteSource,
 };
 use platform_tags::Tags;
@@ -170,7 +170,7 @@ impl<'a, Context: BuildContext + Send + Sync> Downloader<'a, Context> {
     pub async fn get_wheel(&self, dist: Dist, in_flight: &InFlight) -> Result<CachedDist, Error> {
         let id = dist.distribution_id();
         if in_flight.downloads.register(id.clone()) {
-            let policy = self.hashes.get(dist.name());
+            let policy = self.hashes.get(&dist);
             let result = self
                 .database
                 .get_or_build_wheel(&dist, self.tags, policy)
