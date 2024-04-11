@@ -293,7 +293,7 @@ impl Display for EditableRequirement {
 
 /// A [Requirement] with additional metadata from the requirements.txt, currently only hashes but in
 /// the future also editable an similar information
-#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Hash, Serialize)]
 pub struct RequirementEntry {
     /// The actual PEP 508 requirement
     pub requirement: RequirementsTxtRequirement,
