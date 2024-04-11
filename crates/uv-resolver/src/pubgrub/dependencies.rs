@@ -4,7 +4,7 @@ use tracing::warn;
 
 use distribution_types::Verbatim;
 use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use pep508_rs::{MarkerEnvironment, MarkerTree, Requirement, VersionOrUrl};
 use uv_normalize::{ExtraName, PackageName};
 use uv_types::{Constraints, Overrides};
 
@@ -14,7 +14,9 @@ use crate::resolver::{Locals, Urls};
 use crate::ResolveError;
 
 #[derive(Debug)]
-pub struct PubGrubDependencies(Vec<(PubGrubPackage, Range<Version>)>);
+pub struct PubGrubDependencies {
+    dependencies: Vec<(PubGrubPackage, Range<Version>, Option<MarkerTree>)>,
+}
 
 impl PubGrubDependencies {
     /// Generate a set of `PubGrub` dependencies from a set of requirements.
@@ -49,7 +51,7 @@ impl PubGrubDependencies {
                     .into_iter()
                     .map(|extra| to_pubgrub(requirement, Some(extra), urls, locals)),
             ) {
-                let (mut package, version) = result?;
+                let (mut package, version, marker) = result?;
 
                 // Detect self-dependencies.
                 if let PubGrubPackage::Package(name, extra, ..) = &mut package {
@@ -62,7 +64,7 @@ impl PubGrubDependencies {
                     }
                 }
 
-                dependencies.push((package.clone(), version.clone()));
+                dependencies.push((package.clone(), version.clone(), marker));
 
                 // If the requirement was constrained, add those constraints.
                 for constraint in constraints.get(&requirement.name).into_iter().flatten() {
@@ -82,7 +84,7 @@ impl PubGrubDependencies {
                             .into_iter()
                             .map(|extra| to_pubgrub(constraint, Some(extra), urls, locals)),
                     ) {
-                        let (mut package, version) = result?;
+                        let (mut package, version, marker) = result?;
 
                         // Detect self-dependencies.
                         if let PubGrubPackage::Package(name, extra, ..) = &mut package {
@@ -95,30 +97,37 @@ impl PubGrubDependencies {
                             }
                         }
 
-                        dependencies.push((package.clone(), version.clone()));
+                        dependencies.push((package.clone(), version.clone(), marker));
                     }
                 }
             }
         }
 
-        Ok(Self(dependencies))
+        Ok(Self { dependencies })
     }
 
     /// Add a [`PubGrubPackage`] and [`PubGrubVersion`] range into the dependencies.
-    pub(crate) fn push(&mut self, package: PubGrubPackage, version: Range<Version>) {
-        self.0.push((package, version));
+    pub(crate) fn push(
+        &mut self,
+        package: PubGrubPackage,
+        version: Range<Version>,
+        marker: Option<MarkerTree>,
+    ) {
+        self.dependencies.push((package, version, marker));
     }
 
     /// Iterate over the dependencies.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &(PubGrubPackage, Range<Version>)> {
-        self.0.iter()
+    pub(crate) fn iter(
+        &self,
+    ) -> impl Iterator<Item = &(PubGrubPackage, Range<Version>, Option<MarkerTree>)> {
+        self.dependencies.iter()
     }
 }
 
 /// Convert a [`PubGrubDependencies`] to a [`DependencyConstraints`].
-impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>)> {
+impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>, Option<MarkerTree>)> {
     fn from(dependencies: PubGrubDependencies) -> Self {
-        dependencies.0
+        dependencies.dependencies
     }
 }
 
@@ -128,12 +137,14 @@ fn to_pubgrub(
     extra: Option<ExtraName>,
     urls: &Urls,
     locals: &Locals,
-) -> Result<(PubGrubPackage, Range<Version>), ResolveError> {
+) -> Result<(PubGrubPackage, Range<Version>, Option<MarkerTree>), ResolveError> {
+    let marker = requirement.marker.clone();
     match requirement.version_or_url.as_ref() {
         // The requirement has no specifier (e.g., `flask`).
         None => Ok((
             PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
             Range::full(),
+            marker,
         )),
 
         // The requirement has a specifier (e.g., `flask>=1.0`).
@@ -163,6 +174,7 @@ fn to_pubgrub(
             Ok((
                 PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
                 version,
+                marker,
             ))
         }
 
@@ -186,6 +198,7 @@ fn to_pubgrub(
             Ok((
                 PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
                 Range::full(),
+                marker,
             ))
         }
     }

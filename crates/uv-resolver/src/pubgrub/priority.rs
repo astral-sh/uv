@@ -6,7 +6,7 @@ use uv_normalize::PackageName;
 
 use crate::pubgrub::package::PubGrubPackage;
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct PubGrubPriorities(FxHashMap<PackageName, usize>);
 
 impl PubGrubPriorities {

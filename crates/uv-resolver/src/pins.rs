@@ -9,7 +9,7 @@ use crate::candidate_selector::Candidate;
 ///
 /// For example, given `Flask==3.0.0`, the [`FilePins`] would contain a mapping from `Flask` to
 /// `3.0.0` to the specific wheel or source distribution archive that was pinned for that version.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct FilePins(FxHashMap<PackageName, FxHashMap<pep440_rs::Version, ResolvedDist>>);
 
 impl FilePins {

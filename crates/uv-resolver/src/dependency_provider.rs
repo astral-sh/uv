@@ -9,6 +9,7 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPriority};
 
 /// We don't use a dependency provider, we interact with state directly, but we still need this one
 /// for type
+#[derive(Clone)]
 pub(crate) struct UvDependencyProvider;
 
 impl DependencyProvider for UvDependencyProvider {

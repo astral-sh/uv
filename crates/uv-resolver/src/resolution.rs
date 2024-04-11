@@ -14,7 +14,7 @@ use distribution_types::{
     VersionOrUrl,
 };
 use pep440_rs::Version;
-use pep508_rs::MarkerEnvironment;
+use pep508_rs::{MarkerEnvironment, MarkerTree};
 use pypi_types::Hashes;
 use uv_normalize::{ExtraName, PackageName};
 
@@ -42,7 +42,7 @@ pub enum AnnotationStyle {
 #[derive(Debug)]
 pub struct ResolutionGraph {
     /// The underlying graph.
-    petgraph: petgraph::graph::Graph<ResolvedDist, Range<Version>, petgraph::Directed>,
+    petgraph: petgraph::graph::Graph<ResolvedNode, Range<Version>, petgraph::Directed>,
     /// The metadata for every distribution in this resolution.
     hashes: FxHashMap<PackageName, Vec<Hashes>>,
     /// The enabled extras for every distribution in this resolution.
@@ -51,6 +51,18 @@ pub struct ResolutionGraph {
     editables: Editables,
     /// Any diagnostics that were encountered while building the graph.
     diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ResolvedNode {
+    dist: ResolvedDist,
+    markers: Vec<MarkerTree>,
+}
+
+impl std::fmt::Display for ResolvedNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.dist.fmt(f)
+    }
 }
 
 impl ResolutionGraph {
@@ -80,90 +92,98 @@ impl ResolutionGraph {
             resolution.packages.len(),
             BuildHasherDefault::default(),
         );
-        for (package, version) in &resolution.packages {
-            match package {
-                PubGrubPackage::Package(package_name, None, None) => {
-                    // Create the distribution.
-                    let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
-                        Dist::from_editable(package_name.clone(), editable.clone())?.into()
-                    } else {
-                        resolution
-                            .pins
-                            .get(package_name, version)
-                            .expect("Every package should be pinned")
-                            .clone()
-                    };
+        for (package, versions) in &resolution.packages {
+            for (version, markers) in versions {
+                match package {
+                    PubGrubPackage::Package(package_name, None, None) => {
+                        // Create the distribution.
+                        let pinned_package =
+                            if let Some((editable, _)) = editables.get(package_name) {
+                                Dist::from_editable(package_name.clone(), editable.clone())?.into()
+                            } else {
+                                resolution
+                                    .pins
+                                    .get(package_name, version)
+                                    .expect("Every package should be pinned")
+                                    .clone()
+                            };
 
-                    // Add its hashes to the index, preserving those that were already present in
-                    // the lockfile if necessary.
-                    if let Some(hash) = preferences.match_hashes(package_name, version) {
-                        hashes.insert(package_name.clone(), hash.to_vec());
-                    } else if let Some(versions_response) = index.packages.get(package_name) {
-                        if let VersionsResponse::Found(ref version_map) = *versions_response {
-                            hashes.insert(package_name.clone(), {
-                                let mut hash = version_map.hashes(version);
-                                hash.sort_unstable();
-                                hash
-                            });
+                        // Add its hashes to the index, preserving those that were already present in
+                        // the lockfile if necessary.
+                        if let Some(hash) = preferences.match_hashes(package_name, version) {
+                            hashes.insert(package_name.clone(), hash.to_vec());
+                        } else if let Some(versions_response) = index.packages.get(package_name) {
+                            if let VersionsResponse::Found(ref version_map) = *versions_response {
+                                hashes.insert(package_name.clone(), {
+                                    let mut hash = version_map.hashes(version);
+                                    hash.sort_unstable();
+                                    hash
+                                });
+                            }
                         }
+
+                        // Add the distribution to the graph.
+                        let index = petgraph.add_node(ResolvedNode {
+                            dist: pinned_package,
+                            markers: markers.clone(),
+                        });
+                        inverse.insert(package_name, index);
                     }
+                    PubGrubPackage::Package(package_name, None, Some(url)) => {
+                        // Create the distribution.
+                        let pinned_package =
+                            if let Some((editable, _)) = editables.get(package_name) {
+                                Dist::from_editable(package_name.clone(), editable.clone())?
+                            } else {
+                                let url = index.redirects.get(url).map_or_else(
+                                    || url.clone(),
+                                    |precise| apply_redirect(url, precise.value()),
+                                );
+                                Dist::from_url(package_name.clone(), url)?
+                            };
 
-                    // Add the distribution to the graph.
-                    let index = petgraph.add_node(pinned_package);
-                    inverse.insert(package_name, index);
-                }
-                PubGrubPackage::Package(package_name, None, Some(url)) => {
-                    // Create the distribution.
-                    let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
-                        Dist::from_editable(package_name.clone(), editable.clone())?
-                    } else {
-                        let url = index.redirects.get(url).map_or_else(
-                            || url.clone(),
-                            |precise| apply_redirect(url, precise.value()),
-                        );
-                        Dist::from_url(package_name.clone(), url)?
-                    };
-
-                    // Add its hashes to the index, preserving those that were already present in
-                    // the lockfile if necessary.
-                    if let Some(hash) = preferences.match_hashes(package_name, version) {
-                        hashes.insert(package_name.clone(), hash.to_vec());
-                    } else if let Some(versions_response) = index.packages.get(package_name) {
-                        if let VersionsResponse::Found(ref version_map) = *versions_response {
-                            hashes.insert(package_name.clone(), {
-                                let mut hash = version_map.hashes(version);
-                                hash.sort_unstable();
-                                hash
-                            });
+                        // Add its hashes to the index, preserving those that were already present in
+                        // the lockfile if necessary.
+                        if let Some(hash) = preferences.match_hashes(package_name, version) {
+                            hashes.insert(package_name.clone(), hash.to_vec());
+                        } else if let Some(versions_response) = index.packages.get(package_name) {
+                            if let VersionsResponse::Found(ref version_map) = *versions_response {
+                                hashes.insert(package_name.clone(), {
+                                    let mut hash = version_map.hashes(version);
+                                    hash.sort_unstable();
+                                    hash
+                                });
+                            }
                         }
+
+                        // Add the distribution to the graph.
+                        let index = petgraph.add_node(ResolvedNode {
+                            dist: pinned_package.into(),
+                            markers: markers.clone(),
+                        });
+                        inverse.insert(package_name, index);
                     }
+                    PubGrubPackage::Package(package_name, Some(extra), None) => {
+                        // Validate that the `extra` exists.
+                        let dist = PubGrubDistribution::from_registry(package_name, version);
 
-                    // Add the distribution to the graph.
-                    let index = petgraph.add_node(pinned_package.into());
-                    inverse.insert(package_name, index);
-                }
-                PubGrubPackage::Package(package_name, Some(extra), None) => {
-                    // Validate that the `extra` exists.
-                    let dist = PubGrubDistribution::from_registry(package_name, version);
+                        if let Some((editable, metadata)) = editables.get(package_name) {
+                            if metadata.provides_extras.contains(extra) {
+                                extras
+                                    .entry(package_name.clone())
+                                    .or_insert_with(Vec::new)
+                                    .push(extra.clone());
+                            } else {
+                                let pinned_package =
+                                    Dist::from_editable(package_name.clone(), editable.clone())?;
 
-                    if let Some((editable, metadata)) = editables.get(package_name) {
-                        if metadata.provides_extras.contains(extra) {
-                            extras
-                                .entry(package_name.clone())
-                                .or_insert_with(Vec::new)
-                                .push(extra.clone());
+                                diagnostics.push(Diagnostic::MissingExtra {
+                                    dist: pinned_package.into(),
+                                    extra: extra.clone(),
+                                });
+                            }
                         } else {
-                            let pinned_package =
-                                Dist::from_editable(package_name.clone(), editable.clone())?;
-
-                            diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package.into(),
-                                extra: extra.clone(),
-                            });
-                        }
-                    } else {
-                        let metadata =
-                            index
+                            let metadata = index
                                 .distributions
                                 .get(&dist.package_id())
                                 .unwrap_or_else(|| {
@@ -173,49 +193,48 @@ impl ResolutionGraph {
                                     )
                                 });
 
-                        if metadata.provides_extras.contains(extra) {
-                            extras
-                                .entry(package_name.clone())
-                                .or_insert_with(Vec::new)
-                                .push(extra.clone());
-                        } else {
-                            let pinned_package = resolution
-                                .pins
-                                .get(package_name, version)
-                                .unwrap_or_else(|| {
-                                    panic!("Every package should be pinned: {package_name:?}")
-                                })
-                                .clone();
+                            if metadata.provides_extras.contains(extra) {
+                                extras
+                                    .entry(package_name.clone())
+                                    .or_insert_with(Vec::new)
+                                    .push(extra.clone());
+                            } else {
+                                let pinned_package = resolution
+                                    .pins
+                                    .get(package_name, version)
+                                    .unwrap_or_else(|| {
+                                        panic!("Every package should be pinned: {package_name:?}")
+                                    })
+                                    .clone();
 
-                            diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package,
-                                extra: extra.clone(),
-                            });
+                                diagnostics.push(Diagnostic::MissingExtra {
+                                    dist: pinned_package,
+                                    extra: extra.clone(),
+                                });
+                            }
                         }
                     }
-                }
-                PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
-                    // Validate that the `extra` exists.
-                    let dist = PubGrubDistribution::from_url(package_name, url);
+                    PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
+                        // Validate that the `extra` exists.
+                        let dist = PubGrubDistribution::from_url(package_name, url);
 
-                    if let Some((editable, metadata)) = editables.get(package_name) {
-                        if metadata.provides_extras.contains(extra) {
-                            extras
-                                .entry(package_name.clone())
-                                .or_insert_with(Vec::new)
-                                .push(extra.clone());
+                        if let Some((editable, metadata)) = editables.get(package_name) {
+                            if metadata.provides_extras.contains(extra) {
+                                extras
+                                    .entry(package_name.clone())
+                                    .or_insert_with(Vec::new)
+                                    .push(extra.clone());
+                            } else {
+                                let pinned_package =
+                                    Dist::from_editable(package_name.clone(), editable.clone())?;
+
+                                diagnostics.push(Diagnostic::MissingExtra {
+                                    dist: pinned_package.into(),
+                                    extra: extra.clone(),
+                                });
+                            }
                         } else {
-                            let pinned_package =
-                                Dist::from_editable(package_name.clone(), editable.clone())?;
-
-                            diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package.into(),
-                                extra: extra.clone(),
-                            });
-                        }
-                    } else {
-                        let metadata =
-                            index
+                            let metadata = index
                                 .distributions
                                 .get(&dist.package_id())
                                 .unwrap_or_else(|| {
@@ -225,27 +244,28 @@ impl ResolutionGraph {
                                     )
                                 });
 
-                        if metadata.provides_extras.contains(extra) {
-                            extras
-                                .entry(package_name.clone())
-                                .or_insert_with(Vec::new)
-                                .push(extra.clone());
-                        } else {
-                            let url = index.redirects.get(url).map_or_else(
-                                || url.clone(),
-                                |precise| apply_redirect(url, precise.value()),
-                            );
-                            let pinned_package = Dist::from_url(package_name.clone(), url)?;
+                            if metadata.provides_extras.contains(extra) {
+                                extras
+                                    .entry(package_name.clone())
+                                    .or_insert_with(Vec::new)
+                                    .push(extra.clone());
+                            } else {
+                                let url = index.redirects.get(url).map_or_else(
+                                    || url.clone(),
+                                    |precise| apply_redirect(url, precise.value()),
+                                );
+                                let pinned_package = Dist::from_url(package_name.clone(), url)?;
 
-                            diagnostics.push(Diagnostic::MissingExtra {
-                                dist: pinned_package.into(),
-                                extra: extra.clone(),
-                            });
+                                diagnostics.push(Diagnostic::MissingExtra {
+                                    dist: pinned_package.into(),
+                                    extra: extra.clone(),
+                                });
+                            }
                         }
                     }
+                    _ => {}
                 }
-                _ => {}
-            };
+            }
         }
         for (names, ranges) in resolution.dependencies {
             let from_index = inverse[&names.from];
@@ -279,7 +299,7 @@ impl ResolutionGraph {
     pub fn contains(&self, name: &PackageName) -> bool {
         self.petgraph
             .node_indices()
-            .any(|index| self.petgraph[index].name() == name)
+            .any(|index| self.petgraph[index].dist.name() == name)
     }
 
     /// Iterate over the [`ResolvedDist`] entities in this resolution.
@@ -288,7 +308,7 @@ impl ResolutionGraph {
             .into_nodes_edges()
             .0
             .into_iter()
-            .map(|node| node.weight)
+            .map(|node| node.weight.dist)
     }
 
     /// Return the [`Diagnostic`]s that were encountered while building the graph.
@@ -299,7 +319,7 @@ impl ResolutionGraph {
     /// Return the underlying graph.
     pub fn petgraph(
         &self,
-    ) -> &petgraph::graph::Graph<ResolvedDist, Range<Version>, petgraph::Directed> {
+    ) -> &petgraph::graph::Graph<ResolvedNode, Range<Version>, petgraph::Directed> {
         &self.petgraph
     }
 
@@ -328,10 +348,9 @@ impl ResolutionGraph {
         manifest: &Manifest,
         index: &InMemoryIndex,
         marker_env: &MarkerEnvironment,
-    ) -> pep508_rs::MarkerTree {
+    ) -> MarkerTree {
         use pep508_rs::{
-            MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
-            MarkerValueVersion,
+            MarkerExpression, MarkerOperator, MarkerValue, MarkerValueString, MarkerValueVersion,
         };
 
         /// A subset of the possible marker values.
@@ -381,7 +400,7 @@ impl ResolutionGraph {
 
         let mut seen_marker_values = FxHashSet::default();
         for i in self.petgraph.node_indices() {
-            let dist = &self.petgraph[i];
+            let dist = &self.petgraph[i].dist;
             let package_id = match dist.version_or_url() {
                 VersionOrUrl::Version(version) => {
                     PackageId::from_registry(dist.name().clone(), version.clone())
@@ -504,7 +523,12 @@ enum Node<'a> {
     /// A node linked to an editable distribution.
     Editable(&'a PackageName, &'a LocalEditable),
     /// A node linked to a non-editable distribution.
-    Distribution(&'a PackageName, &'a ResolvedDist, &'a [ExtraName]),
+    Distribution(
+        &'a PackageName,
+        &'a ResolvedDist,
+        &'a [ExtraName],
+        &'a [MarkerTree],
+    ),
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -520,7 +544,7 @@ impl<'a> Node<'a> {
     fn name(&self) -> &'a PackageName {
         match self {
             Node::Editable(name, _) => name,
-            Node::Distribution(name, _, _) => name,
+            Node::Distribution(name, _, _, _) => name,
         }
     }
 
@@ -528,7 +552,7 @@ impl<'a> Node<'a> {
     fn key(&self) -> NodeKey<'a> {
         match self {
             Node::Editable(_, editable) => NodeKey::Editable(editable.verbatim()),
-            Node::Distribution(name, _, _) => NodeKey::Distribution(name),
+            Node::Distribution(name, _, _, _) => NodeKey::Distribution(name),
         }
     }
 }
@@ -537,16 +561,21 @@ impl Verbatim for Node<'_> {
     fn verbatim(&self) -> Cow<'_, str> {
         match self {
             Node::Editable(_, editable) => Cow::Owned(format!("-e {}", editable.verbatim())),
-            Node::Distribution(_, dist, &[]) => dist.verbatim(),
-            Node::Distribution(_, dist, extras) => {
+            Node::Distribution(_, dist, &[], markers) => {
+                let tree = MarkerTree::Or(markers.to_vec());
+                Cow::Owned(format!("{} # {}", dist.verbatim(), tree))
+            }
+            Node::Distribution(_, dist, extras, markers) => {
+                let tree = MarkerTree::Or(markers.to_vec());
                 let mut extras = extras.to_vec();
                 extras.sort_unstable();
                 extras.dedup();
                 Cow::Owned(format!(
-                    "{}[{}]{}",
+                    "{}[{}]{} # {}",
                     dist.name(),
                     extras.into_iter().join(", "),
-                    dist.version_or_url().verbatim()
+                    dist.version_or_url().verbatim(),
+                    tree,
                 ))
             }
         }
@@ -562,7 +591,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             .petgraph
             .node_indices()
             .filter_map(|index| {
-                let dist = &self.resolution.petgraph[index];
+                let node = &self.resolution.petgraph[index];
+                let dist = &node.dist;
                 let name = dist.name();
                 if self.no_emit_packages.contains(name) {
                     return None;
@@ -578,9 +608,10 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             .extras
                             .get(name)
                             .map_or(&[], |extras| extras.as_slice()),
+                        &node.markers,
                     )
                 } else {
-                    Node::Distribution(name, dist, &[])
+                    Node::Distribution(name, dist, &[], &node.markers)
                 };
                 Some((index, node))
             })
@@ -625,7 +656,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .edges_directed(index, Direction::Incoming)
                     .map(|edge| &self.resolution.petgraph[edge.source()])
                     .collect::<Vec<_>>();
-                edges.sort_unstable_by_key(|package| package.name());
+                edges.sort_unstable_by_key(|package| package.dist.name());
 
                 match self.annotation_style {
                     AnnotationStyle::Line => {
@@ -633,7 +664,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let separator = if has_hashes { "\n    " } else { "  " };
                             let deps = edges
                                 .into_iter()
-                                .map(|dependency| dependency.name().to_string())
+                                .map(|dependency| dependency.dist.name().to_string())
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             let comment = format!("# via {deps}").green().to_string();
@@ -644,14 +675,16 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                         [] => {}
                         [edge] => {
                             let separator = "\n";
-                            let comment = format!("    # via {}", edge.name()).green().to_string();
+                            let comment = format!("    # via {}", edge.dist.name())
+                                .green()
+                                .to_string();
                             annotation = Some((separator, comment));
                         }
                         edges => {
                             let separator = "\n";
                             let deps = edges
                                 .iter()
-                                .map(|dependency| format!("    #   {}", dependency.name()))
+                                .map(|dependency| format!("    #   {}", dependency.dist.name()))
                                 .collect::<Vec<_>>()
                                 .join("\n");
                             let comment = format!("    # via\n{deps}").green().to_string();
@@ -685,8 +718,8 @@ impl From<ResolutionGraph> for distribution_types::Resolution {
                 .node_indices()
                 .map(|node| {
                     (
-                        graph.petgraph[node].name().clone(),
-                        graph.petgraph[node].clone(),
+                        graph.petgraph[node].dist.name().clone(),
+                        graph.petgraph[node].dist.clone(),
                     )
                 })
                 .collect(),
