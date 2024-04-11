@@ -1,6 +1,7 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
+use same_file::is_same_file;
 use tracing::{debug, info};
 
 use uv_cache::Cache;
@@ -92,12 +93,17 @@ impl PythonEnvironment {
     ///
     /// In most cases, `purelib` and `platlib` will be the same, and so the iterator will contain
     /// a single element; however, in some distributions, they may be different.
+    ///
+    /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
+    /// still deduplicate the entries, returning a single path.
     pub fn site_packages(&self) -> impl Iterator<Item = &Path> {
-        std::iter::once(self.interpreter.purelib()).chain(
-            if self.interpreter.purelib() == self.interpreter.platlib() {
+        let purelib = self.interpreter.purelib();
+        let platlib = self.interpreter.platlib();
+        std::iter::once(purelib).chain(
+            if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
                 None
             } else {
-                Some(self.interpreter.platlib())
+                Some(platlib)
             },
         )
     }
