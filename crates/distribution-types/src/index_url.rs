@@ -171,15 +171,7 @@ impl Display for FlatIndexLocation {
     }
 }
 
-/// The index locations to use for fetching packages.
-///
-/// By default, uses the PyPI index.
-///
-/// "pip treats all package sources equally" (<https://github.com/pypa/pip/issues/8606#issuecomment-788754817>),
-/// and so do we, i.e., you can't rely that on any particular order of querying indices.
-///
-/// If the fields are none and empty, ignore the package index, instead rely on local archives and
-/// caches.
+/// The index locations to use for fetching packages. By default, uses the PyPI index.
 ///
 /// From a pip perspective, this type merges `--index-url`, `--extra-index-url`, and `--find-links`.
 #[derive(Debug, Clone)]
@@ -344,7 +336,9 @@ impl<'a> IndexUrls {
         }
     }
 
-    /// Return an iterator over all [`IndexUrl`] entries.
+    /// Return an iterator over all [`IndexUrl`] entries in order.
+    ///
+    /// Prioritizes the extra indexes over the main index.
     ///
     /// If `no_index` was enabled, then this always returns an empty
     /// iterator.
