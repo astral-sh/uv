@@ -791,18 +791,18 @@ impl RemoteSource for Dist {
 
 impl Identifier for Url {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::new(cache_key::digest(&cache_key::CanonicalUrl::new(self)))
+        DistributionId::Url(cache_key::CanonicalUrl::new(self))
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::new(cache_key::digest(&cache_key::RepositoryUrl::new(self)))
+        ResourceId::Url(cache_key::RepositoryUrl::new(self))
     }
 }
 
 impl Identifier for File {
     fn distribution_id(&self) -> DistributionId {
         if let Some(hash) = self.hashes.first() {
-            DistributionId::new(&*hash.digest)
+            DistributionId::Digest(hash.clone())
         } else {
             self.url.distribution_id()
         }
@@ -810,7 +810,7 @@ impl Identifier for File {
 
     fn resource_id(&self) -> ResourceId {
         if let Some(hash) = self.hashes.first() {
-            ResourceId::new(&*hash.digest)
+            ResourceId::Digest(hash.clone())
         } else {
             self.url.resource_id()
         }
@@ -819,67 +819,31 @@ impl Identifier for File {
 
 impl Identifier for Path {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::new(cache_key::digest(&self))
+        DistributionId::PathBuf(self.to_path_buf())
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::new(cache_key::digest(&self))
-    }
-}
-
-impl Identifier for String {
-    fn distribution_id(&self) -> DistributionId {
-        DistributionId::new(cache_key::digest(&self))
-    }
-
-    fn resource_id(&self) -> ResourceId {
-        ResourceId::new(cache_key::digest(&self))
-    }
-}
-
-impl Identifier for &str {
-    fn distribution_id(&self) -> DistributionId {
-        DistributionId::new(cache_key::digest(&self))
-    }
-
-    fn resource_id(&self) -> ResourceId {
-        ResourceId::new(cache_key::digest(&self))
-    }
-}
-
-impl Identifier for (&str, &str) {
-    fn distribution_id(&self) -> DistributionId {
-        DistributionId::new(cache_key::digest(&self))
-    }
-
-    fn resource_id(&self) -> ResourceId {
-        ResourceId::new(cache_key::digest(&self))
-    }
-}
-
-impl Identifier for (&Url, &str) {
-    fn distribution_id(&self) -> DistributionId {
-        DistributionId::new(cache_key::digest(&self))
-    }
-
-    fn resource_id(&self) -> ResourceId {
-        ResourceId::new(cache_key::digest(&self))
+        ResourceId::PathBuf(self.to_path_buf())
     }
 }
 
 impl Identifier for FileLocation {
     fn distribution_id(&self) -> DistributionId {
         match self {
-            Self::RelativeUrl(base, url) => (base.as_str(), url.as_str()).distribution_id(),
-            Self::AbsoluteUrl(url) => url.distribution_id(),
+            Self::RelativeUrl(base, url) => {
+                DistributionId::RelativeUrl(base.to_string(), url.to_string())
+            }
+            Self::AbsoluteUrl(url) => DistributionId::AbsoluteUrl(url.to_string()),
             Self::Path(path) => path.distribution_id(),
         }
     }
 
     fn resource_id(&self) -> ResourceId {
         match self {
-            Self::RelativeUrl(base, url) => (base.as_str(), url.as_str()).resource_id(),
-            Self::AbsoluteUrl(url) => url.resource_id(),
+            Self::RelativeUrl(base, url) => {
+                ResourceId::RelativeUrl(base.to_string(), url.to_string())
+            }
+            Self::AbsoluteUrl(url) => ResourceId::AbsoluteUrl(url.to_string()),
             Self::Path(path) => path.resource_id(),
         }
     }
