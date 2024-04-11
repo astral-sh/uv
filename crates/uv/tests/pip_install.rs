@@ -3739,6 +3739,81 @@ fn find_links_no_binary() -> Result<()> {
     Ok(())
 }
 
+/// Provide valid hashes for all dependencies with `--require-hashes`.
+#[test]
+fn require_hashes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write to a requirements file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        anyio==4.0.0 \
+            --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f \
+            --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        idna==3.6 \
+            --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+            --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+            # via anyio
+        sniffio==1.3.1 \
+            --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+            --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+            # via anyio
+    "})?;
+
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// Omit hashes for dependencies with `--require-hashes`, which is allowed with `--no-deps`.
+#[test]
+fn require_hashes_no_deps() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write to a requirements file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        anyio==4.0.0 \
+            --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f \
+            --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+    "})?;
+
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-deps")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.0.0
+    "###
+    );
+
+    Ok(())
+}
+
 /// Provide the wrong hash with `--require-hashes`.
 #[test]
 fn require_hashes_mismatch() -> Result<()> {
@@ -3875,6 +3950,91 @@ fn require_hashes_constraint() -> Result<()> {
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    "###
+    );
+
+    Ok(())
+}
+
+/// We allow `--require-hashes` for unnamed URL dependencies.
+#[test]
+fn require_hashes_unnamed() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(indoc::indoc! {r"
+            https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            idna==3.6 \
+                --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+                --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+                # via anyio
+            sniffio==1.3.1 \
+                --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+                --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+                # via anyio
+        "})?;
+
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// We allow `--require-hashes` for unnamed URL dependencies. In this case, the unnamed URL is
+/// a repeat of a registered package.
+#[test]
+fn require_hashes_unnamed_repeated() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Re-run, but duplicate `anyio`.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt
+        .write_str(indoc::indoc! {r"
+            anyio==4.0.0 \
+                --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f \
+                --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+            https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            idna==3.6 \
+                --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+                --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+                # via anyio
+            sniffio==1.3.1 \
+                --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+                --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+                # via anyio
+        "} )?;
+
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0 (from https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl)
+     + idna==3.6
+     + sniffio==1.3.1
     "###
     );
 
