@@ -523,28 +523,27 @@ impl<
         match package {
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Python(_) => {}
-            PubGrubPackage::Package(package_name, _extra, None) => {
-                // Validate that the package is permitted under hash-checking mode.
-                if !self.hasher.allows(package_name) {
-                    return Err(ResolveError::UnhashedPackage(package_name.clone()));
+            PubGrubPackage::Package(name, _extra, None) => {
+                // Verify that the package is allowed under the hash-checking policy.
+                if !self.hasher.allows_package(name) {
+                    return Err(ResolveError::UnhashedPackage(name.clone()));
                 }
 
                 // Emit a request to fetch the metadata for this package.
-                if self.index.packages.register(package_name.clone()) {
-                    priorities.add(package_name.clone());
-                    request_sink
-                        .send(Request::Package(package_name.clone()))
-                        .await?;
+                if self.index.packages.register(name.clone()) {
+                    priorities.add(name.clone());
+                    request_sink.send(Request::Package(name.clone())).await?;
                 }
             }
-            PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-                // Validate that the package is permitted under hash-checking mode.
-                if !self.hasher.allows(package_name) {
-                    return Err(ResolveError::UnhashedPackage(package_name.clone()));
+            PubGrubPackage::Package(name, _extra, Some(url)) => {
+                // Verify that the package is allowed under the hash-checking policy.
+                if !self.hasher.allows_package(name) {
+                    return Err(ResolveError::UnhashedPackage(name.clone()));
                 }
 
+                let dist = Dist::from_url(name.clone(), url.clone())?;
+
                 // Emit a request to fetch the metadata for this distribution.
-                let dist = Dist::from_url(package_name.clone(), url.clone())?;
                 if self.index.distributions.register(dist.package_id()) {
                     priorities.add(dist.name().clone());
                     request_sink.send(Request::Dist(dist)).await?;

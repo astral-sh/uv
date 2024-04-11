@@ -252,22 +252,11 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                 // If the metadata is already in the index, return it.
                 archive.metadata.name.clone()
             } else {
-                // Determine the hash policy. Since we don't have a package name, we perform a
-                // manual match.
-                let hashes = match hasher {
-                    HashStrategy::None => HashPolicy::None,
-                    HashStrategy::Generate => HashPolicy::Generate,
-                    HashStrategy::Validate(_) => {
-                        // TODO(charlie): Support `--require-hashes` for unnamed requirements.
-                        return Err(anyhow::anyhow!(
-                            "Unnamed requirements are not supported with `--require-hashes`"
-                        ));
-                    }
-                };
-
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
-                let archive = database.build_wheel_metadata(&source, hashes).await?;
+                let archive = database
+                    .build_wheel_metadata(&source, hasher.by_id(&id))
+                    .await?;
 
                 let name = archive.metadata.name.clone();
 

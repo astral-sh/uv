@@ -18,6 +18,9 @@ pub trait Name {
     fn name(&self) -> &PackageName;
 }
 
+// Okay, lets make this `VersionId`, then add `PackageId` which identifies a package, which can
+// either be a package _name_ or a URL. Then everything should "just work".
+
 /// Metadata that can be resolved from a requirements specification alone (i.e., prior to building
 /// or installing the distribution).
 pub trait DistributionMetadata: Name {

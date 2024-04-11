@@ -30,6 +30,7 @@ rustc-hash = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
+url = { workspace = true }
 
 [features]
 default = []

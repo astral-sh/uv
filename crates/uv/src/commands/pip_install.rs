@@ -191,10 +191,7 @@ pub(crate) async fn pip_install(
         HashStrategy::from_requirements(
             entries
                 .into_iter()
-                .filter_map(|requirement| match requirement.requirement {
-                    RequirementsTxtRequirement::Pep508(req) => Some((req, requirement.hashes)),
-                    RequirementsTxtRequirement::Unnamed(_) => None,
-                }),
+                .map(|entry| (entry.requirement, entry.hashes)),
             markers,
         )?
     } else {

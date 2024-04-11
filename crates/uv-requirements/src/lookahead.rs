@@ -157,7 +157,7 @@ impl<'a, Context: BuildContext + Send + Sync> LookaheadResolver<'a, Context> {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = self
                     .database
-                    .get_or_build_wheel_metadata(&dist, self.hasher.get(dist.name()))
+                    .get_or_build_wheel_metadata(&dist, self.hasher.get(&dist))
                     .await
                     .with_context(|| match &dist {
                         Dist::Built(built) => format!("Failed to download: {built}"),

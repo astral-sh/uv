@@ -3,7 +3,9 @@ use std::collections::BTreeMap;
 
 use rustc_hash::FxHashMap;
 
-use distribution_types::{CachedRegistryDist, FlatIndexLocation, Hashed, IndexLocations, IndexUrl};
+use distribution_types::{
+    CachedRegistryDist, DistributionMetadata, FlatIndexLocation, Hashed, IndexLocations, IndexUrl,
+};
 use pep440_rs::Version;
 use pep508_rs::VerbatimUrl;
 use platform_tags::Tags;
@@ -123,7 +125,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                 CachedWheel::from_http_pointer(wheel_dir.join(file), cache)
                             {
                                 // Enforce hash-checking based on the built distribution.
-                                if wheel.satisfies(hasher.get(package)) {
+                                if wheel.satisfies(hasher.get(&wheel)) {
                                     Self::add_wheel(wheel, tags, &mut versions);
                                 }
                             }
@@ -139,7 +141,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                 CachedWheel::from_local_pointer(wheel_dir.join(file), cache)
                             {
                                 // Enforce hash-checking based on the built distribution.
-                                if wheel.satisfies(hasher.get(package)) {
+                                if wheel.satisfies(hasher.get(&wheel)) {
                                     Self::add_wheel(wheel, tags, &mut versions);
                                 }
                             }
@@ -184,13 +186,14 @@ impl<'a> RegistryWheelIndex<'a> {
 
                 if let Some(revision) = revision {
                     // Enforce hash-checking based on the source distribution.
-                    if revision.satisfies(hasher.get(package)) {
-                        for wheel_dir in symlinks(cache_shard.join(revision.id())) {
-                            if let Some(wheel) = CachedWheel::from_built_source(wheel_dir) {
-                                Self::add_wheel(wheel, tags, &mut versions);
-                            }
-                        }
-                    }
+                    // We _could_ get it here because the version is in the path...
+                    // if revision.satisfies(hasher.get(package)) {
+                    //     for wheel_dir in symlinks(cache_shard.join(revision.id())) {
+                    //         if let Some(wheel) = CachedWheel::from_built_source(wheel_dir) {
+                    //             Self::add_wheel(wheel, tags, &mut versions);
+                    //         }
+                    //     }
+                    // }
                 }
             }
         }

@@ -1,10 +1,14 @@
 use std::path::Path;
 
 use distribution_filename::WheelFilename;
-use distribution_types::{CachedDirectUrlDist, CachedRegistryDist, Hashed};
+use distribution_types::{
+    CachedDirectUrlDist, CachedRegistryDist, DistributionMetadata, Hashed, Identifier, Name,
+    VersionOrUrl,
+};
 use pep508_rs::VerbatimUrl;
 use pypi_types::HashDigest;
 use uv_cache::{Cache, CacheBucket, CacheEntry};
+use uv_normalize::PackageName;
 
 use crate::{Archive, HttpArchivePointer, LocalArchivePointer};
 
@@ -98,6 +102,18 @@ impl CachedWheel {
             entry,
             hashes,
         })
+    }
+}
+
+impl Name for CachedWheel {
+    fn name(&self) -> &PackageName {
+        &self.filename.name
+    }
+}
+
+impl DistributionMetadata for CachedWheel {
+    fn version_or_url(&self) -> VersionOrUrl {
+        VersionOrUrl::Version(&self.filename.version)
     }
 }
 

@@ -4842,6 +4842,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "url",
  "uv-cache",
  "uv-configuration",
  "uv-interpreter",

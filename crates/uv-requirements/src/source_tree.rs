@@ -92,8 +92,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
         let hashes = match self.hasher {
             HashStrategy::None => HashPolicy::None,
             HashStrategy::Generate => HashPolicy::Generate,
-            HashStrategy::Validate(_) => {
-                // TODO(charlie): Support `--require-hashes` for unnamed requirements.
+            HashStrategy::Validate { .. } => {
                 return Err(anyhow::anyhow!(
                     "Hash-checking is not supported for local directories: {}",
                     source_tree.user_display()

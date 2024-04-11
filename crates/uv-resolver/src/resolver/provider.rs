@@ -3,7 +3,7 @@ use std::future::Future;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 
-use distribution_types::{Dist, IndexLocations, Name};
+use distribution_types::{Dist, DistributionMetadata, IndexLocations, Name};
 use platform_tags::Tags;
 
 use uv_client::RegistryClient;
@@ -181,7 +181,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
     async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
         match self
             .fetcher
-            .get_or_build_wheel_metadata(dist, self.hasher.get(dist.name()))
+            .get_or_build_wheel_metadata(dist, self.hasher.get(dist))
             .await
         {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
