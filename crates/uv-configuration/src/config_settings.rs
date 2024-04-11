@@ -40,6 +40,7 @@ enum ConfigSettingValue {
 ///
 /// See: <https://peps.python.org/pep-0517/#config-settings>
 #[derive(Debug, Default, Clone)]
+#[cfg_attr(not(feature = "serde"), allow(dead_code))]
 pub struct ConfigSettings(BTreeMap<String, ConfigSettingValue>);
 
 impl FromIterator<ConfigSettingEntry> for ConfigSettings {
