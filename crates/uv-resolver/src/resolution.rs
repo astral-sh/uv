@@ -12,13 +12,13 @@ use pubgrub::type_aliases::SelectedDependencies;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use distribution_types::{
-    Dist, DistributionMetadata, LocalEditable, Name, PackageId, ResolvedDist, Verbatim,
+    Dist, DistributionMetadata, IndexUrl, LocalEditable, Name, ResolvedDist, Verbatim, VersionId,
     VersionOrUrl,
 };
 use once_map::OnceMap;
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
-use pypi_types::{Hashes, Metadata23};
+use pypi_types::HashDigest;
 use uv_distribution::to_precise;
 use uv_normalize::{ExtraName, PackageName};
 
@@ -28,7 +28,7 @@ use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{PubGrubDistribution, PubGrubPackage};
 use crate::redirect::apply_redirect;
-use crate::resolver::{InMemoryIndex, VersionsResponse};
+use crate::resolver::{InMemoryIndex, MetadataResponse, VersionsResponse};
 use crate::{Manifest, ResolveError};
 
 /// Indicate the style of annotation comments, used to indicate the dependencies that requested each
@@ -50,7 +50,7 @@ pub struct ResolutionGraph {
     /// The underlying graph.
     petgraph: petgraph::graph::Graph<ResolvedDist, Range<Version>, petgraph::Directed>,
     /// The metadata for every distribution in this resolution.
-    hashes: FxHashMap<PackageName, Vec<Hashes>>,
+    hashes: FxHashMap<PackageName, Vec<HashDigest>>,
     /// The enabled extras for every distribution in this resolution.
     extras: FxHashMap<PackageName, Vec<ExtraName>>,
     /// The set of editable requirements in this resolution.
@@ -66,7 +66,7 @@ impl ResolutionGraph {
         selection: &SelectedDependencies<UvDependencyProvider>,
         pins: &FilePins,
         packages: &OnceMap<PackageName, VersionsResponse>,
-        distributions: &OnceMap<PackageId, Metadata23>,
+        distributions: &OnceMap<VersionId, MetadataResponse>,
         state: &State<UvDependencyProvider>,
         preferences: &Preferences,
         editables: Editables,
@@ -96,15 +96,20 @@ impl ResolutionGraph {
 
                     // Add its hashes to the index, preserving those that were already present in
                     // the lockfile if necessary.
-                    if let Some(hash) = preferences.match_hashes(package_name, version) {
-                        hashes.insert(package_name.clone(), hash.to_vec());
+                    if let Some(digests) = preferences
+                        .match_hashes(package_name, version)
+                        .filter(|digests| !digests.is_empty())
+                    {
+                        hashes.insert(package_name.clone(), digests.to_vec());
                     } else if let Some(versions_response) = packages.get(package_name) {
-                        if let VersionsResponse::Found(ref version_map) = *versions_response {
-                            hashes.insert(package_name.clone(), {
-                                let mut hash = version_map.hashes(version);
-                                hash.sort_unstable();
-                                hash
-                            });
+                        if let VersionsResponse::Found(ref version_maps) = *versions_response {
+                            for version_map in version_maps {
+                                if let Some(mut digests) = version_map.hashes(version) {
+                                    digests.sort_unstable();
+                                    hashes.insert(package_name.clone(), digests);
+                                    break;
+                                }
+                            }
                         }
                     }
 
@@ -124,15 +129,18 @@ impl ResolutionGraph {
 
                     // Add its hashes to the index, preserving those that were already present in
                     // the lockfile if necessary.
-                    if let Some(hash) = preferences.match_hashes(package_name, version) {
-                        hashes.insert(package_name.clone(), hash.to_vec());
-                    } else if let Some(versions_response) = packages.get(package_name) {
-                        if let VersionsResponse::Found(ref version_map) = *versions_response {
-                            hashes.insert(package_name.clone(), {
-                                let mut hash = version_map.hashes(version);
-                                hash.sort_unstable();
-                                hash
-                            });
+                    if let Some(digests) = preferences
+                        .match_hashes(package_name, version)
+                        .filter(|digests| !digests.is_empty())
+                    {
+                        hashes.insert(package_name.clone(), digests.to_vec());
+                    } else if let Some(metadata_response) =
+                        distributions.get(&pinned_package.version_id())
+                    {
+                        if let MetadataResponse::Found(ref archive) = *metadata_response {
+                            let mut digests = archive.hashes.clone();
+                            digests.sort_unstable();
+                            hashes.insert(package_name.clone(), digests);
                         }
                     }
 
@@ -160,14 +168,21 @@ impl ResolutionGraph {
                             });
                         }
                     } else {
-                        let metadata = distributions.get(&dist.package_id()).unwrap_or_else(|| {
+                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
                             panic!(
                                 "Every package should have metadata: {:?}",
-                                dist.package_id()
+                                dist.version_id()
                             )
                         });
 
-                        if metadata.provides_extras.contains(extra) {
+                        let MetadataResponse::Found(archive) = &*response else {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
+                        };
+
+                        if archive.metadata.provides_extras.contains(extra) {
                             extras
                                 .entry(package_name.clone())
                                 .or_insert_with(Vec::new)
@@ -207,14 +222,21 @@ impl ResolutionGraph {
                             });
                         }
                     } else {
-                        let metadata = distributions.get(&dist.package_id()).unwrap_or_else(|| {
+                        let response = distributions.get(&dist.version_id()).unwrap_or_else(|| {
                             panic!(
                                 "Every package should have metadata: {:?}",
-                                dist.package_id()
+                                dist.version_id()
                             )
                         });
 
-                        if metadata.provides_extras.contains(extra) {
+                        let MetadataResponse::Found(archive) = &*response else {
+                            panic!(
+                                "Every package should have metadata: {:?}",
+                                dist.version_id()
+                            )
+                        };
+
+                        if archive.metadata.provides_extras.contains(extra) {
                             extras
                                 .entry(package_name.clone())
                                 .or_insert_with(Vec::new)
@@ -407,17 +429,23 @@ impl ResolutionGraph {
         let mut seen_marker_values = FxHashSet::default();
         for i in self.petgraph.node_indices() {
             let dist = &self.petgraph[i];
-            let package_id = match dist.version_or_url() {
+            let version_id = match dist.version_or_url() {
                 VersionOrUrl::Version(version) => {
-                    PackageId::from_registry(dist.name().clone(), version.clone())
+                    VersionId::from_registry(dist.name().clone(), version.clone())
                 }
-                VersionOrUrl::Url(verbatim_url) => PackageId::from_url(verbatim_url.raw()),
+                VersionOrUrl::Url(verbatim_url) => VersionId::from_url(verbatim_url.raw()),
             };
-            let md = index
+            let res = index
                 .distributions
-                .get(&package_id)
+                .get(&version_id)
                 .expect("every package in resolution graph has metadata");
-            for req in manifest.apply(&md.requires_dist) {
+            let MetadataResponse::Found(archive, ..) = &*res else {
+                panic!(
+                    "Every package should have metadata: {:?}",
+                    dist.version_id()
+                )
+            };
+            for req in manifest.apply(&archive.metadata.requires_dist) {
                 let Some(ref marker_tree) = req.marker else {
                     continue;
                 };
@@ -469,6 +497,7 @@ impl ResolutionGraph {
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolutionGraph,
@@ -481,6 +510,8 @@ pub struct DisplayResolutionGraph<'a> {
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
     /// requested each package.
     include_annotations: bool,
+    /// Whether to include indexes in the output, to indicate which index was used for each package.
+    include_index_annotation: bool,
     /// The style of annotation comments, used to indicate the dependencies that requested each
     /// package.
     annotation_style: AnnotationStyle,
@@ -494,6 +525,7 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
             false,
             false,
             true,
+            false,
             AnnotationStyle::default(),
         )
     }
@@ -501,12 +533,14 @@ impl<'a> From<&'a ResolutionGraph> for DisplayResolutionGraph<'a> {
 
 impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
+    #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
         underlying: &'a ResolutionGraph,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
         include_extras: bool,
         include_annotations: bool,
+        include_index_annotation: bool,
         annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
         Self {
@@ -515,6 +549,7 @@ impl<'a> DisplayResolutionGraph<'a> {
             show_hashes,
             include_extras,
             include_annotations,
+            include_index_annotation,
             annotation_style,
         }
     }
@@ -550,6 +585,14 @@ impl<'a> Node<'a> {
         match self {
             Node::Editable(_, editable) => NodeKey::Editable(editable.verbatim()),
             Node::Distribution(name, _, _) => NodeKey::Distribution(name),
+        }
+    }
+
+    /// Return the [`IndexUrl`] of the distribution, if any.
+    fn index(&self) -> Option<&IndexUrl> {
+        match self {
+            Node::Editable(_, _) => None,
+            Node::Distribution(_, dist, _) => dist.index(),
         }
     }
 }
@@ -625,12 +668,10 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .filter(|hashes| !hashes.is_empty())
                 {
                     for hash in hashes {
-                        if let Some(hash) = hash.to_string() {
-                            has_hashes = true;
-                            line.push_str(" \\\n");
-                            line.push_str("    --hash=");
-                            line.push_str(&hash);
-                        }
+                        has_hashes = true;
+                        line.push_str(" \\\n");
+                        line.push_str("    --hash=");
+                        line.push_str(&hash.to_string());
                     }
                 }
             }
@@ -638,6 +679,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // Determine the annotation comment and separator (between comment and requirement).
             let mut annotation = None;
 
+            // If enabled, include annotations to indicate the dependencies that requested each
+            // package (e.g., `# via mypy`).
             if self.include_annotations {
                 // Display all dependencies.
                 let mut edges = self
@@ -691,6 +734,14 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             } else {
                 // Write the line as is.
                 writeln!(f, "{line}")?;
+            }
+
+            // If enabled, include indexes to indicate which index was used for each package (e.g.,
+            // `# from https://pypi.org/simple`).
+            if self.include_index_annotation {
+                if let Some(index) = node.index() {
+                    writeln!(f, "{}", format!("    # from {index}").green())?;
+                }
             }
         }
 

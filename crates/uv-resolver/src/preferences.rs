@@ -6,7 +6,7 @@ use pep440_rs::{Operator, Version};
 use pep508_rs::{
     MarkerEnvironment, Requirement, RequirementsTxtRequirement, UnnamedRequirement, VersionOrUrl,
 };
-use pypi_types::{HashError, Hashes};
+use pypi_types::{HashDigest, HashError};
 use requirements_txt::RequirementEntry;
 use tracing::trace;
 use uv_normalize::PackageName;
@@ -23,7 +23,7 @@ pub enum PreferenceError {
 #[derive(Clone, Debug)]
 pub struct Preference {
     requirement: Requirement,
-    hashes: Vec<Hashes>,
+    hashes: Vec<HashDigest>,
 }
 
 impl Preference {
@@ -40,7 +40,7 @@ impl Preference {
                 .hashes
                 .iter()
                 .map(String::as_str)
-                .map(Hashes::from_str)
+                .map(HashDigest::from_str)
                 .collect::<Result<_, _>>()?,
         })
     }
@@ -146,7 +146,7 @@ impl Preferences {
         &self,
         package_name: &PackageName,
         version: &Version,
-    ) -> Option<&[Hashes]> {
+    ) -> Option<&[HashDigest]> {
         self.0
             .get(package_name)
             .filter(|pin| pin.version() == version)
@@ -158,7 +158,7 @@ impl Preferences {
 #[derive(Debug, Clone)]
 struct Pin {
     version: Version,
-    hashes: Vec<Hashes>,
+    hashes: Vec<HashDigest>,
 }
 
 impl Pin {
@@ -168,7 +168,7 @@ impl Pin {
     }
 
     /// Return the hashes of the pinned package.
-    fn hashes(&self) -> &[Hashes] {
+    fn hashes(&self) -> &[HashDigest] {
         &self.hashes
     }
 }

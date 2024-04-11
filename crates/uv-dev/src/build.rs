@@ -9,14 +9,12 @@ use distribution_types::IndexLocations;
 use rustc_hash::FxHashMap;
 use uv_build::{SourceBuild, SourceBuildContext};
 use uv_cache::{Cache, CacheArgs};
-use uv_client::{FlatIndex, RegistryClientBuilder};
+use uv_client::RegistryClientBuilder;
+use uv_configuration::{BuildKind, ConfigSettings, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_interpreter::PythonEnvironment;
-use uv_resolver::InMemoryIndex;
-use uv_types::NoBinary;
-use uv_types::{
-    BuildContext, BuildIsolation, BuildKind, ConfigSettings, InFlight, NoBuild, SetupPyStrategy,
-};
+use uv_resolver::{FlatIndex, InMemoryIndex};
+use uv_types::{BuildContext, BuildIsolation, InFlight};
 
 #[derive(Parser)]
 pub(crate) struct BuildArgs {
@@ -93,5 +91,5 @@ pub(crate) async fn build(args: BuildArgs) -> Result<PathBuf> {
         FxHashMap::default(),
     )
     .await?;
-    Ok(wheel_dir.join(builder.build(&wheel_dir).await?))
+    Ok(wheel_dir.join(builder.build_wheel(&wheel_dir).await?))
 }

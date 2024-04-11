@@ -44,21 +44,23 @@ uv-normalize = { path = "crates/uv-normalize" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-resolver = { path = "crates/uv-resolver" }
 uv-types = { path = "crates/uv-types" }
+uv-configuration = { path = "crates/uv-configuration" }
 uv-trampoline = { path = "crates/uv-trampoline" }
 uv-version = { path = "crates/uv-version" }
 uv-virtualenv = { path = "crates/uv-virtualenv" }
 uv-warnings = { path = "crates/uv-warnings" }
+uv-toolchain = { path = "crates/uv-toolchain" }
 
 anstream = { version = "0.6.13" }
 anyhow = { version = "1.0.80" }
 async-channel = { version = "2.2.0" }
 async-compression = { version = "0.4.6" }
 async-trait = { version = "0.1.78" }
-async_http_range_reader = { version = "0.7.0" }
-async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "d76801da0943de985254fc6255c0e476b57c5836", features = ["deflate"] }
-axoupdater = { version = "0.3.1", default-features = false }
+async_http_range_reader = { version = "0.7.1" }
+async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "1dcb40cfe1bf5325a6fd4bfcf9894db40241f585", features = ["deflate"] }
+axoupdater = { version = "0.4.0", default-features = false }
 backoff = { version = "0.4.0" }
-base64 = { version = "0.21.7" }
+base64 = { version = "0.22.0" }
 cachedir = { version = "0.3.1" }
 cargo-util = { version = "0.2.8" }
 chrono = { version = "0.4.31" }
@@ -85,13 +87,14 @@ hex = { version = "0.4.3" }
 hmac = { version = "0.12.1" }
 home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
-http = { version = "0.2.12" }
+http = { version = "1.1.0" }
 indexmap = { version = "2.2.5" }
 indicatif = { version = "0.17.7" }
 indoc = { version = "2.0.4" }
 itertools = { version = "0.12.1" }
 junction = { version = "1.0.0" }
 mailparse = { version = "0.14.0" }
+md-5 = { version = "0.10.6" }
 miette = { version = "7.2.0" }
 nanoid = { version = "0.4.0" }
 once_cell = { version = "1.19.0" }
@@ -106,9 +109,9 @@ rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.15" }
 regex = { version = "1.10.2" }
-reqwest = { version = "0.11.23", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls", "rustls-tls-native-roots"] }
-reqwest-middleware = { version = "0.2.4" }
-reqwest-retry = { version = "0.3.0" }
+reqwest = { version = "0.12.3", default-features = false, features = ["json", "gzip", "brotli", "stream", "rustls-tls", "rustls-tls-native-roots"] }
+reqwest-middleware = { version = "0.3.0" }
+reqwest-retry = { version = "0.5.0" }
 rkyv = { version = "0.7.43", features = ["strict", "validation"] }
 rmp-serde = { version = "1.1.2" }
 rust-netrc = { version = "0.1.1" }
@@ -120,7 +123,6 @@ serde_json = { version = "1.0.114" }
 sha1 = { version = "0.10.6" }
 sha2 = { version = "0.10.8" }
 sys-info = { version = "0.9.1" }
-task-local-extensions = { version = "0.1.4" }
 tempfile = { version = "3.9.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "1.0.56" }
@@ -133,7 +135,7 @@ toml = { version = "0.8.12" }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.2.0", features = ["plot"] }
 tracing-indicatif = { version = "0.3.6" }
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "registry"] }
 tracing-tree = { version = "0.3.0" }
 unicode-width = { version = "0.1.11" }
 unscanny = { version = "0.1.0" }
@@ -197,7 +199,7 @@ lto = "thin"
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.13.0-prerelease.3"
+cargo-dist-version = "0.13.0"
 # CI backends to support
 ci = ["github"]
 # The installers to generate for each app
@@ -207,8 +209,24 @@ windows-archive = ".zip"
 # The archive format to use for non-windows builds (defaults .tar.xz)
 unix-archive = ".tar.gz"
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu", "i686-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl", "i686-unknown-linux-musl", "x86_64-pc-windows-msvc", "i686-pc-windows-msvc", "armv7-unknown-linux-gnueabihf", "powerpc64-unknown-linux-gnu", "powerpc64le-unknown-linux-gnu", "s390x-unknown-linux-gnu", "armv7-unknown-linux-musleabihf", "arm-unknown-linux-musleabihf"]
-# Whether to auto-include files like READMEs and CHANGELOGs (default true)
+targets = [
+  "aarch64-apple-darwin",
+  "aarch64-unknown-linux-gnu",
+  "aarch64-unknown-linux-musl",
+  "arm-unknown-linux-musleabihf",
+  "armv7-unknown-linux-gnueabihf",
+  "armv7-unknown-linux-musleabihf",
+  "i686-pc-windows-msvc",
+  "i686-unknown-linux-gnu",
+  "i686-unknown-linux-musl",
+  "powerpc64-unknown-linux-gnu",
+  "powerpc64le-unknown-linux-gnu",
+  "s390x-unknown-linux-gnu",
+  "x86_64-apple-darwin",
+  "x86_64-pc-windows-msvc",
+  "x86_64-unknown-linux-gnu",
+  "x86_64-unknown-linux-musl",
+]# Whether to auto-include files like READMEs and CHANGELOGs (default true)
 auto-includes = false
 # Whether cargo-dist should create a Github Release or use an existing draft
 create-release = true

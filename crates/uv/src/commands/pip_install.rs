@@ -1,4 +1,5 @@
 use std::fmt::Write;
+
 use std::path::Path;
 
 use anstream::eprint;
@@ -10,8 +11,8 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name,
-    Resolution,
+    DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, LocalEditable,
+    LocalEditables, Name, Resolution,
 };
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::{MarkerEnvironment, Requirement};
@@ -21,8 +22,11 @@ use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{
-    BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClient,
-    RegistryClientBuilder,
+    BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
+};
+use uv_configuration::{
+    ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, Reinstall,
+    SetupPyStrategy, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
@@ -34,13 +38,10 @@ use uv_requirements::{
     RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    DependencyMode, Exclusions, InMemoryIndex, Manifest, Options, OptionsBuilder, PreReleaseMode,
-    Preference, ResolutionGraph, ResolutionMode, Resolver,
+    DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, OptionsBuilder,
+    PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
-use uv_types::{
-    BuildIsolation, ConfigSettings, Constraints, InFlight, NoBinary, NoBuild, Overrides, Reinstall,
-    SetupPyStrategy, Upgrade,
-};
+use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
@@ -61,10 +62,12 @@ pub(crate) async fn pip_install(
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
+    index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
+    require_hashes: bool,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -82,6 +85,7 @@ pub(crate) async fn pip_install(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
@@ -156,6 +160,7 @@ pub(crate) async fn pip_install(
     if reinstall.is_none()
         && upgrade.is_none()
         && source_trees.is_empty()
+        && overrides.is_empty()
         && site_packages.satisfies(&requirements, &editables, &constraints)?
     {
         let num_requirements = requirements.len() + editables.len();
@@ -181,6 +186,19 @@ pub(crate) async fn pip_install(
     let tags = venv.interpreter().tags()?;
     let markers = venv.interpreter().markers();
 
+    // Collect the set of required hashes.
+    let hasher = if require_hashes {
+        HashStrategy::from_requirements(
+            requirements
+                .iter()
+                .chain(overrides.iter())
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            markers,
+        )?
+    } else {
+        HashStrategy::None
+    };
+
     // Incorporate any index locations from the provided sources.
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
@@ -195,6 +213,7 @@ pub(crate) async fn pip_install(
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .index_strategy(index_strategy)
         .keyring_provider(keyring_provider)
         .markers(markers)
         .platform(interpreter.platform())
@@ -204,7 +223,7 @@ pub(crate) async fn pip_install(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags)
+        FlatIndex::from_entries(entries, tags, &hasher, &no_build, &no_binary)
     };
 
     // Determine whether to enable build isolation.
@@ -244,24 +263,43 @@ pub(crate) async fn pip_install(
     // Resolve the requirements from the provided sources.
     let requirements = {
         // Convert from unnamed to named requirements.
-        let mut requirements =
-            NamedRequirementsResolver::new(requirements, &resolve_dispatch, &client, &index)
-                .with_reporter(ResolverReporter::from(printer))
-                .resolve()
-                .await?;
+        let mut requirements = NamedRequirementsResolver::new(
+            requirements,
+            &hasher,
+            &resolve_dispatch,
+            &client,
+            &index,
+        )
+        .with_reporter(ResolverReporter::from(printer))
+        .resolve()
+        .await?;
 
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
             requirements.extend(
-                SourceTreeResolver::new(source_trees, extras, &resolve_dispatch, &client, &index)
-                    .with_reporter(ResolverReporter::from(printer))
-                    .resolve()
-                    .await?,
+                SourceTreeResolver::new(
+                    source_trees,
+                    extras,
+                    &hasher,
+                    &resolve_dispatch,
+                    &client,
+                    &index,
+                )
+                .with_reporter(ResolverReporter::from(printer))
+                .resolve()
+                .await?,
             );
         }
 
         requirements
     };
+
+    // Resolve the overrides from the provided sources.
+    let overrides =
+        NamedRequirementsResolver::new(overrides, &hasher, &resolve_dispatch, &client, &index)
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve()
+            .await?;
 
     // Build all editable distributions. The editables are shared between resolution and
     // installation, and should live for the duration of the command. If an editable is already
@@ -270,10 +308,11 @@ pub(crate) async fn pip_install(
     let editables = if editables.is_empty() {
         vec![]
     } else {
-        editable_wheel_dir = tempdir_in(venv.root())?;
+        editable_wheel_dir = tempdir_in(cache.root())?;
         build_editables(
             &editables,
             editable_wheel_dir.path(),
+            &hasher,
             &cache,
             &interpreter,
             tags,
@@ -298,6 +337,7 @@ pub(crate) async fn pip_install(
         overrides,
         project,
         &editables,
+        &hasher,
         &site_packages,
         &reinstall,
         &upgrade,
@@ -358,6 +398,7 @@ pub(crate) async fn pip_install(
         link_mode,
         compile,
         &index_locations,
+        &hasher,
         tags,
         &client,
         &in_flight,
@@ -385,13 +426,13 @@ async fn read_requirements(
     extras: &ExtrasSpecification<'_>,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
-    // If the user requests `extras` but does not provide a pyproject toml source
-    if !matches!(extras, ExtrasSpecification::None)
-        && !requirements
-            .iter()
-            .any(|source| matches!(source, RequirementsSource::PyprojectToml(_)))
-    {
-        return Err(anyhow!("Requesting extras requires a pyproject.toml input file.").into());
+    // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
+    // return an error.
+    if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
+        return Err(anyhow!(
+            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file."
+        )
+        .into());
     }
 
     // Read all requirements from the provided sources.
@@ -404,21 +445,24 @@ async fn read_requirements(
     )
     .await?;
 
-    // Check that all provided extras are used
-    if let ExtrasSpecification::Some(extras) = extras {
-        let mut unused_extras = extras
-            .iter()
-            .filter(|extra| !spec.extras.contains(extra))
-            .collect::<Vec<_>>();
-        if !unused_extras.is_empty() {
-            unused_extras.sort_unstable();
-            unused_extras.dedup();
-            let s = if unused_extras.len() == 1 { "" } else { "s" };
-            return Err(anyhow!(
-                "Requested extra{s} not found: {}",
-                unused_extras.iter().join(", ")
-            )
-            .into());
+    // If all the metadata could be statically resolved, validate that every extra was used. If we
+    // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
+    if spec.source_trees.is_empty() {
+        if let ExtrasSpecification::Some(extras) = extras {
+            let mut unused_extras = extras
+                .iter()
+                .filter(|extra| !spec.extras.contains(extra))
+                .collect::<Vec<_>>();
+            if !unused_extras.is_empty() {
+                unused_extras.sort_unstable();
+                unused_extras.dedup();
+                let s = if unused_extras.len() == 1 { "" } else { "s" };
+                return Err(anyhow!(
+                    "Requested extra{s} not found: {}",
+                    unused_extras.iter().join(", ")
+                )
+                .into());
+            }
         }
     }
 
@@ -430,6 +474,7 @@ async fn read_requirements(
 async fn build_editables(
     editables: &[EditableRequirement],
     editable_wheel_dir: &Path,
+    hasher: &HashStrategy,
     cache: &Cache,
     interpreter: &Interpreter,
     tags: &Tags,
@@ -439,20 +484,17 @@ async fn build_editables(
 ) -> Result<Vec<BuiltEditable>, Error> {
     let start = std::time::Instant::now();
 
-    let downloader = Downloader::new(cache, tags, client, build_dispatch)
+    let downloader = Downloader::new(cache, tags, hasher, client, build_dispatch)
         .with_reporter(DownloadReporter::from(printer).with_length(editables.len() as u64));
 
-    let editables: Vec<LocalEditable> = editables
-        .iter()
-        .map(|editable| {
-            let EditableRequirement { url, extras, path } = editable;
-            Ok(LocalEditable {
-                url: url.clone(),
-                extras: extras.clone(),
-                path: path.clone(),
-            })
-        })
-        .collect::<Result<_>>()?;
+    let editables = LocalEditables::from_editables(editables.iter().map(|editable| {
+        let EditableRequirement { url, extras, path } = editable;
+        LocalEditable {
+            url: url.clone(),
+            extras: extras.clone(),
+            path: path.clone(),
+        }
+    }));
 
     let editables: Vec<_> = downloader
         .build_editables(editables, editable_wheel_dir)
@@ -499,6 +541,7 @@ async fn resolve(
     overrides: Vec<Requirement>,
     project: Option<PackageName>,
     editables: &[BuiltEditable],
+    hasher: &HashStrategy,
     site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
     upgrade: &Upgrade,
@@ -545,6 +588,7 @@ async fn resolve(
         &constraints,
         &overrides,
         &editables,
+        hasher,
         build_dispatch,
         client,
         index,
@@ -575,6 +619,7 @@ async fn resolve(
         client,
         flat_index,
         index,
+        hasher,
         build_dispatch,
         site_packages,
     )?
@@ -593,6 +638,17 @@ async fn resolve(
         .dimmed()
     )?;
 
+    // Notify the user of any diagnostics.
+    for diagnostic in resolution.diagnostics() {
+        writeln!(
+            printer.stderr(),
+            "{}{} {}",
+            "warning".yellow().bold(),
+            ":".bold(),
+            diagnostic.message().bold()
+        )?;
+    }
+
     Ok(resolution)
 }
 
@@ -607,6 +663,7 @@ async fn install(
     link_mode: LinkMode,
     compile: bool,
     index_urls: &IndexLocations,
+    hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
     in_flight: &InFlight,
@@ -634,6 +691,7 @@ async fn install(
             site_packages,
             reinstall,
             no_binary,
+            hasher,
             index_urls,
             cache,
             venv,
@@ -686,7 +744,7 @@ async fn install(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(cache, tags, client, build_dispatch)
+        let downloader = Downloader::new(cache, tags, hasher, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader
@@ -1001,6 +1059,9 @@ enum Error {
 
     #[error(transparent)]
     Platform(#[from] platform_tags::PlatformError),
+
+    #[error(transparent)]
+    Hash(#[from] uv_types::HashStrategyError),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

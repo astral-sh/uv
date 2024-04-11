@@ -1,6 +1,7 @@
 pub use dependency_mode::DependencyMode;
 pub use error::ResolveError;
 pub use exclusions::Exclusions;
+pub use flat_index::FlatIndex;
 pub use manifest::Manifest;
 pub use options::{Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError};
@@ -9,7 +10,7 @@ pub use python_requirement::PythonRequirement;
 pub use resolution::{AnnotationStyle, Diagnostic, DisplayResolutionGraph, ResolutionGraph};
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
-    BuildId, DefaultResolverProvider, InMemoryIndex, PackageVersionsResult,
+    BuildId, DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
     Reporter as ResolverReporter, Resolver, ResolverProvider, VersionsResponse,
     WheelMetadataResult,
 };
@@ -24,6 +25,7 @@ mod dependency_provider;
 mod editables;
 mod error;
 mod exclusions;
+mod flat_index;
 mod manifest;
 mod options;
 mod pins;

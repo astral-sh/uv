@@ -1,22 +1,26 @@
 use std::fmt::Write;
 
+use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{
-    IndexLocations, InstalledMetadata, LocalDist, LocalEditable, Name, ResolvedDist,
+    IndexLocations, InstalledMetadata, LocalDist, LocalEditable, LocalEditables, Name, ResolvedDist,
 };
 use install_wheel_rs::linker::LinkMode;
+
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
 use uv_client::{
-    BaseClientBuilder, Connectivity, FlatIndex, FlatIndexClient, RegistryClient,
-    RegistryClientBuilder,
+    BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
+};
+use uv_configuration::{
+    ConfigSettings, IndexStrategy, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
@@ -26,11 +30,8 @@ use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
-use uv_resolver::{DependencyMode, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
-use uv_types::{
-    BuildIsolation, ConfigSettings, EmptyInstalledPackages, InFlight, NoBinary, NoBuild, Reinstall,
-    SetupPyStrategy,
-};
+use uv_resolver::{DependencyMode, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
 use crate::commands::reporters::{DownloadReporter, InstallReporter, ResolverReporter};
@@ -44,7 +45,9 @@ pub(crate) async fn pip_sync(
     reinstall: &Reinstall,
     link_mode: LinkMode,
     compile: bool,
+    require_hashes: bool,
     index_locations: IndexLocations,
+    index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
@@ -61,6 +64,7 @@ pub(crate) async fn pip_sync(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
+
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
@@ -128,6 +132,19 @@ pub(crate) async fn pip_sync(
 
     // Determine the current environment markers.
     let tags = venv.interpreter().tags()?;
+    let markers = venv.interpreter().markers();
+
+    // Collect the set of required hashes.
+    let hasher = if require_hashes {
+        HashStrategy::from_requirements(
+            requirements
+                .iter()
+                .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
+            markers,
+        )?
+    } else {
+        HashStrategy::None
+    };
 
     // Incorporate any index locations from the provided sources.
     let index_locations =
@@ -143,6 +160,7 @@ pub(crate) async fn pip_sync(
         .native_tls(native_tls)
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
+        .index_strategy(index_strategy)
         .keyring_provider(keyring_provider)
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
@@ -152,7 +170,7 @@ pub(crate) async fn pip_sync(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags)
+        FlatIndex::from_entries(entries, tags, &hasher, &no_build, &no_binary)
     };
 
     // Create a shared in-memory index.
@@ -195,7 +213,7 @@ pub(crate) async fn pip_sync(
     let requirements = {
         // Convert from unnamed to named requirements.
         let mut requirements =
-            NamedRequirementsResolver::new(requirements, &build_dispatch, &client, &index)
+            NamedRequirementsResolver::new(requirements, &hasher, &build_dispatch, &client, &index)
                 .with_reporter(ResolverReporter::from(printer))
                 .resolve()
                 .await?;
@@ -206,6 +224,7 @@ pub(crate) async fn pip_sync(
                 SourceTreeResolver::new(
                     source_trees,
                     &ExtrasSpecification::None,
+                    &hasher,
                     &build_dispatch,
                     &client,
                     &index,
@@ -224,6 +243,7 @@ pub(crate) async fn pip_sync(
         editables,
         &site_packages,
         reinstall,
+        &hasher,
         venv.interpreter(),
         tags,
         &cache,
@@ -247,6 +267,7 @@ pub(crate) async fn pip_sync(
             site_packages,
             reinstall,
             &no_binary,
+            &hasher,
             &index_locations,
             &cache,
             &venv,
@@ -300,12 +321,22 @@ pub(crate) async fn pip_sync(
             &client,
             &flat_index,
             &index,
+            &hasher,
             &build_dispatch,
             // TODO(zanieb): We should consider support for installed packages in pip sync
             &EmptyInstalledPackages,
         )?
         .with_reporter(reporter);
-        let resolution = resolver.resolve().await?;
+
+        let resolution = match resolver.resolve().await {
+            Err(uv_resolver::ResolveError::NoSolution(err)) => {
+                let report = miette::Report::msg(format!("{err}"))
+                    .context("No solution found when resolving dependencies:");
+                eprint!("{report:?}");
+                return Ok(ExitStatus::Failure);
+            }
+            result => result,
+        }?;
 
         let s = if resolution.len() == 1 { "" } else { "s" };
         writeln!(
@@ -334,7 +365,7 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(&cache, tags, &client, &build_dispatch)
+        let downloader = Downloader::new(&cache, tags, &hasher, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader
@@ -530,6 +561,7 @@ async fn resolve_editables(
     editables: Vec<EditableRequirement>,
     site_packages: &SitePackages<'_>,
     reinstall: &Reinstall,
+    hasher: &HashStrategy,
     interpreter: &Interpreter,
     tags: &Tags,
     cache: &Cache,
@@ -596,32 +628,28 @@ async fn resolve_editables(
     } else {
         let start = std::time::Instant::now();
 
-        let temp_dir = tempfile::tempdir_in(cache.root())?;
-
-        let downloader = Downloader::new(cache, tags, client, build_dispatch)
+        let downloader = Downloader::new(cache, tags, hasher, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(uninstalled.len() as u64));
 
-        let local_editables: Vec<LocalEditable> = uninstalled
-            .iter()
-            .map(|editable| {
-                let EditableRequirement { url, path, extras } = editable;
-                Ok(LocalEditable {
-                    url: url.clone(),
-                    path: path.clone(),
-                    extras: extras.clone(),
-                })
-            })
-            .collect::<Result<_>>()?;
+        let editables = LocalEditables::from_editables(uninstalled.iter().map(|editable| {
+            let EditableRequirement { url, path, extras } = editable;
+            LocalEditable {
+                url: url.clone(),
+                path: path.clone(),
+                extras: extras.clone(),
+            }
+        }));
 
-        let built_editables: Vec<_> = downloader
-            .build_editables(local_editables, temp_dir.path())
+        let editable_wheel_dir = tempfile::tempdir_in(cache.root())?;
+        let editables: Vec<_> = downloader
+            .build_editables(editables, editable_wheel_dir.path())
             .await
             .context("Failed to build editables")?
             .into_iter()
             .collect();
 
         // Validate that the editables are compatible with the target Python version.
-        for editable in &built_editables {
+        for editable in &editables {
             if let Some(python_requires) = editable.metadata.requires_python.as_ref() {
                 if !python_requires.contains(interpreter.python_version()) {
                     return Err(anyhow!(
@@ -634,19 +662,19 @@ async fn resolve_editables(
             }
         }
 
-        let s = if built_editables.len() == 1 { "" } else { "s" };
+        let s = if editables.len() == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
             "{}",
             format!(
                 "Built {} in {}",
-                format!("{} editable{}", built_editables.len(), s).bold(),
+                format!("{} editable{}", editables.len(), s).bold(),
                 elapsed(start.elapsed())
             )
             .dimmed()
         )?;
 
-        (built_editables, Some(temp_dir))
+        (editables, Some(editable_wheel_dir))
     };
 
     Ok(ResolvedEditables {

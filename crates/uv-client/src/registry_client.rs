@@ -9,7 +9,7 @@ use http::HeaderMap;
 use reqwest::{Client, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
@@ -22,6 +22,7 @@ use platform_tags::Platform;
 use pypi_types::{Metadata23, SimpleJson};
 use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_configuration::IndexStrategy;
 use uv_normalize::PackageName;
 
 use crate::base_client::{BaseClient, BaseClientBuilder};
@@ -35,6 +36,7 @@ use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
+    index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
     native_tls: bool,
     retries: u32,
@@ -49,6 +51,7 @@ impl RegistryClientBuilder<'_> {
     pub fn new(cache: Cache) -> Self {
         Self {
             index_urls: IndexUrls::default(),
+            index_strategy: IndexStrategy::default(),
             keyring_provider: KeyringProvider::default(),
             native_tls: false,
             cache,
@@ -65,6 +68,12 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
         self.index_urls = index_urls;
+        self
+    }
+
+    #[must_use]
+    pub fn index_strategy(mut self, index_strategy: IndexStrategy) -> Self {
+        self.index_strategy = index_strategy;
         self
     }
 
@@ -147,6 +156,7 @@ impl<'a> RegistryClientBuilder<'a> {
 
         RegistryClient {
             index_urls: self.index_urls,
+            index_strategy: self.index_strategy,
             cache: self.cache,
             connectivity,
             client,
@@ -160,6 +170,8 @@ impl<'a> RegistryClientBuilder<'a> {
 pub struct RegistryClient {
     /// The index URLs to use for fetching packages.
     index_urls: IndexUrls,
+    /// The strategy to use when fetching across multiple indexes.
+    index_strategy: IndexStrategy,
     /// The underlying HTTP client.
     client: CachedClient,
     /// Used for the remote wheel METADATA cache.
@@ -206,17 +218,23 @@ impl RegistryClient {
     pub async fn simple(
         &self,
         package_name: &PackageName,
-    ) -> Result<(IndexUrl, OwnedArchive<SimpleMetadata>), Error> {
+    ) -> Result<Vec<(IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
         let mut it = self.index_urls.indexes().peekable();
         if it.peek().is_none() {
             return Err(ErrorKind::NoIndex(package_name.as_ref().to_string()).into());
         }
 
+        let mut results = Vec::new();
         for index in it {
-            let result = self.simple_single_index(package_name, index).await?;
+            match self.simple_single_index(package_name, index).await? {
+                Ok(metadata) => {
+                    results.push((index.clone(), metadata));
 
-            return match result {
-                Ok(metadata) => Ok((index.clone(), metadata)),
+                    // If we're only using the first match, we can stop here.
+                    if self.index_strategy == IndexStrategy::FirstMatch {
+                        break;
+                    }
+                }
                 Err(CachedClientError::Client(err)) => match err.into_kind() {
                     ErrorKind::Offline(_) => continue,
                     ErrorKind::ReqwestError(err) => {
@@ -225,20 +243,24 @@ impl RegistryClient {
                         {
                             continue;
                         }
-                        Err(ErrorKind::from(err).into())
+                        return Err(ErrorKind::from(err).into());
                     }
-                    other => Err(other.into()),
+                    other => return Err(other.into()),
                 },
-                Err(CachedClientError::Callback(err)) => Err(err),
+                Err(CachedClientError::Callback(err)) => return Err(err),
             };
         }
 
-        match self.connectivity {
-            Connectivity::Online => {
-                Err(ErrorKind::PackageNotFound(package_name.to_string()).into())
-            }
-            Connectivity::Offline => Err(ErrorKind::Offline(package_name.to_string()).into()),
+        if results.is_empty() {
+            return match self.connectivity {
+                Connectivity::Online => {
+                    Err(ErrorKind::PackageNotFound(package_name.to_string()).into())
+                }
+                Connectivity::Offline => Err(ErrorKind::Offline(package_name.to_string()).into()),
+            };
         }
+
+        Ok(results)
     }
 
     async fn simple_single_index(
@@ -263,6 +285,7 @@ impl RegistryClient {
             Path::new(&match index {
                 IndexUrl::Pypi(_) => "pypi".to_string(),
                 IndexUrl::Url(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
+                IndexUrl::Path(url) => cache_key::digest(&cache_key::CanonicalUrl::new(url)),
             }),
             format!("{package_name}.rkyv"),
         );
@@ -402,11 +425,7 @@ impl RegistryClient {
     ) -> Result<Metadata23, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
-        if file
-            .dist_info_metadata
-            .as_ref()
-            .is_some_and(pypi_types::DistInfoMetadata::is_available)
-        {
+        if file.dist_info_metadata {
             let mut url = url.clone();
             url.set_path(&format!("{}.metadata", url.path()));
 
@@ -596,7 +615,8 @@ async fn read_metadata_async_seek(
     debug_source: String,
     reader: impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
 ) -> Result<Metadata23, Error> {
-    let mut zip_reader = async_zip::tokio::read::seek::ZipFileReader::with_tokio(reader)
+    let reader = futures::io::BufReader::new(reader.compat());
+    let mut zip_reader = async_zip::base::read::seek::ZipFileReader::new(reader)
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
@@ -609,7 +629,7 @@ async fn read_metadata_async_seek(
             .enumerate()
             .filter_map(|(index, entry)| Some((index, entry.filename().as_str().ok()?))),
     )
-    .map_err(ErrorKind::InstallWheel)?;
+    .map_err(ErrorKind::DistInfo)?;
 
     // Read the contents of the `METADATA` file.
     let mut contents = Vec::new();
@@ -633,6 +653,7 @@ async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
     debug_source: String,
     reader: R,
 ) -> Result<Metadata23, Error> {
+    let reader = futures::io::BufReader::with_capacity(128 * 1024, reader);
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(reader);
 
     while let Some(mut entry) = zip

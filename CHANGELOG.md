@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.1.31
+
+### Bug fixes
+
+- Ignore direct URL distributions in prefetcher ([#2943](https://github.com/astral-sh/uv/pull/2943))
+
+## 0.1.30
+
+### Enhancements
+
+- Show resolution diagnostics after `pip install` ([#2829](https://github.com/astral-sh/uv/pull/2829))
+
+### Performance
+
+- Speed up cold-cache `urllib3`-`boto3`-`botocore` performance with batched prefetching ([#2452](https://github.com/astral-sh/uv/pull/2452))
+
+### Bug fixes
+
+- Backtrack on distributions with invalid metadata ([#2834](https://github.com/astral-sh/uv/pull/2834))
+- Include LICENSE files in source distribution ([#2855](https://github.com/astral-sh/uv/pull/2855))
+- Respect `--no-build` and `--no-binary` in `--find-links` ([#2826](https://github.com/astral-sh/uv/pull/2826))
+- Respect cached local `--find-links` in install plan ([#2907](https://github.com/astral-sh/uv/pull/2907))
+- Avoid panic with multiple confirmation handlers ([#2903](https://github.com/astral-sh/uv/pull/2903))
+- Use scheme parsing to determine absolute vs. relative URLs ([#2904](https://github.com/astral-sh/uv/pull/2904))
+- Remove additional 'because' in resolution failure messages ([#2849](https://github.com/astral-sh/uv/pull/2849))
+- Use `miette` when printing `pip sync` resolution failures ([#2848](https://github.com/astral-sh/uv/pull/2848))
+
+## 0.1.29
+
+### Enhancements
+
+- Allow conflicting Git URLs that refer to the same commit SHA ([#2769](https://github.com/astral-sh/uv/pull/2769))
+- Allow package lookups across multiple indexes via explicit opt-in (`--index-strategy unsafe-any-match`) ([#2815](https://github.com/astral-sh/uv/pull/2815))
+- Allow no-op `--no-compile` flag on CLI ([#2816](https://github.com/astral-sh/uv/pull/2816))
+- Upgrade `rs-async-zip` to support data descriptors ([#2809](https://github.com/astral-sh/uv/pull/2809))
+
+### Bug fixes
+
+- Avoid unused extras check in `pip install` for source trees ([#2811](https://github.com/astral-sh/uv/pull/2811))
+- Deduplicate editables during install commands ([#2820](https://github.com/astral-sh/uv/pull/2820))
+- Fix windows lock race: lock exclusive after all try lock errors ([#2800](https://github.com/astral-sh/uv/pull/2800))
+- Preserve `.git` suffixes and casing in Git dependencies ([#2789](https://github.com/astral-sh/uv/pull/2789))
+- Respect Git tags and branches that look like short commits ([#2795](https://github.com/astral-sh/uv/pull/2795))
+- Enable virtualenv creation on Windows with cpython-x86 ([#2707](https://github.com/astral-sh/uv/pull/2707))
+
+### Documentation
+
+- Document that uv is safe to run concurrently ([#2818](https://github.com/astral-sh/uv/pull/2818))
+
 ## 0.1.28
 
 ### Enhancements

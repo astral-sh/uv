@@ -22,12 +22,6 @@ CMake may be installed with Homebrew:
 brew install cmake
 ```
 
-The Python bootstrapping script requires `coreutils` and `zstd`; we recommend installing them with Homebrew:
-
-```shell
-brew install coreutils zstd
-```
-
 See the [Python](#python) section for instructions on installing the Python versions.
 
 ### Windows
@@ -45,13 +39,13 @@ Testing uv requires multiple specific Python versions. You can install them into
 `<project root>/bin` via our bootstrapping script:
 
 ```shell
-pipx run scripts/bootstrap/install.py
+cargo run -p uv-dev -- fetch-python
 ```
 
-Alternatively, you can install `zstandard` from PyPI, then run:
+You may need to add the versions to your `PATH`:
 
 ```shell
-python3.12 scripts/bootstrap/install.py
+source .env
 ```
 
 You can configure the bootstrapping directory with `UV_BOOTSTRAP_DIR`.

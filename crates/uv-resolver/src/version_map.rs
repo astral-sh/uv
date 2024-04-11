@@ -2,23 +2,25 @@ use std::collections::btree_map::{BTreeMap, Entry};
 use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
+use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use rustc_hash::FxHashSet;
-use tracing::{instrument, warn};
+use tracing::instrument;
 
 use distribution_filename::{DistFilename, WheelFilename};
 use distribution_types::{
-    Dist, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
+    Dist, Hash, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
     SourceDistCompatibility, WheelCompatibility,
 };
 use pep440_rs::{Version, VersionSpecifiers};
-use platform_tags::Tags;
-use pypi_types::{Hashes, Yanked};
-use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
-use uv_client::{FlatDistributions, OwnedArchive, SimpleMetadata, VersionFiles};
+use platform_tags::{TagCompatibility, Tags};
+use pypi_types::{HashDigest, Yanked};
+use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
+use uv_configuration::{NoBinary, NoBuild};
 use uv_normalize::PackageName;
-use uv_types::{NoBinary, NoBuild};
+use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
+use crate::flat_index::FlatDistributions;
 use crate::{python_requirement::PythonRequirement, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
@@ -46,6 +48,7 @@ impl VersionMap {
         tags: &Tags,
         python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
+        hasher: &HashStrategy,
         exclude_newer: Option<&DateTime<Utc>>,
         flat_index: Option<FlatDistributions>,
         no_binary: &NoBinary,
@@ -109,6 +112,7 @@ impl VersionMap {
             .allowed_versions(package_name)
             .cloned()
             .unwrap_or_default();
+        let required_hashes = hasher.get_package(package_name).digests().to_vec();
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
@@ -120,6 +124,7 @@ impl VersionMap {
                 python_requirement: python_requirement.clone(),
                 exclude_newer: exclude_newer.copied(),
                 allowed_yanks,
+                required_hashes,
             }),
         }
     }
@@ -152,7 +157,9 @@ impl VersionMap {
     /// which can be used to lazily request a [`CompatibleDist`]. This is
     /// useful in cases where one can skip materializing a full distribution
     /// for each version.
-    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> {
+    pub(crate) fn iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> + ExactSizeIterator {
         match self.inner {
             VersionMapInner::Eager(ref map) => {
                 either::Either::Left(map.iter().map(|(version, dist)| {
@@ -174,16 +181,10 @@ impl VersionMap {
     }
 
     /// Return the [`Hashes`] for the given version, if any.
-    pub(crate) fn hashes(&self, version: &Version) -> Vec<Hashes> {
+    pub(crate) fn hashes(&self, version: &Version) -> Option<Vec<HashDigest>> {
         match self.inner {
-            VersionMapInner::Eager(ref map) => map
-                .get(version)
-                .map(|file| file.hashes().to_vec())
-                .unwrap_or_default(),
-            VersionMapInner::Lazy(ref lazy) => lazy
-                .get(version)
-                .map(|file| file.hashes().to_vec())
-                .unwrap_or_default(),
+            VersionMapInner::Eager(ref map) => map.get(version).map(|file| file.hashes().to_vec()),
+            VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(|file| file.hashes().to_vec()),
         }
     }
 
@@ -306,6 +307,8 @@ struct VersionMapLazy {
     exclude_newer: Option<DateTime<Utc>>,
     /// Which yanked versions are allowed
     allowed_yanks: FxHashSet<Version>,
+    /// The hashes of allowed distributions.
+    required_hashes: Vec<HashDigest>,
 }
 
 impl VersionMapLazy {
@@ -382,13 +385,14 @@ impl VersionMapLazy {
                 let version = filename.version().clone();
                 let requires_python = file.requires_python.clone();
                 let yanked = file.yanked.clone();
-                let hash = file.hashes.clone();
+                let hashes = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
                         let compatibility = self.wheel_compatibility(
                             &filename,
                             &version,
                             requires_python,
+                            &hashes,
                             yanked,
                             excluded,
                             upload_time,
@@ -398,12 +402,13 @@ impl VersionMapLazy {
                             file,
                             self.index.clone(),
                         );
-                        priority_dist.insert_built(dist, Some(hash), compatibility);
+                        priority_dist.insert_built(dist, hashes, compatibility);
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
                             &version,
                             requires_python,
+                            &hashes,
                             yanked,
                             excluded,
                             upload_time,
@@ -413,7 +418,7 @@ impl VersionMapLazy {
                             file,
                             self.index.clone(),
                         );
-                        priority_dist.insert_source(dist, Some(hash), compatibility);
+                        priority_dist.insert_source(dist, hashes, compatibility);
                     }
                 }
             }
@@ -426,10 +431,12 @@ impl VersionMapLazy {
         simple.dist.get_or_init(get_or_init).as_ref()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn source_dist_compatibility(
         &self,
         version: &Version,
         requires_python: Option<VersionSpecifiers>,
+        hashes: &[HashDigest],
         yanked: Option<Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
@@ -466,14 +473,32 @@ impl VersionMapLazy {
             }
         }
 
-        SourceDistCompatibility::Compatible
+        // Check if hashes line up. If hashes aren't required, they're considered matching.
+        let hash = if self.required_hashes.is_empty() {
+            Hash::Matched
+        } else {
+            if hashes.is_empty() {
+                Hash::Missing
+            } else if hashes
+                .iter()
+                .any(|hash| self.required_hashes.contains(hash))
+            {
+                Hash::Matched
+            } else {
+                Hash::Mismatched
+            }
+        };
+
+        SourceDistCompatibility::Compatible(hash)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn wheel_compatibility(
         &self,
         filename: &WheelFilename,
         version: &Version,
         requires_python: Option<VersionSpecifiers>,
+        hashes: &[HashDigest],
         yanked: Option<Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
@@ -504,8 +529,31 @@ impl VersionMapLazy {
             }
         }
 
-        // Determine a compatibility for the wheel based on tags
-        WheelCompatibility::from(filename.compatibility(&self.tags))
+        // Determine a compatibility for the wheel based on tags.
+        let priority = match filename.compatibility(&self.tags) {
+            TagCompatibility::Incompatible(tag) => {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
+            }
+            TagCompatibility::Compatible(priority) => priority,
+        };
+
+        // Check if hashes line up. If hashes aren't required, they're considered matching.
+        let hash = if self.required_hashes.is_empty() {
+            Hash::Matched
+        } else {
+            if hashes.is_empty() {
+                Hash::Missing
+            } else if hashes
+                .iter()
+                .any(|hash| self.required_hashes.contains(hash))
+            {
+                Hash::Matched
+            } else {
+                Hash::Mismatched
+            }
+        };
+
+        WheelCompatibility::Compatible(hash, priority)
     }
 }
 

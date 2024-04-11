@@ -3,10 +3,13 @@ use std::io::Write;
 
 use anyhow::Result;
 use futures::future;
-use hyper::header::AUTHORIZATION;
-use hyper::server::conn::Http;
+use http::header::AUTHORIZATION;
+use http_body_util::Full;
+use hyper::body::Bytes;
+use hyper::server::conn::http1;
 use hyper::service::service_fn;
-use hyper::{Body, Request, Response};
+use hyper::{Request, Response};
+use hyper_util::rt::TokioIo;
 use tempfile::NamedTempFile;
 use tokio::net::TcpListener;
 
@@ -21,7 +24,7 @@ async fn test_client_with_netrc_credentials() -> Result<()> {
 
     // Spawn the server loop in a background task
     tokio::spawn(async move {
-        let svc = service_fn(move |req: Request<Body>| {
+        let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
             // Get User Agent Header and send it back in the response
             let auth = req
                 .headers()
@@ -29,16 +32,19 @@ async fn test_client_with_netrc_credentials() -> Result<()> {
                 .and_then(|v| v.to_str().ok())
                 .map(|s| s.to_string())
                 .unwrap_or_default(); // Empty Default
-            future::ok::<_, hyper::Error>(Response::new(Body::from(auth)))
+            future::ok::<_, hyper::Error>(Response::new(Full::new(Bytes::from(auth))))
         });
-        // Start Hyper Server
+        // Start Server (not wrapped in loop {} since we want a single response server)
+        // If you want server to accept multiple connections, wrap it in loop {}
         let (socket, _) = listener.accept().await.unwrap();
-        Http::new()
-            .http1_keep_alive(false)
-            .serve_connection(socket, svc)
-            .with_upgrades()
-            .await
-            .expect("Server Started");
+        let socket = TokioIo::new(socket);
+        tokio::task::spawn(async move {
+            http1::Builder::new()
+                .serve_connection(socket, svc)
+                .with_upgrades()
+                .await
+                .expect("Server Started");
+        });
     });
 
     // Create a netrc file

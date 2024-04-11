@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.1.28"
+version = "0.1.31"
 description = "An extremely fast Python package installer and resolver, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -41,7 +41,7 @@ manifest-path = "crates/uv/Cargo.toml"
 module-name = "uv"
 python-source = "python"
 strip = true
-include = ["rust-toolchain.toml"]
+include = [{ path = "rust-toolchain.toml", format = ["sdist", "wheel"] }, { path = "LICENSE-APACHE", format = "sdist" }, { path = "LICENSE-MIT", format = "sdist" }]
 
 [tool.rooster]
 major_labels = []  # We do not use the major version number

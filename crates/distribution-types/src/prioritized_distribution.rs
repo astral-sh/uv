@@ -1,8 +1,8 @@
 use std::fmt::{Display, Formatter};
 
 use pep440_rs::VersionSpecifiers;
-use platform_tags::{IncompatibleTag, TagCompatibility, TagPriority};
-use pypi_types::{Hashes, Yanked};
+use platform_tags::{IncompatibleTag, TagPriority};
+use pypi_types::{HashDigest, Yanked};
 
 use crate::{Dist, InstalledDist, ResolvedDistRef};
 
@@ -18,7 +18,7 @@ struct PrioritizedDistInner {
     /// The highest-priority wheel.
     wheel: Option<(Dist, WheelCompatibility)>,
     /// The hashes for each distribution.
-    hashes: Vec<Hashes>,
+    hashes: Vec<HashDigest>,
 }
 
 /// A distribution that can be used for both resolution and installation.
@@ -113,7 +113,7 @@ impl Display for IncompatibleDist {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
-    Compatible(TagPriority),
+    Compatible(Hash, TagPriority),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -128,7 +128,7 @@ pub enum IncompatibleWheel {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceDistCompatibility {
     Incompatible(IncompatibleSource),
-    Compatible,
+    Compatible(Hash),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -139,26 +139,40 @@ pub enum IncompatibleSource {
     NoBuild,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Hash {
+    /// The hash is present, but does not match the expected value.
+    Mismatched,
+    /// The hash is missing.
+    Missing,
+    /// The hash matches the expected value.
+    Matched,
+}
+
 impl PrioritizedDist {
     /// Create a new [`PrioritizedDist`] from the given wheel distribution.
-    pub fn from_built(dist: Dist, hash: Option<Hashes>, compatibility: WheelCompatibility) -> Self {
+    pub fn from_built(
+        dist: Dist,
+        hashes: Vec<HashDigest>,
+        compatibility: WheelCompatibility,
+    ) -> Self {
         Self(Box::new(PrioritizedDistInner {
             wheel: Some((dist, compatibility)),
             source: None,
-            hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
+            hashes,
         }))
     }
 
     /// Create a new [`PrioritizedDist`] from the given source distribution.
     pub fn from_source(
         dist: Dist,
-        hash: Option<Hashes>,
+        hashes: Vec<HashDigest>,
         compatibility: SourceDistCompatibility,
     ) -> Self {
         Self(Box::new(PrioritizedDistInner {
             wheel: None,
             source: Some((dist, compatibility)),
-            hashes: hash.map(|hash| vec![hash]).unwrap_or_default(),
+            hashes,
         }))
     }
 
@@ -166,7 +180,7 @@ impl PrioritizedDist {
     pub fn insert_built(
         &mut self,
         dist: Dist,
-        hash: Option<Hashes>,
+        hashes: Vec<HashDigest>,
         compatibility: WheelCompatibility,
     ) {
         // Track the highest-priority wheel.
@@ -178,16 +192,14 @@ impl PrioritizedDist {
             self.0.wheel = Some((dist, compatibility));
         }
 
-        if let Some(hash) = hash {
-            self.0.hashes.push(hash);
-        }
+        self.0.hashes.extend(hashes);
     }
 
     /// Insert the given source distribution into the [`PrioritizedDist`].
     pub fn insert_source(
         &mut self,
         dist: Dist,
-        hash: Option<Hashes>,
+        hashes: Vec<HashDigest>,
         compatibility: SourceDistCompatibility,
     ) {
         // Track the highest-priority source.
@@ -199,16 +211,25 @@ impl PrioritizedDist {
             self.0.source = Some((dist, compatibility));
         }
 
-        if let Some(hash) = hash {
-            self.0.hashes.push(hash);
-        }
+        self.0.hashes.extend(hashes);
     }
 
     /// Return the highest-priority distribution for the package version, if any.
     pub fn get(&self) -> Option<CompatibleDist> {
         match (&self.0.wheel, &self.0.source) {
+            // If both are compatible, break ties based on the hash.
+            (
+                Some((wheel, WheelCompatibility::Compatible(wheel_hash, tag_priority))),
+                Some((source_dist, SourceDistCompatibility::Compatible(source_hash))),
+            ) => {
+                if source_hash > wheel_hash {
+                    Some(CompatibleDist::SourceDist(source_dist))
+                } else {
+                    Some(CompatibleDist::CompatibleWheel(wheel, *tag_priority))
+                }
+            }
             // Prefer the highest-priority, platform-compatible wheel.
-            (Some((wheel, WheelCompatibility::Compatible(tag_priority))), _) => {
+            (Some((wheel, WheelCompatibility::Compatible(_, tag_priority))), _) => {
                 Some(CompatibleDist::CompatibleWheel(wheel, *tag_priority))
             }
             // If we have a compatible source distribution and an incompatible wheel, return the
@@ -217,25 +238,14 @@ impl PrioritizedDist {
             // using the wheel is faster.
             (
                 Some((wheel, WheelCompatibility::Incompatible(_))),
-                Some((source_dist, SourceDistCompatibility::Compatible)),
+                Some((source_dist, SourceDistCompatibility::Compatible(_))),
             ) => Some(CompatibleDist::IncompatibleWheel { source_dist, wheel }),
             // Otherwise, if we have a source distribution, return it.
-            (None, Some((source_dist, SourceDistCompatibility::Compatible))) => {
+            (None, Some((source_dist, SourceDistCompatibility::Compatible(_)))) => {
                 Some(CompatibleDist::SourceDist(source_dist))
             }
             _ => None,
         }
-    }
-
-    /// Return the compatible source distribution, if any.
-    pub fn compatible_source(&self) -> Option<&Dist> {
-        self.0
-            .source
-            .as_ref()
-            .and_then(|(dist, compatibility)| match compatibility {
-                SourceDistCompatibility::Compatible => Some(dist),
-                SourceDistCompatibility::Incompatible(_) => None,
-            })
     }
 
     /// Return the incompatible source distribution, if any.
@@ -244,21 +254,10 @@ impl PrioritizedDist {
             .source
             .as_ref()
             .and_then(|(dist, compatibility)| match compatibility {
-                SourceDistCompatibility::Compatible => None,
+                SourceDistCompatibility::Compatible(_) => None,
                 SourceDistCompatibility::Incompatible(incompatibility) => {
                     Some((dist, incompatibility))
                 }
-            })
-    }
-
-    /// Return the compatible built distribution, if any.
-    pub fn compatible_wheel(&self) -> Option<(&Dist, TagPriority)> {
-        self.0
-            .wheel
-            .as_ref()
-            .and_then(|(dist, compatibility)| match compatibility {
-                WheelCompatibility::Compatible(priority) => Some((dist, *priority)),
-                WheelCompatibility::Incompatible(_) => None,
             })
     }
 
@@ -268,13 +267,13 @@ impl PrioritizedDist {
             .wheel
             .as_ref()
             .and_then(|(dist, compatibility)| match compatibility {
-                WheelCompatibility::Compatible(_) => None,
+                WheelCompatibility::Compatible(_, _) => None,
                 WheelCompatibility::Incompatible(incompatibility) => Some((dist, incompatibility)),
             })
     }
 
     /// Return the hashes for each distribution.
-    pub fn hashes(&self) -> &[Hashes] {
+    pub fn hashes(&self) -> &[HashDigest] {
         &self.0.hashes
     }
 
@@ -311,11 +310,23 @@ impl<'a> CompatibleDist<'a> {
             } => ResolvedDistRef::Installable(source_dist),
         }
     }
+
+    /// Returns whether the distribution is a source distribution.
+    ///
+    /// Avoid building source distributions we don't need.
+    pub fn prefetchable(&self) -> bool {
+        match *self {
+            CompatibleDist::SourceDist(_) => false,
+            CompatibleDist::InstalledDist(_)
+            | CompatibleDist::CompatibleWheel(_, _)
+            | CompatibleDist::IncompatibleWheel { .. } => true,
+        }
+    }
 }
 
 impl WheelCompatibility {
     pub fn is_compatible(&self) -> bool {
-        matches!(self, Self::Compatible(_))
+        matches!(self, Self::Compatible(_, _))
     }
 
     /// Return `true` if the current compatibility is more compatible than another.
@@ -324,11 +335,12 @@ impl WheelCompatibility {
     /// Compatible wheel ordering is determined by tag priority.
     pub fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Compatible(_), Self::Incompatible(_)) => true,
-            (Self::Compatible(tag_priority), Self::Compatible(other_tag_priority)) => {
-                tag_priority > other_tag_priority
-            }
-            (Self::Incompatible(_), Self::Compatible(_)) => false,
+            (Self::Compatible(_, _), Self::Incompatible(_)) => true,
+            (
+                Self::Compatible(hash, tag_priority),
+                Self::Compatible(other_hash, other_tag_priority),
+            ) => (hash, tag_priority) > (other_hash, other_tag_priority),
+            (Self::Incompatible(_), Self::Compatible(_, _)) => false,
             (Self::Incompatible(incompatibility), Self::Incompatible(other_incompatibility)) => {
                 incompatibility.is_more_compatible(other_incompatibility)
             }
@@ -344,21 +356,14 @@ impl SourceDistCompatibility {
     /// Incompatible source distribution priority selects a source distribution that was "closest" to being usable.
     pub fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Compatible, Self::Incompatible(_)) => true,
-            (Self::Compatible, Self::Compatible) => false, // Arbitrary
-            (Self::Incompatible(_), Self::Compatible) => false,
+            (Self::Compatible(_), Self::Incompatible(_)) => true,
+            (Self::Compatible(compatibility), Self::Compatible(other_compatibility)) => {
+                compatibility > other_compatibility
+            }
+            (Self::Incompatible(_), Self::Compatible(_)) => false,
             (Self::Incompatible(incompatibility), Self::Incompatible(other_incompatibility)) => {
                 incompatibility.is_more_compatible(other_incompatibility)
             }
-        }
-    }
-}
-
-impl From<TagCompatibility> for WheelCompatibility {
-    fn from(value: TagCompatibility) -> Self {
-        match value {
-            TagCompatibility::Compatible(priority) => Self::Compatible(priority),
-            TagCompatibility::Incompatible(tag) => Self::Incompatible(IncompatibleWheel::Tag(tag)),
         }
     }
 }

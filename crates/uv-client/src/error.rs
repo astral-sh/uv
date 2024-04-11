@@ -132,7 +132,7 @@ pub enum ErrorKind {
 
     /// Dist-info error
     #[error(transparent)]
-    InstallWheel(#[from] install_wheel_rs::Error),
+    DistInfo(#[from] install_wheel_rs::Error),
 
     #[error("{0} isn't available locally, but making network requests to registries was banned.")]
     NoIndex(String),
@@ -146,7 +146,11 @@ pub enum ErrorKind {
 
     /// The metadata file could not be parsed.
     #[error("Couldn't parse metadata of {0} from {1}")]
-    MetadataParseError(WheelFilename, String, #[source] Box<pypi_types::Error>),
+    MetadataParseError(
+        WheelFilename,
+        String,
+        #[source] Box<pypi_types::MetadataError>,
+    ),
 
     /// The metadata file was not found in the wheel.
     #[error("Metadata file `{0}` was not found in {1}")]

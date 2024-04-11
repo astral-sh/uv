@@ -1,0 +1,28 @@
+[package]
+name = "uv-configuration"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+pep508_rs = { workspace = true }
+uv-normalize = { workspace = true }
+
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"], optional = true }
+itertools = { workspace = true }
+rustc-hash = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde", "dep:serde_json"]

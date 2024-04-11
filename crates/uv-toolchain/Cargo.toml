@@ -1,0 +1,33 @@
+[package]
+name = "uv-toolchain"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+uv-client = { workspace = true }
+uv-extract = { workspace = true }
+uv-fs = { workspace = true }
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true }
+
+anyhow = { workspace = true }
+fs-err = { workspace = true }
+futures = { workspace = true }
+once_cell = {workspace = true}
+reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true, features = ["compat"] }
+tracing = { workspace = true }
+url = { workspace = true }
+
+[lints]
+workspace = true

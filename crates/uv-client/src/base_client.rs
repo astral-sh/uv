@@ -16,10 +16,9 @@ use uv_warnings::warn_user_once;
 
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
-use crate::tls::Roots;
-use crate::{tls, Connectivity};
+use crate::Connectivity;
 
-/// A builder for an [`RegistryClient`].
+/// A builder for an [`BaseClient`].
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
     keyring_provider: KeyringProvider,
@@ -140,19 +139,20 @@ impl<'a> BaseClientBuilder<'a> {
                 }
                 path_exists
             });
-            // Load the TLS configuration.
-            let tls = tls::load(if self.native_tls || ssl_cert_file_exists {
-                Roots::Native
-            } else {
-                Roots::Webpki
-            })
-            .expect("Failed to load TLS configuration.");
 
+            // Configure the builder.
             let client_core = ClientBuilder::new()
                 .user_agent(user_agent_string)
                 .pool_max_idle_per_host(20)
                 .timeout(std::time::Duration::from_secs(timeout))
-                .use_preconfigured_tls(tls);
+                .tls_built_in_root_certs(false);
+
+            // Configure TLS.
+            let client_core = if self.native_tls || ssl_cert_file_exists {
+                client_core.tls_built_in_native_certs(true)
+            } else {
+                client_core.tls_built_in_webpki_certs(true)
+            };
 
             client_core.build().expect("Failed to build HTTP client.")
         });

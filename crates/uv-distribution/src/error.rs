@@ -3,6 +3,8 @@ use tokio::task::JoinError;
 use zip::result::ZipError;
 
 use distribution_filename::WheelFilenameError;
+use pep440_rs::Version;
+use pypi_types::HashDigest;
 use uv_client::BetterReqwestError;
 use uv_normalize::PackageName;
 
@@ -47,8 +49,10 @@ pub enum Error {
         given: PackageName,
         metadata: PackageName,
     },
+    #[error("Package metadata version `{metadata}` does not match given version `{given}`")]
+    VersionMismatch { given: Version, metadata: Version },
     #[error("Failed to parse metadata from built wheel")]
-    Metadata(#[from] pypi_types::Error),
+    Metadata(#[from] pypi_types::MetadataError),
     #[error("Failed to read `dist-info` metadata from built wheel")]
     DistInfo(#[from] install_wheel_rs::Error),
     #[error("Failed to read zip archive from built wheel")]
@@ -62,11 +66,11 @@ pub enum Error {
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
     #[error("The source distribution does not support static metadata in `PKG-INFO`")]
-    DynamicPkgInfo(#[source] pypi_types::Error),
+    DynamicPkgInfo(#[source] pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
     MissingPyprojectToml,
     #[error("The source distribution does not support static metadata in `pyproject.toml`")]
-    DynamicPyprojectToml(#[source] pypi_types::Error),
+    DynamicPyprojectToml(#[source] pypi_types::MetadataError),
     #[error("Unsupported scheme in URL: {0}")]
     UnsupportedScheme(String),
 
@@ -78,6 +82,40 @@ pub enum Error {
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
     Join(#[from] JoinError),
+
+    /// An I/O error that occurs while exhausting a reader to compute a hash.
+    #[error("Failed to hash distribution")]
+    HashExhaustion(#[source] std::io::Error),
+
+    #[error("Hash mismatch for {distribution}\n\nExpected:\n{expected}\n\nComputed:\n{actual}")]
+    MismatchedHashes {
+        distribution: String,
+        expected: String,
+        actual: String,
+    },
+
+    #[error(
+        "Hash-checking is enabled, but no hashes were provided or computed for: {distribution}"
+    )]
+    MissingHashes { distribution: String },
+
+    #[error("Hash-checking is enabled, but no hashes were computed for: {distribution}\n\nExpected:\n{expected}")]
+    MissingActualHashes {
+        distribution: String,
+        expected: String,
+    },
+
+    #[error("Hash-checking is enabled, but no hashes were provided for: {distribution}\n\nComputed:\n{actual}")]
+    MissingExpectedHashes {
+        distribution: String,
+        actual: String,
+    },
+
+    #[error("Hash-checking is not supported for local directories: {0}")]
+    HashesNotSupportedSourceTree(String),
+
+    #[error("Hash-checking is not supported for Git repositories: {0}")]
+    HashesNotSupportedGit(String),
 }
 
 impl From<reqwest::Error> for Error {
@@ -92,6 +130,62 @@ impl From<reqwest_middleware::Error> for Error {
             reqwest_middleware::Error::Middleware(error) => Self::ReqwestMiddlewareError(error),
             reqwest_middleware::Error::Reqwest(error) => {
                 Self::Reqwest(BetterReqwestError::from(error))
+            }
+        }
+    }
+}
+
+impl Error {
+    /// Construct a hash mismatch error.
+    pub fn hash_mismatch(
+        distribution: String,
+        expected: &[HashDigest],
+        actual: &[HashDigest],
+    ) -> Error {
+        match (expected.is_empty(), actual.is_empty()) {
+            (true, true) => Self::MissingHashes { distribution },
+            (true, false) => {
+                let actual = actual
+                    .iter()
+                    .map(|hash| format!("  {hash}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                Self::MissingExpectedHashes {
+                    distribution,
+                    actual,
+                }
+            }
+            (false, true) => {
+                let expected = expected
+                    .iter()
+                    .map(|hash| format!("  {hash}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                Self::MissingActualHashes {
+                    distribution,
+                    expected,
+                }
+            }
+            (false, false) => {
+                let expected = expected
+                    .iter()
+                    .map(|hash| format!("  {hash}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                let actual = actual
+                    .iter()
+                    .map(|hash| format!("  {hash}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                Self::MismatchedHashes {
+                    distribution,
+                    expected,
+                    actual,
+                }
             }
         }
     }

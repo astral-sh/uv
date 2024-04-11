@@ -30,7 +30,7 @@ drawbacks:
    target tool the user is expecting to use.
 4. It prevents uv from introducing any settings or configuration that don't exist in the target
    tool, since otherwise `pip.conf` (or similar) would no longer be usable with `pip`.
-5. It can lead user confusion, since uv would be reading settings that don't actually affect its
+5. It can lead to user confusion, since uv would be reading settings that don't actually affect its
    behavior, and many users may _not_ expect uv to read configuration files intended for other
    tools.
 
@@ -107,7 +107,7 @@ the available versions of a given package. However, uv and `pip` differ in how t
 packages that exist on multiple indexes.
 
 For example, imagine that a company publishes an internal version of `requests` on a private index
-(`--extra-index-url`), but also allow installing packages from PyPI by default. In this case, the
+(`--extra-index-url`), but also allows installing packages from PyPI by default. In this case, the
 private `requests` would conflict with the public [`requests`](https://pypi.org/project/requests/)
 on PyPI.
 
@@ -117,7 +117,7 @@ finds a match. This means that if a package exists on multiple indexes, uv will 
 candidate versions to those present in the first index that contains the package.
 
 `pip`, meanwhile, will combine the candidate versions from all indexes, and select the best
-version from the combined set., though it makes [no guarantees around the order](https://github.com/pypa/pip/issues/5045#issuecomment-369521345)
+version from the combined set, though it makes [no guarantees around the order](https://github.com/pypa/pip/issues/5045#issuecomment-369521345)
 in which it searches indexes, and expects that packages are unique up to name and version, even
 across indexes.
 
@@ -127,6 +127,12 @@ attacks, in which an attacker publishes a malicious package on PyPI with the sam
 internal package, thus causing the malicious package to be installed instead of the internal
 package. See, for example, [the `torchtriton` attack](https://pytorch.org/blog/compromised-nightly-dependency/)
 from December 2022.
+
+As of v0.1.29, users can opt in to `pip`-style behavior for multiple indexes via the
+`--index-strategy unsafe-any-match` command-line option, or the `UV_INDEX_STRATEGY` environment
+variable. When enabled, uv will search for each package across all indexes, and consider all
+available versions when resolving dependencies, prioritizing the `--extra-index-url` indexes over
+the default index URL. (Versions that are duplicated _across_ indexes will be ignored.)
 
 In the future, uv will support pinning packages to dedicated indexes (see: [#171](https://github.com/astral-sh/uv/issues/171)).
 Additionally, [PEP 708](https://peps.python.org/pep-0708/) is a provisional standard that aims to
@@ -252,14 +258,6 @@ typing-extensions==4.10.0
 When uv resolutions differ from `pip` in undesirable ways, it's often a sign that the specifiers
 are too loose, and that the user should consider tightening them. For example, in the case of
 `starlette` and `fastapi`, the user could require `fastapi>=0.110.0`.
-
-## Hash-checking mode
-
-While uv will include hashes via `uv pip compile --generate-hashes`, it does not support
-hash-checking mode, which is a feature of `pip` that allows users to verify the integrity of
-downloaded packages by checking their hashes against those provided in the `requirements.txt` file.
-
-In the future, uv will support hash-checking mode. For more, see [#474](https://github.com/astral-sh/uv/issues/474).
 
 ## `pip check`
 

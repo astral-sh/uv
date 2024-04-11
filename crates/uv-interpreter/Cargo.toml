@@ -21,6 +21,7 @@ platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-cache = { workspace = true }
 uv-fs = { workspace = true }
+uv-toolchain = { workspace = true }
 
 configparser = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }

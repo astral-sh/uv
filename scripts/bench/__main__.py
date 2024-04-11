@@ -1,10 +1,10 @@
 """Benchmark uv against other packaging tools.
 
-This script assumes that `pip`, `pip-tools`, `virtualenv`, `poetry` and `hyperfine` are
-installed, and that a uv release builds exists at `./target/release/uv`
-(relative to the repository root).
-
 This script assumes that Python 3.12 is installed.
+
+By default, this script also assumes that `pip`, `pip-tools`, `virtualenv`, `poetry` and
+`hyperfine` are installed, and that a uv release builds exists at `./target/release/uv`
+(relative to the repository root). However, the set of tools is configurable.
 
 To set up the required environment, run:
 
@@ -13,17 +13,51 @@ To set up the required environment, run:
     source .venv/bin/activate
     ./target/release/uv pip sync ./scripts/bench/requirements.txt
 
-Example usage:
+Then, to benchmark uv against `pip-tools`:
 
     python -m scripts.bench --uv --pip-compile requirements.in
 
-Multiple versions of uv can be benchmarked by specifying the path to the binary for
-each build, as in:
+It's most common to benchmark multiple uv versions against one another by building
+from multiple branches and specifying the path to each binary, as in:
 
+    # Build the baseline version.
+    git checkout main
+    cargo build --release
+    mv ./target/release/uv ./target/release/baseline
+
+    # Build the feature version.
+    git checkout feature
+    cargo build --release
+
+    # Run the benchmark.
     python -m scripts.bench \
         --uv-path ./target/release/uv \
         --uv-path ./target/release/baseline \
         requirements.in
+
+By default, the script will run the resolution benchmarks when a `requirements.in` file
+is provided, and the installation benchmarks when a `requirements.txt` file is provided:
+
+    # Run the resolution benchmarks against the Trio project.
+    python -m scripts.bench \
+        --uv-path ./target/release/uv \
+        --uv-path ./target/release/baseline \
+        ./scripts/requirements/trio.in
+
+    # Run the installation benchmarks against the Trio project.
+    python -m scripts.bench \
+        --uv-path ./target/release/uv \
+        --uv-path ./target/release/baseline \
+        ./scripts/requirements/compiled/trio.txt
+
+You can also specify the benchmark to run explicitly:
+
+    # Run the "uncached install" benchmark against the Trio project.
+    python -m scripts.bench \
+        --uv-path ./target/release/uv \
+        --uv-path ./target/release/baseline \
+        --benchmark install-cold \
+        ./scripts/requirements/compiled/trio.txt
 """
 
 import abc

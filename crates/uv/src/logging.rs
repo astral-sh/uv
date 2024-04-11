@@ -5,7 +5,6 @@ use std::str::FromStr;
 use anyhow::Context;
 use chrono::Utc;
 use owo_colors::OwoColorize;
-use tracing::level_filters::LevelFilter;
 use tracing::{Event, Subscriber};
 #[cfg(feature = "tracing-durations-export")]
 use tracing_durations_export::{
@@ -115,18 +114,25 @@ where
 /// includes targets and timestamps, along with all `uv=debug` messages by default.
 pub(crate) fn setup_logging(
     level: Level,
-    duration: impl Layer<Registry> + Send + Sync,
+    durations: impl Layer<Registry> + Send + Sync,
 ) -> anyhow::Result<()> {
     let default_directive = match level {
         Level::Default => {
             // Show nothing, but allow `RUST_LOG` to override.
-            LevelFilter::OFF.into()
+            tracing::level_filters::LevelFilter::OFF.into()
         }
         Level::Verbose | Level::ExtraVerbose => {
             // Show `DEBUG` messages from the CLI crate, but allow `RUST_LOG` to override.
-            Directive::from_str("uv=debug").unwrap()
+            Directive::from_str("uv=trace").unwrap()
         }
     };
+
+    // Only record our own spans.
+    let durations_layer =
+        durations.with_filter(tracing_subscriber::filter::Targets::new().with_target(
+            env!("CARGO_PKG_NAME"),
+            tracing::level_filters::LevelFilter::INFO,
+        ));
 
     let filter = EnvFilter::builder()
         .with_default_directive(default_directive)
@@ -148,26 +154,26 @@ pub(crate) fn setup_logging(
                 ColorChoice::Auto => unreachable!(),
             };
             tracing_subscriber::registry()
-                .with(duration)
-                .with(filter)
+                .with(durations_layer)
                 .with(
                     tracing_subscriber::fmt::layer()
                         .event_format(format)
                         .with_writer(std::io::stderr)
-                        .with_ansi(ansi),
+                        .with_ansi(ansi)
+                        .with_filter(filter),
                 )
                 .init();
         }
         Level::ExtraVerbose => {
             // Regardless of the tracing level, include the uptime and target for each message.
             tracing_subscriber::registry()
-                .with(duration)
-                .with(filter)
+                .with(durations_layer)
                 .with(
                     HierarchicalLayer::default()
                         .with_targets(true)
                         .with_timer(Uptime::default())
-                        .with_writer(std::io::stderr),
+                        .with_writer(std::io::stderr)
+                        .with_filter(filter),
                 )
                 .init();
         }
@@ -178,15 +184,15 @@ pub(crate) fn setup_logging(
 
 /// Setup the `TRACING_DURATIONS_FILE` environment variable to enable tracing durations.
 #[cfg(feature = "tracing-durations-export")]
-pub(crate) fn setup_duration() -> (
+pub(crate) fn setup_duration() -> anyhow::Result<(
     Option<DurationsLayer<Registry>>,
     Option<DurationsLayerDropGuard>,
-) {
+)> {
     if let Ok(location) = std::env::var("TRACING_DURATIONS_FILE") {
         let location = std::path::PathBuf::from(location);
         if let Some(parent) = location.parent() {
             fs_err::create_dir_all(parent)
-                .expect("Failed to create parent of TRACING_DURATIONS_FILE");
+                .context("Failed to create parent of TRACING_DURATIONS_FILE")?;
         }
         let plot_config = PlotConfig {
             multi_lane: true,
@@ -203,9 +209,9 @@ pub(crate) fn setup_duration() -> (
             .plot_file(location.with_extension("svg"))
             .plot_config(plot_config)
             .build()
-            .expect("Couldn't create TRACING_DURATIONS_FILE files");
-        (Some(layer), Some(guard))
+            .context("Couldn't create TRACING_DURATIONS_FILE files")?;
+        Ok((Some(layer), Some(guard)))
     } else {
-        (None, None)
+        Ok((None, None))
     }
 }

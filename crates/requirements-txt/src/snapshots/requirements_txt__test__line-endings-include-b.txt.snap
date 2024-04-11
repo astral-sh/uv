@@ -16,7 +16,6 @@ RequirementsTxt {
                 },
             ),
             hashes: [],
-            editable: false,
         },
     ],
     constraints: [],

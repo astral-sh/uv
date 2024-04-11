@@ -1,10 +1,10 @@
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
 use pep508_rs::PackageName;
 
 use crate::{
-    Dist, DistributionId, DistributionMetadata, Identifier, InstalledDist, Name, ResourceId,
-    VersionOrUrl,
+    Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist, Name,
+    ResourceId, VersionOrUrl,
 };
 
 /// A distribution that can be used for resolution and installation.
@@ -31,6 +31,14 @@ impl ResolvedDist {
             Self::Installed(dist) => dist.is_editable(),
         }
     }
+
+    /// Returns the [`IndexUrl`], if the distribution is from a registry.
+    pub fn index(&self) -> Option<&IndexUrl> {
+        match self {
+            Self::Installable(dist) => dist.index(),
+            Self::Installed(_) => None,
+        }
+    }
 }
 
 impl ResolvedDistRef<'_> {
@@ -38,6 +46,15 @@ impl ResolvedDistRef<'_> {
         match self {
             Self::Installable(dist) => ResolvedDist::Installable((*dist).clone()),
             Self::Installed(dist) => ResolvedDist::Installed((*dist).clone()),
+        }
+    }
+}
+
+impl Display for ResolvedDistRef<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Installable(dist) => Display::fmt(dist, f),
+            Self::Installed(dist) => Display::fmt(dist, f),
         }
     }
 }

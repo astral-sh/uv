@@ -261,8 +261,18 @@ The specifics of uv's caching semantics vary based on the nature of the dependen
 - **For Git dependencies**, uv caches based on the fully-resolved Git commit hash. As such,
   `uv pip compile` will pin Git dependencies to a specific commit hash when writing the resolved
   dependency set.
-- **For local dependencies**, uv caches based on the last-modified time of the `setup.py` or
-  `pyproject.toml` file.
+- **For local dependencies**, uv caches based on the last-modified time of the source archive (i.e.,
+  the local `.whl` or `.tar.gz` file). For directories, uv caches based on the last-modified time of
+  the `pyproject.toml`, `setup.py`, or `setup.cfg` file.
+
+It's safe to run multiple `uv` commands concurrently, even against the same virtual environment.
+uv's cache is designed to be thread-safe and append-only, and thus robust to multiple concurrent
+readers and writers. uv applies a file-based lock to the target virtual environment when installing,
+to avoid concurrent modifications across processes.
+
+Note that it's _not_ safe to modify the uv cache directly (e.g., `uv cache clean`) while other `uv`
+commands are running, and _never_ safe to modify the cache directly (e.g., by removing a file or
+directory).
 
 If you're running into caching issues, uv includes a few escape hatches:
 
@@ -443,12 +453,22 @@ uv accepts the following command-line arguments as environment variables:
   `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
 - `UV_PRERELEASE`: Equivalent to the `--prerelease` command-line argument. For example, if set to
   `allow`, uv will allow pre-release versions for all dependencies.
-- `UV_SYSTEM_PYTHON`:  Equivalent to the `--system` command-line argument. If set to `true`, uv
+- `UV_SYSTEM_PYTHON`: Equivalent to the `--system` command-line argument. If set to `true`, uv
   will use the first Python interpreter found in the system `PATH`.
-  WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI) environments and
-  should be used with caution, as it can modify the system Python installation.
+  WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI) or
+  containerized environments and should be used with caution, as modifying the system Python
+  can lead to unexpected behavior.
+- `UV_BREAK_SYSTEM_PACKAGES`: Equivalent to the `--break-system-packages` command-line argument. If
+  set to `true`, uv will allow the installation of packages that conflict with system-installed
+  packages.
+  WARNING: `UV_BREAK_SYSTEM_PACKAGES=true` is intended for use in continuous integration (CI) or
+  containerized environments and should be used with caution, as modifying the system Python
+  can lead to unexpected behavior.
 - `UV_NATIVE_TLS`: Equivalent to the `--native-tls` command-line argument. If set to `true`, uv
   will use the system's trust store instead of the bundled `webpki-roots` crate.
+- `UV_INDEX_STRATEGY`: Equivalent to the `--index-strategy` command-line argument. For example, if
+  set to `unsafe-any-match`, uv will consider versions of a given package available across all
+  index URLs, rather than limiting its search to the first index URL that contains the package.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 

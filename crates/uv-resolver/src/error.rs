@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
 use std::ops::Deref;
 
@@ -20,7 +20,7 @@ use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::pubgrub::{PubGrubPackage, PubGrubPython, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
-use crate::resolver::{UnavailablePackage, VersionsResponse};
+use crate::resolver::{IncompletePackage, UnavailablePackage, VersionsResponse};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -93,6 +93,9 @@ pub enum ResolveError {
     #[error("Attempted to construct an invalid version specifier")]
     InvalidVersion(#[from] pep440_rs::VersionSpecifierBuildError),
 
+    #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: {0}")]
+    UnhashedPackage(PackageName),
+
     /// Something unexpected happened.
     #[error("{0}")]
     Failure(String),
@@ -125,6 +128,7 @@ impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
                     python_requirement: None,
                     index_locations: None,
                     unavailable_packages: FxHashMap::default(),
+                    incomplete_packages: FxHashMap::default(),
                 })
             }
             pubgrub::error::PubGrubError::SelfDependency { package, version } => {
@@ -146,6 +150,7 @@ pub struct NoSolutionError {
     python_requirement: Option<PythonRequirement>,
     index_locations: Option<IndexLocations>,
     unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
+    incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
 }
 
 impl std::error::Error for NoSolutionError {}
@@ -167,6 +172,7 @@ impl std::fmt::Display for NoSolutionError {
             &self.selector,
             &self.index_locations,
             &self.unavailable_packages,
+            &self.incomplete_packages,
         ) {
             write!(f, "\n\n{hint}")?;
         }
@@ -209,14 +215,15 @@ impl NoSolutionError {
                     // we represent the state of the resolver at the time of failure.
                     if visited.contains(name) {
                         if let Some(response) = package_versions.get(name) {
-                            if let VersionsResponse::Found(ref version_map) = *response {
-                                available_versions.insert(
-                                    package.clone(),
-                                    version_map
-                                        .iter()
-                                        .map(|(version, _)| version.clone())
-                                        .collect(),
-                                );
+                            if let VersionsResponse::Found(ref version_maps) = *response {
+                                for version_map in version_maps {
+                                    available_versions
+                                        .entry(package.clone())
+                                        .or_insert_with(BTreeSet::new)
+                                        .extend(
+                                            version_map.iter().map(|(version, _)| version.clone()),
+                                        );
+                                }
                             }
                         }
                     }
@@ -257,6 +264,30 @@ impl NoSolutionError {
             }
         }
         self.unavailable_packages = new;
+        self
+    }
+
+    /// Update the incomplete packages attached to the error.
+    #[must_use]
+    pub(crate) fn with_incomplete_packages(
+        mut self,
+        incomplete_packages: &DashMap<PackageName, DashMap<Version, IncompletePackage>>,
+    ) -> Self {
+        let mut new = FxHashMap::default();
+        for package in self.derivation_tree.packages() {
+            if let PubGrubPackage::Package(name, ..) = package {
+                if let Some(entry) = incomplete_packages.get(name) {
+                    let versions = entry.value();
+                    for entry in versions {
+                        let (version, reason) = entry.pair();
+                        new.entry(name.clone())
+                            .or_insert_with(BTreeMap::default)
+                            .insert(version.clone(), reason.clone());
+                    }
+                }
+            }
+        }
+        self.incomplete_packages = new;
         self
     }
 

@@ -24,6 +24,7 @@ static DEFAULT_INDEX_URL: Lazy<IndexUrl> =
 pub enum IndexUrl {
     Pypi(VerbatimUrl),
     Url(VerbatimUrl),
+    Path(VerbatimUrl),
 }
 
 impl IndexUrl {
@@ -32,6 +33,7 @@ impl IndexUrl {
         match self {
             Self::Pypi(url) => url.raw(),
             Self::Url(url) => url.raw(),
+            Self::Path(url) => url.raw(),
         }
     }
 }
@@ -41,6 +43,7 @@ impl Display for IndexUrl {
         match self {
             Self::Pypi(url) => Display::fmt(url, f),
             Self::Url(url) => Display::fmt(url, f),
+            Self::Path(url) => Display::fmt(url, f),
         }
     }
 }
@@ -50,6 +53,7 @@ impl Verbatim for IndexUrl {
         match self {
             Self::Pypi(url) => url.verbatim(),
             Self::Url(url) => url.verbatim(),
+            Self::Path(url) => url.verbatim(),
         }
     }
 }
@@ -83,6 +87,7 @@ impl From<IndexUrl> for Url {
         match index {
             IndexUrl::Pypi(url) => url.to_url(),
             IndexUrl::Url(url) => url.to_url(),
+            IndexUrl::Path(url) => url.to_url(),
         }
     }
 }
@@ -94,6 +99,7 @@ impl Deref for IndexUrl {
         match &self {
             Self::Pypi(url) => url,
             Self::Url(url) => url,
+            Self::Path(url) => url,
         }
     }
 }
@@ -165,15 +171,7 @@ impl Display for FlatIndexLocation {
     }
 }
 
-/// The index locations to use for fetching packages.
-///
-/// By default, uses the PyPI index.
-///
-/// "pip treats all package sources equally" (<https://github.com/pypa/pip/issues/8606#issuecomment-788754817>),
-/// and so do we, i.e., you can't rely that on any particular order of querying indices.
-///
-/// If the fields are none and empty, ignore the package index, instead rely on local archives and
-/// caches.
+/// The index locations to use for fetching packages. By default, uses the PyPI index.
 ///
 /// From a pip perspective, this type merges `--index-url`, `--extra-index-url`, and `--find-links`.
 #[derive(Debug, Clone)]
@@ -338,7 +336,9 @@ impl<'a> IndexUrls {
         }
     }
 
-    /// Return an iterator over all [`IndexUrl`] entries.
+    /// Return an iterator over all [`IndexUrl`] entries in order.
+    ///
+    /// Prioritizes the extra indexes over the main index.
     ///
     /// If `no_index` was enabled, then this always returns an empty
     /// iterator.

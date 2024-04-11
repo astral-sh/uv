@@ -14,7 +14,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let target = target.as_ref();
-    let mut reader = reader.compat();
+    let mut reader = futures::io::BufReader::new(reader.compat());
     let mut zip = async_zip::base::read::seek::ZipFileReader::new(&mut reader).await?;
 
     let mut directories = FxHashSet::default();
@@ -81,7 +81,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin>(
 }
 
 /// Unzip a `.zip` or `.tar.gz` archive into the target directory, requiring `Seek`.
-pub async fn archive<R: tokio::io::AsyncBufRead + tokio::io::AsyncSeek + Unpin>(
+pub async fn archive<R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin>(
     reader: R,
     source: impl AsRef<Path>,
     target: impl AsRef<Path>,
@@ -107,7 +107,22 @@ pub async fn archive<R: tokio::io::AsyncBufRead + tokio::io::AsyncSeek + Unpin>(
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
         })
     {
-        crate::stream::untar(reader, target).await?;
+        crate::stream::untar_gz(reader, target).await?;
+        return Ok(());
+    }
+
+    // `.tar.zst`
+    if source
+        .as_ref()
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zst"))
+        && source.as_ref().file_stem().is_some_and(|stem| {
+            Path::new(stem)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
+        })
+    {
+        crate::stream::untar_zst(reader, target).await?;
         return Ok(());
     }
 

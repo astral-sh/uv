@@ -5,29 +5,45 @@ use chrono::{DateTime, Utc};
 
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
-use pypi_types::Metadata23;
-use uv_client::{FlatIndex, RegistryClient};
-use uv_distribution::DistributionDatabase;
-use uv_normalize::PackageName;
-use uv_types::{BuildContext, NoBinary, NoBuild};
 
+use uv_client::RegistryClient;
+use uv_configuration::{NoBinary, NoBuild};
+use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_normalize::PackageName;
+use uv_types::{BuildContext, HashStrategy};
+
+use crate::flat_index::FlatIndex;
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
-pub type WheelMetadataResult = Result<Metadata23, uv_distribution::Error>;
+pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
 
 /// The response when requesting versions for a package
 #[derive(Debug)]
 pub enum VersionsResponse {
     /// The package was found in the registry with the included versions
-    Found(VersionMap),
+    Found(Vec<VersionMap>),
     /// The package was not found in the registry
     NotFound,
     /// The package was not found in the local registry
     NoIndex,
     /// The package was not found in the cache and the network is not available.
+    Offline,
+}
+
+#[derive(Debug)]
+pub enum MetadataResponse {
+    /// The wheel metadata was found and parsed successfully.
+    Found(ArchiveMetadata),
+    /// The wheel metadata was found, but could not be parsed.
+    InvalidMetadata(Box<pypi_types::MetadataError>),
+    /// The wheel metadata was found, but the metadata was inconsistent.
+    InconsistentMetadata(Box<uv_distribution::Error>),
+    /// The wheel has an invalid structure.
+    InvalidStructure(Box<install_wheel_rs::Error>),
+    /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
 }
 
@@ -67,6 +83,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     tags: Tags,
     python_requirement: PythonRequirement,
     allowed_yanks: AllowedYanks,
+    hasher: HashStrategy,
     exclude_newer: Option<DateTime<Utc>>,
     no_binary: NoBinary,
     no_build: NoBuild,
@@ -82,6 +99,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
         tags: &'a Tags,
         python_requirement: PythonRequirement,
         allowed_yanks: AllowedYanks,
+        hasher: &'a HashStrategy,
         exclude_newer: Option<DateTime<Utc>>,
         no_binary: &'a NoBinary,
         no_build: &'a NoBuild,
@@ -93,6 +111,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
             tags: tags.clone(),
             python_requirement,
             allowed_yanks,
+            hasher: hasher.clone(),
             exclude_newer,
             no_binary: no_binary.clone(),
             no_build: no_build.clone(),
@@ -108,34 +127,38 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
         &'io self,
         package_name: &'io PackageName,
     ) -> PackageVersionsResult {
-        let result = self.client.simple(package_name).await;
-
-        // If the "Simple API" request was successful, convert to `VersionMap` on the Tokio
-        // threadpool, since it can be slow.
-        match result {
-            Ok((index, metadata)) => Ok(VersionsResponse::Found(VersionMap::from_metadata(
-                metadata,
-                package_name,
-                &index,
-                &self.tags,
-                &self.python_requirement,
-                &self.allowed_yanks,
-                self.exclude_newer.as_ref(),
-                self.flat_index.get(package_name).cloned(),
-                &self.no_binary,
-                &self.no_build,
-            ))),
+        match self.client.simple(package_name).await {
+            Ok(results) => Ok(VersionsResponse::Found(
+                results
+                    .into_iter()
+                    .map(|(index, metadata)| {
+                        VersionMap::from_metadata(
+                            metadata,
+                            package_name,
+                            &index,
+                            &self.tags,
+                            &self.python_requirement,
+                            &self.allowed_yanks,
+                            &self.hasher,
+                            self.exclude_newer.as_ref(),
+                            self.flat_index.get(package_name).cloned(),
+                            &self.no_binary,
+                            &self.no_build,
+                        )
+                    })
+                    .collect(),
+            )),
             Err(err) => match err.into_kind() {
                 uv_client::ErrorKind::PackageNotFound(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
-                        Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
+                        Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::NotFound)
                     }
                 }
                 uv_client::ErrorKind::NoIndex(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
-                        Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
+                        Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else if self.flat_index.offline() {
                         Ok(VersionsResponse::Offline)
                     } else {
@@ -144,7 +167,7 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
                 }
                 uv_client::ErrorKind::Offline(_) => {
                     if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
-                        Ok(VersionsResponse::Found(VersionMap::from(flat_index)))
+                        Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::Offline)
                     }
@@ -154,8 +177,40 @@ impl<'a, Context: BuildContext + Send + Sync> ResolverProvider
         }
     }
 
+    /// Fetch the metadata for a distribution, building it if necessary.
     async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
-        self.fetcher.get_or_build_wheel_metadata(dist).await
+        match self
+            .fetcher
+            .get_or_build_wheel_metadata(dist, self.hasher.get(dist))
+            .await
+        {
+            Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
+            Err(err) => match err {
+                uv_distribution::Error::Client(client) => match client.into_kind() {
+                    uv_client::ErrorKind::Offline(_) => Ok(MetadataResponse::Offline),
+                    uv_client::ErrorKind::MetadataParseError(_, _, err) => {
+                        Ok(MetadataResponse::InvalidMetadata(err))
+                    }
+                    uv_client::ErrorKind::DistInfo(err) => {
+                        Ok(MetadataResponse::InvalidStructure(Box::new(err)))
+                    }
+                    kind => Err(uv_client::Error::from(kind).into()),
+                },
+                uv_distribution::Error::VersionMismatch { .. } => {
+                    Ok(MetadataResponse::InconsistentMetadata(Box::new(err)))
+                }
+                uv_distribution::Error::NameMismatch { .. } => {
+                    Ok(MetadataResponse::InconsistentMetadata(Box::new(err)))
+                }
+                uv_distribution::Error::Metadata(err) => {
+                    Ok(MetadataResponse::InvalidMetadata(Box::new(err)))
+                }
+                uv_distribution::Error::DistInfo(err) => {
+                    Ok(MetadataResponse::InvalidStructure(Box::new(err)))
+                }
+                err => Err(err),
+            },
+        }
     }
 
     fn index_locations(&self) -> &IndexLocations {

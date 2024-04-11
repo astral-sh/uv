@@ -7,15 +7,15 @@ edition = "2021"
 async-trait = { workspace = true }
 base64 = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"], optional = true }
+http = { workspace = true }
+once_cell = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rust-netrc = { workspace = true }
-task-local-extensions = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
-once_cell = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

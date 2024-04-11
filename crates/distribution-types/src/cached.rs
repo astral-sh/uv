@@ -4,9 +4,11 @@ use anyhow::Result;
 
 use distribution_filename::WheelFilename;
 use pep508_rs::VerbatimUrl;
+use pypi_types::HashDigest;
 use uv_normalize::PackageName;
 
 use crate::direct_url::{DirectUrl, LocalFileUrl};
+use crate::hash::Hashed;
 use crate::{
     BuiltDist, Dist, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, SourceDist,
     VersionOrUrl,
@@ -25,6 +27,7 @@ pub enum CachedDist {
 pub struct CachedRegistryDist {
     pub filename: WheelFilename,
     pub path: PathBuf,
+    pub hashes: Vec<HashDigest>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,45 +36,60 @@ pub struct CachedDirectUrlDist {
     pub url: VerbatimUrl,
     pub path: PathBuf,
     pub editable: bool,
+    pub hashes: Vec<HashDigest>,
 }
 
 impl CachedDist {
     /// Initialize a [`CachedDist`] from a [`Dist`].
-    pub fn from_remote(remote: Dist, filename: WheelFilename, path: PathBuf) -> Self {
+    pub fn from_remote(
+        remote: Dist,
+        filename: WheelFilename,
+        hashes: Vec<HashDigest>,
+        path: PathBuf,
+    ) -> Self {
         match remote {
-            Dist::Built(BuiltDist::Registry(_dist)) => {
-                Self::Registry(CachedRegistryDist { filename, path })
-            }
+            Dist::Built(BuiltDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
+                filename,
+                path,
+                hashes,
+            }),
             Dist::Built(BuiltDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
+                hashes,
                 path,
                 editable: false,
             }),
             Dist::Built(BuiltDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
+                hashes,
                 path,
                 editable: false,
             }),
-            Dist::Source(SourceDist::Registry(_dist)) => {
-                Self::Registry(CachedRegistryDist { filename, path })
-            }
+            Dist::Source(SourceDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
+                filename,
+                path,
+                hashes,
+            }),
             Dist::Source(SourceDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
+                hashes,
                 path,
                 editable: false,
             }),
             Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
+                hashes,
                 path,
                 editable: false,
             }),
             Dist::Source(SourceDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
+                hashes,
                 path,
                 editable: dist.editable,
             }),
@@ -104,6 +122,7 @@ impl CachedDist {
         }
     }
 
+    /// Returns `true` if the distribution is editable.
     pub fn editable(&self) -> bool {
         match self {
             Self::Registry(_) => false,
@@ -111,6 +130,7 @@ impl CachedDist {
         }
     }
 
+    /// Returns the [`WheelFilename`] of the distribution.
     pub fn filename(&self) -> &WheelFilename {
         match self {
             Self::Registry(dist) => &dist.filename,
@@ -119,12 +139,24 @@ impl CachedDist {
     }
 }
 
+impl Hashed for CachedRegistryDist {
+    fn hashes(&self) -> &[HashDigest] {
+        &self.hashes
+    }
+}
+
 impl CachedDirectUrlDist {
     /// Initialize a [`CachedDirectUrlDist`] from a [`WheelFilename`], [`url::Url`], and [`Path`].
-    pub fn from_url(filename: WheelFilename, url: VerbatimUrl, path: PathBuf) -> Self {
+    pub fn from_url(
+        filename: WheelFilename,
+        url: VerbatimUrl,
+        hashes: Vec<HashDigest>,
+        path: PathBuf,
+    ) -> Self {
         Self {
             filename,
             url,
+            hashes,
             path,
             editable: false,
         }

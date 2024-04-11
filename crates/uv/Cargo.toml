@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.1.28"
+version = "0.1.31"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -31,8 +31,10 @@ uv-interpreter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-requirements = { workspace = true }
 uv-resolver = { workspace = true, features = ["clap"] }
-uv-types = { workspace = true }
+uv-types = { workspace = true, features = ["clap"] }
+uv-configuration = { workspace = true, features = ["clap"] }
 uv-virtualenv = { workspace = true }
+uv-toolchain = { workspace = true }
 uv-warnings = { workspace = true }
 
 anstream = { workspace = true }
@@ -71,19 +73,21 @@ tikv-jemallocator = { version = "0.5.4" }
 [dev-dependencies]
 assert_cmd = { version = "2.0.14" }
 assert_fs = { version = "1.1.0" }
-base64 = { version = "0.21.7" }
+base64 = { version = "0.22.0" }
 byteorder = { version = "1.5.0" }
 filetime = { version = "0.2.23" }
 indoc = { version = "2.0.4" }
 insta = { version = "1.36.1", features = ["filters", "json"] }
 predicates = { version = "3.0.4" }
 regex = { version = "1.10.3" }
-reqwest = { version = "0.11.23", features = ["blocking"], default-features = false }
+reqwest = { workspace = true, features = ["blocking"], default-features = false }
 
 [features]
-default = ["flate2/zlib-ng", "python", "pypi", "git", "maturin"]
+default = ["flate2/zlib-ng", "python", "pypi", "git", "maturin", "python-patch"]
 # Introduces a dependency on a local Python installation.
 python = []
+# Introduces a dependency on a local Python installation with specific patch versions.
+python-patch = []
 # Introduces a dependency on PyPI.
 pypi = []
 # Introduces a dependency on Git.

@@ -3,8 +3,8 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
+use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
-use assert_fs::fixture::{FileTouch, FileWriteStr};
 use indoc::indoc;
 
 use common::uv_snapshot;
@@ -24,6 +24,7 @@ fn install_command(context: &TestContext) -> Command {
         .arg("--exclude-newer")
         .arg(EXCLUDE_NEWER)
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir);
 
     if cfg!(all(windows, debug_assertions)) {
@@ -45,6 +46,7 @@ fn show_empty() {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: false
     exit_code: 1
@@ -61,7 +63,6 @@ fn show_requires_multiple() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("requests==2.31.0")?;
 
     uv_snapshot!(install_command(&context)
@@ -92,6 +93,7 @@ fn show_requires_multiple() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -116,7 +118,6 @@ fn show_python_version_marker() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("click==8.1.7")?;
 
     uv_snapshot!(install_command(&context)
@@ -149,6 +150,7 @@ fn show_python_version_marker() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -171,7 +173,6 @@ fn show_found_single_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
 
     uv_snapshot!(install_command(&context)
@@ -199,6 +200,7 @@ fn show_found_single_package() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -221,7 +223,6 @@ fn show_found_multiple_packages() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(indoc! {r"
         MarkupSafe==2.1.3
         pip==21.3.1
@@ -255,6 +256,7 @@ fn show_found_multiple_packages() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -283,7 +285,6 @@ fn show_found_one_out_of_three() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(indoc! {r"
         MarkupSafe==2.1.3
         pip==21.3.1
@@ -318,6 +319,7 @@ fn show_found_one_out_of_three() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -341,7 +343,6 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(indoc! {r"
         MarkupSafe==2.1.3
         pip==21.3.1
@@ -377,6 +378,7 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -394,7 +396,6 @@ fn show_empty_quiet() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(indoc! {r"
         MarkupSafe==2.1.3
         pip==21.3.1
@@ -429,6 +430,7 @@ fn show_empty_quiet() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: false
     exit_code: 1
@@ -464,6 +466,7 @@ fn show_editable() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -487,7 +490,6 @@ fn show_required_by_multiple() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
     requirements_txt.write_str(indoc! {r"
         anyio==4.0.0
         requests==2.31.0
@@ -526,6 +528,7 @@ fn show_required_by_multiple() -> Result<()> {
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env("UV_NO_WRAP", "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0

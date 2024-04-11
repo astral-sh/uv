@@ -10,23 +10,26 @@ use tracing::debug;
 
 use distribution_filename::{SourceDistFilename, WheelFilename};
 use distribution_types::{
-    BuildableSource, DirectSourceUrl, GitSourceUrl, PackageId, PathSourceUrl, RemoteSource,
-    SourceUrl,
+    BuildableSource, DirectSourceUrl, GitSourceUrl, PathSourceUrl, RemoteSource, SourceUrl,
+    VersionId,
 };
 use pep508_rs::{
     Requirement, RequirementsTxtRequirement, Scheme, UnnamedRequirement, VersionOrUrl,
 };
 use pypi_types::Metadata10;
+use requirements_txt::RequirementEntry;
 use uv_client::RegistryClient;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_normalize::PackageName;
-use uv_resolver::InMemoryIndex;
-use uv_types::BuildContext;
+use uv_resolver::{InMemoryIndex, MetadataResponse};
+use uv_types::{BuildContext, HashStrategy};
 
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
 pub struct NamedRequirementsResolver<'a, Context: BuildContext + Send + Sync> {
     /// The requirements for the project.
-    requirements: Vec<RequirementsTxtRequirement>,
+    requirements: Vec<RequirementEntry>,
+    /// Whether to check hashes for distributions.
+    hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
     index: &'a InMemoryIndex,
     /// The database for fetching and building distributions.
@@ -36,13 +39,15 @@ pub struct NamedRequirementsResolver<'a, Context: BuildContext + Send + Sync> {
 impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Context> {
     /// Instantiate a new [`NamedRequirementsResolver`] for a given set of requirements.
     pub fn new(
-        requirements: Vec<RequirementsTxtRequirement>,
+        requirements: Vec<RequirementEntry>,
+        hasher: &'a HashStrategy,
         context: &'a Context,
         client: &'a RegistryClient,
         index: &'a InMemoryIndex,
     ) -> Self {
         Self {
             requirements,
+            hasher,
             index,
             database: DistributionDatabase::new(client, context),
         }
@@ -61,15 +66,16 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
     pub async fn resolve(self) -> Result<Vec<Requirement>> {
         let Self {
             requirements,
+            hasher,
             index,
             database,
         } = self;
         futures::stream::iter(requirements)
-            .map(|requirement| async {
-                match requirement {
+            .map(|entry| async {
+                match entry.requirement {
                     RequirementsTxtRequirement::Pep508(requirement) => Ok(requirement),
                     RequirementsTxtRequirement::Unnamed(requirement) => {
-                        Self::resolve_requirement(requirement, index, &database).await
+                        Self::resolve_requirement(requirement, hasher, index, &database).await
                     }
                 }
             })
@@ -81,6 +87,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
     /// Infer the package name for a given "unnamed" requirement.
     async fn resolve_requirement(
         requirement: UnnamedRequirement,
+        hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'a, Context>,
     ) -> Result<Requirement> {
@@ -235,19 +242,26 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
 
         // Fetch the metadata for the distribution.
         let name = {
-            let id = PackageId::from_url(source.url());
-            if let Some(metadata) = index.get_metadata(&id) {
+            let id = VersionId::from_url(source.url());
+            if let Some(archive) = index.get_metadata(&id).as_deref().and_then(|response| {
+                if let MetadataResponse::Found(archive) = response {
+                    Some(archive)
+                } else {
+                    None
+                }
+            }) {
                 // If the metadata is already in the index, return it.
-                metadata.name.clone()
+                archive.metadata.name.clone()
             } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
+                let hashes = hasher.get_url(source.url());
                 let source = BuildableSource::Url(source);
-                let metadata = database.build_wheel_metadata(&source).await?;
+                let archive = database.build_wheel_metadata(&source, hashes).await?;
 
-                let name = metadata.name.clone();
+                let name = archive.metadata.name.clone();
 
                 // Insert the metadata into the index.
-                index.insert_metadata(id, metadata);
+                index.insert_metadata(id, MetadataResponse::Found(archive));
 
                 name
             }

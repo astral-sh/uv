@@ -10,7 +10,8 @@ use crate::{
     BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
     DirectUrlSourceDist, Dist, DistributionId, GitSourceDist, InstalledDirectUrlDist,
     InstalledDist, InstalledRegistryDist, InstalledVersion, LocalDist, PackageId, PathBuiltDist,
-    PathSourceDist, RegistryBuiltDist, RegistrySourceDist, ResourceId, SourceDist, VersionOrUrl,
+    PathSourceDist, RegistryBuiltDist, RegistrySourceDist, ResourceId, SourceDist, VersionId,
+    VersionOrUrl,
 };
 
 pub trait Name {
@@ -25,16 +26,29 @@ pub trait DistributionMetadata: Name {
     /// for URL-based distributions.
     fn version_or_url(&self) -> VersionOrUrl;
 
-    /// Returns a unique identifier for the package.
+    /// Returns a unique identifier for the package at the given version (e.g., `black==23.10.0`).
     ///
     /// Note that this is not equivalent to a unique identifier for the _distribution_, as multiple
     /// registry-based distributions (e.g., different wheels for the same package and version)
-    /// will return the same package ID, but different distribution IDs.
-    fn package_id(&self) -> PackageId {
+    /// will return the same version ID, but different distribution IDs.
+    fn version_id(&self) -> VersionId {
         match self.version_or_url() {
             VersionOrUrl::Version(version) => {
-                PackageId::from_registry(self.name().clone(), version.clone())
+                VersionId::from_registry(self.name().clone(), version.clone())
             }
+            VersionOrUrl::Url(url) => VersionId::from_url(url),
+        }
+    }
+
+    /// Returns a unique identifier for a package. A package can either be identified by a name
+    /// (e.g., `black`) or a URL (e.g., `git+https://github.com/psf/black`).
+    ///
+    /// Note that this is not equivalent to a unique identifier for the _distribution_, as multiple
+    /// registry-based distributions (e.g., different wheels for the same package and version)
+    /// will return the same version ID, but different distribution IDs.
+    fn package_id(&self) -> PackageId {
+        match self.version_or_url() {
+            VersionOrUrl::Version(_) => PackageId::from_registry(self.name().clone()),
             VersionOrUrl::Url(url) => PackageId::from_url(url),
         }
     }
@@ -57,6 +71,17 @@ pub trait RemoteSource {
 pub trait Identifier {
     /// Return a unique resource identifier for the distribution, like a SHA-256 hash of the
     /// distribution's contents.
+    ///
+    /// A distribution is a specific archive of a package at a specific version. For a given package
+    /// version, there may be multiple distributions, e.g., source distribution, along with
+    /// multiple binary distributions (wheels) for different platforms. As a concrete example,
+    /// `black-23.10.0-py3-none-any.whl` would represent a (binary) distribution of the `black` package
+    /// at version `23.10.0`.
+    ///
+    /// The distribution ID is used to uniquely identify a distribution. Ideally, the distribution
+    /// ID should be a hash of the distribution's contents, though in practice, it's only required
+    /// that the ID is unique within a single invocation of the resolver (and so, e.g., a hash of
+    /// the URL would also be sufficient).
     fn distribution_id(&self) -> DistributionId;
 
     /// Return a unique resource identifier for the underlying resource backing the distribution.

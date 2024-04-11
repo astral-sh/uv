@@ -1,8 +1,8 @@
+use http::Extensions;
 use std::fmt::Debug;
 
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
-use task_local_extensions::Extensions;
 use url::Url;
 
 /// A custom error type for the offline middleware.

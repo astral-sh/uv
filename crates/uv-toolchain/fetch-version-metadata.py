@@ -2,15 +2,11 @@
 """
 Fetch Python version metadata.
 
-Generates the bootstrap `versions.json` file.
-
-Installation:
-
-    pip install requests==2.31.0
+Generates the `python-version-metadata.json` file.
 
 Usage:
 
-    scripts/bootstrap/fetch-versions
+    python fetch-version-metadata.py
 
 Acknowledgements:
 
@@ -22,25 +18,19 @@ import argparse
 import hashlib
 import json
 import logging
-import os
 import re
-import sys
+import urllib.error
+import urllib.request
 from itertools import chain
 from pathlib import Path
 from urllib.parse import unquote
-
-try:
-    import requests
-except ImportError:
-    print("ERROR: requests is required; install with `pip install requests==2.31.0`")
-    sys.exit(1)
 
 SELF_DIR = Path(__file__).parent
 RELEASE_URL = "https://api.github.com/repos/indygreg/python-build-standalone/releases"
 HEADERS = {
     "X-GitHub-Api-Version": "2022-11-28",
 }
-VERSIONS_FILE = SELF_DIR / "versions.json"
+VERSIONS_FILE = SELF_DIR / "python-version-metadata.json"
 FLAVOR_PREFERENCES = [
     "shared-pgo",
     "shared-noopt",
@@ -63,6 +53,8 @@ SPECIAL_TRIPLES = {
     "linux64": "x86_64-unknown-linux-gnu",
     "windows-amd64": "x86_64-pc-windows",
     "windows-x86": "i686-pc-windows",
+    "windows-amd64-shared": "x86_64-pc-windows",
+    "windows-x86-shared": "i686-pc-windows",
     "linux64-musl": "x86_64-unknown-linux-musl",
 }
 
@@ -88,8 +80,14 @@ _suffix_re = re.compile(
     )
 )
 
-# to match the output of the `arch` command
-ARCH_MAP = {"aarch64": "arm64"}
+# Normalized mappings to match the Rust types
+ARCH_MAP = {
+    "ppc64": "powerpc64",
+    "ppc64le": "powerpc64le",
+    "i686": "x86",
+    "i386": "x86",
+}
+OS_MAP = {"darwin": "macos"}
 
 
 def parse_filename(filename):
@@ -114,10 +112,8 @@ def normalize_triple(triple):
     triple = SPECIAL_TRIPLES.get(triple, triple)
     pieces = triple.split("-")
     try:
-        arch = pieces[0]
-        # Normalize
-        arch = ARCH_MAP.get(arch, arch)
-        platform = pieces[2]
+        arch = normalize_arch(pieces[0])
+        operating_system = normalize_os(pieces[2])
         if pieces[2] == "linux":
             # On linux, the triple has four segments, the last one is the libc
             libc = pieces[3]
@@ -126,14 +122,27 @@ def normalize_triple(triple):
     except IndexError:
         logging.debug("Skipping %r: unknown triple", triple)
         return
-    return "%s-%s-%s" % (arch, platform, libc)
+    return "%s-%s-%s" % (arch, operating_system, libc)
 
 
-def read_sha256(session, url):
-    resp = session.get(url + ".sha256")
-    if not resp.ok:
+def normalize_arch(arch):
+    arch = ARCH_MAP.get(arch, arch)
+    pieces = arch.split("_")
+    # Strip `_vN` from `x86_64`
+    return "_".join(pieces[:2])
+
+
+def normalize_os(os):
+    return OS_MAP.get(os, os)
+
+
+def read_sha256(url):
+    try:
+        resp = urllib.request.urlopen(url + ".sha256")
+    except urllib.error.HTTPError:
         return None
-    return resp.text.strip()
+    assert resp.status == 200
+    return resp.read().decode().strip()
 
 
 def sha256(path):
@@ -150,8 +159,8 @@ def sha256(path):
     return h.hexdigest()
 
 
-def _sort_key(info):
-    triple, flavor, url = info
+def _sort_by_flavor_preference(info):
+    _triple, flavor, _url = info
     try:
         pref = FLAVOR_PREFERENCES.index(flavor)
     except ValueError:
@@ -159,32 +168,22 @@ def _sort_key(info):
     return pref
 
 
-def get_session() -> requests.Session:
-    session = requests.Session()
-    session.headers = HEADERS.copy()
-
-    token = os.environ.get("GITHUB_TOKEN")
-    if token:
-        session.headers["Authorization"] = "Bearer " + token
-    else:
-        logging.warning(
-            "An authentication token was not found at `GITHUB_TOKEN`, rate limits may be encountered.",
-        )
-
-    return session
+def _sort_by_interpreter_and_version(info):
+    interpreter, version_tuple, _ = info
+    return (interpreter, version_tuple)
 
 
-def find(args):
+def find():
     """
     Find available Python versions and write metadata to a file.
     """
     results = {}
-    session = get_session()
 
+    # Collect all available Python downloads
     for page in range(1, 100):
         logging.debug("Reading release page %s...", page)
-        resp = session.get("%s?page=%d" % (RELEASE_URL, page))
-        rows = resp.json()
+        resp = urllib.request.urlopen("%s?page=%d" % (RELEASE_URL, page))
+        rows = json.loads(resp.read())
         if not rows:
             break
         for row in rows:
@@ -204,34 +203,47 @@ def find(args):
                     continue
                 results.setdefault(py_ver, []).append((triple, flavor, url))
 
-    cpython_results = {}
+    # Collapse CPython variants to a single URL flavor per triple
+    cpython_results: dict[tuple[int, int, int], dict[tuple[str, str, str], str]] = {}
     for py_ver, choices in results.items():
-        choices.sort(key=_sort_key)
         urls = {}
-        for triple, flavor, url in choices:
+        for triple, flavor, url in sorted(choices, key=_sort_by_flavor_preference):
             triple = tuple(triple.split("-"))
+            # Skip existing triples, preferring the first flavor
             if triple in urls:
                 continue
             urls[triple] = url
         cpython_results[tuple(map(int, py_ver.split(".")))] = urls
 
+    # Collect variants across interpreter kinds
+    # TODO(zanieb): Note we only support CPython downloads at this time
+    #               but this will include PyPy chain in the future.
     final_results = {}
     for interpreter, py_ver, choices in sorted(
         chain(
             (("cpython",) + x for x in cpython_results.items()),
         ),
-        key=lambda x: x[:2],
+        key=_sort_by_interpreter_and_version,
+        # Reverse the ordering so newer versions are first
         reverse=True,
     ):
-        for (arch, platform, libc), url in sorted(choices.items()):
-            key = "%s-%s.%s.%s-%s-%s-%s" % (interpreter, *py_ver, platform, arch, libc)
+        # Sort by the remaining information for determinism
+        # This groups download metadata in triple component order
+        for (arch, operating_system, libc), url in sorted(choices.items()):
+            key = "%s-%s.%s.%s-%s-%s-%s" % (
+                interpreter,
+                *py_ver,
+                operating_system,
+                arch,
+                libc,
+            )
             logging.info("Found %s", key)
-            sha256 = read_sha256(session, url)
+            sha256 = read_sha256(url)
 
             final_results[key] = {
                 "name": interpreter,
                 "arch": arch,
-                "os": platform,
+                "os": operating_system,
                 "libc": libc,
                 "major": py_ver[0],
                 "minor": py_ver[1],
@@ -273,7 +285,7 @@ def main():
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    find(args)
+    find()
 
 
 if __name__ == "__main__":

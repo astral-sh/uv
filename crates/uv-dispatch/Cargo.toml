@@ -21,9 +21,9 @@ uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-installer = { workspace = true }
 uv-interpreter = { workspace = true }
-uv-requirements = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
+uv-configuration = { workspace = true }
 
 anyhow = { workspace = true }
 futures = { workspace = true }

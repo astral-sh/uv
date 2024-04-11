@@ -16,15 +16,15 @@ use distribution_types::{FlatIndexLocation, IndexLocations, IndexUrl};
 use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheArgs, Refresh};
 use uv_client::Connectivity;
-use uv_interpreter::PythonVersion;
-use uv_normalize::{ExtraName, PackageName};
-use uv_requirements::{ExtrasSpecification, RequirementsSource};
-use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
-use uv_types::NoBinary;
-use uv_types::{
+use uv_configuration::{
     ConfigSettingEntry, ConfigSettings, NoBuild, PackageNameSpecifier, Reinstall, SetupPyStrategy,
     Upgrade,
 };
+use uv_configuration::{IndexStrategy, NoBinary};
+use uv_normalize::{ExtraName, PackageName};
+use uv_requirements::{ExtrasSpecification, RequirementsSource};
+use uv_resolver::{AnnotationStyle, DependencyMode, PreReleaseMode, ResolutionMode};
+use uv_toolchain::PythonVersion;
 
 use crate::commands::{extra_name_with_clap_error, ExitStatus, ListFormat, VersionFormat};
 use crate::compat::CompatArgs;
@@ -335,6 +335,10 @@ struct PipCompileArgs {
     #[clap(long)]
     no_header: bool,
 
+    /// Choose the style of the annotation comments, which indicate the source of each package.
+    #[clap(long, default_value_t=AnnotationStyle::Split, value_enum)]
+    annotation_style: AnnotationStyle,
+
     /// Change header comment to reflect custom command wrapping `uv pip compile`.
     #[clap(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
     custom_compile_command: Option<String>,
@@ -383,6 +387,15 @@ struct PipCompileArgs {
     /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// The strategy to use when resolving against multiple index URLs.
+    ///
+    /// By default, `uv` will stop at the first index on which a given package is available, and
+    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
+    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
+    /// index.
+    #[clap(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
+    index_strategy: IndexStrategy,
 
     /// Attempt to use `keyring` for authentication for index urls
     ///
@@ -486,9 +499,10 @@ struct PipCompileArgs {
     #[clap(long, hide = true)]
     emit_marker_expression: bool,
 
-    /// Choose the style of the annotation comments, which indicate the source of each package.
-    #[clap(long, default_value_t=AnnotationStyle::Split, value_enum)]
-    annotation_style: AnnotationStyle,
+    /// Include comment annotations indicating the index used to resolve each package (e.g.,
+    /// `# from https://pypi.org/simple`).
+    #[clap(long)]
+    emit_index_annotation: bool,
 
     #[command(flatten)]
     compat_args: compat::PipCompileCompatArgs,
@@ -570,6 +584,29 @@ struct PipSyncArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
+    /// The strategy to use when resolving against multiple index URLs.
+    ///
+    /// By default, `uv` will stop at the first index on which a given package is available, and
+    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
+    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
+    /// index.
+    #[clap(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
+    index_strategy: IndexStrategy,
+
+    /// Require a matching hash for each requirement.
+    ///
+    /// Hash-checking mode is all or nothing. If enabled, _all_ requirements must be provided
+    /// with a corresponding hash or set of hashes. Additionally, if enabled, _all_ requirements
+    /// must either be pinned to exact versions (e.g., `==1.0.0`), or be specified via direct URL.
+    ///
+    /// Hash-checking mode introduces a number of additional constraints:
+    /// - Git dependencies are not supported.
+    /// - Editable installs are not supported.
+    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
+    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
+    #[clap(long, hide = true)]
+    require_hashes: bool,
+
     /// Attempt to use `keyring` for authentication for index urls
     ///
     /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
@@ -620,7 +657,7 @@ struct PipSyncArgs {
     /// environments, when installing into Python installations that are managed by an external
     /// package manager, like `apt`. It should be used with caution, as such Python installations
     /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
-    #[clap(long, requires = "discovery")]
+    #[clap(long, env = "UV_BREAK_SYSTEM_PACKAGES", requires = "discovery")]
     break_system_packages: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
@@ -676,6 +713,10 @@ struct PipSyncArgs {
     /// (like pip) ignore all errors.
     #[clap(long)]
     compile: bool,
+
+    /// Don't compile Python files to bytecode.
+    #[clap(long, hide = true, conflicts_with = "compile")]
+    no_compile: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[clap(long, short = 'C', alias = "config-settings")]
@@ -790,10 +831,6 @@ struct PipInstallArgs {
     #[clap(long, hide = true, conflicts_with = "prerelease")]
     pre: bool,
 
-    /// Write the compiled requirements to the given `requirements.txt` file.
-    #[clap(long, short)]
-    output_file: Option<PathBuf>,
-
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
     /// The index given by this flag is given lower priority than all other
@@ -830,6 +867,29 @@ struct PipInstallArgs {
     /// discovered via `--find-links`.
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
+
+    /// The strategy to use when resolving against multiple index URLs.
+    ///
+    /// By default, `uv` will stop at the first index on which a given package is available, and
+    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
+    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
+    /// index.
+    #[clap(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
+    index_strategy: IndexStrategy,
+
+    /// Require a matching hash for each requirement.
+    ///
+    /// Hash-checking mode is all or nothing. If enabled, _all_ requirements must be provided
+    /// with a corresponding hash or set of hashes. Additionally, if enabled, _all_ requirements
+    /// must either be pinned to exact versions (e.g., `==1.0.0`), or be specified via direct URL.
+    ///
+    /// Hash-checking mode introduces a number of additional constraints:
+    /// - Git dependencies are not supported.
+    /// - Editable installs are not supported.
+    /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
+    ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
+    #[clap(long, hide = true)]
+    require_hashes: bool,
 
     /// Attempt to use `keyring` for authentication for index urls
     ///
@@ -881,7 +941,7 @@ struct PipInstallArgs {
     /// environments, when installing into Python installations that are managed by an external
     /// package manager, like `apt`. It should be used with caution, as such Python installations
     /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
-    #[clap(long, requires = "discovery")]
+    #[clap(long, env = "UV_BREAK_SYSTEM_PACKAGES", requires = "discovery")]
     break_system_packages: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
@@ -937,6 +997,10 @@ struct PipInstallArgs {
     /// (like pip) ignore all errors.
     #[clap(long)]
     compile: bool,
+
+    /// Don't compile Python files to bytecode.
+    #[clap(long, hide = true, conflicts_with = "compile")]
+    no_compile: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[clap(long, short = 'C', alias = "config-settings")]
@@ -1022,7 +1086,7 @@ struct PipUninstallArgs {
     /// environments, when installing into Python installations that are managed by an external
     /// package manager, like `apt`. It should be used with caution, as such Python installations
     /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
-    #[clap(long, requires = "discovery")]
+    #[clap(long, env = "UV_BREAK_SYSTEM_PACKAGES", requires = "discovery")]
     break_system_packages: bool,
 
     /// Run offline, i.e., without accessing the network.
@@ -1328,6 +1392,15 @@ struct VenvArgs {
     #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
     no_index: bool,
 
+    /// The strategy to use when resolving against multiple index URLs.
+    ///
+    /// By default, `uv` will stop at the first index on which a given package is available, and
+    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
+    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
+    /// index.
+    #[clap(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
+    index_strategy: IndexStrategy,
+
     /// Attempt to use `keyring` for authentication for index urls
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
@@ -1423,7 +1496,7 @@ async fn run() -> Result<ExitStatus> {
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
-    let (duration_layer, _duration_guard) = logging::setup_duration();
+    let (duration_layer, _duration_guard) = logging::setup_duration()?;
     #[cfg(not(feature = "tracing-durations-export"))]
     let duration_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(
@@ -1543,7 +1616,9 @@ async fn run() -> Result<ExitStatus> {
                 args.emit_index_url,
                 args.emit_find_links,
                 args.emit_marker_expression,
+                args.emit_index_annotation,
                 index_urls,
+                args.index_strategy,
                 args.keyring_provider,
                 setup_py,
                 config_settings,
@@ -1599,7 +1674,9 @@ async fn run() -> Result<ExitStatus> {
                 &reinstall,
                 args.link_mode,
                 args.compile,
+                args.require_hashes,
                 index_urls,
+                args.index_strategy,
                 args.keyring_provider,
                 setup_py,
                 if args.offline {
@@ -1693,10 +1770,12 @@ async fn run() -> Result<ExitStatus> {
                 dependency_mode,
                 upgrade,
                 index_urls,
+                args.index_strategy,
                 args.keyring_provider,
                 reinstall,
                 args.link_mode,
                 args.compile,
+                args.require_hashes,
                 setup_py,
                 if args.offline {
                     Connectivity::Offline
@@ -1825,6 +1904,7 @@ async fn run() -> Result<ExitStatus> {
                 &args.name,
                 args.python.as_deref(),
                 &index_locations,
+                args.index_strategy,
                 args.keyring_provider,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,

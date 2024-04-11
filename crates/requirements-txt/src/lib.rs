@@ -52,9 +52,9 @@ use pep508_rs::{
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
+use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
-use uv_types::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_warnings::warn_user;
 
 /// We emit one of those for each requirements.txt entry
@@ -293,21 +293,16 @@ impl Display for EditableRequirement {
 
 /// A [Requirement] with additional metadata from the requirements.txt, currently only hashes but in
 /// the future also editable an similar information
-#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Hash, Serialize)]
 pub struct RequirementEntry {
     /// The actual PEP 508 requirement
     pub requirement: RequirementsTxtRequirement,
     /// Hashes of the downloadable packages
     pub hashes: Vec<String>,
-    /// Editable installation, see e.g. <https://stackoverflow.com/q/35064426/3549270>
-    pub editable: bool,
 }
 
 impl Display for RequirementEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.editable {
-            write!(f, "-e ")?;
-        }
         write!(f, "{}", self.requirement)?;
         for hash in &self.hashes {
             write!(f, " --hash {hash}")?;
@@ -670,7 +665,6 @@ fn parse_entry(
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
             requirement,
             hashes,
-            editable: false,
         })
     } else if let Some(char) = s.peek() {
         let (line, column) = calculate_row_column(content, s.cursor());
@@ -1743,7 +1737,6 @@ mod test {
                         },
                     ),
                     hashes: [],
-                    editable: false,
                 },
             ],
             constraints: [],
@@ -1798,7 +1791,6 @@ mod test {
                         },
                     ),
                     hashes: [],
-                    editable: false,
                 },
             ],
             constraints: [],

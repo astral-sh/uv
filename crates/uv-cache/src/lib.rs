@@ -23,7 +23,9 @@ use crate::removal::{rm_rf, Removal};
 pub use crate::timestamp::Timestamp;
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
+pub use archive::ArchiveId;
 
+mod archive;
 mod by_timestamp;
 #[cfg(feature = "clap")]
 mod cli;
@@ -68,6 +70,12 @@ impl CacheEntry {
     #[must_use]
     pub fn with_file(&self, file: impl AsRef<Path>) -> Self {
         Self(self.dir().join(file))
+    }
+}
+
+impl AsRef<Path> for CacheEntry {
+    fn as_ref(&self) -> &Path {
+        &self.0
     }
 }
 
@@ -167,6 +175,11 @@ impl Cache {
         CacheEntry::new(self.bucket(cache_bucket).join(dir), file)
     }
 
+    /// Return the path to an archive in the cache.
+    pub fn archive(&self, id: &ArchiveId) -> PathBuf {
+        self.bucket(CacheBucket::Archive).join(id)
+    }
+
     /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.
     pub fn must_revalidate(&self, package: &PackageName) -> bool {
         match &self.refresh {
@@ -208,18 +221,18 @@ impl Cache {
         }
     }
 
-    /// Persist a temporary directory to the artifact store.
+    /// Persist a temporary directory to the artifact store, returning its unique ID.
     pub async fn persist(
         &self,
         temp_dir: impl AsRef<Path>,
         path: impl AsRef<Path>,
-    ) -> io::Result<PathBuf> {
+    ) -> io::Result<ArchiveId> {
         // Create a unique ID for the artifact.
         // TODO(charlie): Support content-addressed persistence via SHAs.
-        let id = nanoid::nanoid!();
+        let id = ArchiveId::new();
 
         // Move the temporary directory into the directory store.
-        let archive_entry = self.entry(CacheBucket::Archive, "", id);
+        let archive_entry = self.entry(CacheBucket::Archive, "", &id);
         fs_err::create_dir_all(archive_entry.dir())?;
         uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await?;
 
@@ -227,7 +240,7 @@ impl Cache {
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
         uv_fs::replace_symlink(archive_entry.path(), path.as_ref())?;
 
-        Ok(archive_entry.into_path_buf())
+        Ok(id)
     }
 
     /// Initialize a directory for use as a cache.
@@ -594,12 +607,12 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            Self::BuiltWheels => "built-wheels-v2",
+            Self::BuiltWheels => "built-wheels-v3",
             Self::FlatIndex => "flat-index-v0",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v0",
-            Self::Simple => "simple-v6",
-            Self::Wheels => "wheels-v0",
+            Self::Simple => "simple-v7",
+            Self::Wheels => "wheels-v1",
             Self::Archive => "archive-v0",
         }
     }
@@ -793,6 +806,12 @@ impl ArchiveTimestamp {
 
             Ok(Some(Self::Approximate(timestamp)))
         }
+    }
+
+    /// Return the modification timestamp for a file.
+    pub fn from_file(path: impl AsRef<Path>) -> Result<Self, io::Error> {
+        let metadata = fs_err::metadata(path.as_ref())?;
+        Ok(Self::Exact(Timestamp::from_metadata(&metadata)))
     }
 
     /// Return the modification timestamp for an archive.

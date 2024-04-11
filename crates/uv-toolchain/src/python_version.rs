@@ -5,8 +5,6 @@ use std::str::FromStr;
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, StringVersion};
 
-use crate::Interpreter;
-
 #[derive(Debug, Clone)]
 pub struct PythonVersion(StringVersion);
 
@@ -141,18 +139,6 @@ impl PythonVersion {
     pub fn without_patch(&self) -> Self {
         Self::from_str(format!("{}.{}", self.major(), self.minor()).as_str())
             .expect("dropping a patch should always be valid")
-    }
-
-    /// Check if this Python version is satisfied by the given interpreter.
-    ///
-    /// If a patch version is present, we will require an exact match.
-    /// Otherwise, just the major and minor version numbers need to match.
-    pub fn is_satisfied_by(&self, interpreter: &Interpreter) -> bool {
-        if self.patch().is_some() {
-            self.version() == interpreter.python_version()
-        } else {
-            (self.major(), self.minor()) == interpreter.python_tuple()
-        }
     }
 }
 
