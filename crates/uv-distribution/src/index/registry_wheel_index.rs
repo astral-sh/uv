@@ -13,7 +13,7 @@ use uv_normalize::PackageName;
 use uv_types::HashStrategy;
 
 use crate::index::cached_wheel::CachedWheel;
-use crate::source::{HttpRevisionPointer, HTTP_REVISION};
+use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LOCAL_REVISION};
 
 /// A local index of distributions that originate from a registry, like `PyPI`.
 #[derive(Debug)]
@@ -88,13 +88,13 @@ impl<'a> RegistryWheelIndex<'a> {
     ) -> BTreeMap<Version, CachedRegistryDist> {
         let mut versions = BTreeMap::new();
 
-        // Collect into owned `IndexUrl`
+        // Collect into owned `IndexUrl`.
         let flat_index_urls: Vec<IndexUrl> = index_locations
             .flat_index()
             .filter_map(|flat_index| match flat_index {
                 FlatIndexLocation::Path(path) => {
                     let path = fs_err::canonicalize(path).ok()?;
-                    Some(IndexUrl::Url(VerbatimUrl::from_path(path)))
+                    Some(IndexUrl::Path(VerbatimUrl::from_path(path)))
                 }
                 FlatIndexLocation::Url(url) => {
                     Some(IndexUrl::Url(VerbatimUrl::unknown(url.clone())))
@@ -112,30 +112,37 @@ impl<'a> RegistryWheelIndex<'a> {
             // For registry wheels, the cache structure is: `<index>/<package-name>/<wheel>.http`
             // or `<index>/<package-name>/<version>/<wheel>.rev`.
             for file in files(&wheel_dir) {
-                if file
-                    .extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("http"))
-                {
-                    if let Some(wheel) =
-                        CachedWheel::from_http_pointer(&wheel_dir.join(&file), cache)
-                    {
-                        // Enforce hash-checking based on the built distribution.
-                        if wheel.satisfies(hasher.get(package)) {
-                            Self::add_wheel(wheel, tags, &mut versions);
+                match index_url {
+                    // Add files from remote registries.
+                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                        if file
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("http"))
+                        {
+                            if let Some(wheel) =
+                                CachedWheel::from_http_pointer(wheel_dir.join(file), cache)
+                            {
+                                // Enforce hash-checking based on the built distribution.
+                                if wheel.satisfies(hasher.get(package)) {
+                                    Self::add_wheel(wheel, tags, &mut versions);
+                                }
+                            }
                         }
                     }
-                }
-
-                if file
-                    .extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("rev"))
-                {
-                    if let Some(wheel) =
-                        CachedWheel::from_local_pointer(&wheel_dir.join(&file), cache)
-                    {
-                        // Enforce hash-checking based on the built distribution.
-                        if wheel.satisfies(hasher.get(package)) {
-                            Self::add_wheel(wheel, tags, &mut versions);
+                    // Add files from local registries (e.g., `--find-links`).
+                    IndexUrl::Path(_) => {
+                        if file
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("rev"))
+                        {
+                            if let Some(wheel) =
+                                CachedWheel::from_local_pointer(wheel_dir.join(file), cache)
+                            {
+                                // Enforce hash-checking based on the built distribution.
+                                if wheel.satisfies(hasher.get(package)) {
+                                    Self::add_wheel(wheel, tags, &mut versions);
+                                }
+                            }
                         }
                     }
                 }
@@ -152,18 +159,39 @@ impl<'a> RegistryWheelIndex<'a> {
             for shard in directories(&cache_shard) {
                 // Read the existing metadata from the cache, if it exists.
                 let cache_shard = cache_shard.shard(shard);
-                let revision_entry = cache_shard.entry(HTTP_REVISION);
-                if let Ok(Some(pointer)) = HttpRevisionPointer::read_from(&revision_entry) {
+
+                // Read the revision from the cache.
+                let revision = match index_url {
+                    // Add files from remote registries.
+                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                        let revision_entry = cache_shard.entry(HTTP_REVISION);
+                        if let Ok(Some(pointer)) = HttpRevisionPointer::read_from(revision_entry) {
+                            Some(pointer.into_revision())
+                        } else {
+                            None
+                        }
+                    }
+                    // Add files from local registries (e.g., `--find-links`).
+                    IndexUrl::Path(_) => {
+                        let revision_entry = cache_shard.entry(LOCAL_REVISION);
+                        if let Ok(Some(pointer)) = LocalRevisionPointer::read_from(revision_entry) {
+                            Some(pointer.into_revision())
+                        } else {
+                            None
+                        }
+                    }
+                };
+
+                if let Some(revision) = revision {
                     // Enforce hash-checking based on the source distribution.
-                    let revision = pointer.into_revision();
                     if revision.satisfies(hasher.get(package)) {
                         for wheel_dir in symlinks(cache_shard.join(revision.id())) {
-                            if let Some(wheel) = CachedWheel::from_built_source(&wheel_dir) {
+                            if let Some(wheel) = CachedWheel::from_built_source(wheel_dir) {
                                 Self::add_wheel(wheel, tags, &mut versions);
                             }
                         }
                     }
-                };
+                }
             }
         }
 

@@ -87,6 +87,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
+                // For registry source distributions, shard by package, then version, for
+                // convenience in debugging.
+                let cache_shard = self.build_context.cache().shard(
+                    CacheBucket::BuiltWheels,
+                    WheelCache::Index(&dist.index)
+                        .wheel_dir(dist.filename.name.as_ref())
+                        .join(dist.filename.version.to_string()),
+                );
+
                 let url = match &dist.file.url {
                     FileLocation::RelativeUrl(base, url) => {
                         pypi_types::base_url_join_relative(base, url)?
@@ -103,6 +112,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                     url: &url,
                                     path: Cow::Borrowed(path),
                                 },
+                                &cache_shard,
                                 tags,
                                 hashes,
                             )
@@ -110,15 +120,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             .await;
                     }
                 };
-
-                // For registry source distributions, shard by package, then version, for
-                // convenience in debugging.
-                let cache_shard = self.build_context.cache().shard(
-                    CacheBucket::BuiltWheels,
-                    WheelCache::Index(&dist.index)
-                        .wheel_dir(dist.filename.name.as_ref())
-                        .join(dist.filename.version.to_string()),
-                );
 
                 self.url(
                     source,
@@ -165,9 +166,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .boxed()
                         .await?
                 } else {
-                    self.archive(source, &PathSourceUrl::from(dist), tags, hashes)
-                        .boxed()
-                        .await?
+                    let cache_shard = self
+                        .build_context
+                        .cache()
+                        .shard(CacheBucket::BuiltWheels, WheelCache::Path(&dist.url).root());
+                    self.archive(
+                        source,
+                        &PathSourceUrl::from(dist),
+                        &cache_shard,
+                        tags,
+                        hashes,
+                    )
+                    .boxed()
+                    .await?
                 }
             }
             BuildableSource::Url(SourceUrl::Direct(resource)) => {
@@ -204,7 +215,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .boxed()
                         .await?
                 } else {
-                    self.archive(source, resource, tags, hashes).boxed().await?
+                    let cache_shard = self.build_context.cache().shard(
+                        CacheBucket::BuiltWheels,
+                        WheelCache::Path(resource.url).root(),
+                    );
+                    self.archive(source, resource, &cache_shard, tags, hashes)
+                        .boxed()
+                        .await?
                 }
             }
         };
@@ -222,6 +239,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
+                // For registry source distributions, shard by package, then version.
+                let cache_shard = self.build_context.cache().shard(
+                    CacheBucket::BuiltWheels,
+                    WheelCache::Index(&dist.index)
+                        .wheel_dir(dist.filename.name.as_ref())
+                        .join(dist.filename.version.to_string()),
+                );
+
                 let url = match &dist.file.url {
                     FileLocation::RelativeUrl(base, url) => {
                         pypi_types::base_url_join_relative(base, url)?
@@ -238,20 +263,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                     url: &url,
                                     path: Cow::Borrowed(path),
                                 },
+                                &cache_shard,
                                 hashes,
                             )
                             .boxed()
                             .await;
                     }
                 };
-
-                // For registry source distributions, shard by package, then version.
-                let cache_shard = self.build_context.cache().shard(
-                    CacheBucket::BuiltWheels,
-                    WheelCache::Index(&dist.index)
-                        .wheel_dir(dist.filename.name.as_ref())
-                        .join(dist.filename.version.to_string()),
-                );
 
                 self.url_metadata(
                     source,
@@ -296,7 +314,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .boxed()
                         .await?
                 } else {
-                    self.archive_metadata(source, &PathSourceUrl::from(dist), hashes)
+                    let cache_shard = self
+                        .build_context
+                        .cache()
+                        .shard(CacheBucket::BuiltWheels, WheelCache::Path(&dist.url).root());
+                    self.archive_metadata(source, &PathSourceUrl::from(dist), &cache_shard, hashes)
                         .boxed()
                         .await?
                 }
@@ -334,7 +356,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .boxed()
                         .await?
                 } else {
-                    self.archive_metadata(source, resource, hashes)
+                    let cache_shard = self.build_context.cache().shard(
+                        CacheBucket::BuiltWheels,
+                        WheelCache::Path(resource.url).root(),
+                    );
+                    self.archive_metadata(source, resource, &cache_shard, hashes)
                         .boxed()
                         .await?
                 }
@@ -573,17 +599,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
+        cache_shard: &CacheShard,
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let cache_shard = self.build_context.cache().shard(
-            CacheBucket::BuiltWheels,
-            WheelCache::Path(resource.url).root(),
-        );
-
         // Fetch the revision for the source distribution.
         let revision = self
-            .archive_revision(source, resource, &cache_shard, hashes)
+            .archive_revision(source, resource, cache_shard, hashes)
             .await?;
 
         // Before running the build, check that the hashes match.
@@ -644,16 +666,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         resource: &PathSourceUrl<'_>,
+        cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let cache_shard = self.build_context.cache().shard(
-            CacheBucket::BuiltWheels,
-            WheelCache::Path(resource.url).root(),
-        );
-
         // Fetch the revision for the source distribution.
         let revision = self
-            .archive_revision(source, resource, &cache_shard, hashes)
+            .archive_revision(source, resource, cache_shard, hashes)
             .await?;
 
         // Before running the build, check that the hashes match.

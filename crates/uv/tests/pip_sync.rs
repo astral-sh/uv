@@ -2539,12 +2539,12 @@ fn find_links_offline_no_match() -> Result<()> {
 
 /// Sync using `--find-links` with a local directory. Ensure that cached wheels are reused.
 #[test]
-fn find_links_cache() -> Result<()> {
+fn find_links_wheel_cache() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
-        tqdm
+        tqdm==1000.0.0
     "})?;
 
     // Install `tqdm`.
@@ -2579,6 +2579,55 @@ fn find_links_cache() -> Result<()> {
     Installed 1 package in [TIME]
      - tqdm==1000.0.0
      + tqdm==1000.0.0
+    "###
+    );
+
+    Ok(())
+}
+
+/// Sync using `--find-links` with a local directory. Ensure that cached source distributions are
+/// reused.
+#[test]
+fn find_links_source_cache() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        tqdm==999.0.0
+    "})?;
+
+    // Install `tqdm`.
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("requirements.txt")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==999.0.0
+    "###
+    );
+
+    // Reinstall `tqdm` with `--reinstall`. Ensure that the wheel is reused.
+    uv_snapshot!(context.filters(), command(&context)
+        .arg("requirements.txt")
+        .arg("--reinstall")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - tqdm==999.0.0
+     + tqdm==999.0.0
     "###
     );
 

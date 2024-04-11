@@ -205,7 +205,7 @@ impl<'a> FlatIndexClient<'a> {
     fn read_from_directory(path: &PathBuf) -> Result<FlatIndexEntries, std::io::Error> {
         // Absolute paths are required for the URL conversion.
         let path = fs_err::canonicalize(path)?;
-        let index_url = IndexUrl::Url(VerbatimUrl::from_path(&path));
+        let index_url = IndexUrl::Path(VerbatimUrl::from_path(&path));
 
         let mut dists = Vec::new();
         for entry in fs_err::read_dir(path)? {

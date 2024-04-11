@@ -24,6 +24,7 @@ static DEFAULT_INDEX_URL: Lazy<IndexUrl> =
 pub enum IndexUrl {
     Pypi(VerbatimUrl),
     Url(VerbatimUrl),
+    Path(VerbatimUrl),
 }
 
 impl IndexUrl {
@@ -32,6 +33,7 @@ impl IndexUrl {
         match self {
             Self::Pypi(url) => url.raw(),
             Self::Url(url) => url.raw(),
+            Self::Path(url) => url.raw(),
         }
     }
 }
@@ -41,6 +43,7 @@ impl Display for IndexUrl {
         match self {
             Self::Pypi(url) => Display::fmt(url, f),
             Self::Url(url) => Display::fmt(url, f),
+            Self::Path(url) => Display::fmt(url, f),
         }
     }
 }
@@ -50,6 +53,7 @@ impl Verbatim for IndexUrl {
         match self {
             Self::Pypi(url) => url.verbatim(),
             Self::Url(url) => url.verbatim(),
+            Self::Path(url) => url.verbatim(),
         }
     }
 }
@@ -83,6 +87,7 @@ impl From<IndexUrl> for Url {
         match index {
             IndexUrl::Pypi(url) => url.to_url(),
             IndexUrl::Url(url) => url.to_url(),
+            IndexUrl::Path(url) => url.to_url(),
         }
     }
 }
@@ -94,6 +99,7 @@ impl Deref for IndexUrl {
         match &self {
             Self::Pypi(url) => url,
             Self::Url(url) => url,
+            Self::Path(url) => url,
         }
     }
 }
