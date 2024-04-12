@@ -92,7 +92,12 @@ pub fn normalize_url_path(path: &str) -> Cow<'_, str> {
 /// behavior at times. This should be used carefully. Unfortunately,
 /// [`std::fs::canonicalize`] can be hard to use correctly, since it can often
 /// fail, or on Windows returns annoying device paths.
-pub fn normalize_path(path: &Path) -> PathBuf {
+///
+/// # Errors
+///
+/// When a relative path is provided with `..` components that extend beyond the base directory.
+/// For example, `./a/../../b` cannot be normalized because it escapes the base directory.
+pub fn normalize_path(path: &Path) -> Result<PathBuf, std::io::Error> {
     let mut components = path.components().peekable();
     let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().copied() {
         components.next();
@@ -109,14 +114,29 @@ pub fn normalize_path(path: &Path) -> PathBuf {
             }
             Component::CurDir => {}
             Component::ParentDir => {
-                ret.pop();
+                if !ret.pop() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "cannot normalize a relative path beyond the base directory",
+                    ));
+                }
             }
             Component::Normal(c) => {
                 ret.push(c);
             }
         }
     }
-    ret
+    Ok(ret)
+}
+
+/// Convert a path to an absolute path, relative to the current working directory.
+///
+/// Unlike [`std::fs::canonicalize`], this function does not resolve symlinks and does not require
+/// the path to exist.
+pub fn absolutize_path(path: &Path) -> Result<Cow<Path>, std::io::Error> {
+    use path_absolutize::Absolutize;
+
+    path.absolutize_from(&*CWD)
 }
 
 /// Like `fs_err::canonicalize`, but with permissive failures on Windows.
@@ -243,7 +263,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalize_url() {
+    fn test_normalize_url() {
         if cfg!(windows) {
             assert_eq!(
                 normalize_url_path("/C:/Users/ferris/wheel-0.42.0.tar.gz"),
@@ -279,5 +299,21 @@ mod tests {
                 "./wheel cache/wheel-0.42.0.tar.gz"
             );
         }
+    }
+
+    #[test]
+    fn test_normalize_path() {
+        let path = Path::new("/a/b/../c/./d");
+        let normalized = normalize_path(path).unwrap();
+        assert_eq!(normalized, Path::new("/a/c/d"));
+
+        let path = Path::new("/a/../c/./d");
+        let normalized = normalize_path(path).unwrap();
+        assert_eq!(normalized, Path::new("/c/d"));
+
+        // This should be an error.
+        let path = Path::new("/a/../../c/./d");
+        let err = normalize_path(path).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
     }
 }

@@ -42,7 +42,7 @@ impl VerbatimUrl {
         let path = path.as_ref();
 
         // Normalize the path.
-        let path = normalize_path(path);
+        let path = normalize_path(path).expect("path is absolute");
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
@@ -78,7 +78,7 @@ impl VerbatimUrl {
         };
 
         // Normalize the path.
-        let path = normalize_path(&path);
+        let path = normalize_path(&path).expect("path is absolute");
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
@@ -112,7 +112,9 @@ impl VerbatimUrl {
         };
 
         // Normalize the path.
-        let path = normalize_path(&path);
+        let Ok(path) = normalize_path(&path) else {
+            return Err(VerbatimUrlError::RelativePath(path));
+        };
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);

@@ -1,0 +1,1 @@
+httpx @ git+https://github.com/encode/httpx@master
