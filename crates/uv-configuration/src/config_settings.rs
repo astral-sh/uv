@@ -1,3 +1,4 @@
+use serde::ser::SerializeMap;
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     str::FromStr,
@@ -35,12 +36,53 @@ enum ConfigSettingValue {
     List(Vec<String>),
 }
 
+#[cfg(feature = "serde")]
+impl serde::Serialize for ConfigSettingValue {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            ConfigSettingValue::String(value) => serializer.serialize_str(value),
+            ConfigSettingValue::List(values) => serializer.collect_seq(values.iter()),
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for ConfigSettingValue {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = ConfigSettingValue;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string or list of strings")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                Ok(ConfigSettingValue::String(value.to_string()))
+            }
+
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut values = Vec::new();
+                while let Some(value) = seq.next_element()? {
+                    values.push(value);
+                }
+                Ok(ConfigSettingValue::List(values))
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
+    }
+}
+
 /// Settings to pass to a PEP 517 build backend, structured as a map from (string) key to string or
 /// list of strings.
 ///
 /// See: <https://peps.python.org/pep-0517/#config-settings>
 #[derive(Debug, Default, Clone)]
-#[cfg_attr(not(feature = "serde"), allow(dead_code))]
 pub struct ConfigSettings(BTreeMap<String, ConfigSettingValue>);
 
 impl FromIterator<ConfigSettingEntry> for ConfigSettings {
@@ -77,20 +119,39 @@ impl ConfigSettings {
 #[cfg(feature = "serde")]
 impl serde::Serialize for ConfigSettings {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::SerializeMap;
-
         let mut map = serializer.serialize_map(Some(self.0.len()))?;
         for (key, value) in &self.0 {
-            match value {
-                ConfigSettingValue::String(value) => {
-                    map.serialize_entry(&key, &value)?;
-                }
-                ConfigSettingValue::List(values) => {
-                    map.serialize_entry(&key, &values)?;
-                }
-            }
+            map.serialize_entry(key, value)?;
         }
         map.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for ConfigSettings {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = ConfigSettings;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a map from string to string or list of strings")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut config = BTreeMap::default();
+                while let Some((key, value)) = map.next_entry()? {
+                    config.insert(key, value);
+                }
+                Ok(ConfigSettings(config))
+            }
+        }
+
+        deserializer.deserialize_map(Visitor)
     }
 }
 
