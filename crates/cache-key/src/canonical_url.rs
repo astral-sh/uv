@@ -17,6 +17,23 @@ use crate::cache_key::{CacheKey, CacheKeyHasher};
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct CanonicalUrl(Url);
 
+trait RemoveCredentials {
+    fn without_credentials(&self) -> Url;
+}
+
+impl RemoveCredentials for Url {
+    fn without_credentials(&self) -> Url {
+        let mut without_creds = self.clone();
+        if without_creds.password().is_some() {
+            without_creds.set_password(None).unwrap();
+        }
+        if without_creds.username().len() > 0 {
+            without_creds.set_username("").unwrap();
+        }
+        without_creds
+    }
+}
+
 impl CanonicalUrl {
     pub fn new(url: &Url) -> Self {
         let mut url = url.clone();
@@ -79,7 +96,7 @@ impl CacheKey for CanonicalUrl {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
         // possible changes in how the URL crate does hashing.
-        self.0.as_str().cache_key(state);
+        self.0.without_credentials().as_str().cache_key(state);
     }
 }
 
@@ -87,7 +104,7 @@ impl Hash for CanonicalUrl {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
         // possible changes in how the URL crate does hashing.
-        self.0.as_str().hash(state);
+        self.0.without_credentials().as_str().hash(state);
     }
 }
 
@@ -145,7 +162,7 @@ impl CacheKey for RepositoryUrl {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
         // possible changes in how the URL crate does hashing.
-        self.0.as_str().cache_key(state);
+        self.0.without_credentials().as_str().cache_key(state);
     }
 }
 
@@ -153,7 +170,7 @@ impl Hash for RepositoryUrl {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
         // possible changes in how the URL crate does hashing.
-        self.0.as_str().hash(state);
+        self.0.without_credentials().as_str().hash(state);
     }
 }
 
