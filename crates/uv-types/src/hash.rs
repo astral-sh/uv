@@ -141,8 +141,7 @@ impl HashStrategy {
             let digests = digests
                 .iter()
                 .map(|digest| HashDigest::from_str(digest))
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap();
+                .collect::<Result<Vec<_>, _>>()?;
 
             hashes.insert(id, digests);
         }

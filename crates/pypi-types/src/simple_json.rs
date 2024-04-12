@@ -340,7 +340,7 @@ pub enum HashError {
     InvalidStructure(String),
 
     #[error(
-        "Unsupported hash algorithm (expected `md5`, `sha256`, `sha384`, or `sha512`) on: {0}"
+        "Unsupported hash algorithm: `{0}` (expected one of: `md5`, `sha256`, `sha384`, or `sha512`)"
     )]
     UnsupportedHashAlgorithm(String),
 }
