@@ -75,13 +75,28 @@ impl Middleware for AuthMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
-        let url = request.url().clone();
-        debug!("Handling request for {url}");
+        // Check for credentials attached to (1) the request itself
+        let credentials = Credentials::from_request(&request);
+        // In the middleware, existing credentials are already moved from the URL
+        // to the headers so for display purposes we restore some information
+        let url = if tracing::enabled!(tracing::Level::DEBUG) {
+            let mut url = request.url().clone();
+            credentials
+                .as_ref()
+                .and_then(|credentials| credentials.username())
+                .and_then(|username| url.set_username(username).ok());
+            credentials
+                .as_ref()
+                .and_then(|credentials| credentials.password())
+                .and_then(|_| url.set_password(Some("****")).ok());
+            url.to_string()
+        } else {
+            request.url().to_string()
+        };
+        trace!("Handling request for {url}");
 
-        // Check for credentials attached to:
-        // (1) The request itself
-        // (2) The cache
-        let credentials = self.cache().check_request(&request);
+        // Then check for credentials in (2) the cache
+        let credentials = self.cache().check(request.url(), credentials);
 
         // Track credentials that we might want to insert into the cache
         let mut new_credentials = None;
@@ -93,15 +108,13 @@ impl Middleware for AuthMiddleware {
                 CheckResponse::Cached(credentials) => request = credentials.authenticate(request),
                 // If we get credentials from the request, we should update the cache
                 // but don't need to update the request
-                CheckResponse::OnRequest(credentials) => {
-                    new_credentials = Some(credentials.clone())
-                }
+                CheckResponse::Uncached(credentials) => new_credentials = Some(credentials.clone()),
                 CheckResponse::None => unreachable!("No credentials cannot be authenticated"),
             }
         // Otherwise, look for complete credentials in:
         // (3) The netrc file
         } else if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
-            debug!("Checking netrc for credentials for `{}`", url.to_string());
+            trace!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,
                 request.url(),
@@ -110,7 +123,7 @@ impl Middleware for AuthMiddleware {
                     .and_then(|credentials| credentials.username()),
             )
         }) {
-            debug!("Adding credentials from the netrc file to {url}");
+            debug!("Found credentials in netrc file for {url}");
             request = credentials.authenticate(request);
             new_credentials = Some(Arc::new(credentials));
         // (4) The keyring
@@ -119,46 +132,42 @@ impl Middleware for AuthMiddleware {
                 .get()
                 .and_then(|credentials| credentials.username())
             {
-                debug!("Checking keyring for credentials for `{}`", url.to_string());
+                debug!("Checking keyring for credentials for {url}");
                 keyring.fetch(request.url(), username)
             } else {
-                trace!(
-                    "Skipping keyring lookup for `{}`: no username found",
-                    url.to_string()
-                );
+                trace!("Skipping keyring lookup for {url} with no username");
                 None
             }
         }) {
-            debug!("Adding credentials from the keyring to {url}");
+            debug!("Found credentials in keyring for {url}");
             request = credentials.authenticate(request);
             new_credentials = Some(Arc::new(credentials))
+        // No additional credentials were found
         } else {
             match credentials {
                 CheckResponse::Cached(credentials) => request = credentials.authenticate(request),
-                CheckResponse::OnRequest(credentials) => {
-                    new_credentials = Some(credentials.clone())
-                }
+                CheckResponse::Uncached(credentials) => new_credentials = Some(credentials.clone()),
                 CheckResponse::None => {
-                    debug!("No credentials found.")
+                    debug!("No credentials found for {url}")
                 }
             }
         }
 
-        // Perform the request
-        let result = next.run(request, extensions).await;
-
-        // Only update the cache with new credentials on a successful request
         if let Some(credentials) = new_credentials {
+            // Only update the cache with new credentials on a successful request
+            let url = request.url().clone();
+            let result = next.run(request, extensions).await;
             if result
                 .as_ref()
                 .is_ok_and(|response| response.error_for_status_ref().is_ok())
             {
-                debug!("Updating credentials for {url} to {credentials:?}");
+                trace!("Updating cached credentials for {url}");
                 self.cache().insert(&url, credentials)
             };
+            result
+        } else {
+            next.run(request, extensions).await
         }
-
-        result
     }
 }
 
