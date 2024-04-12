@@ -25,7 +25,7 @@ use crate::resolver::{IncompletePackage, UnavailablePackage, VersionsResponse};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
-    #[error("Failed to find a version of {0} that satisfies the requirement")]
+    #[error("Failed to find a version of `{0}` that satisfies the requirement")]
     NotFound(Requirement),
 
     #[error(transparent)]
@@ -46,7 +46,7 @@ pub enum ResolveError {
         metadata: PackageName,
     },
 
-    #[error("~= operator requires at least two release segments: {0}")]
+    #[error("~= operator requires at least two release segments: `{0}`")]
     InvalidTildeEquals(pep440_rs::VersionSpecifier),
 
     #[error("Requirements contain conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
@@ -64,20 +64,20 @@ pub enum ResolveError {
     #[error(transparent)]
     DistributionType(#[from] distribution_types::Error),
 
-    #[error("Failed to download: {0}")]
+    #[error("Failed to download `{0}`")]
     Fetch(Box<BuiltDist>, #[source] uv_distribution::Error),
 
-    #[error("Failed to download and build: {0}")]
+    #[error("Failed to download and build `{0}`")]
     FetchAndBuild(Box<SourceDist>, #[source] uv_distribution::Error),
 
-    #[error("Failed to read: {0}")]
+    #[error("Failed to read `{0}`")]
     Read(Box<PathBuiltDist>, #[source] uv_distribution::Error),
 
     // TODO(zanieb): Use `thiserror` in `InstalledDist` so we can avoid chaining `anyhow`
-    #[error("Failed to read metadata from installed package: {0}")]
+    #[error("Failed to read metadata from installed package `{0}`")]
     ReadInstalled(Box<InstalledDist>, #[source] anyhow::Error),
 
-    #[error("Failed to build: {0}")]
+    #[error("Failed to build `{0}`")]
     Build(Box<PathSourceDist>, #[source] uv_distribution::Error),
 
     #[error(transparent)]
@@ -94,7 +94,7 @@ pub enum ResolveError {
     #[error("Attempted to construct an invalid version specifier")]
     InvalidVersion(#[from] pep440_rs::VersionSpecifierBuildError),
 
-    #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: {0}")]
+    #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`")]
     UnhashedPackage(PackageName),
 
     /// Something unexpected happened.
