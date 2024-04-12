@@ -104,7 +104,7 @@ impl Hash for CanonicalUrl {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
         // possible changes in how the URL crate does hashing.
-        self.0.without_credentials().as_str().hash(state);
+        self.0.as_str().hash(state);
     }
 }
 
@@ -170,7 +170,7 @@ impl Hash for RepositoryUrl {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
         // possible changes in how the URL crate does hashing.
-        self.0.without_credentials().as_str().hash(state);
+        self.0.as_str().hash(state);
     }
 }
 
@@ -191,6 +191,38 @@ impl std::fmt::Display for RepositoryUrl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn user_credential_does_not_affect_cache_key() -> Result<(), url::ParseError> {
+        let mut hasher = CacheKeyHasher::new();
+        CanonicalUrl::parse(
+            "https://user:foo@example.com/pypa/sample-namespace-packages.git@2.0.0",
+        )?
+        .cache_key(&mut hasher);
+        let hash1 = hasher.finish();
+
+        let mut hasher = CacheKeyHasher::new();
+        CanonicalUrl::parse(
+            "https://user:bar@example.com/pypa/sample-namespace-packages.git@2.0.0",
+        )?
+        .cache_key(&mut hasher);
+        let hash2 = hasher.finish();
+        assert_eq!(
+            hash1, hash2,
+            "URLs with different user credentials should hash the same",
+        );
+
+        let mut hasher = CacheKeyHasher::new();
+        CanonicalUrl::parse("https://example.com/pypa/sample-namespace-packages.git@2.0.0")?
+            .cache_key(&mut hasher);
+        let hash3 = hasher.finish();
+        assert_eq!(
+            hash1, hash3,
+            "URLs with no user credentials should hash the same as URLs with different user credentials",
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn canonical_url() -> Result<(), url::ParseError> {
