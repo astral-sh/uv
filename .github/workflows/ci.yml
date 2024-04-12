@@ -371,12 +371,12 @@ jobs:
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./uv
 
-  # Note: rockylinux:8 is a 1-1 code compatible distro to rhel 8
-  # rockylinux:8 mimics centos:8 but with added maintenance stability
-  # and avoids issues with centos stream mirror issues
-  system-test-centos:
+  # Note: rockylinux:8 is a 1-1 code compatible distro to rhel-8
+  # rockylinux:8 mimics centos-8 but with added maintenance stability
+  # and avoids issues with centos stream uptime concerns
+  system-test-rocky-linux:
     needs: build-binary-linux
-    name: "check system | python on centos (via rockylinux)"
+    name: "check system | python on rocky linux"
     runs-on: ubuntu-latest
     container: rockylinux:8
     steps:
