@@ -3,8 +3,8 @@ use std::{collections::HashMap, sync::Mutex};
 
 use crate::credentials::Credentials;
 use crate::NetLoc;
-use reqwest::Request;
-use tracing::debug;
+
+use tracing::trace;
 use url::Url;
 
 type CacheKey = (NetLoc, Option<String>);
@@ -15,11 +15,11 @@ pub struct CredentialsCache {
 
 #[derive(Debug, Clone)]
 pub enum CheckResponse {
-    /// Credentials are already on the request.
-    OnRequest(Arc<Credentials>),
+    /// The given credentials should be used and are not present in the cache.
+    Uncached(Arc<Credentials>),
     /// Credentials were found in the cache.
     Cached(Arc<Credentials>),
-    // Credentials were not found in the cache or request.
+    // Credentials were not found in the cache and none were provided.
     None,
 }
 
@@ -28,7 +28,7 @@ impl CheckResponse {
     pub fn get(&self) -> Option<&Credentials> {
         match self {
             Self::Cached(credentials) => Some(credentials.as_ref()),
-            Self::OnRequest(credentials) => Some(credentials.as_ref()),
+            Self::Uncached(credentials) => Some(credentials.as_ref()),
             Self::None => None,
         }
     }
@@ -59,17 +59,20 @@ impl CredentialsCache {
         (NetLoc::from(url), username)
     }
 
-    /// Return the credentials that should be used for a request, if any.
+    /// Return the credentials that should be used for a URL, if any.
     ///
-    /// If complete credentials are already present on the request, they will be returned.
+    /// The [`Url`] is not checked for credentials. Existing credentials should be extracted and passed
+    /// separately.
+    ///
+    /// If complete credentials are provided, they will be returned as [`CheckResponse::Existing`]
     /// If the credentials are partial, i.e. missing a password, the cache will be checked
     /// for a corresponding entry.
-    pub(crate) fn check_request(&self, request: &Request) -> CheckResponse {
+    pub(crate) fn check(&self, url: &Url, credentials: Option<Credentials>) -> CheckResponse {
         let store = self.store.lock().unwrap();
 
-        let credentials = Credentials::from_request(request).map(Arc::new);
+        let credentials = credentials.map(Arc::new);
         let key = CredentialsCache::key(
-            request.url(),
+            url,
             credentials
                 .as_ref()
                 .and_then(|credentials| credentials.username().map(str::to_string)),
@@ -77,27 +80,31 @@ impl CredentialsCache {
 
         if let Some(credentials) = credentials {
             if credentials.password().is_some() {
-                debug!("Request already has password, skipping cache");
+                trace!("Existing credentials include password, skipping cache");
                 // No need to look-up, we have a password already
-                return CheckResponse::OnRequest(credentials);
+                return CheckResponse::Uncached(credentials);
             }
-            debug!("No password found on request, checking cache");
+            trace!("Existing credentials missing password, checking cache");
             let existing = store.get(&key);
             existing
                 .cloned()
                 .map(CheckResponse::Cached)
-                .unwrap_or(CheckResponse::OnRequest(credentials))
+                .inspect(|_| trace!("Found cached credentials."))
+                .unwrap_or_else(|| {
+                    trace!("No credentials in cache, using existing credentials");
+                    CheckResponse::Uncached(credentials)
+                })
         } else {
-            debug!("No credentials on request, checking cache");
-            let credentials = store.get(&key).cloned();
-            if credentials.is_some() {
-                debug!("Found cached credentials: {credentials:?}");
-            } else {
-                debug!("No credentials in cache");
-            }
-            credentials
+            trace!("No credentials on request, checking cache...");
+            store
+                .get(&key)
+                .cloned()
                 .map(CheckResponse::Cached)
-                .unwrap_or(CheckResponse::None)
+                .inspect(|_| trace!("Found cached credentials."))
+                .unwrap_or_else(|| {
+                    trace!("No credentials in cache.");
+                    CheckResponse::None
+                })
         }
     }
 
