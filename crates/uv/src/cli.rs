@@ -272,10 +272,10 @@ pub(crate) struct PipCompileArgs {
     #[clap(long, value_enum, default_value_t = ResolutionMode::default(), env = "UV_RESOLUTION")]
     pub(crate) resolution: ResolutionMode,
 
-    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre", env = "UV_PRERELEASE")]
+    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), env = "UV_PRERELEASE")]
     pub(crate) prerelease: PreReleaseMode,
 
-    #[clap(long, hide = true, conflicts_with = "prerelease")]
+    #[clap(long, hide = true)]
     pub(crate) pre: bool,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
@@ -348,7 +348,7 @@ pub(crate) struct PipCompileArgs {
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
-    #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
+    #[clap(long)]
     pub(crate) no_index: bool,
 
     /// The strategy to use when resolving against multiple index URLs.
@@ -544,7 +544,7 @@ pub(crate) struct PipSyncArgs {
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
-    #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
+    #[clap(long)]
     pub(crate) no_index: bool,
 
     /// The strategy to use when resolving against multiple index URLs.
@@ -589,13 +589,7 @@ pub(crate) struct PipSyncArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(
-        long,
-        short,
-        verbatim_doc_comment,
-        conflicts_with = "system",
-        group = "discovery"
-    )]
+    #[clap(long, short, verbatim_doc_comment, group = "discovery")]
     pub(crate) python: Option<String>,
 
     /// Install packages into the system Python.
@@ -606,12 +600,7 @@ pub(crate) struct PipSyncArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(
-        long,
-        conflicts_with = "python",
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery"
-    )]
+    #[clap(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
     pub(crate) system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -788,10 +777,10 @@ pub(crate) struct PipInstallArgs {
     #[clap(long, value_enum, default_value_t = ResolutionMode::default(), env = "UV_RESOLUTION")]
     pub(crate) resolution: ResolutionMode,
 
-    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), conflicts_with = "pre", env = "UV_PRERELEASE")]
+    #[clap(long, value_enum, default_value_t = PreReleaseMode::default(), env = "UV_PRERELEASE")]
     pub(crate) prerelease: PreReleaseMode,
 
-    #[clap(long, hide = true, conflicts_with = "prerelease")]
+    #[clap(long, hide = true)]
     pub(crate) pre: bool,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
@@ -828,7 +817,7 @@ pub(crate) struct PipInstallArgs {
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
-    #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
+    #[clap(long)]
     pub(crate) no_index: bool,
 
     /// The strategy to use when resolving against multiple index URLs.
@@ -873,13 +862,7 @@ pub(crate) struct PipInstallArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(
-        long,
-        short,
-        verbatim_doc_comment,
-        conflicts_with = "system",
-        group = "discovery"
-    )]
+    #[clap(long, short, verbatim_doc_comment, group = "discovery")]
     pub(crate) python: Option<String>,
 
     /// Install packages into the system Python.
@@ -890,12 +873,7 @@ pub(crate) struct PipInstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(
-        long,
-        conflicts_with = "python",
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery"
-    )]
+    #[clap(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
     pub(crate) system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -1011,13 +989,7 @@ pub(crate) struct PipUninstallArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(
-        long,
-        short,
-        verbatim_doc_comment,
-        conflicts_with = "system",
-        group = "discovery"
-    )]
+    #[clap(long, short, verbatim_doc_comment, group = "discovery")]
     pub(crate) python: Option<String>,
 
     /// Attempt to use `keyring` for authentication for remote requirements files.
@@ -1035,12 +1007,7 @@ pub(crate) struct PipUninstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(
-        long,
-        conflicts_with = "python",
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery"
-    )]
+    #[clap(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
     pub(crate) system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
@@ -1080,13 +1047,7 @@ pub(crate) struct PipFreezeArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(
-        long,
-        short,
-        verbatim_doc_comment,
-        conflicts_with = "system",
-        group = "discovery"
-    )]
+    #[clap(long, short, verbatim_doc_comment, group = "discovery")]
     pub(crate) python: Option<String>,
 
     /// List packages for the system Python.
@@ -1098,12 +1059,7 @@ pub(crate) struct PipFreezeArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(
-        long,
-        conflicts_with = "python",
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery"
-    )]
+    #[clap(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
     pub(crate) system: bool,
 }
 
@@ -1142,13 +1098,7 @@ pub(crate) struct PipListArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(
-        long,
-        short,
-        verbatim_doc_comment,
-        conflicts_with = "system",
-        group = "discovery"
-    )]
+    #[clap(long, short, verbatim_doc_comment, group = "discovery")]
     pub(crate) python: Option<String>,
 
     /// List packages for the system Python.
@@ -1160,12 +1110,7 @@ pub(crate) struct PipListArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(
-        long,
-        conflicts_with = "python",
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery"
-    )]
+    #[clap(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
     pub(crate) system: bool,
 }
 
@@ -1183,13 +1128,7 @@ pub(crate) struct PipCheckArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(
-        long,
-        short,
-        verbatim_doc_comment,
-        conflicts_with = "system",
-        group = "discovery"
-    )]
+    #[clap(long, short, verbatim_doc_comment, group = "discovery")]
     pub(crate) python: Option<String>,
 
     /// List packages for the system Python.
@@ -1201,12 +1140,7 @@ pub(crate) struct PipCheckArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(
-        long,
-        conflicts_with = "python",
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery"
-    )]
+    #[clap(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
     pub(crate) system: bool,
 }
 
@@ -1232,13 +1166,7 @@ pub(crate) struct PipShowArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[clap(
-        long,
-        short,
-        verbatim_doc_comment,
-        conflicts_with = "system",
-        group = "discovery"
-    )]
+    #[clap(long, short, verbatim_doc_comment, group = "discovery")]
     pub(crate) python: Option<String>,
 
     /// List packages for the system Python.
@@ -1250,12 +1178,7 @@ pub(crate) struct PipShowArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[clap(
-        long,
-        conflicts_with = "python",
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery"
-    )]
+    #[clap(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
     pub(crate) system: bool,
 }
 
@@ -1272,13 +1195,7 @@ pub(crate) struct VenvArgs {
     ///
     /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
     /// doesn't look for a Python interpreter on disk.
-    #[clap(
-        long,
-        short,
-        verbatim_doc_comment,
-        conflicts_with = "system",
-        group = "discovery"
-    )]
+    #[clap(long, short, verbatim_doc_comment, group = "discovery")]
     pub(crate) python: Option<String>,
 
     /// Use the system Python to uninstall packages.
@@ -1289,12 +1206,7 @@ pub(crate) struct VenvArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[clap(
-        long,
-        conflicts_with = "python",
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery"
-    )]
+    #[clap(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
     system: bool,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
@@ -1352,7 +1264,7 @@ pub(crate) struct VenvArgs {
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
-    #[clap(long, conflicts_with = "index_url", conflicts_with = "extra_index_url")]
+    #[clap(long)]
     pub(crate) no_index: bool,
 
     /// The strategy to use when resolving against multiple index URLs.
