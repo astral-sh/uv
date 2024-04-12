@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use tracing::{debug, instrument};
 
 use uv_cache::Cache;
-use uv_fs::normalize_path;
 use uv_toolchain::PythonVersion;
 
 use crate::interpreter::InterpreterInfoError;
@@ -52,9 +51,7 @@ pub fn find_requested_python(request: &str, cache: &Cache) -> Result<Option<Inte
         Interpreter::query(executable, cache).map(Some)
     } else {
         // `-p /home/ferris/.local/bin/python3.10`
-        let executable = normalize_path(request);
-
-        Interpreter::query(executable, cache).map(Some)
+        Interpreter::query(request, cache).map(Some)
     }
 }
 

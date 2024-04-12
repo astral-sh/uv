@@ -36,6 +36,8 @@ impl VerbatimUrl {
     }
 
     /// Create a [`VerbatimUrl`] from a file path.
+    ///
+    /// Assumes that the path is absolute.
     pub fn from_path(path: impl AsRef<Path>) -> Self {
         let path = path.as_ref();
 
@@ -76,7 +78,7 @@ impl VerbatimUrl {
         };
 
         // Normalize the path.
-        let path = normalize_path(path);
+        let path = normalize_path(&path);
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);
@@ -110,7 +112,7 @@ impl VerbatimUrl {
         };
 
         // Normalize the path.
-        let path = normalize_path(path);
+        let path = normalize_path(&path);
 
         // Extract the fragment, if it exists.
         let (path, fragment) = split_fragment(&path);

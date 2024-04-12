@@ -84,8 +84,16 @@ pub fn normalize_url_path(path: &str) -> Cow<'_, str> {
 /// Normalize a path, removing things like `.` and `..`.
 ///
 /// Source: <https://github.com/rust-lang/cargo/blob/b48c41aedbd69ee3990d62a0e2006edbb506a480/crates/cargo-util/src/paths.rs#L76C1-L109C2>
-pub fn normalize_path(path: impl AsRef<Path>) -> PathBuf {
-    let mut components = path.as_ref().components().peekable();
+///
+/// CAUTION: Assumes that the path is already absolute.
+///
+/// CAUTION: This does not resolve symlinks (unlike
+/// [`std::fs::canonicalize`]). This may cause incorrect or surprising
+/// behavior at times. This should be used carefully. Unfortunately,
+/// [`std::fs::canonicalize`] can be hard to use correctly, since it can often
+/// fail, or on Windows returns annoying device paths.
+pub fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = path.components().peekable();
     let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().copied() {
         components.next();
         PathBuf::from(c.as_os_str())
@@ -235,7 +243,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalize() {
+    fn normalize_url() {
         if cfg!(windows) {
             assert_eq!(
                 normalize_url_path("/C:/Users/ferris/wheel-0.42.0.tar.gz"),
