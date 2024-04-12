@@ -3088,6 +3088,31 @@ requires-python = "<=3.5"
     Ok(())
 }
 
+/// Use an unknown hash algorithm with `--require-hashes`.
+#[test]
+fn require_hashes_unknown_algorithm() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio==4.0.0 --hash=foo:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unsupported hash algorithm: `foo` (expected one of: `md5`, `sha256`, `sha384`, or `sha512`)
+    "###
+    );
+
+    Ok(())
+}
+
 /// Omit the hash with `--require-hashes`.
 #[test]
 fn require_hashes_missing_hash() -> Result<()> {
@@ -3162,6 +3187,47 @@ fn require_hashes_missing_version() -> Result<()> {
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio
+    "###
+    );
+
+    Ok(())
+}
+
+/// Use a non-`==` operator with `--require-hashes`.
+#[test]
+fn require_hashes_invalid_operator() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio>4.0.0 --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
+    )?;
+
+    // Install without error when `--require-hashes` is omitted.
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.3.0
+    "###
+    );
+
+    // Error when `--require-hashes` is provided.
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: In `--require-hashes` mode, all requirement must have their versions pinned with `==`, but found: anyio>4.0.0
     "###
     );
 
