@@ -18,6 +18,7 @@ workspace = true
 [dependencies]
 distribution-filename = { workspace = true }
 distribution-types = { workspace = true }
+install-wheel-rs = { workspace = true }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 uv-build = { workspace = true }

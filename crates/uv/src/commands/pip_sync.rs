@@ -205,6 +205,7 @@ pub(crate) async fn pip_sync(
         setup_py,
         config_settings,
         build_isolation,
+        link_mode,
         &no_build,
         &no_binary,
     );

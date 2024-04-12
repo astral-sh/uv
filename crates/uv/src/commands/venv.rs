@@ -197,6 +197,8 @@ async fn venv_impl(
             SetupPyStrategy::default(),
             &config_settings,
             BuildIsolation::Isolated,
+            // TODO(konstin): Should there be a link mode option for venv?
+            install_wheel_rs::linker::LinkMode::default(),
             &NoBuild::All,
             &NoBinary::None,
         )

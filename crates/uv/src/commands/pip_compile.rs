@@ -15,6 +15,7 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{IndexLocations, LocalEditable, LocalEditables, Verbatim};
+use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
@@ -262,6 +263,8 @@ pub(crate) async fn pip_compile(
         setup_py,
         &config_settings,
         build_isolation,
+        // TODO(konstin): Should there be a link mode option for compile?
+        LinkMode::default(),
         &no_build,
         &NoBinary::None,
     )
