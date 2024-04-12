@@ -27,7 +27,7 @@ impl RemoveCredentials for Url {
         if without_creds.password().is_some() {
             without_creds.set_password(None).unwrap();
         }
-        if without_creds.username().len() > 0 {
+        if !without_creds.username().is_empty() {
             without_creds.set_username("").unwrap();
         }
         without_creds
