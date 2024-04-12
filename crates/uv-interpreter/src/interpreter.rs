@@ -488,12 +488,10 @@ impl InterpreterInfo {
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
     pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
-        let executable_bytes = executable.as_os_str().as_encoded_bytes();
-
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             "",
-            format!("{}.msgpack", digest(&executable_bytes)),
+            format!("{}.msgpack", digest(&executable)),
         );
 
         let modified = Timestamp::from_path(uv_fs::canonicalize_executable(executable)?)?;
