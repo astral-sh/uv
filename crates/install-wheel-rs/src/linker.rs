@@ -333,14 +333,17 @@ fn clone_recursive(
                         if reflink::reflink(&from, &tempfile).is_ok() {
                             fs::rename(&tempfile, to)?;
                         } else {
-                            debug!("Failed to clone {} to temporary location {} - attempting to copy files as a fallback", from.display(), tempfile.display());
+                            debug!(
+                                "Failed to clone `{}` to temporary location `{}`, attempting to copy files as a fallback",
+                                from.display(),
+                                tempfile.display());
                             *attempt = Attempt::UseCopyFallback;
                             fs::copy(&from, &to)?;
                         }
                     }
                 } else {
                     debug!(
-                        "Failed to clone {} to {} - attempting to copy files as a fallback",
+                        "Failed to clone `{}` to `{}`, attempting to copy files as a fallback",
                         from.display(),
                         to.display()
                     );
@@ -463,10 +466,20 @@ fn hardlink_wheel_files(
                         if fs::hard_link(path, &tempfile).is_ok() {
                             fs_err::rename(&tempfile, &out_path)?;
                         } else {
+                            debug!(
+                                "Failed to hardlink `{}` to `{}`, attempting to copy files as a fallback",
+                                out_path.display(),
+                                path.display()
+                            );
                             fs::copy(path, &out_path)?;
                             attempt = Attempt::UseCopyFallback;
                         }
                     } else {
+                        debug!(
+                            "Failed to hardlink `{}` to `{}`, attempting to copy files as a fallback",
+                            out_path.display(),
+                            path.display()
+                        );
                         fs::copy(path, &out_path)?;
                         attempt = Attempt::UseCopyFallback;
                     }
