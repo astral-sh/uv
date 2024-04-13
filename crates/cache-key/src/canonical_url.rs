@@ -17,23 +17,6 @@ use crate::cache_key::{CacheKey, CacheKeyHasher};
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct CanonicalUrl(Url);
 
-trait RemoveCredentials {
-    fn without_credentials(&self) -> Url;
-}
-
-impl RemoveCredentials for Url {
-    fn without_credentials(&self) -> Url {
-        let mut without_creds = self.clone();
-        if without_creds.password().is_some() {
-            let _ = without_creds.set_password(None);
-        }
-        if !without_creds.username().is_empty() {
-            let _ = without_creds.set_username("");
-        }
-        without_creds
-    }
-}
-
 impl CanonicalUrl {
     pub fn new(url: &Url) -> Self {
         let mut url = url.clone();
@@ -42,6 +25,15 @@ impl CanonicalUrl {
         if url.cannot_be_a_base() {
             return Self(url);
         }
+
+        // If the URL has no host, then it's not a valid URL anyway.
+        if !url.has_host() {
+            return Self(url);
+        }
+
+        // Strip credentials.
+        url.set_password(None).unwrap();
+        url.set_username("").unwrap();
 
         // Strip a trailing slash.
         if url.path().ends_with('/') {
@@ -96,7 +88,7 @@ impl CacheKey for CanonicalUrl {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
         // possible changes in how the URL crate does hashing.
-        self.0.without_credentials().as_str().cache_key(state);
+        self.0.as_str().cache_key(state);
     }
 }
 
@@ -162,7 +154,7 @@ impl CacheKey for RepositoryUrl {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         // `as_str` gives the serialisation of a url (which has a spec) and so insulates against
         // possible changes in how the URL crate does hashing.
-        self.0.without_credentials().as_str().cache_key(state);
+        self.0.as_str().cache_key(state);
     }
 }
 
