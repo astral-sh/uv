@@ -581,7 +581,6 @@ fn parse_entry(
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
         let requirements_file = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let end = s.cursor();
-        eat_trailing_line(content, s)?;
         RequirementsTxtStatement::Requirements {
             filename: requirements_file.to_string(),
             start,
@@ -590,19 +589,18 @@ fn parse_entry(
     } else if s.eat_if("-c") || s.eat_if("--constraint") {
         let constraints_file = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let end = s.cursor();
-        eat_trailing_line(content, s)?;
         RequirementsTxtStatement::Constraint {
             filename: constraints_file.to_string(),
             start,
             end,
         }
     } else if s.eat_if("-e") || s.eat_if("--editable") {
-        let path_or_url = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
+        let path_or_url = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let editable_requirement = EditableRequirement::parse(path_or_url, working_dir)
             .map_err(|err| err.with_offset(start))?;
         RequirementsTxtStatement::EditableRequirement(editable_requirement)
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let expanded = expand_env_vars(given);
         let url = VerbatimUrl::parse_url(expanded.as_ref())
             .map(|url| url.with_given(given.to_owned()))
@@ -614,7 +612,7 @@ fn parse_entry(
             })?;
         RequirementsTxtStatement::IndexUrl(url)
     } else if s.eat_if("--extra-index-url") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let expanded = expand_env_vars(given);
         let url = VerbatimUrl::parse_url(expanded.as_ref())
             .map(|url| url.with_given(given.to_owned()))
@@ -628,7 +626,7 @@ fn parse_entry(
     } else if s.eat_if("--no-index") {
         RequirementsTxtStatement::NoIndex
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
-        let path_or_url = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
+        let path_or_url = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let path_or_url = FindLink::parse(path_or_url, working_dir).map_err(|err| {
             RequirementsTxtParserError::Url {
                 source: err,
@@ -639,7 +637,7 @@ fn parse_entry(
         })?;
         RequirementsTxtStatement::FindLinks(path_or_url)
     } else if s.eat_if("--no-binary") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
@@ -650,7 +648,7 @@ fn parse_entry(
         })?;
         RequirementsTxtStatement::NoBinary(NoBinary::from_arg(specifier))
     } else if s.eat_if("--only-binary") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r'].contains(&c))?;
+        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
         let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
@@ -801,9 +799,7 @@ fn parse_requirement_and_hashes(
         })?;
 
     let hashes = if has_hashes {
-        let hashes = parse_hashes(content, s)?;
-        eat_trailing_line(content, s)?;
-        hashes
+        parse_hashes(content, s)?
     } else {
         Vec::new()
     };
@@ -1917,8 +1913,195 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @"Nested `requirements` file contains conflicting `--index-url` at <REQUIREMENTS_TXT>:3:1");
+            insta::assert_snapshot!(errors, @"Nested `requirements` file contains conflicting `--index-url` at <REQUIREMENTS_TXT>:2:13");
         });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn comments() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {r"
+            -r ./sibling.txt  # comment
+            --index-url https://test.pypi.org/simple/  # comment
+            --no-binary :all:  # comment
+
+            flask==3.0.0 \
+                --hash=sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef \
+                # comment
+
+            requests==2.26.0 \
+                --hash=sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321 # comment
+
+            black==21.12b0 # comment
+
+            mypy==0.910 \
+              # comment
+        "})?;
+
+        let sibling_txt = temp_dir.child("sibling.txt");
+        sibling_txt.write_str(indoc! {"
+            httpx # comment
+        "})?;
+
+        let requirements = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            &BaseClientBuilder::new(),
+        )
+        .await
+        .unwrap();
+        insta::assert_debug_snapshot!(requirements, @r###"
+        RequirementsTxt {
+            requirements: [
+                RequirementEntry {
+                    requirement: Pep508(
+                        Requirement {
+                            name: PackageName(
+                                "httpx",
+                            ),
+                            extras: [],
+                            version_or_url: None,
+                            marker: None,
+                        },
+                    ),
+                    hashes: [],
+                },
+                RequirementEntry {
+                    requirement: Pep508(
+                        Requirement {
+                            name: PackageName(
+                                "flask",
+                            ),
+                            extras: [],
+                            version_or_url: Some(
+                                VersionSpecifier(
+                                    VersionSpecifiers(
+                                        [
+                                            VersionSpecifier {
+                                                operator: Equal,
+                                                version: "3.0.0",
+                                            },
+                                        ],
+                                    ),
+                                ),
+                            ),
+                            marker: None,
+                        },
+                    ),
+                    hashes: [
+                        "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                    ],
+                },
+                RequirementEntry {
+                    requirement: Pep508(
+                        Requirement {
+                            name: PackageName(
+                                "requests",
+                            ),
+                            extras: [],
+                            version_or_url: Some(
+                                VersionSpecifier(
+                                    VersionSpecifiers(
+                                        [
+                                            VersionSpecifier {
+                                                operator: Equal,
+                                                version: "2.26.0",
+                                            },
+                                        ],
+                                    ),
+                                ),
+                            ),
+                            marker: None,
+                        },
+                    ),
+                    hashes: [
+                        "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+                    ],
+                },
+                RequirementEntry {
+                    requirement: Pep508(
+                        Requirement {
+                            name: PackageName(
+                                "black",
+                            ),
+                            extras: [],
+                            version_or_url: Some(
+                                VersionSpecifier(
+                                    VersionSpecifiers(
+                                        [
+                                            VersionSpecifier {
+                                                operator: Equal,
+                                                version: "21.12b0",
+                                            },
+                                        ],
+                                    ),
+                                ),
+                            ),
+                            marker: None,
+                        },
+                    ),
+                    hashes: [],
+                },
+                RequirementEntry {
+                    requirement: Pep508(
+                        Requirement {
+                            name: PackageName(
+                                "mypy",
+                            ),
+                            extras: [],
+                            version_or_url: Some(
+                                VersionSpecifier(
+                                    VersionSpecifiers(
+                                        [
+                                            VersionSpecifier {
+                                                operator: Equal,
+                                                version: "0.910",
+                                            },
+                                        ],
+                                    ),
+                                ),
+                            ),
+                            marker: None,
+                        },
+                    ),
+                    hashes: [],
+                },
+            ],
+            constraints: [],
+            editables: [],
+            index_url: Some(
+                VerbatimUrl {
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "test.pypi.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/simple/",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://test.pypi.org/simple/",
+                    ),
+                },
+            ),
+            extra_index_urls: [],
+            find_links: [],
+            no_index: false,
+            no_binary: All,
+            only_binary: None,
+        }
+        "###);
 
         Ok(())
     }

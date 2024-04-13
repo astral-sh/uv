@@ -189,6 +189,7 @@ pub(crate) async fn pip_compile(
             (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
+            interpreter.gil_disabled(),
         )?)
     } else {
         Cow::Borrowed(interpreter.tags()?)

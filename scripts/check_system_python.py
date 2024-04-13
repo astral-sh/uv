@@ -8,6 +8,7 @@ To run locally, create a venv with seed packages.
 import argparse
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -107,7 +108,7 @@ if __name__ == "__main__":
             raise Exception("The package `pylint` is installed (but shouldn't be).")
 
         # Create a virtual environment with `uv`.
-        logging.info("Creating virtual environment...")
+        logging.info("Creating virtual environment with `uv`...")
         subprocess.run(
             [uv, "venv", ".venv", "--seed", "--python", sys.executable],
             cwd=temp_dir,
@@ -126,7 +127,7 @@ if __name__ == "__main__":
             check=True,
         )
 
-        logging.info("Installing into virtual environment...")
+        logging.info("Installing into `uv` virtual environment...")
 
         # Disable the `CONDA_PREFIX` and `VIRTUAL_ENV` environment variables, so that
         # we only rely on virtual environment discovery via the `.venv` directory.
@@ -163,6 +164,26 @@ if __name__ == "__main__":
                 "The package `pylint` isn't installed in the virtual environment."
             )
 
+        # Uninstall the package (`pylint`).
+        logging.info("Uninstalling the package `pylint`.")
+        subprocess.run(
+            [uv, "pip", "uninstall", "pylint", "--verbose"],
+            cwd=temp_dir,
+            check=True,
+            env=env,
+        )
+
+        # Ensure that the package (`pylint`) isn't installed in the virtual environment.
+        logging.info("Checking that `pylint` isn't installed.")
+        code = subprocess.run(
+            [executable, "-m", "pip", "show", "pylint"],
+            cwd=temp_dir,
+        )
+        if code.returncode == 0:
+            raise Exception(
+                "The package `pylint` is installed in the virtual environment (but shouldn't be)."
+            )
+
         # Attempt to install NumPy.
         # This ensures that we can successfully install a package with native libraries.
         #
@@ -178,3 +199,31 @@ if __name__ == "__main__":
         # for Python 3.13 (at time of writing).
         if sys.version_info < (3, 13) and sys.implementation.name == "cpython":
             install_package(uv=uv, package="pydantic_core")
+
+        # Next, create a virtual environment with `venv`, to ensure that `uv` can
+        # interoperate with `venv` virtual environments.
+        shutil.rmtree(os.path.join(temp_dir, ".venv"))
+        logging.info("Creating virtual environment with `venv`...")
+        subprocess.run(
+            [sys.executable, "-m", "venv", ".venv"],
+            cwd=temp_dir,
+            check=True,
+        )
+
+        # Install the package (`pylint`) into the virtual environment.
+        logging.info("Installing into `venv` virtual environment...")
+        subprocess.run(
+            [uv, "pip", "install", "pylint", "--verbose"],
+            cwd=temp_dir,
+            check=True,
+            env=env,
+        )
+
+        # Uninstall the package (`pylint`).
+        logging.info("Uninstalling the package `pylint`.")
+        subprocess.run(
+            [uv, "pip", "uninstall", "pylint", "--verbose"],
+            cwd=temp_dir,
+            check=True,
+            env=env,
+        )

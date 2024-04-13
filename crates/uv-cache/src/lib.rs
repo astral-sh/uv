@@ -610,7 +610,7 @@ impl CacheBucket {
             Self::BuiltWheels => "built-wheels-v3",
             Self::FlatIndex => "flat-index-v0",
             Self::Git => "git-v0",
-            Self::Interpreter => "interpreter-v0",
+            Self::Interpreter => "interpreter-v1",
             Self::Simple => "simple-v7",
             Self::Wheels => "wheels-v1",
             Self::Archive => "archive-v0",

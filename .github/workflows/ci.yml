@@ -371,6 +371,31 @@ jobs:
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./uv
 
+  system-test-opensuse:
+    needs: build-binary-linux
+    name: "check system | python on opensuse"
+    runs-on: ubuntu-latest
+    container: opensuse/tumbleweed
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Python"
+        run: zypper install -y python310 which && python3.10 -m ensurepip && mv /usr/bin/python3.10 /usr/bin/python3
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Print Python path"
+        run: echo $(which python3)
+
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv
+
   # Note: rockylinux:8 is a 1-1 code compatible distro to rhel-8
   # rockylinux:8 mimics centos-8 but with added maintenance stability
   # and avoids issues with centos stream uptime concerns
