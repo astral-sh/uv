@@ -25,6 +25,15 @@ pub(crate) struct Cli {
     #[command(subcommand)]
     pub(crate) command: Commands,
 
+    #[command(flatten)]
+    pub(crate) global_args: GlobalArgs,
+
+    #[command(flatten)]
+    pub(crate) cache_args: CacheArgs,
+}
+
+#[derive(Parser, Debug, Clone)]
+pub(crate) struct GlobalArgs {
     /// Do not print any output.
     #[arg(global = true, long, short, conflicts_with = "verbose")]
     pub(crate) quiet: bool,
@@ -61,9 +70,6 @@ pub(crate) struct Cli {
     /// included in your system's certificate store.
     #[arg(global = true, long, env = "UV_NATIVE_TLS")]
     pub(crate) native_tls: bool,
-
-    #[command(flatten)]
-    pub(crate) cache_args: CacheArgs,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]

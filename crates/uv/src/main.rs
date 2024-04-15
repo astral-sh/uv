@@ -105,13 +105,15 @@ async fn run() -> Result<ExitStatus> {
         }
     };
 
+    let globals = cli.global_args;
+
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
     let (duration_layer, _duration_guard) = logging::setup_duration()?;
     #[cfg(not(feature = "tracing-durations-export"))]
     let duration_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(
-        match cli.verbose {
+        match globals.verbose {
             0 => logging::Level::Default,
             1 => logging::Level::Verbose,
             2.. => logging::Level::ExtraVerbose,
@@ -120,23 +122,23 @@ async fn run() -> Result<ExitStatus> {
     )?;
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
-    let printer = if cli.quiet {
+    let printer = if globals.quiet {
         printer::Printer::Quiet
-    } else if cli.verbose > 0 {
+    } else if globals.verbose > 0 {
         printer::Printer::Verbose
     } else {
         printer::Printer::Default
     };
 
     // Configure the `warn!` macros, which control user-facing warnings in the CLI.
-    if !cli.quiet {
+    if !globals.quiet {
         uv_warnings::enable();
     }
 
-    if cli.no_color {
+    if globals.no_color {
         anstream::ColorChoice::write_global(anstream::ColorChoice::Never);
     } else {
-        anstream::ColorChoice::write_global(cli.color.into());
+        anstream::ColorChoice::write_global(globals.color.into());
     }
 
     miette::set_hook(Box::new(|_| {
@@ -243,8 +245,8 @@ async fn run() -> Result<ExitStatus> {
                 args.python_version,
                 args.exclude_newer,
                 args.annotation_style,
-                cli.native_tls,
-                cli.quiet,
+                globals.native_tls,
+                globals.quiet,
                 args.link_mode,
                 cache,
                 printer,
@@ -304,7 +306,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.system,
                 args.break_system_packages,
-                cli.native_tls,
+                globals.native_tls,
                 cache,
                 printer,
             )
@@ -403,7 +405,7 @@ async fn run() -> Result<ExitStatus> {
                 args.python,
                 args.system,
                 args.break_system_packages,
-                cli.native_tls,
+                globals.native_tls,
                 cache,
                 args.dry_run,
                 printer,
@@ -434,7 +436,7 @@ async fn run() -> Result<ExitStatus> {
                 } else {
                     Connectivity::Online
                 },
-                cli.native_tls,
+                globals.native_tls,
                 args.keyring_provider,
                 printer,
             )
@@ -528,7 +530,7 @@ async fn run() -> Result<ExitStatus> {
                 },
                 args.seed,
                 args.exclude_newer,
-                cli.native_tls,
+                globals.native_tls,
                 &cache,
                 printer,
             )
