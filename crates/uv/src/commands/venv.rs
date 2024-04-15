@@ -5,7 +5,7 @@ use std::vec;
 
 use anstream::eprint;
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+
 use itertools::Itertools;
 use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
@@ -21,7 +21,7 @@ use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPy
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
-use uv_resolver::{FlatIndex, InMemoryIndex, OptionsBuilder};
+use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
 
 use crate::commands::ExitStatus;
@@ -41,7 +41,7 @@ pub(crate) async fn venv(
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
@@ -104,7 +104,7 @@ async fn venv_impl(
     system_site_packages: bool,
     connectivity: Connectivity,
     seed: bool,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<ExcludeNewer>,
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
