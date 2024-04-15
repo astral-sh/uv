@@ -81,6 +81,7 @@ pub(crate) async fn pip_compile(
     annotation_style: AnnotationStyle,
     native_tls: bool,
     quiet: bool,
+    link_mode: LinkMode,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -263,8 +264,7 @@ pub(crate) async fn pip_compile(
         setup_py,
         &config_settings,
         build_isolation,
-        // TODO(konstin): Should there be a link mode option for compile?
-        LinkMode::default(),
+        link_mode,
         &no_build,
         &NoBinary::None,
     )

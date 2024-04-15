@@ -12,6 +12,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name, ResolvedDist};
+use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
@@ -32,6 +33,7 @@ use crate::shell::Shell;
 pub(crate) async fn venv(
     path: &Path,
     python_request: Option<&str>,
+    link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
@@ -47,6 +49,7 @@ pub(crate) async fn venv(
     match venv_impl(
         path,
         python_request,
+        link_mode,
         index_locations,
         index_strategy,
         keyring_provider,
@@ -93,6 +96,7 @@ enum VenvError {
 async fn venv_impl(
     path: &Path,
     python_request: Option<&str>,
+    link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProvider,
@@ -197,8 +201,7 @@ async fn venv_impl(
             SetupPyStrategy::default(),
             &config_settings,
             BuildIsolation::Isolated,
-            // TODO(konstin): Should there be a link mode option for venv?
-            install_wheel_rs::linker::LinkMode::default(),
+            link_mode,
             &NoBuild::All,
             &NoBinary::None,
         )
