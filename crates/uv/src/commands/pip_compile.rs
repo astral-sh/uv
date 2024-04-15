@@ -17,9 +17,10 @@ use tracing::debug;
 use distribution_types::{IndexLocations, LocalEditable, LocalEditables, Verbatim};
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
-use uv_auth::{store_credentials_from_url, KeyringProvider};
+use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_configuration::KeyringProviderType;
 use uv_configuration::{
     ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, SetupPyStrategy,
     Upgrade,
@@ -69,7 +70,7 @@ pub(crate) async fn pip_compile(
     include_index_annotation: bool,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
-    keyring_provider: KeyringProvider,
+    keyring_provider: KeyringProviderType,
     setup_py: SetupPyStrategy,
     config_settings: ConfigSettings,
     connectivity: Connectivity,

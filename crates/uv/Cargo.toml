@@ -20,7 +20,7 @@ pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 requirements-txt = { workspace = true, features = ["http"] }
-uv-auth = { workspace = true, features = ["clap"] }
+uv-auth = { workspace = true }
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-dispatch = { workspace = true }

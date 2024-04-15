@@ -19,11 +19,12 @@ use pep508_rs::{MarkerEnvironment, Requirement};
 use platform_tags::Tags;
 use pypi_types::{Metadata23, Yanked};
 use requirements_txt::EditableRequirement;
-use uv_auth::{store_credentials_from_url, KeyringProvider};
+use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
 };
+use uv_configuration::KeyringProviderType;
 use uv_configuration::{
     ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, Reinstall,
     SetupPyStrategy, Upgrade,
@@ -63,7 +64,7 @@ pub(crate) async fn pip_install(
     upgrade: Upgrade,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
-    keyring_provider: KeyringProvider,
+    keyring_provider: KeyringProviderType,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,

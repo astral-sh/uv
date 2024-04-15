@@ -14,11 +14,12 @@ use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
-use uv_auth::{store_credentials_from_url, KeyringProvider};
+use uv_auth::store_credentials_from_url;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
 };
+use uv_configuration::KeyringProviderType;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
 };
@@ -48,7 +49,7 @@ pub(crate) async fn pip_sync(
     require_hashes: bool,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
-    keyring_provider: KeyringProvider,
+    keyring_provider: KeyringProviderType,
     setup_py: SetupPyStrategy,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,

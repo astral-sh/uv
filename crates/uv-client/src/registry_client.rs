@@ -20,9 +20,9 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use platform_tags::Platform;
 use pypi_types::{Metadata23, SimpleJson};
-use uv_auth::KeyringProvider;
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_configuration::IndexStrategy;
+use uv_configuration::KeyringProviderType;
 use uv_normalize::PackageName;
 
 use crate::base_client::{BaseClient, BaseClientBuilder};
@@ -37,7 +37,7 @@ use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     index_strategy: IndexStrategy,
-    keyring_provider: KeyringProvider,
+    keyring_provider: KeyringProviderType,
     native_tls: bool,
     retries: u32,
     connectivity: Connectivity,
@@ -52,7 +52,7 @@ impl RegistryClientBuilder<'_> {
         Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
-            keyring_provider: KeyringProvider::default(),
+            keyring_provider: KeyringProviderType::default(),
             native_tls: false,
             cache,
             connectivity: Connectivity::Online,
@@ -78,7 +78,7 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn keyring_provider(mut self, keyring_provider: KeyringProvider) -> Self {
+    pub fn keyring_provider(mut self, keyring_provider: KeyringProviderType) -> Self {
         self.keyring_provider = keyring_provider;
         self
     }

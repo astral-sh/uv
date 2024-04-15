@@ -13,8 +13,7 @@ use tracing::instrument;
 use distribution_types::IndexLocations;
 use uv_cache::{Cache, Refresh};
 use uv_client::Connectivity;
-use uv_configuration::NoBinary;
-use uv_configuration::{ConfigSettings, NoBuild, Reinstall, SetupPyStrategy, Upgrade};
+use uv_configuration::{ConfigSettings, NoBinary, NoBuild, Reinstall, SetupPyStrategy, Upgrade};
 use uv_requirements::{ExtrasSpecification, RequirementsSource};
 use uv_resolver::{DependencyMode, PreReleaseMode};
 
