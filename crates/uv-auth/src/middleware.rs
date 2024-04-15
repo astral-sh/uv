@@ -132,6 +132,10 @@ impl Middleware for AuthMiddleware {
             request = credentials.authenticate(request);
             new_credentials = Some(Arc::new(credentials));
         // (4) The keyring
+        // N.B. The subprocess keyring provider performs lookups for the exact URL then
+        //      falls back to the host, but we cache the result per host so if a keyring
+        //      implementation returns different credentials for different URLs in the
+        //      same realm we will use the wrong credentials.
         } else if let Some(credentials) = self.keyring.as_ref().and_then(|keyring| {
             if let Some(username) = credentials
                 .get()
