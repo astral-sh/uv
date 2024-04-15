@@ -81,14 +81,19 @@ impl Middleware for AuthMiddleware {
         // to the headers so for display purposes we restore some information
         let url = if tracing::enabled!(tracing::Level::DEBUG) {
             let mut url = request.url().clone();
-            credentials
+            if let Some(username) = credentials
                 .as_ref()
                 .and_then(|credentials| credentials.username())
-                .and_then(|username| url.set_username(username).ok());
-            credentials
+            {
+                let _ = url.set_username(username);
+            };
+            if credentials
                 .as_ref()
                 .and_then(|credentials| credentials.password())
-                .and_then(|_| url.set_password(Some("****")).ok());
+                .is_some()
+            {
+                let _ = url.set_password(Some("****"));
+            };
             url.to_string()
         } else {
             request.url().to_string()

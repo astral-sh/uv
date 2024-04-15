@@ -11,12 +11,22 @@ use url::Url;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Credentials {
+    /// The name of the user for authentication.
+    ///
+    /// Unlike `reqwest`, empty usernames should be encoded as `None` instead of an empty string.
     username: Option<String>,
+    /// The password to use for authentication.
     password: Option<String>,
 }
 
 impl Credentials {
     pub fn new(username: Option<String>, password: Option<String>) -> Self {
+        debug_assert!(
+            username.is_none()
+                || username
+                    .as_ref()
+                    .is_some_and(|username| !username.is_empty())
+        );
         Self { username, password }
     }
 
@@ -31,6 +41,7 @@ impl Credentials {
     pub fn is_empty(&self) -> bool {
         self.password.is_none() && self.username.is_none()
     }
+
     /// Return [`Credentials`] for a [`Url`] from a [`Netrc`] file, if any.
     ///
     /// If a username is provided, it must match the login in the netrc file or [`None`] is returned.
@@ -96,14 +107,21 @@ impl Credentials {
     /// Parse [`Credentials`] from an authorization header, if any.
     ///
     /// Only HTTP Basic Authentication is supported.
+    /// [`None`] will be returned if another authoriziation scheme is detected.
     ///
-    /// [`None`] will be returned if any error is encountered.
+    /// Panics if the authentication is not conformant to the HTTP Basic Authentication scheme:
+    /// - The contents must be base64 encoded
+    /// - There must be a `:` separator
     pub(crate) fn from_header_value(header: &HeaderValue) -> Option<Self> {
         let mut value = header.as_bytes().strip_prefix(b"Basic ")?;
         let mut decoder = DecoderReader::new(&mut value, &BASE64_STANDARD);
         let mut buf = String::new();
-        decoder.read_to_string(&mut buf).ok()?;
-        let (username, password) = buf.split_once(':')?;
+        decoder
+            .read_to_string(&mut buf)
+            .expect("HTTP Basic Authentication should be base64 encoded.");
+        let (username, password) = buf
+            .split_once(':')
+            .expect("HTTP Basic Authentication should include a `:` separator.");
         let username = if username.is_empty() {
             None
         } else {
@@ -118,14 +136,17 @@ impl Credentials {
     }
 
     /// Create an HTTP Basic Authentication header for the credentials.
+    ///
+    /// Panics if the username or password cannot be base64 encoded.
     pub(crate) fn to_header_value(&self) -> HeaderValue {
         // See: <https://github.com/seanmonstar/reqwest/blob/2c11ef000b151c2eebeed2c18a7b81042220c6b0/src/util.rs#L3>
         let mut buf = b"Basic ".to_vec();
         {
             let mut encoder = EncoderWriter::new(&mut buf, &BASE64_STANDARD);
-            let _ = write!(encoder, "{}:", self.username().unwrap_or_default());
+            write!(encoder, "{}:", self.username().unwrap_or_default())
+                .expect("Write to base64 encoder should succeed");
             if let Some(password) = self.password() {
-                let _ = write!(encoder, "{}", password);
+                write!(encoder, "{}", password).expect("Write to base64 encoder should succeed");
             }
         }
         let mut header = HeaderValue::from_bytes(&buf).expect("base64 is always valid HeaderValue");
