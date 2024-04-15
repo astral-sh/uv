@@ -1,7 +1,7 @@
 use std::process::Command;
 
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, instrument};
 use url::Url;
 
 use crate::credentials::Credentials;
@@ -30,7 +30,7 @@ pub enum KeyringProvider {
 
 #[derive(Debug, Error)]
 pub(crate) enum Error {
-    #[error("Url is not valid Keyring target: {0}")]
+    #[error("URL is not valid Keyring target: {0}")]
     NotKeyringTarget(String),
     #[error(transparent)]
     CliFailure(#[from] std::io::Error),
@@ -46,17 +46,17 @@ impl KeyringProvider {
         let host = url.host_str();
         if host.is_none() {
             return Err(Error::NotKeyringTarget(
-                "Should only use keyring for urls with host".to_string(),
+                "Should only use keyring for URLs with host".to_string(),
             ));
         }
 
         if url.password().is_some() {
             return Err(Error::NotKeyringTarget(
-                "Url already contains password - keyring not required".to_string(),
+                "URL already contains password - keyring not required".to_string(),
             ));
         }
 
-        debug!("Checking keyring for credentials for `{}`", url.to_string(),);
+        debug!("Checking keyring for credentials for `{url}`");
         let password = match self {
             Self::Disabled => Ok(None),
             Self::Subprocess => self.fetch_subprocess(url),
@@ -123,7 +123,7 @@ mod test {
         let res = KeyringProvider::Dummy(HashMap::default()).fetch(&url);
         assert!(res.is_err());
         assert!(matches!(res.unwrap_err(),
-                Error::NotKeyringTarget(s) if s == "Url already contains password - keyring not required"));
+                Error::NotKeyringTarget(s) if s == "URL already contains password - keyring not required"));
     }
 
     #[test]
@@ -132,7 +132,7 @@ mod test {
         let res = KeyringProvider::Dummy(HashMap::default()).fetch(&url);
         assert!(res.is_err());
         assert!(matches!(res.unwrap_err(),
-                Error::NotKeyringTarget(s) if s == "Url already contains password - keyring not required"));
+                Error::NotKeyringTarget(s) if s == "URL already contains password - keyring not required"));
     }
 
     #[test]
