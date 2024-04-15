@@ -13,10 +13,10 @@ use crate::credentials::Credentials;
 pub enum KeyringProvider {
     /// Use the `keyring` command to fetch credentials.
     ///
-    /// Tracks attempted URL and Strin
-    Subprocess(Mutex<HashSet<(Url, String)>>),
+    /// Tracks attempted service and username to avoid expensive repeated lookups.
+    Subprocess(Mutex<HashSet<(String, String)>>),
     #[cfg(test)]
-    Dummy(std::collections::HashMap<(Url, &'static str), &'static str>),
+    Dummy(std::collections::HashMap<(String, &'static str), &'static str>),
 }
 
 impl KeyringProvider {
@@ -44,11 +44,27 @@ impl KeyringProvider {
             "Should only use keyring with a username"
         );
 
-        let password = match self {
-            Self::Subprocess(attempts) => self.fetch_subprocess(attempts, url, username),
+        let host = url.host_str()?;
+
+        // Check the full URL first
+        // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
+        let mut password = match self {
+            Self::Subprocess(no_credentials) => {
+                self.fetch_subprocess(no_credentials, url.as_str(), username)
+            }
             #[cfg(test)]
-            Self::Dummy(store) => self.fetch_dummy(store, url, username),
+            Self::Dummy(store) => self.fetch_dummy(store, url.as_str(), username),
         };
+        // And fallback to a check for the host
+        if password.is_none() {
+            password = match self {
+                Self::Subprocess(no_credentials) => {
+                    self.fetch_subprocess(no_credentials, host, username)
+                }
+                #[cfg(test)]
+                Self::Dummy(store) => self.fetch_dummy(store, host, username),
+            };
+        }
 
         password.map(|password| Credentials::new(Some(username.to_string()), Some(password)))
     }
@@ -56,20 +72,23 @@ impl KeyringProvider {
     #[instrument]
     fn fetch_subprocess(
         &self,
-        attempts: &Mutex<HashSet<(Url, String)>>,
-        url: &Url,
+        no_credentials: &Mutex<HashSet<(String, String)>>,
+        service_name: &str,
         username: &str,
     ) -> Option<String> {
-        // Avoid expensive subprocess calls by tracking previous attempts
-        let mut attempts = attempts.lock().unwrap();
-        if !attempts.insert((url.to_owned(), username.to_string())) {
-            debug!("Skipping subprocess lookup for {username} at {url}, already attempted.");
+        // Avoid expensive subprocess calls by tracking previous attempts with no credentials.
+        let mut no_credentials = no_credentials.lock().unwrap();
+        let key = (service_name.to_string(), username.to_string());
+        if no_credentials.contains(&key) {
+            debug!(
+                "Skipping keyring lookup for {username} at {service_name}, already attempted and found no credentials."
+            );
             return None;
         }
 
         let output = Command::new("keyring")
             .arg("get")
-            .arg(url.to_string())
+            .arg(service_name)
             .arg(username)
             .output()
             .inspect_err(|err| warn!("Failure running `keyring` command: {err}"))
@@ -82,6 +101,7 @@ impl KeyringProvider {
                 .ok()
                 .map(|password| password.trim_end().to_string())
         } else {
+            no_credentials.insert(key);
             // On failure, no password was available
             None
         }
@@ -90,13 +110,25 @@ impl KeyringProvider {
     #[cfg(test)]
     fn fetch_dummy(
         &self,
-        store: &std::collections::HashMap<(Url, &'static str), &'static str>,
-        url: &Url,
+        store: &std::collections::HashMap<(String, &'static str), &'static str>,
+        service_name: &str,
         username: &str,
     ) -> Option<String> {
         store
-            .get(&(url.clone(), username))
+            .get(&(service_name.to_string(), username))
             .map(|password| password.to_string())
+    }
+
+    /// Create a new [`KeyringProvider::Dummy`].
+    #[cfg(test)]
+    pub fn dummy<S: Into<String>, T: IntoIterator<Item = ((S, &'static str), &'static str)>>(
+        iter: T,
+    ) -> Self {
+        use std::collections::HashMap;
+
+        Self::Dummy(HashMap::from_iter(iter.into_iter().map(
+            |((service, username), password)| ((service.into(), username), password),
+        )))
     }
 }
 
@@ -144,11 +176,16 @@ mod test {
     #[test]
     fn fetch_url() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring =
-            KeyringProvider::Dummy(HashMap::from_iter([((url.clone(), "user"), "password")]));
-        let credentials = keyring.fetch(&url, "user");
+        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "user"), "password")]);
         assert_eq!(
-            credentials,
+            keyring.fetch(&url, "user"),
+            Some(Credentials::new(
+                Some("user".to_string()),
+                Some("password".to_string())
+            ))
+        );
+        assert_eq!(
+            keyring.fetch(&url.join("test").unwrap(), "user"),
             Some(Credentials::new(
                 Some("user".to_string()),
                 Some("password".to_string())
@@ -159,19 +196,45 @@ mod test {
     #[test]
     fn fetch_url_no_match() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::Dummy(HashMap::from_iter([(
-            (Url::parse("https://other.com").unwrap(), "user"),
-            "password",
-        )]));
+        let keyring = KeyringProvider::dummy([(("other.com", "user"), "password")]);
         let credentials = keyring.fetch(&url, "user");
         assert_eq!(credentials, None);
     }
 
     #[test]
+    fn fetch_url_prefers_url_to_host() {
+        let url = Url::parse("https://example.com/").unwrap();
+        let keyring = KeyringProvider::dummy([
+            ((url.join("foo").unwrap().as_str(), "user"), "password"),
+            ((url.host_str().unwrap(), "user"), "other-password"),
+        ]);
+        assert_eq!(
+            keyring.fetch(&url.join("foo").unwrap(), "user"),
+            Some(Credentials::new(
+                Some("user".to_string()),
+                Some("password".to_string())
+            ))
+        );
+        assert_eq!(
+            keyring.fetch(&url, "user"),
+            Some(Credentials::new(
+                Some("user".to_string()),
+                Some("other-password".to_string())
+            ))
+        );
+        assert_eq!(
+            keyring.fetch(&url.join("bar").unwrap(), "user"),
+            Some(Credentials::new(
+                Some("user".to_string()),
+                Some("other-password".to_string())
+            ))
+        );
+    }
+
+    #[test]
     fn fetch_url_username() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring =
-            KeyringProvider::Dummy(HashMap::from_iter([((url.clone(), "user"), "password")]));
+        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "user"), "password")]);
         let credentials = keyring.fetch(&url, "user");
         assert_eq!(
             credentials,
@@ -185,8 +248,7 @@ mod test {
     #[test]
     fn fetch_url_username_no_match() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring =
-            KeyringProvider::Dummy(HashMap::from_iter([((url.clone(), "foo"), "password")]));
+        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "foo"), "password")]);
         let credentials = keyring.fetch(&url, "bar");
         assert_eq!(credentials, None);
 

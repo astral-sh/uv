@@ -108,6 +108,28 @@ impl CredentialsCache {
         }
     }
 
+    /// Update the cache with the given credentials if none exist.
+    pub(crate) fn set_default(&self, url: &Url, credentials: Arc<Credentials>) {
+        // Do not cache empty credentials
+        if credentials.is_empty() {
+            return;
+        }
+
+        // Insert an entry for requests including the username
+        if let Some(username) = credentials.username() {
+            let key = CredentialsCache::key(url, Some(username.to_string()));
+            if !self.contains_key(&key) {
+                self.insert_entry(key, credentials.clone());
+            }
+        }
+
+        // Insert an entry for requests with no username
+        let key = CredentialsCache::key(url, None);
+        if !self.contains_key(&key) {
+            self.insert_entry(key, credentials.clone());
+        }
+    }
+
     /// Update the cache with the given credentials.
     pub(crate) fn insert(&self, url: &Url, credentials: Arc<Credentials>) {
         // Do not cache empty credentials
@@ -152,5 +174,11 @@ impl CredentialsCache {
         }
 
         false
+    }
+
+    /// Returns true if a key is in the cache.
+    fn contains_key(&self, key: &(NetLoc, Option<String>)) -> bool {
+        let store = self.store.lock().unwrap();
+        store.contains_key(key)
     }
 }
