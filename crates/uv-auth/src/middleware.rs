@@ -146,7 +146,7 @@ impl Middleware for AuthMiddleware {
         }) {
             debug!("Found credentials in keyring for {url}");
             request = credentials.authenticate(request);
-            new_credentials = Some(Arc::new(credentials))
+            new_credentials = Some(Arc::new(credentials));
         // No additional credentials were found
         } else {
             match credentials {
@@ -159,9 +159,15 @@ impl Middleware for AuthMiddleware {
         }
 
         if let Some(credentials) = new_credentials {
-            // Only update the cache with new credentials on a successful request
             let url = request.url().clone();
+
+            // Update the default credentials eagerly since requests are made concurrently
+            // and we want to avoid expensive credential lookups
+            self.cache().set_default(&url, credentials.clone());
+
             let result = next.run(request, extensions).await;
+
+            // Only update the cache with new credentials on a successful request
             if result
                 .as_ref()
                 .is_ok_and(|response| response.error_for_status_ref().is_ok())
@@ -178,7 +184,7 @@ impl Middleware for AuthMiddleware {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+
     use std::io::Write;
 
     use reqwest::Client;
@@ -525,10 +531,10 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
-                    .with_keyring(Some(KeyringProvider::Dummy(HashMap::from_iter([(
-                        (base_url.clone(), username),
+                    .with_keyring(Some(KeyringProvider::dummy([(
+                        (base_url.host_str().unwrap(), username),
                         password,
-                    )])))),
+                    )]))),
             )
             .build();
 
