@@ -56,16 +56,17 @@ jobs:
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
-  cargo-test:
+  cargo-test-unix:
     strategy:
       matrix:
         include:
           # We use the large GitHub actions runners
           # For Ubuntu and Windows, this requires Organization-level configuration
           # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
-          - { os: "ubuntu", runner: "ubuntu-latest-large" }
-          - { os: "windows", runner: "windows-latest-large" }
-          - { os: "macos", runner: "macos-14" }
+          - os: "ubuntu"
+            runner: "ubuntu-latest-large"
+          - os: "macos"
+            runner: "macos-14"
       fail-fast: false
     runs-on:
       labels: ${{ matrix.runner }}
@@ -75,8 +76,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - if: ${{ matrix.os != 'windows' }}
-        uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@v1
 
       - uses: Swatinem/rust-cache@v2
 
@@ -91,17 +91,55 @@ jobs:
 
       - name: "Cargo test"
         run: |
-          cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+          cargo nextest run \
+            --workspace \
+            --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
-      - name: "Smoke test (unix)"
-        if: ${{ matrix.os != 'windows' }}
+      - name: "Smoke test"
         run: |
           uv="./target/debug/uv"
           $uv venv
           $uv pip install ruff
 
-      - name: "Smoke test (windows)"
-        if: ${{ matrix.os == 'windows' }}
+  cargo-test-windows:
+    strategy:
+      matrix:
+        include:
+          - os: "windows"
+            runner: "windows-latest-large"
+      fail-fast: false
+    runs-on:
+      labels: ${{ matrix.runner }}
+    name: "cargo test | ${{ matrix.os }}"
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      # We do not test with Python patch versions on Windows
+      # so we can use `setup-python` instead of our bootstrapping code
+      # this is much faster on the extremely slow GitHub Windows runners.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.8
+            3.9
+            3.10
+            3.11
+            3.12
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: "Cargo test"
+        run: |
+          cargo nextest run --no-default-features --features python,pypi,git --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+
+      - name: "Smoke test"
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
           uv venv
