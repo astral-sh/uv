@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use http::Extensions;
 
 use netrc::Netrc;
@@ -5,7 +7,10 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use tracing::{debug, trace};
 
-use crate::{credentials::Credentials, CredentialsCache, KeyringProvider, CREDENTIALS_CACHE};
+use crate::{
+    cache::CheckResponse, credentials::Credentials, CredentialsCache, KeyringProvider,
+    CREDENTIALS_CACHE,
+};
 
 /// A middleware that adds basic authentication to requests based on the netrc file and the keyring.
 ///
@@ -73,39 +78,45 @@ impl Middleware for AuthMiddleware {
         let url = request.url().clone();
         debug!("Handling request for {url}");
 
-        // Check for credentials attached to this request or in the cache
-        let credentials = self.cache().credentials_for_request(&request);
+        // Check for credentials attached to:
+        // (1) The request itself
+        // (2) The cache
+        let credentials = self.cache().check_request(&request);
 
-        // If there's a password attached to the credentials there's nothing to do
-        if let Some(credentials) = credentials.as_ref() {
-            if credentials.password().is_some() {
-                request = credentials.authenticated_request(request);
-                return next.run(request, extensions).await;
+        // Track credentials that we might want to insert into the cache
+        let mut new_credentials = None;
+
+        // If already authenticated (including a password), don't query other services
+        if credentials.is_authenticated() {
+            match credentials {
+                // If we get credentials from the cache, update the request
+                CheckResponse::Cached(credentials) => request = credentials.authenticate(request),
+                // If we get credentials from the request, we should update the cache
+                // but don't need to update the request
+                CheckResponse::OnRequest(credentials) => {
+                    new_credentials = Some(credentials.clone())
+                }
+                CheckResponse::None => unreachable!("No credentials cannot be authenticated"),
             }
-        }
-        // Otherwise, we should look for credentials
-
-        // (1) In the netrc file
-        if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
+        // Otherwise, look for complete credentials in:
+        // (3) The netrc file
+        } else if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
             debug!("Checking netrc for credentials for `{}`", url.to_string());
             Credentials::from_netrc(
                 netrc,
                 request.url(),
                 credentials
-                    .as_ref()
+                    .get()
                     .and_then(|credentials| credentials.username()),
             )
         }) {
             debug!("Adding credentials from the netrc file to {url}");
-            request = credentials.authenticated_request(request);
-            self.cache().credentials_for_request(&request);
-            return next.run(request, extensions).await;
-        }
-
-        // (2) In the keyring
-        if let Some(credentials) = self.keyring.as_ref().and_then(|keyring| {
+            request = credentials.authenticate(request);
+            new_credentials = Some(Arc::new(credentials));
+        // (4) The keyring
+        } else if let Some(credentials) = self.keyring.as_ref().and_then(|keyring| {
             if let Some(username) = credentials
-                .as_ref()
+                .get()
                 .and_then(|credentials| credentials.username())
             {
                 debug!("Checking keyring for credentials for `{}`", url.to_string());
@@ -119,12 +130,35 @@ impl Middleware for AuthMiddleware {
             }
         }) {
             debug!("Adding credentials from the keyring to {url}");
-            request = credentials.authenticated_request(request);
-            self.cache().credentials_for_request(&request);
-            return next.run(request, extensions).await;
+            request = credentials.authenticate(request);
+            new_credentials = Some(Arc::new(credentials))
+        } else {
+            match credentials {
+                CheckResponse::Cached(credentials) => request = credentials.authenticate(request),
+                CheckResponse::OnRequest(credentials) => {
+                    new_credentials = Some(credentials.clone())
+                }
+                CheckResponse::None => {
+                    debug!("No credentials found.")
+                }
+            }
         }
 
-        next.run(request, extensions).await
+        // Perform the request
+        let result = next.run(request, extensions).await;
+
+        // Only update the cache with new credentials on a successful request
+        if let Some(credentials) = new_credentials {
+            if result
+                .as_ref()
+                .is_ok_and(|response| response.error_for_status_ref().is_ok())
+            {
+                debug!("Updating credentials for {url} to {credentials:?}");
+                self.cache().insert(&url, credentials)
+            };
+        }
+
+        result
     }
 }
 
@@ -198,42 +232,6 @@ mod tests {
         Ok(())
     }
 
-    // #[test(tokio::test)]
-    // async fn test_credentials_prepopulated_from_url() -> Result<(), Error> {
-    //     let username = "user";
-    //     let password = "password";
-
-    //     let server = start_test_server(username, password).await;
-
-    //     let mut url = Url::parse(&server.uri())?;
-    //     url.set_username(username).unwrap();
-    //     url.set_password(Some(password)).unwrap();
-
-    //     let store = AuthenticationStore::new();
-    //     store.set(&url, Credentials::from_url(&url).unwrap());
-
-    //     let client = test_client_builder()
-    //         .with(AuthMiddleware::new().with_authentication_store(store))
-    //         .build();
-
-    //     assert_eq!(
-    //         client.get(server.uri()).send().await?.status(),
-    //         200,
-    //         "Requests should not require credentials"
-    //     );
-    //     assert_eq!(
-    //         client
-    //             .get(format!("{}/foo", server.uri()))
-    //             .send()
-    //             .await?
-    //             .status(),
-    //         200,
-    //         "Requests to paths in the same realm should be authorized"
-    //     );
-
-    //     Ok(())
-    // }
-
     #[test(tokio::test)]
     async fn test_credentials_in_url() -> Result<(), Error> {
         let username = "user";
@@ -280,6 +278,57 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    async fn test_credentials_in_url_username_only() -> Result<(), Error> {
+        let username = "user";
+        let password = "";
+
+        let server = start_test_server(username, password).await;
+        let client = test_client_builder()
+            .with(AuthMiddleware::new().with_cache(CredentialsCache::new()))
+            .build();
+
+        let base_url = Url::parse(&server.uri())?;
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        url.set_password(None).unwrap();
+        assert_eq!(client.get(url).send().await?.status(), 200);
+
+        // Works for a URL without credentials now
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            200,
+            "Subsequent requests should not require credentials"
+        );
+        assert_eq!(
+            client
+                .get(format!("{}/foo", server.uri()))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Subsequent requests can be to different paths in the same realm"
+        );
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        url.set_password(Some("invalid")).unwrap();
+        assert_eq!(
+            client.get(url).send().await?.status(),
+            401,
+            "Credentials in the URL should take precedence and fail"
+        );
+
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            200,
+            "Subsequent requests should not use the invalid credentials"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
     async fn test_netrc_file_default_host() -> Result<(), Error> {
         let username = "user";
         let password = "password";
@@ -311,7 +360,6 @@ mod tests {
             "Credentials in the URL should take precedence and fail"
         );
 
-        debug!("---");
         assert_eq!(
             client.get(server.uri()).send().await?.status(),
             200,

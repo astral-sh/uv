@@ -28,6 +28,9 @@ impl Credentials {
         self.password.as_deref()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.password.is_none() && self.username.is_none()
+    }
     /// Return [`Credentials`] for a [`Url`] from a [`Netrc`] file, if any.
     ///
     /// If a username is provided, it must match the login in the netrc file or [`None`] is returned.
@@ -134,7 +137,7 @@ impl Credentials {
     ///
     /// Any existing credentials will be overridden.
     #[must_use]
-    pub fn authenticated_request(&self, mut request: reqwest::Request) -> reqwest::Request {
+    pub fn authenticate(&self, mut request: reqwest::Request) -> reqwest::Request {
         request
             .headers_mut()
             .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self));
@@ -194,7 +197,7 @@ mod test {
         let credentials = Credentials::from_url(&auth_url).unwrap();
 
         let mut request = reqwest::Request::new(reqwest::Method::GET, url);
-        request = credentials.authenticated_request(request);
+        request = credentials.authenticate(request);
 
         let mut header = request
             .headers()
@@ -216,7 +219,7 @@ mod test {
         let credentials = Credentials::from_url(&auth_url).unwrap();
 
         let mut request = reqwest::Request::new(reqwest::Method::GET, url);
-        request = credentials.authenticated_request(request);
+        request = credentials.authenticate(request);
 
         let mut header = request
             .headers()
@@ -238,7 +241,7 @@ mod test {
         let credentials = Credentials::from_url(&auth_url).unwrap();
 
         let mut request = reqwest::Request::new(reqwest::Method::GET, url);
-        request = credentials.authenticated_request(request);
+        request = credentials.authenticate(request);
 
         let mut header = request
             .headers()

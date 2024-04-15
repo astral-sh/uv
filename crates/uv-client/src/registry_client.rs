@@ -37,7 +37,7 @@ use crate::{CachedClient, CachedClientError, Error, ErrorKind};
 pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     index_strategy: IndexStrategy,
-    keyring_provider: KeyringProviderType,
+    keyring: KeyringProviderType,
     native_tls: bool,
     retries: u32,
     connectivity: Connectivity,
@@ -52,7 +52,7 @@ impl RegistryClientBuilder<'_> {
         Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
-            keyring_provider: KeyringProviderType::default(),
+            keyring: KeyringProviderType::default(),
             native_tls: false,
             cache,
             connectivity: Connectivity::Online,
@@ -78,8 +78,8 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn keyring_provider(mut self, keyring_provider: KeyringProviderType) -> Self {
-        self.keyring_provider = keyring_provider;
+    pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
+        self.keyring = keyring_type;
         self
     }
 
@@ -145,7 +145,7 @@ impl<'a> RegistryClientBuilder<'a> {
             .retries(self.retries)
             .connectivity(self.connectivity)
             .native_tls(self.native_tls)
-            .keyring_provider(self.keyring_provider)
+            .keyring(self.keyring)
             .build();
 
         let timeout = client.timeout();

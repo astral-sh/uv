@@ -148,7 +148,7 @@ async fn venv_impl(
             .native_tls(native_tls)
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
-            .keyring_provider(keyring_provider)
+            .keyring(keyring_provider)
             .connectivity(connectivity)
             .markers(interpreter.markers())
             .platform(interpreter.platform())

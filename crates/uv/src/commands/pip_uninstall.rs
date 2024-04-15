@@ -34,7 +34,7 @@ pub(crate) async fn pip_uninstall(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring_provider(keyring_provider);
+        .keyring(keyring_provider);
 
     // Read all requirements from the provided sources.
     let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
