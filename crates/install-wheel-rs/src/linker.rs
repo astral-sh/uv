@@ -205,6 +205,7 @@ fn parse_scripts(
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum LinkMode {
     /// Clone (i.e., copy-on-write) packages from the wheel into the site packages.
     Clone,

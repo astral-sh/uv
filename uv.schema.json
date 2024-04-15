@@ -1,0 +1,548 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Options",
+  "description": "A `[tool.uv]` section.",
+  "type": "object",
+  "properties": {
+    "cache-dir": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "native-tls": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "no-cache": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "pip": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PipOptions"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "AnnotationStyle": {
+      "description": "Indicate the style of annotation comments, used to indicate the dependencies that requested each package.",
+      "oneOf": [
+        {
+          "description": "Render the annotations on a single, comma-separated line.",
+          "type": "string",
+          "enum": [
+            "line"
+          ]
+        },
+        {
+          "description": "Render each annotation on its own line.",
+          "type": "string",
+          "enum": [
+            "split"
+          ]
+        }
+      ]
+    },
+    "ConfigSettingValue": {
+      "oneOf": [
+        {
+          "description": "The value consists of a single string.",
+          "type": "object",
+          "required": [
+            "String"
+          ],
+          "properties": {
+            "String": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "The value consists of a list of strings.",
+          "type": "object",
+          "required": [
+            "List"
+          ],
+          "properties": {
+            "List": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ConfigSettings": {
+      "description": "Settings to pass to a PEP 517 build backend, structured as a map from (string) key to string or list of strings.\n\nSee: <https://peps.python.org/pep-0517/#config-settings>",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/ConfigSettingValue"
+      }
+    },
+    "ExcludeNewer": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2}))?$"
+    },
+    "ExtraName": {
+      "description": "The normalized name of an extra dependency group.\n\nConverts the name to lowercase and collapses any run of the characters `-`, `_` and `.` down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.\n\nSee: - <https://peps.python.org/pep-0685/#specification/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
+      "type": "string"
+    },
+    "FlatIndexLocation": {
+      "type": "string"
+    },
+    "IndexStrategy": {
+      "oneOf": [
+        {
+          "description": "Only use results from the first index that returns a match for a given package name.\n\nWhile this differs from pip's behavior, it's the default index strategy as it's the most secure.",
+          "type": "string",
+          "enum": [
+            "first-match"
+          ]
+        },
+        {
+          "description": "Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next.\n\nIn this strategy, we look for every package across all indexes. When resolving, we attempt to use versions from the indexes in order, such that we exhaust all available versions from the first index before moving on to the next. Further, if a version is found to be incompatible in the first index, we do not reconsider that version in subsequent indexes, even if the secondary index might contain compatible versions (e.g., variants of the same versions with different ABI tags or Python version constraints).\n\nSee: https://peps.python.org/pep-0708/",
+          "type": "string",
+          "enum": [
+            "unsafe-any-match"
+          ]
+        }
+      ]
+    },
+    "IndexUrl": {
+      "type": "string"
+    },
+    "KeyringProviderType": {
+      "description": "Keyring provider type to use for credential lookup.",
+      "oneOf": [
+        {
+          "description": "Do not use keyring for credential lookup.",
+          "type": "string",
+          "enum": [
+            "disabled"
+          ]
+        },
+        {
+          "description": "Use the `keyring` command for credential lookup.",
+          "type": "string",
+          "enum": [
+            "subprocess"
+          ]
+        }
+      ]
+    },
+    "LinkMode": {
+      "oneOf": [
+        {
+          "description": "Clone (i.e., copy-on-write) packages from the wheel into the site packages.",
+          "type": "string",
+          "enum": [
+            "clone"
+          ]
+        },
+        {
+          "description": "Copy packages from the wheel into the site packages.",
+          "type": "string",
+          "enum": [
+            "copy"
+          ]
+        },
+        {
+          "description": "Hard link packages from the wheel into the site packages.",
+          "type": "string",
+          "enum": [
+            "hardlink"
+          ]
+        }
+      ]
+    },
+    "PackageName": {
+      "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses any run of the characters `-`, `_` and `.` down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
+      "type": "string"
+    },
+    "PackageNameSpecifier": {
+      "type": "string",
+      "pattern": "^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
+    },
+    "PipOptions": {
+      "description": "A `[tool.uv.pip]` section.",
+      "type": "object",
+      "properties": {
+        "all-extras": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "annotation-style": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AnnotationStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "break-system-packages": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "compile-bytecode": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "config-settings": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ConfigSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "custom-compile-command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "emit-find-links": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "emit-index-annotation": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "emit-index-url": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "emit-marker-expression": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "exclude-newer": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ExcludeNewer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "extra": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/ExtraName"
+          }
+        },
+        "extra-index-url": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/IndexUrl"
+          }
+        },
+        "find-links": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/FlatIndexLocation"
+          }
+        },
+        "generate-hashes": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "index-strategy": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexStrategy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "index-url": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexUrl"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "keyring-provider": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/KeyringProviderType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "legacy-setup-py": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "link-mode": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LinkMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "no-annotate": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no-binary": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/PackageNameSpecifier"
+          }
+        },
+        "no-build": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no-build-isolation": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no-deps": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no-emit-package": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
+        },
+        "no-header": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no-index": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no-strip-extras": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "offline": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "only-binary": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/PackageNameSpecifier"
+          }
+        },
+        "output-file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prerelease": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PreReleaseMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "python": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "python-version": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PythonVersion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "require-hashes": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "resolution": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResolutionMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "strict": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "system": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "PreReleaseMode": {
+      "oneOf": [
+        {
+          "description": "Disallow all pre-release versions.",
+          "type": "string",
+          "enum": [
+            "disallow"
+          ]
+        },
+        {
+          "description": "Allow all pre-release versions.",
+          "type": "string",
+          "enum": [
+            "allow"
+          ]
+        },
+        {
+          "description": "Allow pre-release versions if all versions of a package are pre-release.",
+          "type": "string",
+          "enum": [
+            "if-necessary"
+          ]
+        },
+        {
+          "description": "Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements.",
+          "type": "string",
+          "enum": [
+            "explicit"
+          ]
+        },
+        {
+          "description": "Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements.",
+          "type": "string",
+          "enum": [
+            "if-necessary-or-explicit"
+          ]
+        }
+      ]
+    },
+    "PythonVersion": {
+      "type": "string"
+    },
+    "ResolutionMode": {
+      "oneOf": [
+        {
+          "description": "Resolve the highest compatible version of each package.",
+          "type": "string",
+          "enum": [
+            "highest"
+          ]
+        },
+        {
+          "description": "Resolve the lowest compatible version of each package.",
+          "type": "string",
+          "enum": [
+            "lowest"
+          ]
+        },
+        {
+          "description": "Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies.",
+          "type": "string",
+          "enum": [
+            "lowest-direct"
+          ]
+        }
+      ]
+    }
+  }
+}

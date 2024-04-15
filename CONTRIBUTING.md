@@ -8,7 +8,7 @@ We have issues labeled as [Good First Issue](https://github.com/astral-sh/uv/iss
 
 ### Linux
 
-On Ubuntu and other Debian-based distributions, you can install the C compiler and CMake with
+On Ubuntu and other Debian-based distributions, you can install the C compiler and CMake with:
 
 ```shell
 sudo apt install build-essential cmake
@@ -16,7 +16,7 @@ sudo apt install build-essential cmake
 
 ### macOS
 
-CMake may be installed with Homebrew:
+You can install CMake with Homebrew:
 
 ```shell
 brew install cmake
@@ -26,12 +26,13 @@ See the [Python](#python) section for instructions on installing the Python vers
 
 ### Windows
 
-You can install CMake from the [installers](https://cmake.org/download/) or with `pipx install cmake`
-(make sure that the pipx install path is in `PATH`, pipx complains if it isn't).
+You can install CMake from the [installers](https://cmake.org/download/) or with `pipx install cmake`.
 
 ## Testing
 
 For running tests, we recommend [nextest](https://nexte.st/).
+
+If tests fail due to a mismatch in the JSON Schema, run: `cargo dev generate-json-schema`.
 
 ### Python
 
@@ -87,7 +88,7 @@ python -m scripts.bench \
     ./scripts/requirements/jupyter.in --benchmark resolve-cold --min-runs 20
 ```
 
-### Analysing concurrency
+### Analyzing concurrency
 
 You can use [tracing-durations-export](https://github.com/konstin/tracing-durations-export) to visualize parallel requests and find any spots where uv is CPU-bound. Example usage, with `uv` and `uv-dev` respectively:
 
@@ -104,7 +105,7 @@ RUST_LOG=uv=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run -
 You can enable `trace` level logging using the `RUST_LOG` environment variable, i.e.
 
 ```shell
-RUST_LOG=trace uv …
+RUST_LOG=trace uv
 ```
 
 ## Releases

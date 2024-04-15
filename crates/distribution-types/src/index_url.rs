@@ -27,6 +27,21 @@ pub enum IndexUrl {
     Path(VerbatimUrl),
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for IndexUrl {
+    fn schema_name() -> String {
+        "IndexUrl".to_string()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
+    }
+}
+
 impl IndexUrl {
     /// Return the raw URL for the index.
     pub fn url(&self) -> &Url {
@@ -111,6 +126,21 @@ impl Deref for IndexUrl {
 pub enum FlatIndexLocation {
     Path(PathBuf),
     Url(Url),
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for FlatIndexLocation {
+    fn schema_name() -> String {
+        "FlatIndexLocation".to_string()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
+    }
 }
 
 impl FromStr for FlatIndexLocation {

@@ -984,6 +984,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "diff"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
+
+[[package]]
 name = "difflib"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1051,6 +1057,7 @@ dependencies = [
  "pypi-types",
  "rkyv",
  "rustc-hash",
+ "schemars",
  "serde",
  "serde_json",
  "thiserror",
@@ -1802,6 +1809,7 @@ dependencies = [
  "reflink-copy",
  "regex",
  "rustc-hash",
+ "schemars",
  "serde",
  "serde_json",
  "sha2",
@@ -2653,6 +2661,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pretty_assertions"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af7cee1a6c8a5b9208b3cb1061f10c0cb689087b3d8ce85fb9d2dd7a29b6ba66"
+dependencies = [
+ "diff",
+ "yansi",
+]
+
+[[package]]
 name = "priority-queue"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2714,7 +2732,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset 0.9.1",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.1",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",
@@ -4455,6 +4473,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "rust-netrc",
+ "schemars",
  "serde",
  "tempfile",
  "test-log",
@@ -4577,6 +4596,7 @@ dependencies = [
  "itertools 0.12.1",
  "pep508_rs",
  "rustc-hash",
+ "schemars",
  "serde",
  "serde_json",
  "uv-auth",
@@ -4605,8 +4625,10 @@ dependencies = [
  "pep508_rs",
  "petgraph",
  "poloto",
+ "pretty_assertions",
  "resvg",
  "rustc-hash",
+ "schemars",
  "serde",
  "serde_json",
  "tagu",
@@ -4628,6 +4650,7 @@ dependencies = [
  "uv-resolver",
  "uv-toolchain",
  "uv-types",
+ "uv-workspace",
  "walkdir",
 ]
 
@@ -4831,6 +4854,7 @@ name = "uv-normalize"
 version = "0.0.1"
 dependencies = [
  "rkyv",
+ "schemars",
  "serde",
 ]
 
@@ -4898,6 +4922,7 @@ dependencies = [
  "requirements-txt",
  "rkyv",
  "rustc-hash",
+ "schemars",
  "serde",
  "textwrap",
  "thiserror",
@@ -4927,6 +4952,7 @@ dependencies = [
  "pep508_rs",
  "reqwest",
  "reqwest-middleware",
+ "schemars",
  "serde",
  "tempfile",
  "thiserror",
@@ -5006,7 +5032,6 @@ dependencies = [
  "pep508_rs",
  "schemars",
  "serde",
- "serde_json",
  "thiserror",
  "toml",
  "tracing",
@@ -5564,6 +5589,12 @@ name = "xmlparser"
 version = "0.13.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
+
+[[package]]
+name = "yansi"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
 
 [[package]]
 name = "zeroize"

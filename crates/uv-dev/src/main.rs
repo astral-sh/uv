@@ -22,6 +22,7 @@ use crate::build::{build, BuildArgs};
 use crate::clear_compile::ClearCompileArgs;
 use crate::compile::CompileArgs;
 use crate::fetch_python::FetchPythonArgs;
+use crate::generate_json_schema::GenerateJsonSchemaArgs;
 use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::resolve_cli::ResolveCliArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
@@ -46,10 +47,13 @@ mod build;
 mod clear_compile;
 mod compile;
 mod fetch_python;
+mod generate_json_schema;
 mod render_benchmarks;
 mod resolve_cli;
 mod resolve_many;
 mod wheel_metadata;
+
+const ROOT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
 
 #[derive(Parser)]
 enum Cli {
@@ -76,6 +80,8 @@ enum Cli {
     ClearCompile(ClearCompileArgs),
     /// Fetch Python versions for testing
     FetchPython(FetchPythonArgs),
+    /// Generate JSON schema for the TOML configuration file.
+    GenerateJSONSchema(GenerateJsonSchemaArgs),
 }
 
 #[instrument] // Anchor span to check for overhead
@@ -97,6 +103,7 @@ async fn run() -> Result<()> {
         Cli::Compile(args) => compile::compile(args).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
         Cli::FetchPython(args) => fetch_python::fetch_python(args).await?,
+        Cli::GenerateJSONSchema(args) => generate_json_schema::main(&args)?,
     }
     Ok(())
 }

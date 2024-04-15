@@ -12,14 +12,15 @@ use crate::{validate_and_normalize_owned, validate_and_normalize_ref, InvalidNam
 /// down to a single `-`, e.g., `---`, `.`, and `__` all get converted to just `-`.
 ///
 /// See: <https://packaging.python.org/en/latest/specifications/name-normalization/>
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize),
     archive(check_bytes),
     archive_attr(derive(Debug))
 )]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PackageName(String);
 
 impl PackageName {

@@ -40,6 +40,7 @@ use crate::{Manifest, ResolveError};
     feature = "serde",
     serde(deny_unknown_fields, rename_all = "kebab-case")
 )]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum AnnotationStyle {
     /// Render the annotations on a single, comma-separated line.
     Line,

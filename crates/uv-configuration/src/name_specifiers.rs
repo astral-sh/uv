@@ -59,6 +59,29 @@ impl<'de> serde::Deserialize<'de> for PackageNameSpecifier {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for PackageNameSpecifier {
+    fn schema_name() -> String {
+        "PackageNameSpecifier".to_string()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            string: Some(Box::new(schemars::schema::StringValidation {
+                // See: https://packaging.python.org/en/latest/specifications/name-normalization/#name-format
+                pattern: Some(
+                    r"^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
+                        .to_string(),
+                ),
+                ..schemars::schema::StringValidation::default()
+            })),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
+    }
+}
+
 /// Package name specification.
 ///
 /// Consumes both package names and selection directives for compatibility with pip flags

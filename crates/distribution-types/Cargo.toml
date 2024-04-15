@@ -18,10 +18,10 @@ distribution-filename = { workspace = true, features = ["serde"] }
 pep440_rs = { workspace = true }
 pep508_rs = { workspace = true }
 platform-tags = { workspace = true }
+pypi-types = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true, features = ["vendored-openssl"] }
 uv-normalize = { workspace = true }
-pypi-types = { workspace = true }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
@@ -29,6 +29,7 @@ itertools = { workspace = true }
 once_cell = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
+schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
