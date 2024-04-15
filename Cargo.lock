@@ -1582,9 +1582,9 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
 name = "hyper"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "186548d73ac615b32a73aafe38fb4f56c0d340e110e5a200bcadbaf2e199263a"
+checksum = "9f24ce812868d86d19daa79bf3bf9175bc44ea323391147a5e3abde2a283871b"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -2685,7 +2685,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset 0.9.1",
- "parking_lot 0.12.1",
+ "parking_lot 0.11.2",
  "portable-atomic",
  "pyo3-build-config",
  "pyo3-ffi",
