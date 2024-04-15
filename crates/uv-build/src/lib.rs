@@ -81,7 +81,7 @@ pub enum Error {
     Virtualenv(#[from] uv_virtualenv::Error),
     #[error("Failed to run {0}")]
     CommandFailed(PathBuf, #[source] io::Error),
-    #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
+    #[error("{message} with {exit_code}\nstdout:\n{stdout}\nstderr:\n{stderr}\n")]
     BuildBackend {
         message: String,
         exit_code: ExitStatus,
@@ -89,7 +89,7 @@ pub enum Error {
         stderr: String,
     },
     /// Nudge the user towards installing the missing dev library
-    #[error("{message} with {exit_code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---")]
+    #[error("{message} with {exit_code}\nstdout:\n{stdout}\nstderr:\n{stderr}\n")]
     MissingHeader {
         message: String,
         exit_code: ExitStatus,
@@ -182,6 +182,9 @@ impl Error {
                 },
             };
         }
+
+        let stdout = stdout.lines().map(|line| format!(" | {line}")).join("\n");
+        let stderr = stderr.lines().map(|line| format!(" | {line}")).join("\n");
 
         Self::BuildBackend {
             message,
