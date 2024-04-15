@@ -71,6 +71,7 @@ impl KeyringProvider {
     ///
     /// See pip's implementation
     /// <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L102>
+    #[instrument]
     fn fetch_subprocess(&self, url: &Url) -> Result<Option<String>, Error> {
         let output = match Command::new("keyring")
             .arg("get")
