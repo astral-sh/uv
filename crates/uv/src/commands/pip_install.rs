@@ -255,6 +255,7 @@ pub(crate) async fn pip_install(
         setup_py,
         config_settings,
         build_isolation,
+        link_mode,
         &no_build,
         &no_binary,
     )
@@ -382,6 +383,7 @@ pub(crate) async fn pip_install(
             setup_py,
             config_settings,
             build_isolation,
+            link_mode,
             &no_build,
             &no_binary,
         )

@@ -323,6 +323,15 @@ pub(crate) struct PipCompileArgs {
     #[clap(long)]
     pub(crate) refresh_package: Vec<PackageName>,
 
+    /// The method to use when installing packages from the global cache.
+    ///
+    /// This option is only used when creating build environments for source distributions.
+    ///
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Windows.
+    #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
+    pub(crate) link_mode: install_wheel_rs::linker::LinkMode,
+
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
     /// The index given by this flag is given lower priority than all other
@@ -1238,6 +1247,15 @@ pub(crate) struct VenvArgs {
     /// behavior of `uv` commands.
     #[clap(long)]
     pub(crate) system_site_packages: bool,
+
+    /// The method to use when installing packages from the global cache.
+    ///
+    /// This option is only used for installing seed packages.
+    ///
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Windows.
+    #[clap(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
+    pub(crate) link_mode: install_wheel_rs::linker::LinkMode,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///

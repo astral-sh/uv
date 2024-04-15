@@ -35,6 +35,7 @@ pub struct BuildDispatch<'a> {
     in_flight: &'a InFlight,
     setup_py: SetupPyStrategy,
     build_isolation: BuildIsolation<'a>,
+    link_mode: install_wheel_rs::linker::LinkMode,
     no_build: &'a NoBuild,
     no_binary: &'a NoBinary,
     config_settings: &'a ConfigSettings,
@@ -56,6 +57,7 @@ impl<'a> BuildDispatch<'a> {
         setup_py: SetupPyStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
+        link_mode: install_wheel_rs::linker::LinkMode,
         no_build: &'a NoBuild,
         no_binary: &'a NoBinary,
     ) -> Self {
@@ -70,6 +72,7 @@ impl<'a> BuildDispatch<'a> {
             setup_py,
             config_settings,
             build_isolation,
+            link_mode,
             no_build,
             no_binary,
             source_build_context: SourceBuildContext::default(),
@@ -262,6 +265,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 wheels.iter().map(ToString::to_string).join(", ")
             );
             Installer::new(venv)
+                .with_link_mode(self.link_mode)
                 .install(&wheels)
                 .context("Failed to install build dependencies")?;
         }

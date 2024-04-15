@@ -15,6 +15,7 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{IndexLocations, LocalEditable, LocalEditables, Verbatim};
+use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
 use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
@@ -80,6 +81,7 @@ pub(crate) async fn pip_compile(
     annotation_style: AnnotationStyle,
     native_tls: bool,
     quiet: bool,
+    link_mode: LinkMode,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -262,6 +264,7 @@ pub(crate) async fn pip_compile(
         setup_py,
         &config_settings,
         build_isolation,
+        link_mode,
         &no_build,
         &NoBinary::None,
     )

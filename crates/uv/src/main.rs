@@ -245,6 +245,7 @@ async fn run() -> Result<ExitStatus> {
                 args.annotation_style,
                 cli.native_tls,
                 cli.quiet,
+                args.link_mode,
                 cache,
                 printer,
             )
@@ -514,6 +515,7 @@ async fn run() -> Result<ExitStatus> {
             commands::venv(
                 &args.name,
                 args.python.as_deref(),
+                args.link_mode,
                 &index_locations,
                 args.index_strategy,
                 args.keyring_provider,
