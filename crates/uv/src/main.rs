@@ -110,7 +110,11 @@ async fn run() -> Result<ExitStatus> {
     };
 
     // Load the workspace settings.
-    let workspace = uv_workspace::Workspace::find(env::current_dir()?)?;
+    let workspace = if let Some(config_file) = cli.config_file.as_ref() {
+        Some(uv_workspace::Workspace::from_file(config_file)?)
+    } else {
+        uv_workspace::Workspace::find(env::current_dir()?)?
+    };
 
     // Resolve the global settings.
     let globals = GlobalSettings::resolve(cli.global_args, workspace.as_ref());

@@ -30,6 +30,10 @@ pub(crate) struct Cli {
 
     #[command(flatten)]
     pub(crate) cache_args: CacheArgs,
+
+    /// The path to a `pyproject.toml` or `uv.toml` file to use for configuration.
+    #[arg(long, short, env = "UV_CONFIG_FILE", hide = true)]
+    pub(crate) config_file: Option<PathBuf>,
 }
 
 #[derive(Parser, Debug, Clone)]
