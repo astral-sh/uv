@@ -1,6 +1,4 @@
-use chrono::{DateTime, Utc};
-
-use crate::{DependencyMode, PreReleaseMode, ResolutionMode};
+use crate::{DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 
 /// Options for resolving a manifest.
 #[derive(Debug, Default, Copy, Clone)]
@@ -8,7 +6,7 @@ pub struct Options {
     pub resolution_mode: ResolutionMode,
     pub prerelease_mode: PreReleaseMode,
     pub dependency_mode: DependencyMode,
-    pub exclude_newer: Option<DateTime<Utc>>,
+    pub exclude_newer: Option<ExcludeNewer>,
 }
 
 /// Builder for [`Options`].
@@ -17,7 +15,7 @@ pub struct OptionsBuilder {
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
     dependency_mode: DependencyMode,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<ExcludeNewer>,
 }
 
 impl OptionsBuilder {
@@ -49,7 +47,7 @@ impl OptionsBuilder {
 
     /// Sets the exclusion date.
     #[must_use]
-    pub fn exclude_newer(mut self, exclude_newer: Option<DateTime<Utc>>) -> Self {
+    pub fn exclude_newer(mut self, exclude_newer: Option<ExcludeNewer>) -> Self {
         self.exclude_newer = exclude_newer;
         self
     }

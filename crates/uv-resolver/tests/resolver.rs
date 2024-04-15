@@ -18,7 +18,7 @@ use uv_client::RegistryClientBuilder;
 use uv_configuration::{BuildKind, Constraints, NoBinary, NoBuild, Overrides, SetupPyStrategy};
 use uv_interpreter::{find_default_python, Interpreter, PythonEnvironment};
 use uv_resolver::{
-    DisplayResolutionGraph, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
+    DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
     OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{
@@ -26,10 +26,12 @@ use uv_types::{
 };
 
 // Exclude any packages uploaded after this date.
-static EXCLUDE_NEWER: Lazy<DateTime<Utc>> = Lazy::new(|| {
-    DateTime::parse_from_rfc3339("2023-11-18T12:00:00Z")
-        .unwrap()
-        .with_timezone(&Utc)
+static EXCLUDE_NEWER: Lazy<ExcludeNewer> = Lazy::new(|| {
+    ExcludeNewer::from(
+        DateTime::parse_from_rfc3339("2023-11-18T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc),
+    )
 });
 
 struct DummyContext {

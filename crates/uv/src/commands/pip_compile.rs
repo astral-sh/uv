@@ -8,7 +8,6 @@ use std::str::FromStr;
 
 use anstream::{eprint, AutoStream, StripStream};
 use anyhow::{anyhow, Context, Result};
-use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
@@ -35,8 +34,9 @@ use uv_requirements::{
     RequirementsSource, RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, DisplayResolutionGraph, Exclusions, FlatIndex, InMemoryIndex,
-    Manifest, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode, Resolver,
+    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, Exclusions, FlatIndex,
+    InMemoryIndex, Manifest, OptionsBuilder, PreReleaseMode, PythonRequirement, ResolutionMode,
+    Resolver,
 };
 use uv_toolchain::PythonVersion;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
@@ -77,7 +77,7 @@ pub(crate) async fn pip_compile(
     no_build_isolation: bool,
     no_build: NoBuild,
     python_version: Option<PythonVersion>,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<ExcludeNewer>,
     annotation_style: AnnotationStyle,
     native_tls: bool,
     quiet: bool,

@@ -1,11 +1,9 @@
 use std::future::Future;
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 
 use distribution_types::{Dist, IndexLocations};
 use platform_tags::Tags;
-
 use uv_client::RegistryClient;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
@@ -16,6 +14,7 @@ use crate::flat_index::FlatIndex;
 use crate::python_requirement::PythonRequirement;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
+use crate::ExcludeNewer;
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
 pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
@@ -84,7 +83,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext + Send + Sync> {
     python_requirement: PythonRequirement,
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<ExcludeNewer>,
     no_binary: NoBinary,
     no_build: NoBuild,
 }
@@ -100,7 +99,7 @@ impl<'a, Context: BuildContext + Send + Sync> DefaultResolverProvider<'a, Contex
         python_requirement: PythonRequirement,
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
-        exclude_newer: Option<DateTime<Utc>>,
+        exclude_newer: Option<ExcludeNewer>,
         no_binary: &'a NoBinary,
         no_build: &'a NoBuild,
     ) -> Self {

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
-use chrono::{DateTime, Utc};
+
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
@@ -38,8 +38,8 @@ use uv_requirements::{
     RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
-    DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, OptionsBuilder,
-    PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
+    DependencyMode, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
+    OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -75,7 +75,7 @@ pub(crate) async fn pip_install(
     no_build: NoBuild,
     no_binary: NoBinary,
     strict: bool,
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<ExcludeNewer>,
     python: Option<String>,
     system: bool,
     break_system_packages: bool,

@@ -1,7 +1,6 @@
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::sync::OnceLock;
 
-use chrono::{DateTime, Utc};
 use rkyv::{de::deserializers::SharedDeserializeMap, Deserialize};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
@@ -21,7 +20,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{python_requirement::PythonRequirement, yanks::AllowedYanks};
+use crate::{python_requirement::PythonRequirement, yanks::AllowedYanks, ExcludeNewer};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -49,7 +48,7 @@ impl VersionMap {
         python_requirement: &PythonRequirement,
         allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
-        exclude_newer: Option<&DateTime<Utc>>,
+        exclude_newer: Option<&ExcludeNewer>,
         flat_index: Option<FlatDistributions>,
         no_binary: &NoBinary,
         no_build: &NoBuild,
@@ -304,7 +303,7 @@ struct VersionMapLazy {
     /// exists) is satisfied or not.
     python_requirement: PythonRequirement,
     /// Whether files newer than this timestamp should be excluded or not.
-    exclude_newer: Option<DateTime<Utc>>,
+    exclude_newer: Option<ExcludeNewer>,
     /// Which yanked versions are allowed
     allowed_yanks: FxHashSet<Version>,
     /// The hashes of allowed distributions.

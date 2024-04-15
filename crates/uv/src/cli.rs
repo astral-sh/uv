@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::Result;
-use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
+
 use clap::{Args, Parser, Subcommand};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
@@ -11,7 +11,7 @@ use uv_cache::CacheArgs;
 use uv_configuration::IndexStrategy;
 use uv_configuration::{ConfigSettingEntry, PackageNameSpecifier};
 use uv_normalize::{ExtraName, PackageName};
-use uv_resolver::{AnnotationStyle, PreReleaseMode, ResolutionMode};
+use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
 
 use crate::commands::{extra_name_with_clap_error, ListFormat, VersionFormat};
@@ -176,24 +176,6 @@ pub(crate) enum PipCommand {
     Show(PipShowArgs),
     /// Verify installed packages have compatible dependencies.
     Check(PipCheckArgs),
-}
-
-/// Clap parser for the union of date and datetime
-fn date_or_datetime(input: &str) -> Result<DateTime<Utc>, String> {
-    let date_err = match NaiveDate::from_str(input) {
-        Ok(date) => {
-            // Midnight that day is 00:00:00 the next day
-            return Ok((date + Days::new(1)).and_time(NaiveTime::MIN).and_utc());
-        }
-        Err(err) => err,
-    };
-    let datetime_err = match DateTime::parse_from_rfc3339(input) {
-        Ok(datetime) => return Ok(datetime.with_timezone(&Utc)),
-        Err(err) => err,
-    };
-    Err(format!(
-        "Neither a valid date ({date_err}) not a valid datetime ({datetime_err})"
-    ))
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -446,8 +428,8 @@ pub(crate) struct PipCompileArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, value_parser = date_or_datetime)]
-    pub(crate) exclude_newer: Option<DateTime<Utc>>,
+    #[arg(long)]
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
 
     /// Specify a package to omit from the output resolution. Its dependencies will still be
     /// included in the resolution. Equivalent to pip-compile's `--unsafe-package` option.
@@ -965,8 +947,8 @@ pub(crate) struct PipInstallArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, value_parser = date_or_datetime)]
-    pub(crate) exclude_newer: Option<DateTime<Utc>>,
+    #[arg(long)]
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
 
     /// Perform a dry run, i.e., don't actually install anything but resolve the dependencies and
     /// print the resulting plan.
@@ -1309,8 +1291,8 @@ pub(crate) struct VenvArgs {
     ///
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and UTC dates in the same
     /// format (e.g., `2006-12-02`).
-    #[arg(long, value_parser = date_or_datetime)]
-    pub(crate) exclude_newer: Option<DateTime<Utc>>,
+    #[arg(long)]
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
 
     #[command(flatten)]
     pub(crate) compat_args: compat::VenvCompatArgs,

@@ -2253,7 +2253,7 @@ fn compile_exclude_newer() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '2022-04-04+02:00' for '--exclude-newer <EXCLUDE_NEWER>': Neither a valid date (trailing input) not a valid datetime (input contains invalid characters)
+    error: invalid value '2022-04-04+02:00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04+02:00` is neither a valid date (trailing input) nor a valid datetime (input contains invalid characters)
 
     For more information, try '--help'.
     "###
