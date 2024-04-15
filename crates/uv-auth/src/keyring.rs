@@ -10,11 +10,16 @@ use crate::credentials::Credentials;
 /// See pip's implementation for reference
 /// <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L102>
 #[derive(Debug)]
-pub enum KeyringProvider {
+pub struct KeyringProvider {
+    /// Tracks host and username pairs with no credentials to avoid repeated queries.
+    cache: Mutex<HashSet<(String, String)>>,
+    backend: KeyringProviderBackend,
+}
+
+#[derive(Debug)]
+pub enum KeyringProviderBackend {
     /// Use the `keyring` command to fetch credentials.
-    ///
-    /// Tracks attempted service and username to avoid expensive repeated lookups.
-    Subprocess(Mutex<HashSet<(String, String)>>),
+    Subprocess,
     #[cfg(test)]
     Dummy(std::collections::HashMap<(String, &'static str), &'static str>),
 }
@@ -22,7 +27,10 @@ pub enum KeyringProvider {
 impl KeyringProvider {
     /// Create a new [`KeyringProvider::Subprocess`].
     pub fn subprocess() -> Self {
-        Self::Subprocess(Mutex::new(HashSet::new()))
+        Self {
+            cache: Mutex::new(HashSet::new()),
+            backend: KeyringProviderBackend::Subprocess,
+        }
     }
 
     /// Fetch credentials for the given [`Url`] from the keyring.
@@ -46,46 +54,50 @@ impl KeyringProvider {
 
         let host = url.host_str()?;
 
+        // Avoid expensive lookups by tracking previous attempts with no credentials.
+        // N.B. We cache missing credentials per host so no credentials are found for
+        //      a host but would return credentials for some other URL in the same realm
+        //      we may not find the credentials depending on which URL we see first.
+        //      This behavior avoids adding ~80ms to every request when the subprocess keyring
+        //      provider is being used, but makes assumptions about the typical keyring
+        //      use-cases.
+        let mut cache = self.cache.lock().unwrap();
+
+        let key = (host.to_string(), username.to_string());
+        if cache.contains(&key) {
+            debug!(
+                "Skipping keyring lookup for {username} at {host}, already attempted and found no credentials."
+            );
+            return None;
+        }
+
         // Check the full URL first
         // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
-        let mut password = match self {
-            Self::Subprocess(no_credentials) => {
-                self.fetch_subprocess(no_credentials, url.as_str(), username)
-            }
+        let mut password = match self.backend {
+            KeyringProviderBackend::Subprocess => self.fetch_subprocess(url.as_str(), username),
             #[cfg(test)]
-            Self::Dummy(store) => self.fetch_dummy(store, url.as_str(), username),
+            KeyringProviderBackend::Dummy(ref store) => {
+                self.fetch_dummy(store, url.as_str(), username)
+            }
         };
         // And fallback to a check for the host
         if password.is_none() {
-            password = match self {
-                Self::Subprocess(no_credentials) => {
-                    self.fetch_subprocess(no_credentials, host, username)
-                }
+            password = match self.backend {
+                KeyringProviderBackend::Subprocess => self.fetch_subprocess(host, username),
                 #[cfg(test)]
-                Self::Dummy(store) => self.fetch_dummy(store, host, username),
+                KeyringProviderBackend::Dummy(ref store) => self.fetch_dummy(store, host, username),
             };
+        }
+
+        if password.is_none() {
+            cache.insert(key);
         }
 
         password.map(|password| Credentials::new(Some(username.to_string()), Some(password)))
     }
 
     #[instrument]
-    fn fetch_subprocess(
-        &self,
-        no_credentials: &Mutex<HashSet<(String, String)>>,
-        service_name: &str,
-        username: &str,
-    ) -> Option<String> {
-        // Avoid expensive subprocess calls by tracking previous attempts with no credentials.
-        let mut no_credentials = no_credentials.lock().unwrap();
-        let key = (service_name.to_string(), username.to_string());
-        if no_credentials.contains(&key) {
-            debug!(
-                "Skipping keyring lookup for {username} at {service_name}, already attempted and found no credentials."
-            );
-            return None;
-        }
-
+    fn fetch_subprocess(&self, service_name: &str, username: &str) -> Option<String> {
         let output = Command::new("keyring")
             .arg("get")
             .arg(service_name)
@@ -101,7 +113,6 @@ impl KeyringProvider {
                 .ok()
                 .map(|password| password.trim_end().to_string())
         } else {
-            no_credentials.insert(key);
             // On failure, no password was available
             None
         }
@@ -119,29 +130,42 @@ impl KeyringProvider {
             .map(|password| password.to_string())
     }
 
-    /// Create a new [`KeyringProvider::Dummy`].
+    /// Create a new provider with [`KeyringProviderBackend::Dummy`].
     #[cfg(test)]
     pub fn dummy<S: Into<String>, T: IntoIterator<Item = ((S, &'static str), &'static str)>>(
         iter: T,
     ) -> Self {
         use std::collections::HashMap;
 
-        Self::Dummy(HashMap::from_iter(iter.into_iter().map(
-            |((service, username), password)| ((service.into(), username), password),
-        )))
+        Self {
+            cache: Mutex::new(HashSet::new()),
+            backend: KeyringProviderBackend::Dummy(HashMap::from_iter(
+                iter.into_iter()
+                    .map(|((service, username), password)| ((service.into(), username), password)),
+            )),
+        }
+    }
+
+    /// Create a new provider with no credentials available.
+    #[cfg(test)]
+    pub fn empty() -> Self {
+        use std::collections::HashMap;
+
+        Self {
+            cache: Mutex::new(HashSet::new()),
+            backend: KeyringProviderBackend::Dummy(HashMap::new()),
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
-
     use super::*;
 
     #[test]
     fn fetch_url_no_host() {
         let url = Url::parse("file:/etc/bin/").unwrap();
-        let keyring = KeyringProvider::Dummy(HashMap::default());
+        let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
         let result = std::panic::catch_unwind(|| keyring.fetch(&url, "user"));
         assert!(result.is_err());
@@ -150,7 +174,7 @@ mod test {
     #[test]
     fn fetch_url_with_password() {
         let url = Url::parse("https://user:password@example.com").unwrap();
-        let keyring = KeyringProvider::Dummy(HashMap::default());
+        let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
         let result = std::panic::catch_unwind(|| keyring.fetch(&url, url.username()));
         assert!(result.is_err());
@@ -159,7 +183,7 @@ mod test {
     #[test]
     fn fetch_url_with_no_username() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::Dummy(HashMap::default());
+        let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
         let result = std::panic::catch_unwind(|| keyring.fetch(&url, url.username()));
         assert!(result.is_err());
@@ -168,7 +192,7 @@ mod test {
     #[test]
     fn fetch_url_no_auth() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::Dummy(HashMap::default());
+        let keyring = KeyringProvider::empty();
         let credentials = keyring.fetch(&url, "user");
         assert!(credentials.is_none());
     }
@@ -229,6 +253,22 @@ mod test {
                 Some("other-password".to_string())
             ))
         );
+    }
+
+    /// Demonstrates "incorrect" behavior in our cache which avoids an expensive fetch of
+    /// credentials for _every_ request URL at the cost of inconsistent behavior when
+    /// credentials are not scoped to a realm.
+    #[test]
+    fn fetch_url_caches_based_on_host() {
+        let url = Url::parse("https://example.com/").unwrap();
+        let keyring =
+            KeyringProvider::dummy([((url.join("foo").unwrap().as_str(), "user"), "password")]);
+
+        // If we attempt an unmatching URL first...
+        assert_eq!(keyring.fetch(&url.join("bar").unwrap(), "user"), None);
+
+        // ... we will cache the missing credentials on subsequent attempts
+        assert_eq!(keyring.fetch(&url.join("foo").unwrap(), "user"), None);
     }
 
     #[test]
