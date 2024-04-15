@@ -68,7 +68,7 @@ pub(crate) async fn pip_sync(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring_provider(keyring_provider);
+        .keyring(keyring_provider);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -156,7 +156,7 @@ pub(crate) async fn pip_sync(
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
-        .keyring_provider(keyring_provider)
+        .keyring(keyring_provider)
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
         .build();
