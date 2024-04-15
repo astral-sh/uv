@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.1.32
+
+### Enhancements
+
+- Add a `--require-hashes` command-line setting ([#2824](https://github.com/astral-sh/uv/pull/2824))
+- Add hash-checking support to `install` and `sync` ([#2945](https://github.com/astral-sh/uv/pull/2945))
+- Add support for URL requirements in `--generate-hashes` ([#2952](https://github.com/astral-sh/uv/pull/2952))
+- Allow unnamed requirements for overrides ([#2999](https://github.com/astral-sh/uv/pull/2999))
+- Enforce and backtrack on invalid versions in source metadata ([#2954](https://github.com/astral-sh/uv/pull/2954))
+- Fall back to distributions without hashes in resolver ([#2949](https://github.com/astral-sh/uv/pull/2949))
+- Implement `--emit-index-annotation` to annotate source index for each package ([#2926](https://github.com/astral-sh/uv/pull/2926))
+- Log hard-link failures ([#3015](https://github.com/astral-sh/uv/pull/3015))
+- Support free-threaded python ([#2805](https://github.com/astral-sh/uv/pull/2805))
+- Support unnamed requirements in `--require-hashes` ([#2993](https://github.com/astral-sh/uv/pull/2993))
+- Respect link mode for builds, in `uv pip compile` and for `uv venv` seed packages ([#3016](https://github.com/astral-sh/uv/pull/3016))
+- Force color for build error messages ([#3032](https://github.com/astral-sh/uv/pull/3032))
+- Surface invalid metadata as hints in error reports ([#2850](https://github.com/astral-sh/uv/pull/2850))
+
+### Configuration
+
+- Add `UV_BREAK_SYSTEM_PACKAGES` environment variable ([#2995](https://github.com/astral-sh/uv/pull/2995))
+
+### CLI
+
+- Remove some restrictions in argument groups ([#3001](https://github.com/astral-sh/uv/pull/3001))
+
+### Bug fixes
+
+- Add `--find-links` source distributions to the registry cache ([#2986](https://github.com/astral-sh/uv/pull/2986))
+- Allow comments after all `requirements.txt` entries ([#3018](https://github.com/astral-sh/uv/pull/3018))
+- Avoid cache invalidation on credentials renewal ([#3010](https://github.com/astral-sh/uv/pull/3010))
+- Avoid calling `normalize_path` with relative paths that extend beyond the current directory ([#3013](https://github.com/astral-sh/uv/pull/3013))
+- Deduplicate symbolic links between `purelib` and `platlib` ([#3002](https://github.com/astral-sh/uv/pull/3002))
+- Remove unused `--output-file` from `pip install` ([#2975](https://github.com/astral-sh/uv/pull/2975))
+- Strip query string when parsing filename from HTML index ([#2961](https://github.com/astral-sh/uv/pull/2961))
+- Update hashes without `--upgrade` if not present ([#2966](https://github.com/astral-sh/uv/pull/2966))
+
 ## 0.1.31
 
 ### Bug fixes
