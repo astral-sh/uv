@@ -4384,7 +4384,6 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "base64 0.22.0",
- "clap",
  "http",
  "insta",
  "once_cell",
@@ -4514,6 +4513,8 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
+ "uv-auth",
+ "uv-cache",
  "uv-normalize",
 ]
 

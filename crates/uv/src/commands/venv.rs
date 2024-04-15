@@ -13,9 +13,10 @@ use thiserror::Error;
 
 use distribution_types::{DistributionMetadata, IndexLocations, Name, ResolvedDist};
 use pep508_rs::Requirement;
-use uv_auth::{store_credentials_from_url, KeyringProvider};
+use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_configuration::KeyringProviderType;
 use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
@@ -34,7 +35,7 @@ pub(crate) async fn venv(
     python_request: Option<&str>,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
-    keyring_provider: KeyringProvider,
+    keyring_provider: KeyringProviderType,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -95,7 +96,7 @@ async fn venv_impl(
     python_request: Option<&str>,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
-    keyring_provider: KeyringProvider,
+    keyring_provider: KeyringProviderType,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,

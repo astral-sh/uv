@@ -7,9 +7,9 @@ use tracing::debug;
 
 use distribution_types::{InstalledMetadata, Name};
 use pep508_rs::{Requirement, RequirementsTxtRequirement, UnnamedRequirement};
-use uv_auth::KeyringProvider;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
+use uv_configuration::KeyringProviderType;
 use uv_fs::Simplified;
 use uv_interpreter::PythonEnvironment;
 
@@ -27,7 +27,7 @@ pub(crate) async fn pip_uninstall(
     cache: Cache,
     connectivity: Connectivity,
     native_tls: bool,
-    keyring_provider: KeyringProvider,
+    keyring_provider: KeyringProviderType,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();

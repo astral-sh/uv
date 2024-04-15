@@ -1,7 +1,7 @@
 use base64::prelude::BASE64_STANDARD;
 use base64::read::DecoderReader;
 use base64::write::EncoderWriter;
-use netrc::Authenticator;
+
 use netrc::Netrc;
 use reqwest::header::HeaderValue;
 use reqwest::Request;
@@ -11,17 +11,17 @@ use url::Url;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Credentials {
-    username: String,
+    username: Option<String>,
     password: Option<String>,
 }
 
 impl Credentials {
-    pub fn new(username: String, password: Option<String>) -> Self {
+    pub fn new(username: Option<String>, password: Option<String>) -> Self {
         Self { username, password }
     }
 
-    pub fn username(&self) -> &str {
-        &self.username
+    pub fn username(&self) -> Option<&str> {
+        self.username.as_deref()
     }
 
     pub fn password(&self) -> Option<&str> {
@@ -29,15 +29,29 @@ impl Credentials {
     }
 
     /// Return [`Credentials`] for a [`Url`] from a [`Netrc`] file, if any.
-    pub fn from_netrc(netrc: &Netrc, url: &Url) -> Option<Self> {
-        url.host_str()
-            .and_then(|host| netrc.hosts.get(host).or_else(|| netrc.hosts.get("default")))
-            .map(Self::from)
+    ///
+    /// If a username is provided, it must match the login in the netrc file or [`None`] is returned.
+    pub fn from_netrc(netrc: &Netrc, url: &Url, username: Option<&str>) -> Option<Self> {
+        let host = url.host_str()?;
+        let entry = netrc
+            .hosts
+            .get(host)
+            .or_else(|| netrc.hosts.get("default"))?;
+
+        // Ensure the username matches if provided
+        if username.is_some_and(|username| username != entry.login) {
+            return None;
+        };
+
+        Some(Credentials {
+            username: Some(entry.login.clone()),
+            password: Some(entry.password.clone()),
+        })
     }
 
     /// Parse [`Credentials`] from a URL, if any.
     ///
-    /// Returns [`None`] if both `username` and `password` are not populated.
+    /// Returns [`None`] if both [`Url::username`] and [`Url::password`] are not populated.
     pub fn from_url(url: &Url) -> Option<Self> {
         if url.username().is_empty() && url.password().is_none() {
             return None;
@@ -45,9 +59,15 @@ impl Credentials {
         Some(Self {
             // Remove percent-encoding from URL credentials
             // See <https://github.com/pypa/pip/blob/06d21db4ff1ab69665c22a88718a4ea9757ca293/src/pip/_internal/utils/misc.py#L497-L499>
-            username: urlencoding::decode(url.username())
-                .expect("An encoded username should always decode")
-                .into_owned(),
+            username: if url.username().is_empty() {
+                None
+            } else {
+                Some(
+                    urlencoding::decode(url.username())
+                        .expect("An encoded username should always decode")
+                        .into_owned(),
+                )
+            },
             password: url.password().map(|password| {
                 urlencoding::decode(password)
                     .expect("An encoded password should always decode")
@@ -81,12 +101,17 @@ impl Credentials {
         let mut buf = String::new();
         decoder.read_to_string(&mut buf).ok()?;
         let (username, password) = buf.split_once(':')?;
+        let username = if username.is_empty() {
+            None
+        } else {
+            Some(username.to_string())
+        };
         let password = if password.is_empty() {
             None
         } else {
             Some(password.to_string())
         };
-        Some(Self::new(username.to_string(), password))
+        Some(Self::new(username, password))
     }
 
     /// Create an HTTP Basic Authentication header for the credentials.
@@ -95,7 +120,7 @@ impl Credentials {
         let mut buf = b"Basic ".to_vec();
         {
             let mut encoder = EncoderWriter::new(&mut buf, &BASE64_STANDARD);
-            let _ = write!(encoder, "{}:", self.username());
+            let _ = write!(encoder, "{}:", self.username().unwrap_or_default());
             if let Some(password) = self.password() {
                 let _ = write!(encoder, "{}", password);
             }
@@ -114,15 +139,6 @@ impl Credentials {
             .headers_mut()
             .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self));
         request
-    }
-}
-
-impl From<&Authenticator> for Credentials {
-    fn from(auth: &Authenticator) -> Self {
-        Credentials {
-            username: auth.login.clone(),
-            password: Some(auth.password.clone()),
-        }
     }
 }
 
@@ -145,8 +161,28 @@ mod test {
         auth_url.set_username("user").unwrap();
         auth_url.set_password(Some("password")).unwrap();
         let credentials = Credentials::from_url(&auth_url).unwrap();
-        assert_eq!(credentials.username(), "user");
+        assert_eq!(credentials.username(), Some("user"));
         assert_eq!(credentials.password(), Some("password"));
+    }
+
+    #[test]
+    fn from_url_no_username() {
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let mut auth_url = url.clone();
+        auth_url.set_password(Some("password")).unwrap();
+        let credentials = Credentials::from_url(&auth_url).unwrap();
+        assert_eq!(credentials.username(), None);
+        assert_eq!(credentials.password(), Some("password"));
+    }
+
+    #[test]
+    fn from_url_no_password() {
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let mut auth_url = url.clone();
+        auth_url.set_username("user").unwrap();
+        let credentials = Credentials::from_url(&auth_url).unwrap();
+        assert_eq!(credentials.username(), Some("user"));
+        assert_eq!(credentials.password(), None);
     }
 
     #[test]

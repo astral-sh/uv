@@ -6,10 +6,10 @@ use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 use clap::{Args, Parser, Subcommand};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
-use uv_auth::KeyringProvider;
 use uv_cache::CacheArgs;
-use uv_configuration::IndexStrategy;
-use uv_configuration::{ConfigSettingEntry, PackageNameSpecifier};
+use uv_configuration::{
+    ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
+};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
@@ -365,7 +365,7 @@ pub(crate) struct PipCompileArgs {
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
     #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProvider,
+    pub(crate) keyring_provider: KeyringProviderType,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -575,7 +575,7 @@ pub(crate) struct PipSyncArgs {
     /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
     /// `uv` will try to use `keyring` via CLI when this flag is used.
     #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProvider,
+    pub(crate) keyring_provider: KeyringProviderType,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -848,7 +848,7 @@ pub(crate) struct PipInstallArgs {
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
     #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProvider,
+    pub(crate) keyring_provider: KeyringProviderType,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -997,7 +997,7 @@ pub(crate) struct PipUninstallArgs {
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
     #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProvider,
+    pub(crate) keyring_provider: KeyringProviderType,
 
     /// Use the system Python to uninstall packages.
     ///
@@ -1281,7 +1281,7 @@ pub(crate) struct VenvArgs {
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
     #[clap(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProvider,
+    pub(crate) keyring_provider: KeyringProviderType,
 
     /// Run offline, i.e., without accessing the network.
     #[arg(global = true, long)]
