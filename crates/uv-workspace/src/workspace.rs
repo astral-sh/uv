@@ -10,8 +10,8 @@ use crate::{Options, PyProjectToml};
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Workspace {
-    options: Options,
-    root: PathBuf,
+    pub options: Options,
+    pub root: PathBuf,
 }
 
 impl Workspace {

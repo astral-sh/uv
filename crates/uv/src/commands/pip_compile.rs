@@ -79,9 +79,9 @@ pub(crate) async fn pip_compile(
     python_version: Option<PythonVersion>,
     exclude_newer: Option<ExcludeNewer>,
     annotation_style: AnnotationStyle,
+    link_mode: LinkMode,
     native_tls: bool,
     quiet: bool,
-    link_mode: LinkMode,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
