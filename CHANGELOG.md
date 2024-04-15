@@ -12,7 +12,7 @@
 - Fall back to distributions without hashes in resolver ([#2949](https://github.com/astral-sh/uv/pull/2949))
 - Implement `--emit-index-annotation` to annotate source index for each package ([#2926](https://github.com/astral-sh/uv/pull/2926))
 - Log hard-link failures ([#3015](https://github.com/astral-sh/uv/pull/3015))
-- Support free-threaded python ([#2805](https://github.com/astral-sh/uv/pull/2805))
+- Support free-threaded Python ([#2805](https://github.com/astral-sh/uv/pull/2805))
 - Support unnamed requirements in `--require-hashes` ([#2993](https://github.com/astral-sh/uv/pull/2993))
 - Respect link mode for builds, in `uv pip compile` and for `uv venv` seed packages ([#3016](https://github.com/astral-sh/uv/pull/3016))
 - Force color for build error messages ([#3032](https://github.com/astral-sh/uv/pull/3032))
