@@ -560,7 +560,37 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
-        Commands::Run(args) => commands::run(args.command, args.args, args.isolated, &cache).await,
+        Commands::Run(args) => {
+            let requirements = args
+                .with
+                .into_iter()
+                .map(RequirementsSource::from_package)
+                // TODO(zanieb): Consider editable package support. What benefit do these have in an ephemeral
+                //               environment?
+                // .chain(
+                //     args.with_editable
+                //         .into_iter()
+                //         .map(RequirementsSource::Editable),
+                // )
+                // TODO(zanieb): Consider requirements file support, this comes with additional complexity due to
+                //               to the extensive configuration allowed in requirements files
+                // .chain(
+                //     args.with_requirements
+                //         .into_iter()
+                //         .map(RequirementsSource::from_requirements_file),
+                // )
+                .collect::<Vec<_>>();
+
+            commands::run(
+                args.command,
+                args.args,
+                &requirements,
+                args.isolated,
+                &cache,
+                printer,
+            )
+            .await
+        }
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
             command: SelfCommand::Update,
