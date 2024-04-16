@@ -454,17 +454,21 @@ async fn run() -> Result<ExitStatus> {
         ),
         Commands::Pip(PipNamespace {
             command: PipCommand::List(args),
-        }) => commands::pip_list(
-            args.editable,
-            args.exclude_editable,
-            &args.exclude,
-            &args.format,
-            args.strict,
-            args.python.as_deref(),
-            args.system,
-            &cache,
-            printer,
-        ),
+        }) => {
+            args.compat_args.validate()?;
+
+            commands::pip_list(
+                args.editable,
+                args.exclude_editable,
+                &args.exclude,
+                &args.format,
+                args.strict,
+                args.python.as_deref(),
+                args.system,
+                &cache,
+                printer,
+            )
+        }
         Commands::Pip(PipNamespace {
             command: PipCommand::Show(args),
         }) => commands::pip_show(
