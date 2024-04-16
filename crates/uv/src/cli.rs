@@ -111,6 +111,8 @@ pub(crate) enum Commands {
     /// Clear the cache, removing all entries or those linked to specific packages.
     #[clap(hide = true)]
     Clean(CleanArgs),
+    #[clap(hide = true)]
+    Run(RunArgs),
     /// Display uv's version
     Version {
         #[arg(long, value_enum, default_value = "text")]
@@ -1305,6 +1307,17 @@ pub(crate) struct VenvArgs {
 
     #[command(flatten)]
     pub(crate) compat_args: compat::VenvCompatArgs,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct RunArgs {
+    /// Command
+    pub(crate) command: String,
+
+    /// Arguments
+    #[clap(allow_hyphen_values = true)]
+    pub(crate) args: Vec<String>,
 }
 
 #[derive(Args)]
