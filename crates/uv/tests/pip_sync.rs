@@ -1446,13 +1446,18 @@ fn install_registry_source_dist_cached() -> Result<()> {
     parent.create_dir_all()?;
     let venv = create_venv(&parent, &context.cache_dir, "3.12");
 
-    let filters = if cfg!(windows) {
+    let filters: Vec<(&str, &str)> = if cfg!(windows) {
+        // On Windows, the number of files removed is different.
         [("Removed 615 files", "Removed 616 files")]
             .into_iter()
             .chain(context.filters())
             .collect()
     } else {
-        context.filters()
+        // For some Linux distributions, like Gentoo, the number of files removed is different.
+        [("Removed 614 files", "Removed 616 files")]
+            .into_iter()
+            .chain(context.filters())
+            .collect()
     };
     uv_snapshot!(filters, Command::new(get_bin())
         .arg("clean")
