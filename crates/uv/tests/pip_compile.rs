@@ -7785,3 +7785,28 @@ fn emit_index_annotation_multiple_indexes() -> Result<()> {
 
     Ok(())
 }
+
+/// Test error message when direct dependency is an empty set.
+#[test]
+fn no_version_for_direct_dependency() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("pypyp==1,>=1.2")?;
+
+    uv_snapshot!(context.compile()
+        .arg("requirements.in")
+        // Must error before we make any network requests
+        .arg("--offline"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ you require pypyp ∅
+    "###
+    );
+
+    Ok(())
+}
