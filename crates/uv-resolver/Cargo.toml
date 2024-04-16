@@ -48,6 +48,7 @@ petgraph = { workspace = true }
 pubgrub = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
+serde = { workspace = true, optional = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }

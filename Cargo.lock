@@ -1053,6 +1053,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56ce8c6da7551ec6c462cbaf3bfbc75131ebbfa1c944aeaa9dab51ca1c5f0c3b"
 
 [[package]]
+name = "dyn-clone"
+version = "1.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d6ef0072f8a535281e4876be788938b528e9a1d43900b82c2569af7da799125"
+
+[[package]]
 name = "either"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3322,6 +3328,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemars"
+version = "0.8.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45a28f4c49489add4ce10783f7911893516f15afe45d015608d41faca6bc4d29"
+dependencies = [
+ "dyn-clone",
+ "schemars_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "0.8.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c767fd6fa65d9ccf9cf026122c1b555f2ef9a4f0cea69da4d7dbc3e258d30967"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3380,6 +3410,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.58",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85bf8229e7920a9f636479437026331ce11aa132b4dde37d121944a44d6e5f3c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -3729,6 +3770,27 @@ dependencies = [
  "quote",
  "syn 2.0.58",
  "test-case-core",
+]
+
+[[package]]
+name = "test-log"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b319995299c65d522680decf80f2c108d85b861d81dfe340a10d16cee29d9e6"
+dependencies = [
+ "test-log-macros",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "test-log-macros"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8f546451eaa38373f549093fe9fd05e7d2bade739e2ddf834b9968621d60107"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -4356,6 +4418,7 @@ dependencies = [
  "uv-types",
  "uv-virtualenv",
  "uv-warnings",
+ "uv-workspace",
 ]
 
 [[package]]
@@ -4364,13 +4427,15 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "base64 0.22.0",
- "clap",
  "http",
+ "insta",
  "once_cell",
  "reqwest",
  "reqwest-middleware",
  "rust-netrc",
+ "serde",
  "tempfile",
+ "test-log",
  "thiserror",
  "tokio",
  "tracing",
@@ -4492,6 +4557,8 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
+ "uv-auth",
+ "uv-cache",
  "uv-normalize",
 ]
 
@@ -4809,6 +4876,7 @@ dependencies = [
  "requirements-txt",
  "rkyv",
  "rustc-hash",
+ "serde",
  "textwrap",
  "thiserror",
  "tokio",
@@ -4837,6 +4905,7 @@ dependencies = [
  "pep508_rs",
  "reqwest",
  "reqwest-middleware",
+ "serde",
  "tempfile",
  "thiserror",
  "tokio",
@@ -4903,6 +4972,28 @@ dependencies = [
  "once_cell",
  "owo-colors",
  "rustc-hash",
+]
+
+[[package]]
+name = "uv-workspace"
+version = "0.0.1"
+dependencies = [
+ "distribution-types",
+ "fs-err",
+ "install-wheel-rs",
+ "pep508_rs",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "toml",
+ "uv-auth",
+ "uv-configuration",
+ "uv-fs",
+ "uv-normalize",
+ "uv-resolver",
+ "uv-toolchain",
+ "uv-warnings",
 ]
 
 [[package]]

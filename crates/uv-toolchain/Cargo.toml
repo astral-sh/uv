@@ -10,11 +10,11 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true }
 uv-client = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
-pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
@@ -22,6 +22,7 @@ futures = { workspace = true }
 once_cell = {workspace = true}
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
+serde = { workspace = true, optional = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
