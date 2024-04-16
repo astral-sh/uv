@@ -21,7 +21,7 @@ impl PubGrubPriorities {
         match package {
             PubGrubPackage::Root(_) => Some(Reverse(0)),
             PubGrubPackage::Python(_) => Some(Reverse(0)),
-            PubGrubPackage::Package(name, _, _) => self
+            PubGrubPackage::Package { name, .. } => self
                 .0
                 .get(name)
                 .copied()

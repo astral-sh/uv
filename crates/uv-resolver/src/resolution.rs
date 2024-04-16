@@ -95,7 +95,11 @@ impl ResolutionGraph {
         for (package, versions) in &resolution.packages {
             for (version, markers) in versions {
                 match package {
-                    PubGrubPackage::Package(package_name, None, None) => {
+                    PubGrubPackage::Package {
+                        name: package_name,
+                        extra: None,
+                        url: None,
+                    } => {
                         // Create the distribution.
                         let pinned_package =
                             if let Some((editable, _)) = editables.get(package_name) {
@@ -129,7 +133,11 @@ impl ResolutionGraph {
                         });
                         inverse.insert(package_name, index);
                     }
-                    PubGrubPackage::Package(package_name, None, Some(url)) => {
+                    PubGrubPackage::Package {
+                        name: package_name,
+                        extra: None,
+                        url: Some(url),
+                    } => {
                         // Create the distribution.
                         let pinned_package =
                             if let Some((editable, _)) = editables.get(package_name) {
@@ -163,7 +171,11 @@ impl ResolutionGraph {
                         });
                         inverse.insert(package_name, index);
                     }
-                    PubGrubPackage::Package(package_name, Some(extra), None) => {
+                    PubGrubPackage::Package {
+                        name: package_name,
+                        extra: Some(extra),
+                        url: None,
+                    } => {
                         // Validate that the `extra` exists.
                         let dist = PubGrubDistribution::from_registry(package_name, version);
 
@@ -214,7 +226,11 @@ impl ResolutionGraph {
                             }
                         }
                     }
-                    PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
+                    PubGrubPackage::Package {
+                        name: package_name,
+                        extra: Some(extra),
+                        url: Some(url),
+                    } => {
                         // Validate that the `extra` exists.
                         let dist = PubGrubDistribution::from_url(package_name, url);
 

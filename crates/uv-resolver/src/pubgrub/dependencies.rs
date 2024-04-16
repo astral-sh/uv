@@ -54,7 +54,7 @@ impl PubGrubDependencies {
                 let (mut package, version, marker) = result?;
 
                 // Detect self-dependencies.
-                if let PubGrubPackage::Package(name, extra, ..) = &mut package {
+                if let PubGrubPackage::Package { name, extra, .. } = &mut package {
                     if source_name.is_some_and(|source_name| source_name == name) {
                         // Allow, e.g., `black` to depend on `black[colorama]`.
                         if source_extra == extra.as_ref() {
@@ -87,7 +87,7 @@ impl PubGrubDependencies {
                         let (mut package, version, marker) = result?;
 
                         // Detect self-dependencies.
-                        if let PubGrubPackage::Package(name, extra, ..) = &mut package {
+                        if let PubGrubPackage::Package { name, extra, .. } = &mut package {
                             if source_name.is_some_and(|source_name| source_name == name) {
                                 // Allow, e.g., `black` to depend on `black[colorama]`.
                                 if source_extra == extra.as_ref() {
@@ -196,7 +196,11 @@ fn to_pubgrub(
             }
 
             Ok((
-                PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
+                PubGrubPackage::Package {
+                    name: requirement.name.clone(),
+                    extra,
+                    url: Some(expected.clone()),
+                },
                 Range::full(),
                 marker,
             ))

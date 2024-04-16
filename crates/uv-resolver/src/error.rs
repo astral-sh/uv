@@ -202,7 +202,7 @@ impl NoSolutionError {
                         BTreeSet::from([python_requirement.target().deref().clone()]),
                     );
                 }
-                PubGrubPackage::Package(name, ..) => {
+                PubGrubPackage::Package { name, .. } => {
                     // Avoid including available versions for packages that exist in the derivation
                     // tree, but were never visited during resolution. We _may_ have metadata for
                     // these packages, but it's non-deterministic, and omitting them ensures that
@@ -249,7 +249,7 @@ impl NoSolutionError {
     ) -> Self {
         let mut new = FxHashMap::default();
         for package in self.derivation_tree.packages() {
-            if let PubGrubPackage::Package(name, ..) = package {
+            if let PubGrubPackage::Package { name, .. } = package {
                 if let Some(entry) = unavailable_packages.get(name) {
                     let reason = entry.value();
                     new.insert(name.clone(), reason.clone());

@@ -333,7 +333,11 @@ impl<
                             .expect("a package was chosen but we don't have a term.");
 
                         let reason = {
-                            if let PubGrubPackage::Package(ref package_name, _, _) = state.next {
+                            if let PubGrubPackage::Package {
+                                name: ref package_name,
+                                ..
+                            } = state.next
+                            {
                                 // Check if the decision was due to the package being unavailable
                                 self.unavailable_packages.get(package_name).map(
                                     |entry| match *entry {
@@ -558,7 +562,11 @@ impl<
         match package {
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Python(_) => {}
-            PubGrubPackage::Package(package_name, _extra, None) => {
+            PubGrubPackage::Package {
+                name: package_name,
+                url: None,
+                ..
+            } => {
                 // Emit a request to fetch the metadata for this package.
                 if self.index.packages.register(package_name.clone()) {
                     priorities.add(package_name.clone());
@@ -567,7 +575,11 @@ impl<
                         .await?;
                 }
             }
-            PubGrubPackage::Package(package_name, _extra, Some(url)) => {
+            PubGrubPackage::Package {
+                name: package_name,
+                url: Some(url),
+                ..
+            } => {
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(package_name.clone(), url.clone())?;
                 if self.index.distributions.register(dist.package_id()) {
@@ -588,7 +600,12 @@ impl<
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
         for (package, range) in packages {
-            let PubGrubPackage::Package(package_name, _extra, None) = package else {
+            let PubGrubPackage::Package {
+                name: package_name,
+                url: None,
+                ..
+            } = package
+            else {
                 continue;
             };
             request_sink
@@ -631,7 +648,11 @@ impl<
                 }
             }
 
-            PubGrubPackage::Package(package_name, extra, Some(url)) => {
+            PubGrubPackage::Package {
+                name: package_name,
+                extra,
+                url: Some(url),
+            } => {
                 if let Some(extra) = extra {
                     debug!(
                         "Searching for a compatible version of {package_name}[{extra}] @ {url} ({range})",
@@ -697,7 +718,11 @@ impl<
                 Ok(Some(ResolverVersion::Available(version.clone())))
             }
 
-            PubGrubPackage::Package(package_name, extra, None) => {
+            PubGrubPackage::Package {
+                name: package_name,
+                extra,
+                url: None,
+            } => {
                 // Wait for the metadata to be available.
                 let versions_response = self
                     .index
@@ -825,7 +850,7 @@ impl<
             let (ref pkg, _, _) = *dep;
             let name = match *pkg {
                 PubGrubPackage::Root(_) | PubGrubPackage::Python(_) => unreachable!(),
-                PubGrubPackage::Package(ref name, _, _) => name,
+                PubGrubPackage::Package { ref name, .. } => name,
             };
             by_name.entry(name).or_insert(vec![]).push(dep);
         }
@@ -914,7 +939,11 @@ impl<
 
             PubGrubPackage::Python(_) => Ok(Dependencies::Available(Vec::default())),
 
-            PubGrubPackage::Package(package_name, extra, url) => {
+            PubGrubPackage::Package {
+                name: package_name,
+                extra,
+                url,
+            } => {
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
@@ -963,7 +992,11 @@ impl<
                     // If a package has an extra, insert a constraint on the base package.
                     if extra.is_some() {
                         constraints.push(
-                            PubGrubPackage::Package(package_name.clone(), None, url.clone()),
+                            PubGrubPackage::Package {
+                                name: package_name.clone(),
+                                extra: None,
+                                url: url.clone(),
+                            },
                             Range::singleton(version.clone()),
                             None,
                         );
@@ -1026,7 +1059,11 @@ impl<
                 // If a package has an extra, insert a constraint on the base package.
                 if extra.is_some() {
                     constraints.push(
-                        PubGrubPackage::Package(package_name.clone(), None, url.clone()),
+                        PubGrubPackage::Package {
+                            name: package_name.clone(),
+                            extra: None,
+                            url: url.clone(),
+                        },
                         Range::singleton(version.clone()),
                         None,
                     );
@@ -1305,10 +1342,17 @@ impl ResolverState {
                 if package != self_package {
                     continue;
                 }
-                let PubGrubPackage::Package(ref self_name, _, _) = self_package else {
+                let PubGrubPackage::Package {
+                    name: ref self_name,
+                    ..
+                } = self_package
+                else {
                     continue;
                 };
-                let PubGrubPackage::Package(ref dep_name, _, _) = dep_package else {
+                let PubGrubPackage::Package {
+                    name: ref dep_name, ..
+                } = dep_package
+                else {
                     continue;
                 };
                 if self_name == dep_name {

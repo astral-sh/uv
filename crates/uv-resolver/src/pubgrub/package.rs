@@ -47,9 +47,9 @@ pub enum PubGrubPackage {
     //
     // MarkerExpr(PackageName, MarkerTree),
     /// A Python package.
-    Package(
-        PackageName,
-        Option<ExtraName>,
+    Package {
+        name: PackageName,
+        extra: Option<ExtraName>,
         /// The URL of the package, if it was specified in the requirement.
         ///
         /// There are a few challenges that come with URL-based packages, and how they map to
@@ -86,15 +86,15 @@ pub enum PubGrubPackage {
         /// we're going to have a dependency that's provided as a URL, we _need_ to visit the URL
         /// version before the registry version. So we could just error if we visit a URL variant
         /// _after_ a registry variant.
-        Option<VerbatimUrl>,
-    ),
+        url: Option<VerbatimUrl>,
+    },
 }
 
 impl PubGrubPackage {
     /// Create a [`PubGrubPackage`] from a package name and optional extra name.
     pub(crate) fn from_package(name: PackageName, extra: Option<ExtraName>, urls: &Urls) -> Self {
         let url = urls.get(&name).cloned();
-        Self::Package(name, extra, url)
+        Self::Package { name, extra, url }
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -102,7 +102,7 @@ impl PubGrubPackage {
             PubGrubPackage::Root(None) => "<NONE>",
             PubGrubPackage::Root(Some(ref name)) => name.as_ref(),
             PubGrubPackage::Python(_) => "<PYTHON>",
-            PubGrubPackage::Package(ref name, _, _) => name.as_ref(),
+            PubGrubPackage::Package { ref name, .. } => name.as_ref(),
         }
     }
 }
@@ -126,8 +126,14 @@ impl std::fmt::Display for PubGrubPackage {
                 }
             }
             Self::Python(_) => write!(f, "Python"),
-            Self::Package(name, None, ..) => write!(f, "{name}"),
-            Self::Package(name, Some(extra), ..) => {
+            Self::Package {
+                name, extra: None, ..
+            } => write!(f, "{name}"),
+            Self::Package {
+                name,
+                extra: Some(extra),
+                ..
+            } => {
                 write!(f, "{name}[{extra}]")
             }
         }
