@@ -40,12 +40,16 @@ jobs:
         run: pipx run ruff check .
 
   cargo-clippy:
-    name: "cargo clippy"
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: "ubuntu"
+            runner: "ubuntu-latest"
+          - os: "windows"
+            runner: "windows-latest-large"
       fail-fast: false
-    runs-on: ${{ matrix.os }}
+    runs-on: ["${{ matrix.runner }}"]
+    name: "cargo clippy | ${{ matrix.os }}"
     steps:
       - uses: actions/checkout@v4
       - name: "Install Rust toolchain"
