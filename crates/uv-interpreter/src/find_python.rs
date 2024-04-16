@@ -43,27 +43,35 @@ pub fn find_requested_python(request: &str, cache: &Cache) -> Result<Option<Inte
             _ => unreachable!(),
         };
         find_python(selector, cache)
-    } else if request.contains(std::path::MAIN_SEPARATOR)
-        || std::path::PathBuf::from(request).exists()
-    {
-        // `-p /home/ferris/.local/bin/python3.10`
-        let executable = uv_fs::absolutize_path(request.as_ref())?;
-        if executable.is_dir() {
-            let exe = ["bin/python", "Scripts/python.exe"]
-                .iter()
-                .map(|p| executable.join(p))
-                .find(|p| p.is_file());
-            if let Some(executable) = exe {
-                return Interpreter::query(executable, cache).map(Some);
-            }
-        }
-        Interpreter::query(executable, cache).map(Some)
     } else {
-        // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
-        let Some(executable) = find_executable(request)? else {
-            return Ok(None);
-        };
-        Interpreter::query(executable, cache).map(Some)
+        match fs_err::metadata(request) {
+            Ok(metadata) => {
+                // Map from user-provided path to an executable.
+                let path = uv_fs::absolutize_path(request.as_ref())?;
+                let executable = if metadata.is_dir() {
+                    // If the user provided a directory, assume it's a virtual environment.
+                    // `-p /home/ferris/.venv`
+                    if cfg!(windows) {
+                        Cow::Owned(path.join("Scripts/python.exe"))
+                    } else {
+                        Cow::Owned(path.join("bin/python"))
+                    }
+                } else {
+                    // Otherwise, assume it's a Python executable.
+                    // `-p /home/ferris/.local/bin/python3.10`
+                    path
+                };
+                Interpreter::query(executable, cache).map(Some)
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
+                let Some(executable) = find_executable(request)? else {
+                    return Ok(None);
+                };
+                Interpreter::query(executable, cache).map(Some)
+            }
+            Err(err) => return Err(err.into()),
+        }
     }
 }
 
