@@ -137,16 +137,13 @@ impl Middleware for AuthMiddleware {
         //      implementation returns different credentials for different URLs in the
         //      same realm we will use the wrong credentials.
         } else if let Some(credentials) = self.keyring.as_ref().and_then(|keyring| {
-            if let Some(username) = credentials
-                .get()
-                .and_then(|credentials| credentials.username())
-            {
-                debug!("Checking keyring for credentials for {url}");
-                keyring.fetch(request.url(), username)
-            } else {
-                trace!("Skipping keyring lookup for {url} with no username");
-                None
-            }
+            debug!("Checking keyring for credentials for {url}");
+            keyring.fetch(
+                request.url(),
+                credentials
+                    .get()
+                    .and_then(|credentials| credentials.username()),
+            )
         }) {
             debug!("Found credentials in keyring for {url}");
             request = credentials.authenticate(request);
@@ -536,7 +533,7 @@ mod tests {
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
                     .with_keyring(Some(KeyringProvider::dummy([(
-                        (base_url.host_str().unwrap(), username),
+                        (base_url.host_str().unwrap(), Some(username)),
                         password,
                     )]))),
             )
@@ -575,6 +572,41 @@ mod tests {
 
         let mut url = base_url.clone();
         url.set_username("other_user").unwrap();
+        assert_eq!(
+            client.get(url).send().await?.status(),
+            401,
+            "Credentials are not pulled from the keyring when given another username"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_keyring_no_username() -> Result<(), Error> {
+        let username = "";
+        let password = "password";
+        let server = start_test_server(username, password).await;
+        let base_url = Url::parse(&server.uri())?;
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_keyring(Some(KeyringProvider::dummy([(
+                        (base_url.host_str().unwrap(), None),
+                        password,
+                    )]))),
+            )
+            .build();
+
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            200,
+            "Credentials are pulled from the keyring without a username"
+        );
+
+        let mut url = base_url.clone();
+        url.set_username("suser").unwrap();
         assert_eq!(
             client.get(url).send().await?.status(),
             401,

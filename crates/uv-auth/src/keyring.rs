@@ -21,7 +21,7 @@ pub enum KeyringProviderBackend {
     /// Use the `keyring` command to fetch credentials.
     Subprocess,
     #[cfg(test)]
-    Dummy(std::collections::HashMap<(String, &'static str), &'static str>),
+    Dummy(std::collections::HashMap<(String, Option<&'static str>), &'static str>),
 }
 
 impl KeyringProvider {
@@ -37,7 +37,9 @@ impl KeyringProvider {
     ///
     /// Returns [`None`] if no password was found for the username or if any errors
     /// are encountered in the keyring backend.
-    pub(crate) fn fetch(&self, url: &Url, username: &str) -> Option<Credentials> {
+    ///
+    /// If the username is `None`, the returned credentials will not have a username.
+    pub(crate) fn fetch(&self, url: &Url, username: Option<&str>) -> Option<Credentials> {
         // Validate the request
         debug_assert!(
             url.host_str().is_some(),
@@ -47,10 +49,16 @@ impl KeyringProvider {
             url.password().is_none(),
             "Should only use keyring for urls without a password"
         );
-        debug_assert!(
-            !username.is_empty(),
-            "Should only use keyring with a username"
-        );
+
+        // Clear the username if it's an empty string
+        let username = if username
+            .as_ref()
+            .is_some_and(|username| username.is_empty())
+        {
+            None
+        } else {
+            username
+        };
 
         let host = url.host_str()?;
 
@@ -63,10 +71,10 @@ impl KeyringProvider {
         //      use-cases.
         let mut cache = self.cache.lock().unwrap();
 
-        let key = (host.to_string(), username.to_string());
+        let key = (host.to_string(), username.unwrap_or_default().to_string());
         if cache.contains(&key) {
             debug!(
-                "Skipping keyring lookup for {username} at {host}, already attempted and found no credentials."
+                "Skipping keyring lookup for {}@{host}, already attempted and found no credentials.", username.unwrap_or("unknown")
             );
             return None;
         }
@@ -93,15 +101,15 @@ impl KeyringProvider {
             cache.insert(key);
         }
 
-        password.map(|password| Credentials::new(Some(username.to_string()), Some(password)))
+        password.map(|password| Credentials::new(username.map(str::to_string), Some(password)))
     }
 
     #[instrument]
-    fn fetch_subprocess(&self, service_name: &str, username: &str) -> Option<String> {
+    fn fetch_subprocess(&self, service_name: &str, username: Option<&str>) -> Option<String> {
         let output = Command::new("keyring")
             .arg("get")
             .arg(service_name)
-            .arg(username)
+            .arg(username.unwrap_or("unknown"))
             .output()
             .inspect_err(|err| warn!("Failure running `keyring` command: {err}"))
             .ok()?;
@@ -121,9 +129,9 @@ impl KeyringProvider {
     #[cfg(test)]
     fn fetch_dummy(
         &self,
-        store: &std::collections::HashMap<(String, &'static str), &'static str>,
+        store: &std::collections::HashMap<(String, Option<&'static str>), &'static str>,
         service_name: &str,
-        username: &str,
+        username: Option<&str>,
     ) -> Option<String> {
         store
             .get(&(service_name.to_string(), username))
@@ -132,7 +140,10 @@ impl KeyringProvider {
 
     /// Create a new provider with [`KeyringProviderBackend::Dummy`].
     #[cfg(test)]
-    pub fn dummy<S: Into<String>, T: IntoIterator<Item = ((S, &'static str), &'static str)>>(
+    pub fn dummy<
+        S: Into<String>,
+        T: IntoIterator<Item = ((S, Option<&'static str>), &'static str)>,
+    >(
         iter: T,
     ) -> Self {
         use std::collections::HashMap;
@@ -167,7 +178,7 @@ mod test {
         let url = Url::parse("file:/etc/bin/").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::catch_unwind(|| keyring.fetch(&url, "user"));
+        let result = std::panic::catch_unwind(|| keyring.fetch(&url, Some("user")));
         assert!(result.is_err());
     }
 
@@ -176,16 +187,7 @@ mod test {
         let url = Url::parse("https://user:password@example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::catch_unwind(|| keyring.fetch(&url, url.username()));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn fetch_url_with_no_username() {
-        let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::empty();
-        // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::catch_unwind(|| keyring.fetch(&url, url.username()));
+        let result = std::panic::catch_unwind(|| keyring.fetch(&url, Some(url.username())));
         assert!(result.is_err());
     }
 
@@ -193,23 +195,24 @@ mod test {
     fn fetch_url_no_auth() {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::empty();
-        let credentials = keyring.fetch(&url, "user");
+        let credentials = keyring.fetch(&url, Some("user"));
         assert!(credentials.is_none());
     }
 
     #[test]
     fn fetch_url() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "user"), "password")]);
+        let keyring =
+            KeyringProvider::dummy([((url.host_str().unwrap(), Some("user")), "password")]);
         assert_eq!(
-            keyring.fetch(&url, "user"),
+            keyring.fetch(&url, Some("user")),
             Some(Credentials::new(
                 Some("user".to_string()),
                 Some("password".to_string())
             ))
         );
         assert_eq!(
-            keyring.fetch(&url.join("test").unwrap(), "user"),
+            keyring.fetch(&url.join("test").unwrap(), Some("user")),
             Some(Credentials::new(
                 Some("user".to_string()),
                 Some("password".to_string())
@@ -218,10 +221,31 @@ mod test {
     }
 
     #[test]
+    fn fetch_url_with_no_username() {
+        let url = Url::parse("https://example.com").unwrap();
+
+        // With "user" required this should always return `None`
+        let keyring =
+            KeyringProvider::dummy([((url.host_str().unwrap(), Some("user")), "password")]);
+        assert_eq!(keyring.fetch(&url, None), None);
+        assert_eq!(keyring.fetch(&url, Some("")), None);
+
+        // Some keyring provides are agnostic to the username, we should not return a username in the credentials
+        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), None), "password")]);
+        assert_eq!(
+            keyring.fetch(&url, None),
+            Some(Credentials::new(None, Some("password".to_string())))
+        );
+        assert_eq!(
+            keyring.fetch(&url, Some("")),
+            Some(Credentials::new(None, Some("password".to_string())))
+        );
+    }
+    #[test]
     fn fetch_url_no_match() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::dummy([(("other.com", "user"), "password")]);
-        let credentials = keyring.fetch(&url, "user");
+        let keyring = KeyringProvider::dummy([(("other.com", Some("user")), "password")]);
+        let credentials = keyring.fetch(&url, Some("user"));
         assert_eq!(credentials, None);
     }
 
@@ -229,25 +253,28 @@ mod test {
     fn fetch_url_prefers_url_to_host() {
         let url = Url::parse("https://example.com/").unwrap();
         let keyring = KeyringProvider::dummy([
-            ((url.join("foo").unwrap().as_str(), "user"), "password"),
-            ((url.host_str().unwrap(), "user"), "other-password"),
+            (
+                (url.join("foo").unwrap().as_str(), Some("user")),
+                "password",
+            ),
+            ((url.host_str().unwrap(), Some("user")), "other-password"),
         ]);
         assert_eq!(
-            keyring.fetch(&url.join("foo").unwrap(), "user"),
+            keyring.fetch(&url.join("foo").unwrap(), Some("user")),
             Some(Credentials::new(
                 Some("user".to_string()),
                 Some("password".to_string())
             ))
         );
         assert_eq!(
-            keyring.fetch(&url, "user"),
+            keyring.fetch(&url, Some("user")),
             Some(Credentials::new(
                 Some("user".to_string()),
                 Some("other-password".to_string())
             ))
         );
         assert_eq!(
-            keyring.fetch(&url.join("bar").unwrap(), "user"),
+            keyring.fetch(&url.join("bar").unwrap(), Some("user")),
             Some(Credentials::new(
                 Some("user".to_string()),
                 Some("other-password".to_string())
@@ -261,21 +288,24 @@ mod test {
     #[test]
     fn fetch_url_caches_based_on_host() {
         let url = Url::parse("https://example.com/").unwrap();
-        let keyring =
-            KeyringProvider::dummy([((url.join("foo").unwrap().as_str(), "user"), "password")]);
+        let keyring = KeyringProvider::dummy([(
+            (url.join("foo").unwrap().as_str(), Some("user")),
+            "password",
+        )]);
 
         // If we attempt an unmatching URL first...
-        assert_eq!(keyring.fetch(&url.join("bar").unwrap(), "user"), None);
+        assert_eq!(keyring.fetch(&url.join("bar").unwrap(), Some("user")), None);
 
         // ... we will cache the missing credentials on subsequent attempts
-        assert_eq!(keyring.fetch(&url.join("foo").unwrap(), "user"), None);
+        assert_eq!(keyring.fetch(&url.join("foo").unwrap(), Some("user")), None);
     }
 
     #[test]
     fn fetch_url_username() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "user"), "password")]);
-        let credentials = keyring.fetch(&url, "user");
+        let keyring =
+            KeyringProvider::dummy([((url.host_str().unwrap(), Some("user")), "password")]);
+        let credentials = keyring.fetch(&url, Some("user"));
         assert_eq!(
             credentials,
             Some(Credentials::new(
@@ -288,13 +318,14 @@ mod test {
     #[test]
     fn fetch_url_username_no_match() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "foo"), "password")]);
-        let credentials = keyring.fetch(&url, "bar");
+        let keyring =
+            KeyringProvider::dummy([((url.host_str().unwrap(), Some("foo")), "password")]);
+        let credentials = keyring.fetch(&url, Some("bar"));
         assert_eq!(credentials, None);
 
         // Still fails if we have `foo` in the URL itself
         let url = Url::parse("https://foo@example.com").unwrap();
-        let credentials = keyring.fetch(&url, "bar");
+        let credentials = keyring.fetch(&url, Some("bar"));
         assert_eq!(credentials, None);
     }
 }
