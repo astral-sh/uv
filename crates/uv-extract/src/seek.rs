@@ -80,7 +80,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin>(
     Ok(())
 }
 
-/// Unzip a `.zip` or `.tar.gz` archive into the target directory, requiring `Seek`.
+/// Unzip a `.zip`, `.tar.gz`, or `.tar.bz2` archive into the target directory, requiring `Seek`.
 pub async fn archive<R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin>(
     reader: R,
     source: impl AsRef<Path>,
@@ -108,6 +108,21 @@ pub async fn archive<R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin>(
         })
     {
         crate::stream::untar_gz(reader, target).await?;
+        return Ok(());
+    }
+
+    // `.tar.bz2`
+    if source
+        .as_ref()
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("bz2"))
+        && source.as_ref().file_stem().is_some_and(|stem| {
+            Path::new(stem)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
+        })
+    {
+        crate::stream::untar_bz2(reader, target).await?;
         return Ok(());
     }
 

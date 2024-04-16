@@ -666,6 +666,42 @@ fn install_sdist_url() -> Result<()> {
     Ok(())
 }
 
+/// Install a package with source archive format `.tar.bz2`.
+#[test]
+fn install_sdist_archive_type_bz2() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // Install a version of Twisted that uses `.tar.bz2`.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("Twisted==20.3.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.txt")
+        .arg("--no-binary")
+        .arg(":all:")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + twisted==20.3.0
+    warning: The package `twisted` requires `zope-interface>=4.4.2`, but it's not installed.
+    warning: The package `twisted` requires `constantly>=15.1`, but it's not installed.
+    warning: The package `twisted` requires `incremental>=16.10.1`, but it's not installed.
+    warning: The package `twisted` requires `automat>=0.3.0`, but it's not installed.
+    warning: The package `twisted` requires `hyperlink>=17.1.1`, but it's not installed.
+    warning: The package `twisted` requires `pyhamcrest!=1.10.0,>=1.9.0`, but it's not installed.
+    warning: The package `twisted` requires `attrs>=19.2.0`, but it's not installed.
+    "###
+    );
+
+    Ok(())
+}
+
 /// Attempt to re-install a package into a virtual environment from a URL. The second install
 /// should be a no-op.
 #[test]

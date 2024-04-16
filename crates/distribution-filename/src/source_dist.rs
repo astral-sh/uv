@@ -19,6 +19,7 @@ use uv_normalize::{InvalidNameError, PackageName};
 pub enum SourceDistExtension {
     Zip,
     TarGz,
+    TarBz2,
 }
 
 impl FromStr for SourceDistExtension {
@@ -28,6 +29,7 @@ impl FromStr for SourceDistExtension {
         Ok(match s {
             "zip" => Self::Zip,
             "tar.gz" => Self::TarGz,
+            "tar.bz2" => Self::TarBz2,
             other => return Err(other.to_string()),
         })
     }
@@ -38,6 +40,7 @@ impl Display for SourceDistExtension {
         match self {
             Self::Zip => f.write_str("zip"),
             Self::TarGz => f.write_str("tar.gz"),
+            Self::TarBz2 => f.write_str("tar.bz2"),
         }
     }
 }
@@ -49,6 +52,9 @@ impl SourceDistExtension {
         }
         if let Some(stem) = filename.strip_suffix(".tar.gz") {
             return Some((stem, Self::TarGz));
+        }
+        if let Some(stem) = filename.strip_suffix(".tar.bz2") {
+            return Some((stem, Self::TarBz2));
         }
         None
     }
@@ -182,7 +188,7 @@ impl Display for SourceDistFilenameError {
 enum SourceDistFilenameErrorKind {
     #[error("Name doesn't start with package name {0}")]
     Filename(PackageName),
-    #[error("Source distributions filenames must end with .zip or .tar.gz")]
+    #[error("Source distributions filenames must end with .zip, .tar.gz, or .tar.bz2")]
     Extension,
     #[error("Version section is invalid")]
     Version(#[from] VersionParseError),
@@ -207,6 +213,7 @@ mod tests {
             "foo-lib-1.2.3.zip",
             "foo-lib-1.2.3a3.zip",
             "foo-lib-1.2.3.tar.gz",
+            "foo-lib-1.2.3.tar.bz2",
         ] {
             assert_eq!(
                 SourceDistFilename::parse(normalized, &PackageName::from_str("foo_lib").unwrap())
