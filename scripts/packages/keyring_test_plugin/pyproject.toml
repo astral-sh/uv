@@ -1,0 +1,22 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "keyring-test-plugin"
+description = "A keyring plugin for testing."
+requires-python = ">=3.7"
+version = "0.1.0"
+keywords = []
+authors = [
+  { name = "Astral Software Inc.", email = "hey@astral.sh" },
+]
+dependencies = [
+  "keyring"
+]
+
+[tool.flit.module]
+name = "keyrings"
+
+[project.entry-points."keyring.backends"]
+AstralTest = "keyrings.test_keyring"
