@@ -43,15 +43,26 @@ pub fn find_requested_python(request: &str, cache: &Cache) -> Result<Option<Inte
             _ => unreachable!(),
         };
         find_python(selector, cache)
-    } else if !request.contains(std::path::MAIN_SEPARATOR) {
+    } else if request.contains(std::path::MAIN_SEPARATOR)
+        || std::path::PathBuf::from(request).exists()
+    {
+        // `-p /home/ferris/.local/bin/python3.10`
+        let executable = uv_fs::absolutize_path(request.as_ref())?;
+        if executable.is_dir() {
+            let exe = ["bin/python", "Scripts/python.exe"]
+                .iter()
+                .map(|p| executable.join(p))
+                .find(|p| p.is_file());
+            if let Some(executable) = exe {
+                return Interpreter::query(executable, cache).map(Some);
+            }
+        }
+        Interpreter::query(executable, cache).map(Some)
+    } else {
         // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
         let Some(executable) = find_executable(request)? else {
             return Ok(None);
         };
-        Interpreter::query(executable, cache).map(Some)
-    } else {
-        // `-p /home/ferris/.local/bin/python3.10`
-        let executable = uv_fs::absolutize_path(request.as_ref())?;
         Interpreter::query(executable, cache).map(Some)
     }
 }
