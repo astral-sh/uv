@@ -1109,6 +1109,9 @@ pub(crate) struct PipListArgs {
     /// should be used with caution.
     #[clap(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
     pub(crate) system: bool,
+
+    #[command(flatten)]
+    pub(crate) compat_args: compat::PipListCompatArgs,
 }
 
 #[derive(Args)]

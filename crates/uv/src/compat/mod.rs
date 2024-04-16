@@ -206,6 +206,31 @@ impl CompatArgs for PipCompileCompatArgs {
     }
 }
 
+/// Arguments for `pip list` compatibility.
+///
+/// These represent a subset of the `pip list` interface that uv supports by default.
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct PipListCompatArgs {
+    #[clap(long, hide = true)]
+    outdated: bool,
+}
+
+impl CompatArgs for crate::compat::PipListCompatArgs {
+    /// Validate the arguments passed for `pip list` compatibility.
+    ///
+    /// This method will warn when an argument is passed that has no effect but matches uv's
+    /// behavior. If an argument is passed that does _not_ match uv's behavior (e.g.,
+    /// `--outdated`), this method will return an error.
+    fn validate(&self) -> Result<()> {
+        if self.outdated {
+            return Err(anyhow!("pip list's `--outdated` is unsupported."));
+        }
+
+        Ok(())
+    }
+}
+
 /// Arguments for `pip-sync` compatibility.
 ///
 /// These represent a subset of the `pip-sync` interface that uv supports by default.
