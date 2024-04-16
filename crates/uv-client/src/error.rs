@@ -77,6 +77,11 @@ impl Error {
                     if status == reqwest::StatusCode::NOT_FOUND {
                         return true;
                     }
+
+                    // Pypicloud + private S3 returns a 403 for HEAD requests.
+                    if status == reqwest::StatusCode::FORBIDDEN {
+                        return true;
+                    }
                 }
             }
 
