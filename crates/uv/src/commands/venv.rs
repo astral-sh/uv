@@ -14,9 +14,9 @@ use thiserror::Error;
 use distribution_types::{DistributionMetadata, IndexLocations, Name, ResolvedDist};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
-use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_configuration::KeyringProviderType;
 use uv_configuration::{ConfigSettings, IndexStrategy, NoBinary, NoBuild, SetupPyStrategy};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
@@ -36,7 +36,7 @@ pub(crate) async fn venv(
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
-    keyring_provider: KeyringProvider,
+    keyring_provider: KeyringProviderType,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -99,7 +99,7 @@ async fn venv_impl(
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
-    keyring_provider: KeyringProvider,
+    keyring_provider: KeyringProviderType,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -147,17 +147,12 @@ async fn venv_impl(
         // Extract the interpreter.
         let interpreter = venv.interpreter();
 
-        // Add all authenticated sources to the store.
-        for url in index_locations.urls() {
-            GLOBAL_AUTH_STORE.save_from_url(url);
-        }
-
         // Instantiate a client.
         let client = RegistryClientBuilder::new(cache.clone())
             .native_tls(native_tls)
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
-            .keyring_provider(keyring_provider)
+            .keyring(keyring_provider)
             .connectivity(connectivity)
             .markers(interpreter.markers())
             .platform(interpreter.platform())

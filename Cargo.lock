@@ -3732,6 +3732,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-log"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b319995299c65d522680decf80f2c108d85b861d81dfe340a10d16cee29d9e6"
+dependencies = [
+ "test-log-macros",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "test-log-macros"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8f546451eaa38373f549093fe9fd05e7d2bade739e2ddf834b9968621d60107"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.58",
+]
+
+[[package]]
 name = "testing_logger"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4364,13 +4385,14 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "base64 0.22.0",
- "clap",
  "http",
+ "insta",
  "once_cell",
  "reqwest",
  "reqwest-middleware",
  "rust-netrc",
  "tempfile",
+ "test-log",
  "thiserror",
  "tokio",
  "tracing",
@@ -4492,6 +4514,8 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
+ "uv-auth",
+ "uv-cache",
  "uv-normalize",
 ]
 
