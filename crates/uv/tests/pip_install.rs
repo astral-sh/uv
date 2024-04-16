@@ -302,6 +302,41 @@ fn install_package() {
     context.assert_command("import flask").success();
 }
 
+/// Install a package with source archive format `.tar.bz2`.
+#[test]
+fn archive_type_bz2() {
+    let context = TestContext::new("3.8");
+
+    // Install a version of Twisted that uses `.tar.bz2` (and provides no wheel
+    // for the given version of Python).
+    uv_snapshot!(context.install()
+        .arg("Twisted==20.3.0")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    Downloaded 11 packages in [TIME]
+    Installed 11 packages in [TIME]
+     + attrs==23.2.0
+     + automat==22.10.0
+     + constantly==23.10.4
+     + hyperlink==21.0.0
+     + idna==3.6
+     + incremental==22.10.0
+     + pyhamcrest==2.1.0
+     + setuptools==69.2.0
+     + six==1.16.0
+     + twisted==20.3.0
+     + zope-interface==6.2
+    "###
+    );
+
+    context.assert_command("import twisted").success();
+}
+
 /// Install a package from a `requirements.txt` into a virtual environment.
 #[test]
 fn install_requirements_txt() -> Result<()> {

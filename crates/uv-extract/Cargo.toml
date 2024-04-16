@@ -15,7 +15,7 @@ workspace = true
 [dependencies]
 pypi-types = { workspace = true }
 
-async-compression = { workspace = true, features = ["gzip", "zstd"] }
+async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd"] }
 async_zip = { workspace = true, features = ["tokio"] }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
