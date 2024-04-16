@@ -732,19 +732,13 @@ mod windows {
         #[cfg_attr(not(windows), ignore)]
         fn no_such_python_path() {
             let result =
-                find_requested_python(r"C:\does\not\exists\python3.12", &Cache::temp().unwrap());
-            insta::with_settings!({
-                filters => vec![
-                    // The exact message is host language dependent
-                    (r"Caused by: .* \(os error 3\)", "Caused by: The system cannot find the path specified. (os error 3)")
-                ]
-            }, {
-                assert_snapshot!(
-                    format_err(result), @r###"
-        failed to canonicalize path `C:\does\not\exists\python3.12`
-          Caused by: The system cannot find the path specified. (os error 3)
-        "###);
-            });
+                find_requested_python(r"C:\does\not\exists\python3.12", &Cache::temp().unwrap())
+                    .unwrap()
+                    .ok_or(Error::RequestedPythonNotFound(r"C:\does\not\exists\python3.12".to_string()));
+            assert_snapshot!(
+                format_err(result),
+                @"Failed to locate Python interpreter at `C:\\does\\not\\exists\\python3.12`"
+            );
         }
     }
 }
@@ -794,11 +788,10 @@ mod tests {
     #[test]
     #[cfg_attr(not(unix), ignore)]
     fn no_such_python_path() {
-        let result = find_requested_python("/does/not/exists/python3.12", &Cache::temp().unwrap());
+        let result = find_requested_python("/does/not/exists/python3.12", &Cache::temp().unwrap())
+            .unwrap()
+            .ok_or(Error::RequestedPythonNotFound("/does/not/exists/python3.12".to_string()));
         assert_snapshot!(
-            format_err(result), @r###"
-        failed to canonicalize path `/does/not/exists/python3.12`
-          Caused by: No such file or directory (os error 2)
-        "###);
+            format_err(result), @"Failed to locate Python interpreter at `/does/not/exists/python3.12`");
     }
 }
