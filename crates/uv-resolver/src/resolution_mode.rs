@@ -7,6 +7,7 @@ use crate::Manifest;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum ResolutionMode {
     /// Resolve the highest compatible version of each package.
     #[default]

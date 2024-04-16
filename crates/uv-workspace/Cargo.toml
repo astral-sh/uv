@@ -1,0 +1,36 @@
+[package]
+name = "uv-workspace"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+distribution-types = { workspace = true }
+install-wheel-rs = { workspace = true }
+pep508_rs = { workspace = true }
+uv-auth = { workspace = true, features = ["serde"] }
+uv-configuration = { workspace = true, features = ["serde"] }
+uv-fs = { workspace = true }
+uv-normalize = { workspace = true }
+uv-resolver = { workspace = true, features = ["serde"] }
+uv-toolchain = { workspace = true, features = ["serde"] }
+uv-warnings = { workspace = true }
+
+fs-err = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+
+[features]
+default = []
+serde = ["dep:serde", "dep:serde_json"]
