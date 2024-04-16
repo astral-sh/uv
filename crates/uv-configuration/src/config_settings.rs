@@ -1,4 +1,3 @@
-use serde::ser::SerializeMap;
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     str::FromStr,
@@ -83,6 +82,7 @@ impl<'de> serde::Deserialize<'de> for ConfigSettingValue {
 ///
 /// See: <https://peps.python.org/pep-0517/#config-settings>
 #[derive(Debug, Default, Clone)]
+#[cfg_attr(not(feature = "serde"), allow(dead_code))]
 pub struct ConfigSettings(BTreeMap<String, ConfigSettingValue>);
 
 impl FromIterator<ConfigSettingEntry> for ConfigSettings {
@@ -119,6 +119,8 @@ impl ConfigSettings {
 #[cfg(feature = "serde")]
 impl serde::Serialize for ConfigSettings {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+
         let mut map = serializer.serialize_map(Some(self.0.len()))?;
         for (key, value) in &self.0 {
             map.serialize_entry(key, value)?;
