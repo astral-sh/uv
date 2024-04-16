@@ -3,6 +3,7 @@ use uv_auth::{self, KeyringProvider};
 /// Keyring provider type to use for credential lookup.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum KeyringProviderType {
     /// Do not use keyring for credential lookup.
     #[default]

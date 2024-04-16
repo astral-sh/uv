@@ -21,6 +21,44 @@ impl FromStr for PackageNameSpecifier {
     }
 }
 
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for PackageNameSpecifier {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = PackageNameSpecifier;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a package name or `:all:` or `:none:`")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                // Accept the special values `:all:` and `:none:`.
+                match value {
+                    ":all:" => Ok(PackageNameSpecifier::All),
+                    ":none:" => Ok(PackageNameSpecifier::None),
+                    _ => {
+                        // Otherwise, parse the value as a package name.
+                        match PackageName::from_str(value) {
+                            Ok(name) => Ok(PackageNameSpecifier::Package(name)),
+                            Err(err) => Err(E::custom(err)),
+                        }
+                    }
+                }
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
+}
+
 /// Package name specification.
 ///
 /// Consumes both package names and selection directives for compatibility with pip flags

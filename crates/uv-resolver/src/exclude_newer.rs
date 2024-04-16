@@ -4,6 +4,7 @@ use chrono::{DateTime, Days, NaiveDate, NaiveTime, Utc};
 
 /// A timestamp that excludes files newer than it.
 #[derive(Debug, Copy, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct ExcludeNewer(DateTime<Utc>);
 
 impl ExcludeNewer {
