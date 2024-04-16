@@ -43,16 +43,35 @@ pub fn find_requested_python(request: &str, cache: &Cache) -> Result<Option<Inte
             _ => unreachable!(),
         };
         find_python(selector, cache)
-    } else if !request.contains(std::path::MAIN_SEPARATOR) {
-        // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
-        let Some(executable) = find_executable(request)? else {
-            return Ok(None);
-        };
-        Interpreter::query(executable, cache).map(Some)
     } else {
-        // `-p /home/ferris/.local/bin/python3.10`
-        let executable = uv_fs::absolutize_path(request.as_ref())?;
-        Interpreter::query(executable, cache).map(Some)
+        match fs_err::metadata(request) {
+            Ok(metadata) => {
+                // Map from user-provided path to an executable.
+                let path = uv_fs::absolutize_path(request.as_ref())?;
+                let executable = if metadata.is_dir() {
+                    // If the user provided a directory, assume it's a virtual environment.
+                    // `-p /home/ferris/.venv`
+                    if cfg!(windows) {
+                        Cow::Owned(path.join("Scripts/python.exe"))
+                    } else {
+                        Cow::Owned(path.join("bin/python"))
+                    }
+                } else {
+                    // Otherwise, assume it's a Python executable.
+                    // `-p /home/ferris/.local/bin/python3.10`
+                    path
+                };
+                Interpreter::query(executable, cache).map(Some)
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
+                let Some(executable) = find_executable(request)? else {
+                    return Ok(None);
+                };
+                Interpreter::query(executable, cache).map(Some)
+            }
+            Err(err) => return Err(err.into()),
+        }
     }
 }
 
@@ -713,19 +732,15 @@ mod windows {
         #[cfg_attr(not(windows), ignore)]
         fn no_such_python_path() {
             let result =
-                find_requested_python(r"C:\does\not\exists\python3.12", &Cache::temp().unwrap());
-            insta::with_settings!({
-                filters => vec![
-                    // The exact message is host language dependent
-                    (r"Caused by: .* \(os error 3\)", "Caused by: The system cannot find the path specified. (os error 3)")
-                ]
-            }, {
-                assert_snapshot!(
-                    format_err(result), @r###"
-        failed to canonicalize path `C:\does\not\exists\python3.12`
-          Caused by: The system cannot find the path specified. (os error 3)
-        "###);
-            });
+                find_requested_python(r"C:\does\not\exists\python3.12", &Cache::temp().unwrap())
+                    .unwrap()
+                    .ok_or(Error::RequestedPythonNotFound(
+                        r"C:\does\not\exists\python3.12".to_string(),
+                    ));
+            assert_snapshot!(
+                format_err(result),
+                @"Failed to locate Python interpreter at `C:\\does\\not\\exists\\python3.12`"
+            );
         }
     }
 }
@@ -775,11 +790,12 @@ mod tests {
     #[test]
     #[cfg_attr(not(unix), ignore)]
     fn no_such_python_path() {
-        let result = find_requested_python("/does/not/exists/python3.12", &Cache::temp().unwrap());
+        let result = find_requested_python("/does/not/exists/python3.12", &Cache::temp().unwrap())
+            .unwrap()
+            .ok_or(Error::RequestedPythonNotFound(
+                "/does/not/exists/python3.12".to_string(),
+            ));
         assert_snapshot!(
-            format_err(result), @r###"
-        failed to canonicalize path `/does/not/exists/python3.12`
-          Caused by: No such file or directory (os error 2)
-        "###);
+            format_err(result), @"Failed to locate Python interpreter at `/does/not/exists/python3.12`");
     }
 }
