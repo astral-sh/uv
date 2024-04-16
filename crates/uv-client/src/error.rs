@@ -77,6 +77,12 @@ impl Error {
                     if status == reqwest::StatusCode::NOT_FOUND {
                         return true;
                     }
+
+                    // In some cases, registries (like PyPICloud) return a 403 for HEAD requests
+                    // when they're not supported. Again, it's better to be lenient here.
+                    if status == reqwest::StatusCode::FORBIDDEN {
+                        return true;
+                    }
                 }
             }
 
