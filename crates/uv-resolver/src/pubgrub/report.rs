@@ -733,47 +733,47 @@ impl PackageRange<'_> {
 
 impl std::fmt::Display for PackageRange<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let package = fmt_package(self.package);
         if self.range.is_empty() {
-            write!(f, "∅")?;
-        } else {
-            let segments: Vec<_> = self.range.iter().collect();
-            if segments.len() > 1 {
-                match self.kind {
-                    PackageRangeKind::Dependency => write!(f, "one of:")?,
-                    PackageRangeKind::Compatibility => write!(f, "any of:")?,
-                    PackageRangeKind::Available => write!(f, "are available:")?,
-                }
+            return write!(f, "{package} ∅");
+        }
+
+        let segments: Vec<_> = self.range.iter().collect();
+        if segments.len() > 1 {
+            match self.kind {
+                PackageRangeKind::Dependency => write!(f, "one of:")?,
+                PackageRangeKind::Compatibility => write!(f, "any of:")?,
+                PackageRangeKind::Available => write!(f, "are available:")?,
             }
-            let package = fmt_package(self.package);
-            for segment in &segments {
-                if segments.len() > 1 {
-                    write!(f, "\n    ")?;
-                }
-                match segment {
-                    (Bound::Unbounded, Bound::Unbounded) => match self.kind {
-                        PackageRangeKind::Dependency => write!(f, "{package}")?,
-                        PackageRangeKind::Compatibility => write!(f, "all versions of {package}")?,
-                        PackageRangeKind::Available => write!(f, "{package}")?,
-                    },
-                    (Bound::Unbounded, Bound::Included(v)) => write!(f, "{package}<={v}")?,
-                    (Bound::Unbounded, Bound::Excluded(v)) => write!(f, "{package}<{v}")?,
-                    (Bound::Included(v), Bound::Unbounded) => write!(f, "{package}>={v}")?,
-                    (Bound::Included(v), Bound::Included(b)) => {
-                        if v == b {
-                            write!(f, "{package}=={v}")?;
-                        } else {
-                            write!(f, "{package}>={v},<={b}")?;
-                        }
+        }
+        for segment in &segments {
+            if segments.len() > 1 {
+                write!(f, "\n    ")?;
+            }
+            match segment {
+                (Bound::Unbounded, Bound::Unbounded) => match self.kind {
+                    PackageRangeKind::Dependency => write!(f, "{package}")?,
+                    PackageRangeKind::Compatibility => write!(f, "all versions of {package}")?,
+                    PackageRangeKind::Available => write!(f, "{package}")?,
+                },
+                (Bound::Unbounded, Bound::Included(v)) => write!(f, "{package}<={v}")?,
+                (Bound::Unbounded, Bound::Excluded(v)) => write!(f, "{package}<{v}")?,
+                (Bound::Included(v), Bound::Unbounded) => write!(f, "{package}>={v}")?,
+                (Bound::Included(v), Bound::Included(b)) => {
+                    if v == b {
+                        write!(f, "{package}=={v}")?;
+                    } else {
+                        write!(f, "{package}>={v},<={b}")?;
                     }
-                    (Bound::Included(v), Bound::Excluded(b)) => write!(f, "{package}>={v},<{b}")?,
-                    (Bound::Excluded(v), Bound::Unbounded) => write!(f, "{package}>{v}")?,
-                    (Bound::Excluded(v), Bound::Included(b)) => write!(f, "{package}>{v},<={b}")?,
-                    (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, "{package}>{v},<{b}")?,
-                };
-            }
-            if segments.len() > 1 {
-                writeln!(f)?;
-            }
+                }
+                (Bound::Included(v), Bound::Excluded(b)) => write!(f, "{package}>={v},<{b}")?,
+                (Bound::Excluded(v), Bound::Unbounded) => write!(f, "{package}>{v}")?,
+                (Bound::Excluded(v), Bound::Included(b)) => write!(f, "{package}>{v},<={b}")?,
+                (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, "{package}>{v},<{b}")?,
+            };
+        }
+        if segments.len() > 1 {
+            writeln!(f)?;
         }
         Ok(())
     }
