@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 pub use dependency_mode::DependencyMode;
 pub use error::ResolveError;
 pub use exclusions::Exclusions;

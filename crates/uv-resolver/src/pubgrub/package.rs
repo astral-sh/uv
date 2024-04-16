@@ -19,6 +19,33 @@ pub enum PubGrubPackage {
     Root(Option<PackageName>),
     /// A Python version.
     Python(PubGrubPython),
+    // Add this as a dependency of the corresponding `PubGrubPackage::Package`.
+    // In get_depencencies, if you find a PubGrubPackage::MarkerExpr, then you'd just
+    // return the one package.
+    //
+    // Need to make sure only one version of async-generator is chosen. The way to enforce
+    // it is:
+    //
+    // Two different packages pull in async-generator with different but overlapping
+    // markers. One has py<=3.7 and the other is py<=3.8. Might end up with two different
+    // packages in the *same* fork with two different marker expressions. Need to make
+    // sure that both refer to the same version of async-generator, because they could be
+    // different.
+    //
+    // Introduce a dependency where both depend on async-generator with no markers.
+    // This is similar to extras, because we need to make sure we pick the same version
+    // of the package. e.g., `black` and `black[jupyter]` both HAVE to resolve to the same
+    // version. We do that by adding a dependency from `black[jupyter]` to `black`.
+    //
+    // But what happens if we get to the end and the markers diverged.
+    //
+    // Could we represent marker values themselves in PubGrub? If markers were
+    // represented in pubgrub, e.g., `py<=3.7 and py>=3.8`.
+    //
+    // Also, under what conditions do we fork? Why is it a local decision to just the
+    // dependencies of a single package?
+    //
+    // MarkerExpr(PackageName, MarkerTree),
     /// A Python package.
     Package(
         PackageName,
@@ -68,6 +95,15 @@ impl PubGrubPackage {
     pub(crate) fn from_package(name: PackageName, extra: Option<ExtraName>, urls: &Urls) -> Self {
         let url = urls.get(&name).cloned();
         Self::Package(name, extra, url)
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        match *self {
+            PubGrubPackage::Root(None) => "<NONE>",
+            PubGrubPackage::Root(Some(ref name)) => name.as_ref(),
+            PubGrubPackage::Python(_) => "<PYTHON>",
+            PubGrubPackage::Package(ref name, _, _) => name.as_ref(),
+        }
     }
 }
 

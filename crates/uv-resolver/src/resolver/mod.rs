@@ -1,7 +1,5 @@
 //! Given a set of requirements, find a set of compatible packages.
 
-#![allow(warnings)]
-
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
@@ -471,15 +469,43 @@ impl<
                             Dependencies::Available(constraints) => constraints,
                         };
 
-                        for &(ref package, _, ref marker) in dependencies.iter() {
+                        let parent = &package;
+                        // eprintln!("===== {:?} {:?} =====", parent.name(), version);
+                        for &(ref package, ref versions, ref marker) in dependencies.iter() {
+                            // use std::ops::Bound;
+                            // let range = match versions.iter().next().unwrap() {
+                            // (Bound::Included(s), Bound::Included(e)) => {
+                            // format!("{s}..={e}")
+                            // }
+                            // (Bound::Included(s), Bound::Excluded(e)) => {
+                            // format!("{s}..{e}")
+                            // }
+                            // (Bound::Included(s), Bound::Unbounded) => {
+                            // format!("{s}..")
+                            // }
+                            // (Bound::Unbounded, Bound::Included(e)) => {
+                            // format!("..={e}")
+                            // }
+                            // (Bound::Unbounded, Bound::Excluded(e)) => {
+                            // format!("..{e}")
+                            // }
+                            // (Bound::Unbounded, Bound::Unbounded) => {
+                            // format!("..")
+                            // }
+                            // _ => unreachable!(),
+                            // };
                             if let Some(ref marker) = *marker {
+                                // eprintln!("dep: {:?} {} ; {}", package.name(), range, marker);
                                 state
                                     .markers
                                     .entry(package.clone())
-                                    .or_default()
-                                    .push(marker.clone());
+                                    .or_insert_with(|| MarkerTree::And(vec![]))
+                                    .and(marker.clone());
+                            } else {
+                                // eprintln!("dep: {:?} {}", package.name(), range);
                             }
                         }
+                        // eprintln!("==========");
 
                         // Add that package and version if the dependencies are not problematic.
                         let dep_incompats = state.pubgrub.add_incompatibility_from_dependencies(
@@ -1216,18 +1242,18 @@ impl<
     }
 
     fn on_progress(&self, package: &PubGrubPackage, version: &Version) {
-        if let Some(reporter) = self.reporter.as_ref() {
-            match package {
-                PubGrubPackage::Root(_) => {}
-                PubGrubPackage::Python(_) => {}
-                PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-                    reporter.on_progress(package_name, &VersionOrUrl::Url(url));
-                }
-                PubGrubPackage::Package(package_name, _extra, None) => {
-                    reporter.on_progress(package_name, &VersionOrUrl::Version(version));
-                }
-            }
-        }
+        // if let Some(reporter) = self.reporter.as_ref() {
+        // match package {
+        // PubGrubPackage::Root(_) => {}
+        // PubGrubPackage::Python(_) => {}
+        // PubGrubPackage::Package(package_name, _extra, Some(url)) => {
+        // reporter.on_progress(package_name, &VersionOrUrl::Url(url));
+        // }
+        // PubGrubPackage::Package(package_name, _extra, None) => {
+        // reporter.on_progress(package_name, &VersionOrUrl::Version(version));
+        // }
+        // }
+        // }
     }
 
     fn on_complete(&self) {
@@ -1258,7 +1284,7 @@ pub(crate) struct ResolverState {
     pub(crate) pins: FilePins,
     pub(crate) priorities: PubGrubPriorities,
     pub(crate) added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>>,
-    pub(crate) markers: FxHashMap<PubGrubPackage, Vec<MarkerTree>>,
+    pub(crate) markers: FxHashMap<PubGrubPackage, MarkerTree>,
 }
 
 impl ResolverState {
@@ -1307,8 +1333,9 @@ impl ResolverState {
         let packages = packages
             .into_iter()
             .map(|(package, version)| {
-                let marker = self.markers.get(&package).cloned().unwrap_or(vec![]);
-                (package, vec![(version, marker)])
+                let marker = self.markers.get(&package).cloned();
+                let map = FxHashMap::from_iter([(version, marker)]);
+                (package, map)
             })
             .collect();
         Resolution {
@@ -1321,7 +1348,7 @@ impl ResolverState {
 
 #[derive(Debug, Default)]
 pub(crate) struct Resolution {
-    pub(crate) packages: FxHashMap<PubGrubPackage, Vec<(Version, Vec<MarkerTree>)>>,
+    pub(crate) packages: FxHashMap<PubGrubPackage, FxHashMap<Version, Option<MarkerTree>>>,
     pub(crate) dependencies:
         FxHashMap<ResolutionDependencyNames, Vec<ResolutionDependencyVersions>>,
     pub(crate) pins: FilePins,
@@ -1342,7 +1369,18 @@ pub(crate) struct ResolutionDependencyVersions {
 impl Resolution {
     fn union(&mut self, other: Resolution) {
         for (package, versions) in other.packages {
-            self.packages.entry(package).or_default().extend(versions);
+            let entry = self.packages.entry(package);
+            let mut map: &mut FxHashMap<Version, Option<MarkerTree>> = entry.or_default();
+            for (version, marker) in versions {
+                if !map.contains_key(&version) || map[&version].is_none() {
+                    map.insert(version, marker);
+                } else {
+                    if let Some(marker) = marker {
+                        map.get_mut(&version).unwrap().as_mut().unwrap().or(marker);
+                    }
+                }
+            }
+            // self.packages.entry(package).or_default().extend(versions);
         }
         for (names, ranges) in other.dependencies {
             self.dependencies.entry(names).or_default().extend(ranges);

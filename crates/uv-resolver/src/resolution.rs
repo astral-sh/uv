@@ -56,7 +56,7 @@ pub struct ResolutionGraph {
 #[derive(Clone, Debug)]
 pub struct ResolvedNode {
     dist: ResolvedDist,
-    markers: Vec<MarkerTree>,
+    markers: Option<MarkerTree>,
 }
 
 impl std::fmt::Display for ResolvedNode {
@@ -527,7 +527,7 @@ enum Node<'a> {
         &'a PackageName,
         &'a ResolvedDist,
         &'a [ExtraName],
-        &'a [MarkerTree],
+        Option<&'a MarkerTree>,
     ),
 }
 
@@ -561,12 +561,22 @@ impl Verbatim for Node<'_> {
     fn verbatim(&self) -> Cow<'_, str> {
         match self {
             Node::Editable(_, editable) => Cow::Owned(format!("-e {}", editable.verbatim())),
-            Node::Distribution(_, dist, &[], markers) => {
-                let tree = MarkerTree::Or(markers.to_vec());
-                Cow::Owned(format!("{} # {}", dist.verbatim(), tree))
+            Node::Distribution(_, dist, &[], None) => dist.verbatim(),
+            Node::Distribution(_, dist, &[], Some(markers)) => {
+                Cow::Owned(format!("{} # {}", dist.verbatim(), markers))
             }
-            Node::Distribution(_, dist, extras, markers) => {
-                let tree = MarkerTree::Or(markers.to_vec());
+            Node::Distribution(_, dist, extras, None) => {
+                let mut extras = extras.to_vec();
+                extras.sort_unstable();
+                extras.dedup();
+                Cow::Owned(format!(
+                    "{}[{}]{}",
+                    dist.name(),
+                    extras.into_iter().join(", "),
+                    dist.version_or_url().verbatim(),
+                ))
+            }
+            Node::Distribution(_, dist, extras, Some(markers)) => {
                 let mut extras = extras.to_vec();
                 extras.sort_unstable();
                 extras.dedup();
@@ -575,7 +585,7 @@ impl Verbatim for Node<'_> {
                     dist.name(),
                     extras.into_iter().join(", "),
                     dist.version_or_url().verbatim(),
-                    tree,
+                    markers,
                 ))
             }
         }
@@ -608,10 +618,10 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             .extras
                             .get(name)
                             .map_or(&[], |extras| extras.as_slice()),
-                        &node.markers,
+                        node.markers.as_ref(),
                     )
                 } else {
-                    Node::Distribution(name, dist, &[], &node.markers)
+                    Node::Distribution(name, dist, &[], node.markers.as_ref())
                 };
                 Some((index, node))
             })

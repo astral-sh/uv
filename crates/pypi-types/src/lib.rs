@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 pub use base_url::*;
 pub use direct_url::*;
 pub use lenient_requirement::*;

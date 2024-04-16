@@ -947,6 +947,40 @@ impl FromStr for MarkerTree {
 }
 
 impl MarkerTree {
+    /// TODO
+    pub fn and(&mut self, tree: MarkerTree) {
+        match *self {
+            MarkerTree::Expression(_) | MarkerTree::Or(_) => {
+                let this = std::mem::replace(self, MarkerTree::And(vec![]));
+                *self = MarkerTree::And(vec![this]);
+            }
+            _ => {}
+        }
+        match *self {
+            MarkerTree::And(ref mut exprs) => {
+                exprs.push(tree);
+            }
+            _ => {}
+        }
+    }
+
+    /// TODO
+    pub fn or(&mut self, tree: MarkerTree) {
+        match *self {
+            MarkerTree::Expression(_) | MarkerTree::And(_) => {
+                let this = std::mem::replace(self, MarkerTree::And(vec![]));
+                *self = MarkerTree::Or(vec![this]);
+            }
+            _ => {}
+        }
+        match *self {
+            MarkerTree::Or(ref mut exprs) => {
+                exprs.push(tree);
+            }
+            _ => {}
+        }
+    }
+
     /// Does this marker apply in the given environment?
     pub fn evaluate(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         let mut reporter = |_kind, _message, _marker_expression: &MarkerExpression| {
