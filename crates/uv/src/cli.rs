@@ -258,10 +258,16 @@ pub(crate) struct PipCompileArgs {
     #[arg(long, conflicts_with = "extra")]
     pub(crate) all_extras: bool,
 
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub(crate) no_all_extras: bool,
+
     /// Ignore package dependencies, instead only add those packages explicitly listed
     /// on the command line to the resulting the requirements file.
     #[arg(long)]
     pub(crate) no_deps: bool,
+
+    #[arg(long, overrides_with("no_deps"), hide = true)]
+    pub(crate) deps: bool,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -290,16 +296,25 @@ pub(crate) struct PipCompileArgs {
     /// By default, `uv` strips extras, as any packages pulled in by the extras are already included
     /// as dependencies in the output file directly. Further, output files generated with
     /// `--no-strip-extras` cannot be used as constraints files in `install` and `sync` invocations.
-    #[arg(long)]
+    #[arg(long, overrides_with("strip_extras"))]
     pub(crate) no_strip_extras: bool,
 
+    #[arg(long, overrides_with("no_strip_extras"), hide = true)]
+    pub(crate) strip_extras: bool,
+
     /// Exclude comment annotations indicating the source of each package.
-    #[arg(long)]
+    #[arg(long, overrides_with("annotate"))]
     pub(crate) no_annotate: bool,
 
+    #[arg(long, overrides_with("no_annotate"), hide = true)]
+    pub(crate) annotate: bool,
+
     /// Exclude the comment header at the top of the generated output file.
-    #[arg(long)]
+    #[arg(long, overrides_with("header"))]
     pub(crate) no_header: bool,
+
+    #[arg(long, overrides_with("no_header"), hide = true)]
+    pub(crate) header: bool,
 
     /// Choose the style of the annotation comments, which indicate the source of each package.
     ///
@@ -316,9 +331,13 @@ pub(crate) struct PipCompileArgs {
         global = true,
         long,
         conflicts_with = "refresh",
-        conflicts_with = "refresh_package"
+        conflicts_with = "refresh_package",
+        overrides_with("no_offline")
     )]
     pub(crate) offline: bool,
+
+    #[arg(long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
     #[arg(long)]
@@ -402,19 +421,28 @@ pub(crate) struct PipCompileArgs {
     pub(crate) upgrade_package: Option<Vec<PackageName>>,
 
     /// Include distribution hashes in the output file.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_generate_hashes"))]
     pub(crate) generate_hashes: bool,
+
+    #[arg(long, overrides_with("generate_hashes"), hide = true)]
+    pub(crate) no_generate_hashes: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_legacy_setup_py"))]
     pub(crate) legacy_setup_py: bool,
+
+    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
+    pub(crate) no_legacy_setup_py: bool,
 
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(long)]
+    #[arg(long, overrides_with("build_isolation"))]
     pub(crate) no_build_isolation: bool,
+
+    #[arg(long, overrides_with("no_build_isolation"), hide = true)]
+    pub(crate) build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -423,8 +451,16 @@ pub(crate) struct PipCompileArgs {
     /// exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
-    #[arg(long, conflicts_with = "only_binary")]
+    #[arg(long, conflicts_with = "only_binary", overrides_with = "build")]
     pub(crate) no_build: bool,
+
+    #[arg(
+        long,
+        conflicts_with = "only_binary",
+        overrides_with("no_build"),
+        hide = true
+    )]
+    pub(crate) build: bool,
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
@@ -462,12 +498,18 @@ pub(crate) struct PipCompileArgs {
     pub(crate) no_emit_package: Option<Vec<PackageName>>,
 
     /// Include `--index-url` and `--extra-index-url` entries in the generated output file.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_emit_index_url"))]
     pub(crate) emit_index_url: bool,
 
+    #[arg(long, overrides_with("emit_index_url"), hide = true)]
+    pub(crate) no_emit_index_url: bool,
+
     /// Include `--find-links` entries in the generated output file.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_emit_find_links"))]
     pub(crate) emit_find_links: bool,
+
+    #[arg(long, overrides_with("emit_find_links"), hide = true)]
+    pub(crate) no_emit_find_links: bool,
 
     /// Whether to emit a marker string indicating when it is known that the
     /// resulting set of pinned dependencies is valid.
@@ -475,13 +517,19 @@ pub(crate) struct PipCompileArgs {
     /// The pinned dependencies may be valid even when the marker expression is
     /// false, but when the expression is true, the requirements are known to
     /// be correct.
-    #[arg(long, hide = true)]
+    #[arg(long, overrides_with("no_emit_marker_expression"), hide = true)]
     pub(crate) emit_marker_expression: bool,
+
+    #[arg(long, overrides_with("emit_marker_expression"), hide = true)]
+    pub(crate) no_emit_marker_expression: bool,
 
     /// Include comment annotations indicating the index used to resolve each package (e.g.,
     /// `# from https://pypi.org/simple`).
-    #[arg(long)]
+    #[arg(long, overrides_with("no_emit_index_annotation"))]
     pub(crate) emit_index_annotation: bool,
+
+    #[arg(long, overrides_with("emit_index_annotation"), hide = true)]
+    pub(crate) no_emit_index_annotation: bool,
 
     #[command(flatten)]
     pub(crate) compat_args: compat::PipCompileCompatArgs,
@@ -502,14 +550,17 @@ pub(crate) struct PipSyncArgs {
     #[arg(long)]
     pub(crate) reinstall_package: Vec<PackageName>,
 
-    /// Run offline, i.e., without accessing the network.
     #[arg(
         global = true,
         long,
         conflicts_with = "refresh",
-        conflicts_with = "refresh_package"
+        conflicts_with = "refresh_package",
+        overrides_with("no_offline")
     )]
     pub(crate) offline: bool,
+
+    #[arg(long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
     #[arg(long)]
@@ -583,8 +634,11 @@ pub(crate) struct PipSyncArgs {
     /// - Editable installs are not supported.
     /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
     ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_require_hashes"))]
     pub(crate) require_hashes: bool,
+
+    #[arg(long, overrides_with("require_hashes"), hide = true)]
+    pub(crate) no_require_hashes: bool,
 
     /// Attempt to use `keyring` for authentication for index URLs.
     ///
@@ -618,8 +672,16 @@ pub(crate) struct PipSyncArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
     ///
@@ -627,19 +689,33 @@ pub(crate) struct PipSyncArgs {
     /// environments, when installing into Python installations that are managed by an external
     /// package manager, like `apt`. It should be used with caution, as such Python installations
     /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
-    #[arg(long, env = "UV_BREAK_SYSTEM_PACKAGES", requires = "discovery")]
+    #[arg(
+        long,
+        env = "UV_BREAK_SYSTEM_PACKAGES",
+        requires = "discovery",
+        overrides_with("no_break_system_packages")
+    )]
     pub(crate) break_system_packages: bool,
+
+    #[arg(long, overrides_with("break_system_packages"))]
+    pub(crate) no_break_system_packages: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_legacy_setup_py"))]
     pub(crate) legacy_setup_py: bool,
+
+    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
+    pub(crate) no_legacy_setup_py: bool,
 
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(long)]
+    #[arg(long, overrides_with("build_isolation"))]
     pub(crate) no_build_isolation: bool,
+
+    #[arg(long, overrides_with("no_build_isolation"), hide = true)]
+    pub(crate) build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -648,8 +724,22 @@ pub(crate) struct PipSyncArgs {
     /// exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
-    #[arg(long, conflicts_with = "no_binary", conflicts_with = "only_binary")]
+    #[arg(
+        long,
+        conflicts_with = "no_binary",
+        conflicts_with = "only_binary",
+        overrides_with("build")
+    )]
     pub(crate) no_build: bool,
+
+    #[arg(
+        long,
+        conflicts_with = "no_binary",
+        conflicts_with = "only_binary",
+        overrides_with("no_build"),
+        hide = true
+    )]
+    pub(crate) build: bool,
 
     /// Don't install pre-built wheels.
     ///
@@ -681,11 +771,10 @@ pub(crate) struct PipSyncArgs {
     ///
     /// The compile option will process the entire site-packages directory for consistency and
     /// (like pip) ignore all errors.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_compile"))]
     pub(crate) compile: bool,
 
-    /// Don't compile Python files to bytecode.
-    #[arg(long, hide = true, conflicts_with = "compile")]
+    #[arg(long, overrides_with("compile"), hide = true)]
     pub(crate) no_compile: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
@@ -694,8 +783,11 @@ pub(crate) struct PipSyncArgs {
 
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_strict"))]
     pub(crate) strict: bool,
+
+    #[arg(long, overrides_with("strict"), hide = true)]
+    pub(crate) no_strict: bool,
 
     #[command(flatten)]
     pub(crate) compat_args: compat::PipSyncCompatArgs,
@@ -744,8 +836,11 @@ pub(crate) struct PipInstallArgs {
     pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
-    #[arg(long, conflicts_with = "extra")]
+    #[arg(long, conflicts_with = "extra", overrides_with = "no_all_extras")]
     pub(crate) all_extras: bool,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub(crate) no_all_extras: bool,
 
     /// Allow package upgrades.
     #[arg(long, short = 'U')]
@@ -763,14 +858,17 @@ pub(crate) struct PipInstallArgs {
     #[arg(long)]
     pub(crate) reinstall_package: Option<Vec<PackageName>>,
 
-    /// Run offline, i.e., without accessing the network.
     #[arg(
         global = true,
         long,
         conflicts_with = "refresh",
-        conflicts_with = "refresh_package"
+        conflicts_with = "refresh_package",
+        overrides_with("no_offline")
     )]
     pub(crate) offline: bool,
+
+    #[arg(long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
     #[arg(long)]
@@ -782,8 +880,11 @@ pub(crate) struct PipInstallArgs {
 
     /// Ignore package dependencies, instead only installing those packages explicitly listed
     /// on the command line or in the requirements files.
-    #[arg(long)]
+    #[arg(long, overrides_with("deps"))]
     pub(crate) no_deps: bool,
+
+    #[arg(long, overrides_with("no_deps"), hide = true)]
+    pub(crate) deps: bool,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -867,8 +968,11 @@ pub(crate) struct PipInstallArgs {
     /// - Editable installs are not supported.
     /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
     ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_require_hashes"))]
     pub(crate) require_hashes: bool,
+
+    #[arg(long, overrides_with("require_hashes"), hide = true)]
+    pub(crate) no_require_hashes: bool,
 
     /// Attempt to use `keyring` for authentication for index URLs.
     ///
@@ -902,8 +1006,16 @@ pub(crate) struct PipInstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
     ///
@@ -911,19 +1023,33 @@ pub(crate) struct PipInstallArgs {
     /// environments, when installing into Python installations that are managed by an external
     /// package manager, like `apt`. It should be used with caution, as such Python installations
     /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
-    #[arg(long, env = "UV_BREAK_SYSTEM_PACKAGES", requires = "discovery")]
+    #[arg(
+        long,
+        env = "UV_BREAK_SYSTEM_PACKAGES",
+        requires = "discovery",
+        overrides_with("no_break_system_packages")
+    )]
     pub(crate) break_system_packages: bool,
+
+    #[arg(long, overrides_with("break_system_packages"))]
+    pub(crate) no_break_system_packages: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_legacy_setup_py"))]
     pub(crate) legacy_setup_py: bool,
+
+    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
+    pub(crate) no_legacy_setup_py: bool,
 
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(long)]
+    #[arg(long, overrides_with("build_isolation"))]
     pub(crate) no_build_isolation: bool,
+
+    #[arg(long, overrides_with("no_build_isolation"), hide = true)]
+    pub(crate) build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -932,8 +1058,22 @@ pub(crate) struct PipInstallArgs {
     /// exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
-    #[arg(long, conflicts_with = "no_binary", conflicts_with = "only_binary")]
+    #[arg(
+        long,
+        conflicts_with = "no_binary",
+        conflicts_with = "only_binary",
+        overrides_with("build")
+    )]
     pub(crate) no_build: bool,
+
+    #[arg(
+        long,
+        conflicts_with = "no_binary",
+        conflicts_with = "only_binary",
+        overrides_with("no_build"),
+        hide = true
+    )]
+    pub(crate) build: bool,
 
     /// Don't install pre-built wheels.
     ///
@@ -965,11 +1105,10 @@ pub(crate) struct PipInstallArgs {
     ///
     /// The compile option will process the entire site-packages directory for consistency and
     /// (like pip) ignore all errors.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_compile"))]
     pub(crate) compile: bool,
 
-    /// Don't compile Python files to bytecode.
-    #[arg(long, hide = true, conflicts_with = "compile")]
+    #[arg(long, overrides_with("compile"), hide = true)]
     pub(crate) no_compile: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
@@ -978,8 +1117,11 @@ pub(crate) struct PipInstallArgs {
 
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_strict"))]
     pub(crate) strict: bool,
+
+    #[arg(long, overrides_with("strict"), hide = true)]
+    pub(crate) no_strict: bool,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -1038,8 +1180,16 @@ pub(crate) struct PipUninstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
     ///
@@ -1047,12 +1197,23 @@ pub(crate) struct PipUninstallArgs {
     /// environments, when installing into Python installations that are managed by an external
     /// package manager, like `apt`. It should be used with caution, as such Python installations
     /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
-    #[arg(long, env = "UV_BREAK_SYSTEM_PACKAGES", requires = "discovery")]
+    #[arg(
+        long,
+        env = "UV_BREAK_SYSTEM_PACKAGES",
+        requires = "discovery",
+        overrides_with("no_break_system_packages")
+    )]
     pub(crate) break_system_packages: bool,
 
+    #[arg(long, overrides_with("break_system_packages"))]
+    pub(crate) no_break_system_packages: bool,
+
     /// Run offline, i.e., without accessing the network.
-    #[arg(global = true, long)]
+    #[arg(long, overrides_with("no_offline"))]
     pub(crate) offline: bool,
+
+    #[arg(long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
 }
 
 #[derive(Args)]
@@ -1064,8 +1225,11 @@ pub(crate) struct PipFreezeArgs {
 
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_strict"))]
     pub(crate) strict: bool,
+
+    #[arg(long, overrides_with("strict"), hide = true)]
+    pub(crate) no_strict: bool,
 
     /// The Python interpreter for which packages should be listed.
     ///
@@ -1090,8 +1254,16 @@ pub(crate) struct PipFreezeArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 }
 
 #[derive(Args)]
@@ -1115,8 +1287,11 @@ pub(crate) struct PipListArgs {
 
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_strict"))]
     pub(crate) strict: bool,
+
+    #[arg(long, overrides_with("strict"), hide = true)]
+    pub(crate) no_strict: bool,
 
     /// The Python interpreter for which packages should be listed.
     ///
@@ -1141,8 +1316,16 @@ pub(crate) struct PipListArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 
     #[command(flatten)]
     pub(crate) compat_args: compat::PipListCompatArgs,
@@ -1174,8 +1357,16 @@ pub(crate) struct PipCheckArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 }
 
 #[derive(Args)]
@@ -1186,8 +1377,11 @@ pub(crate) struct PipShowArgs {
 
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_strict"))]
     pub(crate) strict: bool,
+
+    #[arg(long, overrides_with("strict"), hide = true)]
+    pub(crate) no_strict: bool,
 
     /// The Python interpreter for which packages should be listed.
     ///
@@ -1212,8 +1406,16 @@ pub(crate) struct PipShowArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 }
 
 #[derive(Args)]
@@ -1240,8 +1442,16 @@ pub(crate) struct VenvArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
     #[arg(long)]
@@ -1329,8 +1539,11 @@ pub(crate) struct VenvArgs {
     pub(crate) keyring_provider: Option<KeyringProviderType>,
 
     /// Run offline, i.e., without accessing the network.
-    #[arg(global = true, long)]
+    #[arg(long, overrides_with("no_offline"))]
     pub(crate) offline: bool,
+
+    #[arg(long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
