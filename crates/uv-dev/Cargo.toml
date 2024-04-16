@@ -39,7 +39,7 @@ uv-types = { workspace = true }
 anstream = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
+clap = { workspace = true, features = ["derive", "wrap_help"] }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
