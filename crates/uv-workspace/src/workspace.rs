@@ -15,6 +15,19 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    /// Load the user [`Workspace`].
+    pub fn user() -> Result<Option<Self>, WorkspaceError> {
+        let Some(dir) = config_dir() else {
+            return Ok(None);
+        };
+        let root = dir.join("uv");
+        let file = root.join("uv.toml");
+        Ok(Some(Self {
+            options: find_in_directory(&file)?.unwrap_or_default(),
+            root,
+        }))
+    }
+
     /// Find the [`Workspace`] for the given path.
     ///
     /// The search starts at the given path and goes up the directory tree until a workspace is
@@ -50,6 +63,27 @@ impl Workspace {
             options: read_file(path.as_ref())?,
             root: path.as_ref().parent().unwrap().to_path_buf(),
         })
+    }
+}
+
+/// Returns the path to the user configuration directory.
+///
+/// This is similar to the `config_dir()` returned by the `dirs` crate, but it uses the
+/// `XDG_CONFIG_HOME` environment variable on both Linux _and_ macOS, rather than the
+/// `Application Support` directory on macOS.
+fn config_dir() -> Option<PathBuf> {
+    // On Windows, use, e.g., C:\Users\Alice\AppData\Roaming
+    #[cfg(windows)]
+    {
+        dirs_sys::known_folder_roaming_app_data()
+    }
+
+    // On Linux and macOS, use, e.g., /home/alice/.config.
+    #[cfg(not(windows))]
+    {
+        std::env::var_os("XDG_CONFIG_HOME")
+            .and_then(dirs_sys::is_absolute_path)
+            .or_else(|| dirs_sys::home_dir().map(|path| path.join(".config")))
     }
 }
 

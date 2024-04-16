@@ -109,11 +109,16 @@ async fn run() -> Result<ExitStatus> {
         }
     };
 
-    // Load the workspace settings.
+    // Load the workspace settings, prioritizing (in order):
+    // 1. The configuration file specified on the command-line.
+    // 2. The configuration file in the current directory.
+    // 3. The user configuration file.
     let workspace = if let Some(config_file) = cli.config_file.as_ref() {
         Some(uv_workspace::Workspace::from_file(config_file)?)
+    } else if let Some(workspace) = uv_workspace::Workspace::find(env::current_dir()?)? {
+        Some(workspace)
     } else {
-        uv_workspace::Workspace::find(env::current_dir()?)?
+        uv_workspace::Workspace::user()?
     };
 
     // Resolve the global settings.
