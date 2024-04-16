@@ -734,7 +734,9 @@ mod windows {
             let result =
                 find_requested_python(r"C:\does\not\exists\python3.12", &Cache::temp().unwrap())
                     .unwrap()
-                    .ok_or(Error::RequestedPythonNotFound(r"C:\does\not\exists\python3.12".to_string()));
+                    .ok_or(Error::RequestedPythonNotFound(
+                        r"C:\does\not\exists\python3.12".to_string(),
+                    ));
             assert_snapshot!(
                 format_err(result),
                 @"Failed to locate Python interpreter at `C:\\does\\not\\exists\\python3.12`"
@@ -790,7 +792,9 @@ mod tests {
     fn no_such_python_path() {
         let result = find_requested_python("/does/not/exists/python3.12", &Cache::temp().unwrap())
             .unwrap()
-            .ok_or(Error::RequestedPythonNotFound("/does/not/exists/python3.12".to_string()));
+            .ok_or(Error::RequestedPythonNotFound(
+                "/does/not/exists/python3.12".to_string(),
+            ));
         assert_snapshot!(
             format_err(result), @"Failed to locate Python interpreter at `/does/not/exists/python3.12`");
     }
