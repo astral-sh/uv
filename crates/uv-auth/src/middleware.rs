@@ -142,6 +142,7 @@ impl Middleware for AuthMiddleware {
                 .and_then(|credentials| credentials.username())
             {
                 debug!("Checking keyring for credentials for {url}");
+                // how to fix this
                 keyring.fetch(request.url(), username)
             } else {
                 trace!("Skipping keyring lookup for {url} with no username");
