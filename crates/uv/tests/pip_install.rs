@@ -2889,6 +2889,70 @@ fn install_package_basic_auth_from_url() {
     context.assert_command("import anyio").success();
 }
 
+/// Install a package from an index that requires authentication
+#[test]
+fn install_package_basic_auth_from_netrc_default() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let netrc = context.temp_dir.child(".netrc");
+    netrc.write_str("default login public password heron")?;
+
+    uv_snapshot!(context.install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .env("NETRC", netrc.to_str().unwrap())
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+
+    Ok(())
+}
+
+/// Install a package from an index that requires authentication
+#[test]
+fn install_package_basic_auth_from_netrc() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let netrc = context.temp_dir.child(".netrc");
+    netrc.write_str("machine pypi-proxy.fly.dev login public password heron")?;
+
+    uv_snapshot!(context.install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .env("NETRC", netrc.to_str().unwrap())
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+
+    Ok(())
+}
+
 /// Install a package from an index that provides relative links
 #[test]
 fn install_index_with_relative_links() {
