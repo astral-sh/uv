@@ -92,17 +92,23 @@ impl PipCompileSettings {
             r#override,
             extra,
             all_extras,
+            no_all_extras,
             no_deps,
+            deps,
             resolution,
             prerelease,
             pre,
             output_file,
             no_strip_extras,
+            strip_extras,
             no_annotate,
+            annotate,
             no_header,
+            header,
             annotation_style,
             custom_compile_command,
             offline,
+            no_offline,
             refresh,
             refresh_package,
             link_mode,
@@ -115,18 +121,26 @@ impl PipCompileSettings {
             upgrade,
             upgrade_package,
             generate_hashes,
+            no_generate_hashes,
             legacy_setup_py,
+            no_legacy_setup_py,
             no_build_isolation,
+            build_isolation,
             no_build,
+            build,
             only_binary,
             config_setting,
             python_version,
             exclude_newer,
             no_emit_package,
             emit_index_url,
+            no_emit_index_url,
             emit_find_links,
+            no_emit_find_links,
             emit_marker_expression,
+            no_emit_marker_expression,
             emit_index_annotation,
+            no_emit_index_annotation,
             compat_args: _,
         } = args;
 
@@ -143,7 +157,7 @@ impl PipCompileSettings {
             // Shared settings.
             shared: PipSharedSettings::combine(
                 PipOptions {
-                    offline: Some(offline),
+                    offline: flag(offline, no_offline),
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -155,12 +169,12 @@ impl PipCompileSettings {
                     find_links,
                     index_strategy,
                     keyring_provider,
-                    no_build: Some(no_build),
+                    no_build: flag(no_build, build),
                     only_binary,
-                    no_build_isolation: Some(no_build_isolation),
+                    no_build_isolation: flag(no_build_isolation, build_isolation),
                     extra,
-                    all_extras: Some(all_extras),
-                    no_deps: Some(no_deps),
+                    all_extras: flag(all_extras, no_all_extras),
+                    no_deps: flag(no_deps, deps),
                     resolution,
                     prerelease: if pre {
                         Some(PreReleaseMode::Allow)
@@ -168,22 +182,22 @@ impl PipCompileSettings {
                         prerelease
                     },
                     output_file,
-                    no_strip_extras: Some(no_strip_extras),
-                    no_annotate: Some(no_annotate),
-                    no_header: Some(no_header),
+                    no_strip_extras: flag(no_strip_extras, strip_extras),
+                    no_annotate: flag(no_annotate, annotate),
+                    no_header: flag(no_header, header),
                     custom_compile_command,
-                    generate_hashes: Some(generate_hashes),
-                    legacy_setup_py: Some(legacy_setup_py),
+                    generate_hashes: flag(generate_hashes, no_generate_hashes),
+                    legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
                     config_settings: config_setting.map(|config_settings| {
                         config_settings.into_iter().collect::<ConfigSettings>()
                     }),
                     python_version,
                     exclude_newer,
                     no_emit_package,
-                    emit_index_url: Some(emit_index_url),
-                    emit_find_links: Some(emit_find_links),
-                    emit_marker_expression: Some(emit_marker_expression),
-                    emit_index_annotation: Some(emit_index_annotation),
+                    emit_index_url: flag(emit_index_url, no_emit_index_url),
+                    emit_find_links: flag(emit_find_links, no_emit_find_links),
+                    emit_marker_expression: flag(emit_marker_expression, no_emit_marker_expression),
+                    emit_index_annotation: flag(emit_index_annotation, no_emit_index_annotation),
                     annotation_style,
                     link_mode,
                     ..PipOptions::default()
@@ -218,6 +232,7 @@ impl PipSyncSettings {
             reinstall_package,
             offline,
             refresh,
+            no_offline,
             refresh_package,
             link_mode,
             index_url,
@@ -226,19 +241,26 @@ impl PipSyncSettings {
             no_index,
             index_strategy,
             require_hashes,
+            no_require_hashes,
             keyring_provider,
             python,
             system,
+            no_system,
             break_system_packages,
+            no_break_system_packages,
             legacy_setup_py,
+            no_legacy_setup_py,
             no_build_isolation,
+            build_isolation,
             no_build,
+            build,
             no_binary,
             only_binary,
             compile,
-            no_compile: _,
+            no_compile,
             config_setting,
             strict,
+            no_strict,
             compat_args: _,
         } = args;
 
@@ -254,9 +276,9 @@ impl PipSyncSettings {
             shared: PipSharedSettings::combine(
                 PipOptions {
                     python,
-                    system: Some(system),
-                    break_system_packages: Some(break_system_packages),
-                    offline: Some(offline),
+                    system: flag(system, no_system),
+                    break_system_packages: flag(break_system_packages, no_break_system_packages),
+                    offline: flag(offline, no_offline),
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -268,18 +290,18 @@ impl PipSyncSettings {
                     find_links,
                     index_strategy,
                     keyring_provider,
-                    no_build: Some(no_build),
+                    no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
-                    no_build_isolation: Some(no_build_isolation),
-                    strict: Some(strict),
-                    legacy_setup_py: Some(legacy_setup_py),
+                    no_build_isolation: flag(no_build_isolation, build_isolation),
+                    strict: flag(strict, no_strict),
+                    legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
                     config_settings: config_setting.map(|config_settings| {
                         config_settings.into_iter().collect::<ConfigSettings>()
                     }),
                     link_mode,
-                    compile_bytecode: Some(compile),
-                    require_hashes: Some(require_hashes),
+                    compile_bytecode: flag(compile, no_compile),
+                    require_hashes: flag(require_hashes, no_require_hashes),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -320,14 +342,17 @@ impl PipInstallSettings {
             r#override,
             extra,
             all_extras,
+            no_all_extras,
             upgrade,
             upgrade_package,
             reinstall,
             reinstall_package,
             offline,
             refresh,
+            no_offline,
             refresh_package,
             no_deps,
+            deps,
             link_mode,
             resolution,
             prerelease,
@@ -338,19 +363,26 @@ impl PipInstallSettings {
             no_index,
             index_strategy,
             require_hashes,
+            no_require_hashes,
             keyring_provider,
             python,
             system,
+            no_system,
             break_system_packages,
+            no_break_system_packages,
             legacy_setup_py,
+            no_legacy_setup_py,
             no_build_isolation,
+            build_isolation,
             no_build,
+            build,
             no_binary,
             only_binary,
             compile,
-            no_compile: _,
+            no_compile,
             config_setting,
             strict,
+            no_strict,
             exclude_newer,
             dry_run,
         } = args;
@@ -374,9 +406,9 @@ impl PipInstallSettings {
             shared: PipSharedSettings::combine(
                 PipOptions {
                     python,
-                    system: Some(system),
-                    break_system_packages: Some(break_system_packages),
-                    offline: Some(offline),
+                    system: flag(system, no_system),
+                    break_system_packages: flag(break_system_packages, no_break_system_packages),
+                    offline: flag(offline, no_offline),
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -388,28 +420,28 @@ impl PipInstallSettings {
                     find_links,
                     index_strategy,
                     keyring_provider,
-                    no_build: Some(no_build),
+                    no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
-                    no_build_isolation: Some(no_build_isolation),
-                    strict: Some(strict),
+                    no_build_isolation: flag(no_build_isolation, build_isolation),
+                    strict: flag(strict, no_strict),
                     extra,
-                    all_extras: Some(all_extras),
-                    no_deps: Some(no_deps),
+                    all_extras: flag(all_extras, no_all_extras),
+                    no_deps: flag(no_deps, deps),
                     resolution,
                     prerelease: if pre {
                         Some(PreReleaseMode::Allow)
                     } else {
                         prerelease
                     },
-                    legacy_setup_py: Some(legacy_setup_py),
+                    legacy_setup_py: flag(legacy_setup_py, no_legacy_setup_py),
                     config_settings: config_setting.map(|config_settings| {
                         config_settings.into_iter().collect::<ConfigSettings>()
                     }),
                     exclude_newer,
                     link_mode,
-                    compile_bytecode: Some(compile),
-                    require_hashes: Some(require_hashes),
+                    compile_bytecode: flag(compile, no_compile),
+                    require_hashes: flag(require_hashes, no_require_hashes),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -438,8 +470,11 @@ impl PipUninstallSettings {
             python,
             keyring_provider,
             system,
+            no_system,
             break_system_packages,
+            no_break_system_packages,
             offline,
+            no_offline,
         } = args;
 
         Self {
@@ -451,9 +486,9 @@ impl PipUninstallSettings {
             shared: PipSharedSettings::combine(
                 PipOptions {
                     python,
-                    system: Some(system),
-                    break_system_packages: Some(break_system_packages),
-                    offline: Some(offline),
+                    system: flag(system, no_system),
+                    break_system_packages: flag(break_system_packages, no_break_system_packages),
+                    offline: flag(offline, no_offline),
                     keyring_provider,
                     ..PipOptions::default()
                 },
@@ -479,8 +514,10 @@ impl PipFreezeSettings {
         let PipFreezeArgs {
             exclude_editable,
             strict,
+            no_strict,
             python,
             system,
+            no_system,
         } = args;
 
         Self {
@@ -491,8 +528,8 @@ impl PipFreezeSettings {
             shared: PipSharedSettings::combine(
                 PipOptions {
                     python,
-                    system: Some(system),
-                    strict: Some(strict),
+                    system: flag(system, no_system),
+                    strict: flag(strict, no_strict),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -524,8 +561,10 @@ impl PipListSettings {
             exclude,
             format,
             strict,
+            no_strict,
             python,
             system,
+            no_system,
             compat_args: _,
         } = args;
 
@@ -540,8 +579,8 @@ impl PipListSettings {
             shared: PipSharedSettings::combine(
                 PipOptions {
                     python,
-                    system: Some(system),
-                    strict: Some(strict),
+                    system: flag(system, no_system),
+                    strict: flag(strict, no_strict),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -567,8 +606,10 @@ impl PipShowSettings {
         let PipShowArgs {
             package,
             strict,
+            no_strict,
             python,
             system,
+            no_system,
         } = args;
 
         Self {
@@ -579,8 +620,8 @@ impl PipShowSettings {
             shared: PipSharedSettings::combine(
                 PipOptions {
                     python,
-                    system: Some(system),
-                    strict: Some(strict),
+                    system: flag(system, no_system),
+                    strict: flag(strict, no_strict),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -602,14 +643,18 @@ pub(crate) struct PipCheckSettings {
 impl PipCheckSettings {
     /// Resolve the [`PipCheckSettings`] from the CLI and workspace configuration.
     pub(crate) fn resolve(args: PipCheckArgs, workspace: Option<Workspace>) -> Self {
-        let PipCheckArgs { python, system } = args;
+        let PipCheckArgs {
+            python,
+            system,
+            no_system,
+        } = args;
 
         Self {
             // Shared settings.
             shared: PipSharedSettings::combine(
                 PipOptions {
                     python,
-                    system: Some(system),
+                    system: flag(system, no_system),
                     ..PipOptions::default()
                 },
                 workspace,
@@ -638,6 +683,7 @@ impl VenvSettings {
         let VenvArgs {
             python,
             system,
+            no_system,
             seed,
             name,
             prompt,
@@ -649,6 +695,7 @@ impl VenvSettings {
             index_strategy,
             keyring_provider,
             offline,
+            no_offline,
             exclude_newer,
             compat_args: _,
         } = args;
@@ -664,8 +711,8 @@ impl VenvSettings {
             shared: PipSharedSettings::combine(
                 PipOptions {
                     python,
-                    system: Some(system),
-                    offline: Some(offline),
+                    system: flag(system, no_system),
+                    offline: flag(offline, no_offline),
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
                         extra_index_urls
@@ -782,59 +829,75 @@ impl PipSharedSettings {
 
         Self {
             extra: args.extra.or(extra).unwrap_or_default(),
-            all_extras: args.all_extras.unwrap_or(false) || all_extras.unwrap_or(false),
-            no_deps: args.no_deps.unwrap_or(false) || no_deps.unwrap_or(false),
+            all_extras: args.all_extras.or(all_extras).unwrap_or_default(),
+            no_deps: args.no_deps.or(no_deps).unwrap_or_default(),
             resolution: args.resolution.or(resolution).unwrap_or_default(),
             prerelease: args.prerelease.or(prerelease).unwrap_or_default(),
             output_file: args.output_file.or(output_file),
-            no_strip_extras: args.no_strip_extras.unwrap_or(false)
-                || no_strip_extras.unwrap_or(false),
-            no_annotate: args.no_annotate.unwrap_or(false) || no_annotate.unwrap_or(false),
-            no_header: args.no_header.unwrap_or(false) || no_header.unwrap_or(false),
+            no_strip_extras: args.no_strip_extras.or(no_strip_extras).unwrap_or_default(),
+            no_annotate: args.no_annotate.or(no_annotate).unwrap_or_default(),
+            no_header: args.no_header.or(no_header).unwrap_or_default(),
             custom_compile_command: args.custom_compile_command.or(custom_compile_command),
             annotation_style: args
                 .annotation_style
                 .or(annotation_style)
                 .unwrap_or_default(),
-            offline: args.offline.unwrap_or(false) || offline.unwrap_or(false),
+            offline: args.offline.or(offline).unwrap_or_default(),
             index_url: args.index_url.or(index_url),
             extra_index_url: args.extra_index_url.or(extra_index_url).unwrap_or_default(),
-            no_index: args.no_index.unwrap_or(false) || no_index.unwrap_or(false),
+            no_index: args.no_index.or(no_index).unwrap_or_default(),
             index_strategy: args.index_strategy.or(index_strategy).unwrap_or_default(),
             keyring_provider: args
                 .keyring_provider
                 .or(keyring_provider)
                 .unwrap_or_default(),
             find_links: args.find_links.or(find_links).unwrap_or_default(),
-            generate_hashes: args.generate_hashes.unwrap_or(false)
-                || generate_hashes.unwrap_or(false),
-            legacy_setup_py: args.legacy_setup_py.unwrap_or(false)
-                || legacy_setup_py.unwrap_or(false),
-            no_build_isolation: args.no_build_isolation.unwrap_or(false)
-                || no_build_isolation.unwrap_or(false),
-            no_build: args.no_build.unwrap_or(false) || no_build.unwrap_or(false),
+            generate_hashes: args.generate_hashes.or(generate_hashes).unwrap_or_default(),
+            legacy_setup_py: args.legacy_setup_py.or(legacy_setup_py).unwrap_or_default(),
+            no_build_isolation: args
+                .no_build_isolation
+                .or(no_build_isolation)
+                .unwrap_or_default(),
+            no_build: args.no_build.or(no_build).unwrap_or_default(),
             only_binary: args.only_binary.or(only_binary).unwrap_or_default(),
             config_setting: args.config_settings.or(config_settings).unwrap_or_default(),
             python_version: args.python_version.or(python_version),
             exclude_newer: args.exclude_newer.or(exclude_newer),
             no_emit_package: args.no_emit_package.or(no_emit_package).unwrap_or_default(),
-            emit_index_url: args.emit_index_url.unwrap_or(false) || emit_index_url.unwrap_or(false),
-            emit_find_links: args.emit_find_links.unwrap_or(false)
-                || emit_find_links.unwrap_or(false),
-            emit_marker_expression: args.emit_marker_expression.unwrap_or(false)
-                || emit_marker_expression.unwrap_or(false),
-            emit_index_annotation: args.emit_index_annotation.unwrap_or(false)
-                || emit_index_annotation.unwrap_or(false),
+            emit_index_url: args.emit_index_url.or(emit_index_url).unwrap_or_default(),
+            emit_find_links: args.emit_find_links.or(emit_find_links).unwrap_or_default(),
+            emit_marker_expression: args
+                .emit_marker_expression
+                .or(emit_marker_expression)
+                .unwrap_or_default(),
+            emit_index_annotation: args
+                .emit_index_annotation
+                .or(emit_index_annotation)
+                .unwrap_or_default(),
             link_mode: args.link_mode.or(link_mode).unwrap_or_default(),
-            require_hashes: args.require_hashes.unwrap_or(false) || require_hashes.unwrap_or(false),
+            require_hashes: args.require_hashes.or(require_hashes).unwrap_or_default(),
             python: args.python.or(python),
-            system: args.system.unwrap_or(false) || system.unwrap_or(false),
-            break_system_packages: args.break_system_packages.unwrap_or(false)
-                || break_system_packages.unwrap_or(false),
+            system: args.system.or(system).unwrap_or_default(),
+            break_system_packages: args
+                .break_system_packages
+                .or(break_system_packages)
+                .unwrap_or_default(),
             no_binary: args.no_binary.or(no_binary).unwrap_or_default(),
-            compile_bytecode: args.compile_bytecode.unwrap_or(false)
-                || compile_bytecode.unwrap_or(false),
-            strict: args.strict.unwrap_or(false) || strict.unwrap_or(false),
+            compile_bytecode: args
+                .compile_bytecode
+                .or(compile_bytecode)
+                .unwrap_or_default(),
+            strict: args.strict.or(strict).unwrap_or_default(),
         }
+    }
+}
+
+/// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
+fn flag(yes: bool, no: bool) -> Option<bool> {
+    match (yes, no) {
+        (true, false) => Some(true),
+        (false, true) => Some(false),
+        (false, false) => None,
+        (..) => unreachable!("Clap should make this impossible"),
     }
 }
