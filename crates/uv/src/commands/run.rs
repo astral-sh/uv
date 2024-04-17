@@ -41,15 +41,26 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 pub(crate) async fn run(
     command: String,
     args: Vec<String>,
-    requirements: &[RequirementsSource],
+    mut requirements: Vec<RequirementsSource>,
     isolated: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    // Copy the requirements into a set of overrides; we'll use this to prioritize
+    // requested requirements over those discovered in the project.
+    // We must retain these requirements as direct dependencies too, as overrides
+    // cannot be applied to transitive dependencies.
+    let overrides = requirements.clone();
+
+    // TODO(zanieb): Provide an opt-out for this behavior
+    if let Some(workspace_requirements) = find_workspace_requirements()? {
+        requirements.extend(workspace_requirements);
+    }
+
     // Detect the current Python interpreter.
     // TODO(zanieb): Create ephemeral environments
     // TODO(zanieb): Accept `--python`
-    let run_env = environment_for_run(requirements, isolated, cache, printer).await?;
+    let run_env = environment_for_run(&requirements, &overrides, isolated, cache, printer).await?;
     let python_env = run_env.python;
 
     // Construct the command
@@ -98,12 +109,31 @@ struct RunEnvironment {
     _temp_dir_drop: Option<TempDir>,
 }
 
+fn find_workspace_requirements() -> Result<Option<Vec<RequirementsSource>>> {
+    // TODO(zanieb): Add/use workspace logic to load requirements for a workspace
+    // We cannot use `Workspace::find` yet because it depends on a `[tool.uv]` section
+    let pyproject_path = std::env::current_dir()?.join("pyproject.toml");
+    if pyproject_path.exists() {
+        debug!(
+            "Loading requirements from {}",
+            pyproject_path.user_display()
+        );
+        return Ok(Some(vec![
+            RequirementsSource::from_requirements_file(pyproject_path),
+            RequirementsSource::from_package(".".to_string()),
+        ]));
+    }
+
+    Ok(None)
+}
+
 /// Returns an environment for a `run` invocation.
 ///
 /// Will use the current virtual environment (if any) unless `isolated` is true.
 /// Will create virtual environments in a temporary directory (if necessary).
 async fn environment_for_run(
     requirements: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     isolated: bool,
     cache: &Cache,
     printer: Printer,
@@ -123,10 +153,16 @@ async fn environment_for_run(
     let client_builder = BaseClientBuilder::default();
 
     // Read all requirements from the provided sources.
-    // TODO(zanieb): Consider allowing overrides and constraints
+    // TODO(zanieb): Consider allowing constraints and extras
     // TODO(zanieb): Allow specifying extras somehow
-    let spec =
-        RequirementsSpecification::from_simple_sources(requirements, &client_builder).await?;
+    let spec = RequirementsSpecification::from_sources(
+        requirements,
+        &[],
+        overrides,
+        &ExtrasSpecification::None,
+        &client_builder,
+    )
+    .await?;
 
     // Check if the current environment satisfies the requirements
     if let Some(venv) = current_venv {

@@ -8,7 +8,7 @@ use uv_warnings::warn_user;
 
 use crate::confirm;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RequirementsSource {
     /// A package was provided on the command line (e.g., `pip install flask`).
     Package(String),
