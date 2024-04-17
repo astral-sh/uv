@@ -36,7 +36,7 @@ uv-toolchain = { workspace = true }
 uv-types = { workspace = true, features = ["clap"] }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
-uv-workspace = { workspace = true, features = ["serde", "schemars"] }
+uv-workspace = { workspace = true, features = ["schemars"] }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }

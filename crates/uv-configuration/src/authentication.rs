@@ -8,6 +8,7 @@ use uv_auth::{self, KeyringProvider};
     feature = "serde",
     serde(deny_unknown_fields, rename_all = "kebab-case")
 )]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum KeyringProviderType {
     /// Do not use keyring for credential lookup.
     #[default]

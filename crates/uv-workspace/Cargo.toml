@@ -13,25 +13,20 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-distribution-types = { workspace = true }
-install-wheel-rs = { workspace = true }
+distribution-types = { workspace = true, features = ["schemars"] }
+install-wheel-rs = { workspace = true, features = ["schemars"] }
 pep508_rs = { workspace = true }
-uv-auth = { workspace = true, features = ["serde"] }
-uv-configuration = { workspace = true, features = ["serde"] }
+uv-auth = { workspace = true, features = ["schemars", "serde"] }
+uv-configuration = { workspace = true, features = ["schemars", "serde"] }
 uv-fs = { workspace = true }
-uv-normalize = { workspace = true }
-uv-resolver = { workspace = true, features = ["serde"] }
-uv-toolchain = { workspace = true, features = ["serde"] }
+uv-normalize = { workspace = true, features = ["schemars"] }
+uv-resolver = { workspace = true, features = ["schemars", "serde"] }
+uv-toolchain = { workspace = true, features = ["schemars", "serde"] }
 uv-warnings = { workspace = true }
 
 fs-err = { workspace = true }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-
-[features]
-default = []
-serde = ["dep:serde", "dep:serde_json"]

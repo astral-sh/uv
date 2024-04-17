@@ -12,6 +12,7 @@ use crate::Manifest;
     feature = "serde",
     serde(deny_unknown_fields, rename_all = "kebab-case")
 )]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum ResolutionMode {
     /// Resolve the highest compatible version of each package.
     #[default]

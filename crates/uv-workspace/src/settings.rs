@@ -27,6 +27,7 @@ pub(crate) struct Tools {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Options {
     pub native_tls: Option<bool>,
     pub no_cache: Option<bool>,
@@ -38,6 +39,7 @@ pub struct Options {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PipOptions {
     pub python: Option<String>,
     pub system: Option<bool>,

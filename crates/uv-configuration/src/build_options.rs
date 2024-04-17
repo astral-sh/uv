@@ -203,6 +203,7 @@ impl NoBuild {
     feature = "serde",
     serde(deny_unknown_fields, rename_all = "kebab-case")
 )]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum IndexStrategy {
     /// Only use results from the first index that returns a match for a given package name.
     ///

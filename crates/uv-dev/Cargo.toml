@@ -33,6 +33,7 @@ uv-normalize = { workspace = true }
 uv-resolver = { workspace = true }
 uv-toolchain = { workspace = true }
 uv-types = { workspace = true }
+uv-workspace = { workspace = true, features = ["schemars"] }
 
 # Any dependencies that are exclusively used in `uv-dev` should be listed as non-workspace
 # dependencies, to ensure that we're forced to think twice before including them in other crates.
@@ -47,8 +48,10 @@ itertools = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
 poloto = { version = "19.1.2" }
+pretty_assertions = { version = "1.4.0" }
 resvg = { version = "0.29.0" }
 rustc-hash = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tagu = { version = "0.1.6" }
