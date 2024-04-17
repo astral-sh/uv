@@ -12,6 +12,7 @@ use platform_tags::Tags;
 use pypi_types::Yanked;
 use std::ffi::OsString;
 use std::fmt::Write;
+use std::path::PathBuf;
 use std::{env, iter};
 use tempfile::{tempdir_in, TempDir};
 use tokio::process::Command;
@@ -40,14 +41,28 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 #[allow(clippy::unnecessary_wraps, clippy::too_many_arguments)]
 pub(crate) async fn run(
     target: Option<String>,
-    args: Vec<String>,
+    mut args: Vec<OsString>,
     mut requirements: Vec<RequirementsSource>,
     isolated: bool,
     no_workspace: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let command = target.unwrap_or("python".to_string());
+    let command = if let Some(target) = target {
+        let target_path = PathBuf::from(&target);
+        if target_path
+            .extension()
+            .map_or(false, |ext| ext.eq_ignore_ascii_case("py"))
+            && target_path.exists()
+        {
+            args.insert(0, target_path.as_os_str().into());
+            "python".to_string()
+        } else {
+            target
+        }
+    } else {
+        "python".to_string()
+    };
 
     // Copy the requirements into a set of overrides; we'll use this to prioritize
     // requested requirements over those discovered in the project.
@@ -91,7 +106,10 @@ pub(crate) async fn run(
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
     let space = if args.is_empty() { "" } else { " " };
-    debug!("Running `{command}{space}{}`", args.join(" "));
+    debug!(
+        "Running `{command}{space}{}`",
+        args.iter().map(|arg| arg.to_string_lossy()).join(" ")
+    );
     let mut handle = process.spawn()?;
     let status = handle.wait().await?;
 
