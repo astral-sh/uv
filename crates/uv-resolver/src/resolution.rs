@@ -36,6 +36,10 @@ use crate::{Manifest, ResolveError};
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(deny_unknown_fields, rename_all = "kebab-case")
+)]
 pub enum AnnotationStyle {
     /// Render the annotations on a single, comma-separated line.
     Line,

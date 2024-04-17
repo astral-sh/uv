@@ -8,6 +8,10 @@ use crate::Manifest;
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(deny_unknown_fields, rename_all = "kebab-case")
+)]
 pub enum ResolutionMode {
     /// Resolve the highest compatible version of each package.
     #[default]
