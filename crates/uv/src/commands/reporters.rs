@@ -1,5 +1,6 @@
+use std::fmt::Write;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
@@ -11,6 +12,7 @@ use distribution_types::{
 };
 use uv_normalize::PackageName;
 
+use crate::commands::elapsed;
 use crate::printer::Printer;
 
 #[derive(Debug)]
@@ -19,6 +21,7 @@ pub(crate) struct DownloadReporter {
     multi_progress: MultiProgress,
     progress: ProgressBar,
     bars: Arc<Mutex<Vec<ProgressBar>>>,
+    start_time: Instant,
 }
 
 impl From<Printer> for DownloadReporter {
@@ -36,6 +39,8 @@ impl From<Printer> for DownloadReporter {
             multi_progress,
             progress,
             bars: Arc::new(Mutex::new(Vec::new())),
+            // TODO(zanieb): Consider setting the start time on the start of the first download insteasd
+            start_time: Instant::now(),
         }
     }
 }
@@ -78,6 +83,20 @@ impl uv_installer::DownloadReporter for DownloadReporter {
 
     fn on_complete(&self) {
         self.progress.finish_and_clear();
+        if let Some(length) = self.progress.length() {
+            let s = if length == 1 { "" } else { "s" };
+            writeln!(
+                self.printer.stderr(),
+                "{}",
+                format!(
+                    "Downloaded {} in {}",
+                    format!("{} package{}", length, s).bold(),
+                    elapsed(self.start_time.elapsed())
+                )
+                .dimmed()
+            )
+            .unwrap();
+        };
     }
 
     fn on_build_start(&self, source: &BuildableSource) -> usize {
@@ -130,7 +149,9 @@ impl uv_installer::DownloadReporter for DownloadReporter {
 
 #[derive(Debug)]
 pub(crate) struct InstallReporter {
+    printer: Printer,
     progress: ProgressBar,
+    start_time: Instant,
 }
 
 impl From<Printer> for InstallReporter {
@@ -140,7 +161,11 @@ impl From<Printer> for InstallReporter {
             ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
         );
         progress.set_message("Installing wheels...");
-        Self { progress }
+        Self {
+            printer,
+            progress,
+            start_time: Instant::now(),
+        }
     }
 }
 
@@ -160,6 +185,20 @@ impl uv_installer::InstallReporter for InstallReporter {
 
     fn on_install_complete(&self) {
         self.progress.finish_and_clear();
+        if let Some(length) = self.progress.length() {
+            let s = if length == 1 { "" } else { "s" };
+            writeln!(
+                self.printer.stderr(),
+                "{}",
+                format!(
+                    "Installed {} in {}",
+                    format!("{} package{}", length, s).bold(),
+                    elapsed(self.start_time.elapsed())
+                )
+                .dimmed()
+            )
+            .unwrap();
+        };
     }
 }
 

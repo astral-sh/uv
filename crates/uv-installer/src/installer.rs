@@ -74,7 +74,13 @@ impl<'a> Installer<'a> {
 
                 Ok::<(), Error>(())
             })
-        })
+        })?;
+
+        if let Some(reporter) = self.reporter.as_ref() {
+            reporter.on_install_complete();
+        }
+
+        Ok(())
     }
 }
 

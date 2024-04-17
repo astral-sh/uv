@@ -739,8 +739,6 @@ async fn install(
     let wheels = if remote.is_empty() {
         vec![]
     } else {
-        let start = std::time::Instant::now();
-
         let downloader = Downloader::new(cache, tags, hasher, client, build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
@@ -748,18 +746,6 @@ async fn install(
             .download(remote.clone(), in_flight)
             .await
             .context("Failed to download distributions")?;
-
-        let s = if wheels.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Downloaded {} in {}",
-                format!("{} package{}", wheels.len(), s).bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
 
         wheels
     };
@@ -794,23 +780,10 @@ async fn install(
     // Install the resolved distributions.
     let wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !wheels.is_empty() {
-        let start = std::time::Instant::now();
         uv_installer::Installer::new(venv)
             .with_link_mode(link_mode)
             .with_reporter(InstallReporter::from(printer).with_length(wheels.len() as u64))
             .install(&wheels)?;
-
-        let s = if wheels.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Installed {} in {}",
-                format!("{} package{}", wheels.len(), s).bold(),
-                elapsed(start.elapsed())
-            )
-            .dimmed()
-        )?;
     }
 
     if compile {
