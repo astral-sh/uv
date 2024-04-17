@@ -14,7 +14,8 @@ mod util;
 /// A URL reference to a Git repository.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GitUrl {
-    /// The URL of the Git repository, with any query parameters and fragments removed.
+    /// The URL of the Git repository, with any query parameters, fragments and leading `git+`
+    /// removed.
     repository: Url,
     /// The reference to the commit to use, which could be a branch, tag or revision.
     reference: GitReference,
@@ -23,6 +24,14 @@ pub struct GitUrl {
 }
 
 impl GitUrl {
+    pub fn new(repository: Url, reference: GitReference) -> Self {
+        Self {
+            repository,
+            reference,
+            precise: None,
+        }
+    }
+
     #[must_use]
     pub fn with_precise(mut self, precise: GitSha) -> Self {
         self.precise = Some(precise);

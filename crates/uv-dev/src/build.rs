@@ -28,7 +28,7 @@ pub(crate) struct BuildArgs {
     /// The source distribution to build, as a directory.
     sdist: PathBuf,
     /// The subdirectory to build within the source distribution.
-    subdirectory: Option<PathBuf>,
+    subdirectory: Option<String>,
     /// You can edit the python sources of an editable install and the changes will be used without
     /// the need to reinstall it.
     #[clap(short, long)]

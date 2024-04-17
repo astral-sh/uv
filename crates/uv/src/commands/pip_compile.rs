@@ -1,3 +1,4 @@
+use indexmap::IndexMap;
 use std::borrow::Cow;
 use std::env;
 use std::fmt::Write;
@@ -14,7 +15,9 @@ use tempfile::tempdir_in;
 use tracing::debug;
 
 use distribution_types::{IndexLocations, LocalEditable, LocalEditables, Verbatim};
+use distribution_types::{UvRequirement, UvRequirements};
 use install_wheel_rs::linker::LinkMode;
+
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
 use uv_auth::store_credentials_from_url;
@@ -369,12 +372,29 @@ pub(crate) async fn pip_compile(
             .await
             .context("Failed to build editables")?
             .into_iter()
-            .map(|built_editable| (built_editable.editable, built_editable.metadata))
+            .map(|built_editable| {
+                let requirements = UvRequirements {
+                    dependencies: built_editable
+                        .metadata
+                        .requires_dist
+                        .iter()
+                        .cloned()
+                        .map(UvRequirement::from_requirement)
+                        .collect::<Result<_, _>>()
+                        .expect("TODO(konsti)"),
+                    optional_dependencies: IndexMap::default(),
+                };
+                (
+                    built_editable.editable,
+                    built_editable.metadata,
+                    requirements,
+                )
+            })
             .collect();
 
         // Validate that the editables are compatible with the target Python version.
         let requirement = PythonRequirement::new(&interpreter, &markers);
-        for (.., metadata) in &editables {
+        for (_, metadata, _) in &editables {
             if let Some(python_requires) = metadata.requires_python.as_ref() {
                 if !python_requires.contains(requirement.target()) {
                     return Err(anyhow!(

@@ -54,7 +54,12 @@ impl std::ops::Deref for VersionSpecifiers {
 }
 
 impl VersionSpecifiers {
-    /// Whether all specifiers match the given version
+    /// Matches all versions.
+    pub fn empty() -> Self {
+        Self(Vec::new())
+    }
+
+    /// Whether all specifiers match the given version.
     pub fn contains(&self, version: &Version) -> bool {
         self.iter().all(|specifier| specifier.contains(version))
     }

@@ -1,5 +1,5 @@
-use distribution_types::LocalEditable;
-use pep508_rs::{MarkerEnvironment, Requirement};
+use distribution_types::{LocalEditable, UvRequirement, UvRequirements};
+use pep508_rs::MarkerEnvironment;
 use pypi_types::Metadata23;
 use uv_configuration::{Constraints, Overrides};
 use uv_normalize::PackageName;
@@ -11,7 +11,7 @@ use crate::{preferences::Preference, Exclusions};
 #[derive(Clone, Debug)]
 pub struct Manifest {
     /// The direct requirements for the project.
-    pub(crate) requirements: Vec<Requirement>,
+    pub(crate) requirements: Vec<UvRequirement>,
 
     /// The constraints for the project.
     pub(crate) constraints: Constraints,
@@ -33,7 +33,7 @@ pub struct Manifest {
     ///
     /// The requirements of the editables should be included in resolution as if they were
     /// direct requirements in their own right.
-    pub(crate) editables: Vec<(LocalEditable, Metadata23)>,
+    pub(crate) editables: Vec<(LocalEditable, Metadata23, UvRequirements)>,
 
     /// The installed packages to exclude from consideration during resolution.
     ///
@@ -52,12 +52,12 @@ pub struct Manifest {
 impl Manifest {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        requirements: Vec<Requirement>,
+        requirements: Vec<UvRequirement>,
         constraints: Constraints,
         overrides: Overrides,
         preferences: Vec<Preference>,
         project: Option<PackageName>,
-        editables: Vec<(LocalEditable, Metadata23)>,
+        editables: Vec<(LocalEditable, Metadata23, UvRequirements)>,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
@@ -73,7 +73,7 @@ impl Manifest {
         }
     }
 
-    pub fn simple(requirements: Vec<Requirement>) -> Self {
+    pub fn simple(requirements: Vec<UvRequirement>) -> Self {
         Self {
             requirements,
             constraints: Constraints::default(),
@@ -97,7 +97,7 @@ impl Manifest {
     pub fn requirements<'a>(
         &'a self,
         markers: &'a MarkerEnvironment,
-    ) -> impl Iterator<Item = &Requirement> {
+    ) -> impl Iterator<Item = &UvRequirement> {
         self.lookaheads
             .iter()
             .flat_map(|lookahead| {
@@ -105,11 +105,17 @@ impl Manifest {
                     .apply(lookahead.requirements())
                     .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
             })
-            .chain(self.editables.iter().flat_map(|(editable, metadata)| {
-                self.overrides
-                    .apply(&metadata.requires_dist)
-                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
-            }))
+            .chain(
+                self.editables
+                    .iter()
+                    .flat_map(|(editable, _metadata, uv_requirements)| {
+                        self.overrides
+                            .apply(&uv_requirements.dependencies)
+                            .filter(|requirement| {
+                                requirement.evaluate_markers(markers, &editable.extras)
+                            })
+                    }),
+            )
             .chain(
                 self.overrides
                     .apply(&self.requirements)
@@ -144,11 +150,17 @@ impl Manifest {
                     .apply(lookahead.requirements())
                     .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
             })
-            .chain(self.editables.iter().flat_map(|(editable, metadata)| {
-                self.overrides
-                    .apply(&metadata.requires_dist)
-                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
-            }))
+            .chain(
+                self.editables
+                    .iter()
+                    .flat_map(|(editable, _metadata, uv_requirements)| {
+                        self.overrides
+                            .apply(&uv_requirements.dependencies)
+                            .filter(|requirement| {
+                                requirement.evaluate_markers(markers, &editable.extras)
+                            })
+                    }),
+            )
             .chain(
                 self.overrides
                     .apply(&self.requirements)
@@ -163,8 +175,8 @@ impl Manifest {
     /// even if a requirement is overridden.
     pub fn apply<'a>(
         &'a self,
-        requirements: impl IntoIterator<Item = &'a Requirement>,
-    ) -> impl Iterator<Item = &Requirement> {
+        requirements: impl IntoIterator<Item = &'a UvRequirement>,
+    ) -> impl Iterator<Item = &UvRequirement> {
         self.constraints.apply(self.overrides.apply(requirements))
     }
 }

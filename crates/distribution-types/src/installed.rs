@@ -32,6 +32,7 @@ pub struct InstalledRegistryDist {
 pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
+    pub direct_url: Box<pypi_types::DirectUrl>,
     pub url: Url,
     pub editable: bool,
     pub path: PathBuf,
@@ -61,6 +62,7 @@ impl InstalledDist {
                         name,
                         version,
                         editable: matches!(&direct_url, pypi_types::DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
+                        direct_url: Box::new(direct_url),
                         url,
                         path: path.to_path_buf(),
                     }))),

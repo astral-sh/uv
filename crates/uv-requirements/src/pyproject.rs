@@ -1,13 +1,53 @@
+use std::collections::HashMap;
+use std::ops::Deref;
+use std::path::PathBuf;
+use std::str::FromStr;
+
+use glob::Pattern;
 use indexmap::IndexMap;
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use thiserror::Error;
+use url::Url;
 
-use pep508_rs::Requirement;
-use pypi_types::LenientRequirement;
+use distribution_types::{DirectUrlError, UvRequirement, UvRequirements, UvSource};
+use pep508_rs::{Requirement, VerbatimUrl, VersionOrUrl};
+use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::ExtrasSpecification;
+
+#[derive(Debug, Error)]
+pub(crate) enum Pep621Error {
+    #[error("Failed to parse pyproject.toml")]
+    Pep508(#[from] pep508_rs::Pep508Error),
+    #[error("Missing entry `{0}`")]
+    MissingEntry(&'static str),
+    #[error("Failed to parse entry for {0}")]
+    LoweringError(PackageName, #[source] UvSourcesLoweringError),
+}
+
+/// An error parsing and merging `tool.uv.sources` with
+/// `project.{dependencies,optional-dependencies}`.
+#[derive(Debug, Error)]
+pub(crate) enum UvSourcesLoweringError {
+    #[error("Invalid URL structure")]
+    DirectUrl(#[from] Box<DirectUrlError>),
+    #[error("Unsupported path (can't convert to URL): `{0}`")]
+    PathToUrl(String),
+    #[error("The package is a workspace package, to use it you have to specify `{0} = {{ workspace = true }} in `tool.uv.sources`.")]
+    UndeclaredWorkspacePackage(PackageName),
+    #[error("You need to specify a version constraint")]
+    UnconstrainedVersion,
+    #[error("You can only use one of rev, tag or branch.")]
+    MoreThanOneGitRef,
+    #[error("You can't combine these options in `tool.uv.sources`")]
+    InvalidEntry,
+    #[error(transparent)]
+    InvalidUrl(#[from] url::ParseError),
+    #[error("You can't combine a url in `project` with `tool.uv.sources`")]
+    ConflictingUrls,
+}
 
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -15,9 +55,11 @@ use crate::ExtrasSpecification;
 pub(crate) struct PyProjectToml {
     /// Project metadata
     pub(crate) project: Option<Project>,
+    /// Uv additions
+    pub(crate) tool: Option<Tool>,
 }
 
-/// PEP 621 project metadata.
+/// PEP 621 project metadata (`project`).
 ///
 /// This is a subset of the full metadata specification, and only includes the fields that are
 /// relevant for extracting static requirements.
@@ -37,25 +79,96 @@ pub(crate) struct Project {
     pub(crate) dynamic: Option<Vec<String>>,
 }
 
-/// The PEP 621 project metadata, with static requirements extracted in advance.
+/// `tool`.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Tool {
+    pub(crate) uv: Option<Uv>,
+}
+
+/// `tool.uv`.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Uv {
+    pub(crate) sources: Option<HashMap<PackageName, Source>>,
+    pub(crate) workspace: Option<UvWorkspace>,
+}
+
+/// `tool.uv.workspace`.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UvWorkspace {
+    pub(crate) members: Option<Vec<SerdePattern>>,
+    pub(crate) exclude: Option<Vec<SerdePattern>>,
+}
+
+/// (De)serialize globs as strings.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SerdePattern(#[serde(with = "serde_from_and_to_string")] pub(crate) Pattern);
+
+impl Deref for SerdePattern {
+    type Target = Pattern;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// A `tool.uv.sources` value.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(untagged)]
+pub(crate) enum Source {
+    Git {
+        git: String,
+        subdirectory: Option<String>,
+        // Only one of the three may be used, we validate this later for a better error message.
+        rev: Option<String>,
+        tag: Option<String>,
+        branch: Option<String>,
+    },
+    Url {
+        url: String,
+        subdirectory: Option<String>,
+    },
+    Path {
+        path: String,
+        /// `false` by default.
+        editable: Option<bool>,
+    },
+    Registry {
+        // TODO(konstin): The string is more-or-less a placeholder
+        index: String,
+    },
+    Workspace {
+        workspace: bool,
+        /// `true` by default.
+        editable: Option<bool>,
+    },
+    /// Show a better error message for invalid combinations of options.
+    CatchAll {
+        git: String,
+        subdirectory: Option<String>,
+        rev: Option<String>,
+        tag: Option<String>,
+        branch: Option<String>,
+        url: String,
+        patch: String,
+        index: String,
+        workspace: bool,
+    },
+}
+
+/// The PEP 621 project metadata, with static requirements extracted in advance, joined
+/// with `tool.uv.sources`.
 #[derive(Debug)]
-pub(crate) struct Pep621Metadata {
+pub(crate) struct UvMetadata {
     /// The name of the project.
     pub(crate) name: PackageName,
     /// The requirements extracted from the project.
-    pub(crate) requirements: Vec<Requirement>,
+    pub(crate) requirements: Vec<UvRequirement>,
     /// The extras used to collect requirements.
     pub(crate) used_extras: FxHashSet<ExtraName>,
 }
 
-#[derive(thiserror::Error, Debug)]
-pub(crate) enum Pep621Error {
-    #[error(transparent)]
-    Pep508(#[from] pep508_rs::Pep508Error),
-}
-
-impl Pep621Metadata {
-    /// Extract the static [`Pep621Metadata`] from a [`Project`] and [`ExtrasSpecification`], if
+impl UvMetadata {
+    /// Extract the static [`UvMetadata`] from a [`Project`] and [`ExtrasSpecification`], if
     /// possible.
     ///
     /// If the project specifies dynamic dependencies, or if the project specifies dynamic optional
@@ -63,69 +176,251 @@ impl Pep621Metadata {
     ///
     /// Returns an error if the requirements are not valid PEP 508 requirements.
     pub(crate) fn try_from(
-        project: Project,
+        pyproject: PyProjectToml,
         extras: &ExtrasSpecification,
+        workspace_sources: &HashMap<PackageName, Source>,
+        workspace_packages: &HashMap<PackageName, PathBuf>,
     ) -> Result<Option<Self>, Pep621Error> {
+        let project_sources = pyproject
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.clone());
+
+        let has_sources = project_sources.is_some() || !workspace_sources.is_empty();
+
+        let Some(project) = pyproject.project else {
+            return if has_sources {
+                Err(Pep621Error::MissingEntry("[project]"))
+            } else {
+                Ok(None)
+            };
+        };
         if let Some(dynamic) = project.dynamic.as_ref() {
             // If the project specifies dynamic dependencies, we can't extract the requirements.
             if dynamic.iter().any(|field| field == "dependencies") {
-                return Ok(None);
+                return if has_sources {
+                    Err(Pep621Error::MissingEntry("[project.dependencies]"))
+                } else {
+                    Ok(None)
+                };
             }
             // If we requested extras, and the project specifies dynamic optional dependencies, we can't
             // extract the requirements.
             if !extras.is_empty() && dynamic.iter().any(|field| field == "optional-dependencies") {
-                return Ok(None);
+                return if has_sources {
+                    Err(Pep621Error::MissingEntry("[project.optional-dependencies]"))
+                } else {
+                    Ok(None)
+                };
             }
         }
 
-        let name = project.name;
+        let uv_requirements = lower_requirements(
+            &project.dependencies.unwrap_or_default(),
+            &project.optional_dependencies.unwrap_or_default(),
+            &project.name,
+            &project_sources.unwrap_or_default(),
+            workspace_sources,
+            workspace_packages,
+        )?;
 
         // Parse out the project requirements.
-        let mut requirements = project
-            .dependencies
-            .unwrap_or_default()
-            .iter()
-            .map(String::as_str)
-            .map(|s| LenientRequirement::from_str(s).map(Requirement::from))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut requirements = uv_requirements.dependencies;
 
         // Include any optional dependencies specified in `extras`.
         let mut used_extras = FxHashSet::default();
         if !extras.is_empty() {
-            if let Some(optional_dependencies) = project.optional_dependencies {
-                // Parse out the optional dependencies.
-                let optional_dependencies = optional_dependencies
-                    .into_iter()
-                    .map(|(extra, requirements)| {
-                        let requirements = requirements
-                            .iter()
-                            .map(String::as_str)
-                            .map(|s| LenientRequirement::from_str(s).map(Requirement::from))
-                            .collect::<Result<Vec<_>, _>>()?;
-                        Ok::<(ExtraName, Vec<Requirement>), Pep621Error>((extra, requirements))
-                    })
-                    .collect::<Result<IndexMap<_, _>, _>>()?;
-
-                // Include the optional dependencies if the extras are requested.
-                for (extra, optional_requirements) in &optional_dependencies {
-                    if extras.contains(extra) {
-                        used_extras.insert(extra.clone());
-                        requirements.extend(flatten_extra(
-                            &name,
-                            optional_requirements,
-                            &optional_dependencies,
-                        ));
-                    }
+            // Include the optional dependencies if the extras are requested.
+            for (extra, optional_requirements) in &uv_requirements.optional_dependencies {
+                if extras.contains(extra) {
+                    used_extras.insert(extra.clone());
+                    requirements.extend(flatten_extra(
+                        &project.name,
+                        optional_requirements,
+                        &uv_requirements.optional_dependencies,
+                    ));
                 }
             }
         }
 
         Ok(Some(Self {
-            name,
+            name: project.name,
             requirements,
             used_extras,
         }))
     }
+}
+
+pub(crate) fn lower_requirements(
+    dependencies: &[String],
+    optional_dependencies: &IndexMap<ExtraName, Vec<String>>,
+    project_name: &PackageName,
+    project_sources: &HashMap<PackageName, Source>,
+    workspace_sources: &HashMap<PackageName, Source>,
+    workspace_packages: &HashMap<PackageName, PathBuf>,
+) -> Result<UvRequirements, Pep621Error> {
+    let dependencies = dependencies
+        .iter()
+        .map(|dependency| {
+            let requirement = Requirement::from_str(dependency)?;
+            let name = requirement.name.clone();
+            lower_requirement(
+                requirement,
+                project_name,
+                project_sources,
+                workspace_sources,
+                workspace_packages,
+            )
+            .map_err(|err| Pep621Error::LoweringError(name, err))
+        })
+        .collect::<Result<_, Pep621Error>>()?;
+    let optional_dependencies = optional_dependencies
+        .iter()
+        .map(|(extra_name, dependencies)| {
+            let dependencies: Vec<_> = dependencies
+                .iter()
+                .map(|dependency| {
+                    let requirement = Requirement::from_str(dependency)?;
+                    let name = requirement.name.clone();
+                    lower_requirement(
+                        requirement,
+                        project_name,
+                        project_sources,
+                        workspace_sources,
+                        workspace_packages,
+                    )
+                    .map_err(|err| Pep621Error::LoweringError(name, err))
+                })
+                .collect::<Result<_, Pep621Error>>()?;
+            Ok((extra_name.clone(), dependencies))
+        })
+        .collect::<Result<_, Pep621Error>>()?;
+    Ok(UvRequirements {
+        dependencies,
+        optional_dependencies,
+    })
+}
+
+/// Combine `project.dependencies`/`project.optional-dependencies` with `tool.uv.sources`.
+pub(crate) fn lower_requirement(
+    requirement: Requirement,
+    project_name: &PackageName,
+    project_sources: &HashMap<PackageName, Source>,
+    workspace_sources: &HashMap<PackageName, Source>,
+    workspace_packages: &HashMap<PackageName, PathBuf>,
+) -> Result<UvRequirement, UvSourcesLoweringError> {
+    let source = project_sources
+        .get(&requirement.name)
+        .or(workspace_sources.get(&requirement.name))
+        .cloned();
+    if !matches!(
+        source,
+        Some(Source::Workspace {
+            // By using toml, we technically support `workspace = false`.
+            workspace: true,
+            ..
+        })
+    ) && workspace_packages.contains_key(&requirement.name)
+    {
+        return Err(UvSourcesLoweringError::UndeclaredWorkspacePackage(
+            requirement.name,
+        ));
+    }
+
+    let Some(source) = source else {
+        // Support recursive editable inclusions. TODO(konsti): This is a workspace feature.
+        return if requirement.version_or_url.is_none() && &requirement.name != project_name {
+            Err(UvSourcesLoweringError::UnconstrainedVersion)
+        } else {
+            Ok(UvRequirement::from_requirement(requirement).map_err(Box::new)?)
+        };
+    };
+
+    let source = match source {
+        Source::Git {
+            git,
+            subdirectory,
+            rev,
+            tag,
+            branch,
+        } => {
+            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                return Err(UvSourcesLoweringError::ConflictingUrls);
+            }
+            // TODO(konsti): We know better than this enum
+            let reference = match (rev, tag, branch) {
+                (None, None, None) => GitReference::DefaultBranch,
+                (Some(rev), None, None) => {
+                    if rev.len() == 40 {
+                        GitReference::FullCommit(rev)
+                    } else {
+                        GitReference::BranchOrTagOrCommit(rev)
+                    }
+                }
+                (None, Some(tag), None) => GitReference::BranchOrTag(tag),
+                (None, None, Some(branch)) => GitReference::BranchOrTag(branch),
+                _ => return Err(UvSourcesLoweringError::MoreThanOneGitRef),
+            };
+
+            // TODO(konsti): Wrong verbatim url
+            let url = VerbatimUrl::from_url(Url::parse(&git)?).with_given(git);
+            let repository = url.to_url().clone();
+            UvSource::Git {
+                url,
+                repository,
+                reference,
+                subdirectory,
+            }
+        }
+        Source::Url { url, subdirectory } => {
+            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                return Err(UvSourcesLoweringError::ConflictingUrls);
+            }
+            let url = VerbatimUrl::from_url(Url::parse(&url)?).with_given(url);
+            UvSource::Url { url, subdirectory }
+        }
+        Source::Path { path, editable } => {
+            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                return Err(UvSourcesLoweringError::ConflictingUrls);
+            }
+            let path_buf = PathBuf::from(&path);
+            let url = VerbatimUrl::from_url(
+                Url::from_file_path(&path)
+                    .map_err(|()| UvSourcesLoweringError::PathToUrl(path.to_string()))?,
+            )
+            .with_given(path);
+            UvSource::Path {
+                path: path_buf,
+                url,
+                editable,
+            }
+        }
+        Source::Registry { index } => match requirement.version_or_url {
+            None => return Err(UvSourcesLoweringError::UnconstrainedVersion),
+            Some(VersionOrUrl::VersionSpecifier(version)) => UvSource::Registry {
+                version,
+                index: Some(index),
+            },
+            Some(VersionOrUrl::Url(_)) => return Err(UvSourcesLoweringError::ConflictingUrls),
+        },
+        Source::Workspace { .. } => {
+            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
+                return Err(UvSourcesLoweringError::ConflictingUrls);
+            }
+            todo!()
+        }
+        Source::CatchAll { .. } => {
+            // This is better than a serde error about not matching any enum variant
+            return Err(UvSourcesLoweringError::InvalidEntry);
+        }
+    };
+    Ok(UvRequirement {
+        name: requirement.name,
+        extras: requirement.extras,
+        marker: requirement.marker,
+        source,
+    })
 }
 
 /// Given an extra in a project that may contain references to the project
@@ -150,15 +445,15 @@ impl Pep621Metadata {
 /// ```
 fn flatten_extra(
     project_name: &PackageName,
-    requirements: &[Requirement],
-    extras: &IndexMap<ExtraName, Vec<Requirement>>,
-) -> Vec<Requirement> {
+    requirements: &[UvRequirement],
+    extras: &IndexMap<ExtraName, Vec<UvRequirement>>,
+) -> Vec<UvRequirement> {
     fn inner(
         project_name: &PackageName,
-        requirements: &[Requirement],
-        extras: &IndexMap<ExtraName, Vec<Requirement>>,
+        requirements: &[UvRequirement],
+        extras: &IndexMap<ExtraName, Vec<UvRequirement>>,
         seen: &mut FxHashSet<ExtraName>,
-    ) -> Vec<Requirement> {
+    ) -> Vec<UvRequirement> {
         let mut flattened = Vec::with_capacity(requirements.len());
         for requirement in requirements {
             if requirement.name == *project_name {
@@ -188,4 +483,31 @@ fn flatten_extra(
         extras,
         &mut FxHashSet::default(),
     )
+}
+
+/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
+mod serde_from_and_to_string {
+    use std::fmt::Display;
+    use std::str::FromStr;
+
+    use serde::{de, Deserialize, Deserializer, Serializer};
+
+    pub(super) fn serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        T: Display,
+        S: Serializer,
+    {
+        serializer.collect_str(value)
+    }
+
+    pub(super) fn deserialize<'de, T, D>(deserializer: D) -> Result<T, D::Error>
+    where
+        T: FromStr,
+        T::Err: Display,
+        D: Deserializer<'de>,
+    {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(de::Error::custom)
+    }
 }

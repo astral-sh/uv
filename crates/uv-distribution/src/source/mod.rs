@@ -378,7 +378,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         filename: &'data str,
         url: &'data Url,
         cache_shard: &CacheShard,
-        subdirectory: Option<&'data Path>,
+        subdirectory: Option<&'data str>,
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
@@ -447,7 +447,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         filename: &'data str,
         url: &'data Url,
         cache_shard: &CacheShard,
-        subdirectory: Option<&'data Path>,
+        subdirectory: Option<&'data str>,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         // Fetch the revision for the source distribution.
@@ -1255,7 +1255,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         source_root: &Path,
-        subdirectory: Option<&Path>,
+        subdirectory: Option<&str>,
         cache_shard: &CacheShard,
     ) -> Result<(String, WheelFilename, Metadata23), Error> {
         debug!("Building: {source}");
@@ -1308,7 +1308,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         source_root: &Path,
-        subdirectory: Option<&Path>,
+        subdirectory: Option<&str>,
     ) -> Result<Option<Metadata23>, Error> {
         debug!("Preparing metadata for: {source}");
 
@@ -1535,7 +1535,7 @@ impl LocalRevisionPointer {
 /// `Provides-Extra`) are marked as dynamic.
 async fn read_pkg_info(
     source_tree: &Path,
-    subdirectory: Option<&Path>,
+    subdirectory: Option<&str>,
 ) -> Result<Metadata23, Error> {
     // Read the `PKG-INFO` file.
     let pkg_info = match subdirectory {
@@ -1556,11 +1556,11 @@ async fn read_pkg_info(
     Ok(metadata)
 }
 
-/// Read the [`Metadata23`] from a source distribution's `pyproject.tom` file, if it defines static
+/// Read the [`Metadata23`] from a source distribution's `pyproject.toml` file, if it defines static
 /// metadata consistent with PEP 621.
 async fn read_pyproject_toml(
     source_tree: &Path,
-    subdirectory: Option<&Path>,
+    subdirectory: Option<&str>,
 ) -> Result<Metadata23, Error> {
     // Read the `pyproject.toml` file.
     let pyproject_toml = match subdirectory {

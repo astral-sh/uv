@@ -1,0 +1,14 @@
+[project]
+name = "foo"
+version = "0.0.0"
+dependencies = [
+  "tqdm>4,<=5",
+  "boltons==24.0.0",
+  "packaging @ git+https://github.com/pypa/packaging",
+  "poetry_editable"
+]
+
+[tool.uv.sources]
+tqdm = { url = "https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl" }
+boltons = { git = "https://github.com/mahmoud/boltons" }
+poetry_editable = { path = "../scripts/packages/poetry_editable" }

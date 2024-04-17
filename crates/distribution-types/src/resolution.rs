@@ -1,9 +1,10 @@
 use rustc_hash::FxHashMap;
+use url::Url;
 
-use pep508_rs::Requirement;
+use uv_git::GitUrl;
 use uv_normalize::PackageName;
 
-use crate::{BuiltDist, Dist, InstalledDist, Name, ResolvedDist, SourceDist};
+use crate::{BuiltDist, Dist, Name, ResolvedDist, SourceDist, UvRequirement, UvSource};
 
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]
@@ -56,99 +57,125 @@ impl Resolution {
         self.0.is_empty()
     }
 
-    /// Return the set of [`Requirement`]s that this resolution represents, exclusive of any
+    /// Return the set of [`UvRequirement`]s that this resolution represents, exclusive of any
     /// editable requirements.
-    pub fn requirements(&self) -> Vec<Requirement> {
+    pub fn requirements(&self) -> Vec<UvRequirement> {
         let mut requirements = self
             .0
             .values()
             // Remove editable requirements
             .filter(|dist| !dist.is_editable())
-            .map(|dist| Requirement::from(dist.clone()))
+            .map(dist_to_uv_requirement)
             .collect::<Vec<_>>();
         requirements.sort_unstable_by(|a, b| a.name.cmp(&b.name));
         requirements
     }
 }
 
-impl From<Dist> for Requirement {
-    fn from(dist: Dist) -> Self {
-        match dist {
-            Dist::Built(BuiltDist::Registry(wheel)) => Self {
-                name: wheel.filename.name,
+fn dist_to_uv_requirement(resolved_dist: &ResolvedDist) -> UvRequirement {
+    match resolved_dist {
+        ResolvedDist::Installable(dist) => match dist {
+            Dist::Built(BuiltDist::Registry(wheel)) => UvRequirement {
+                name: wheel.filename.name.clone(),
                 extras: vec![],
-                version_or_url: Some(pep508_rs::VersionOrUrl::VersionSpecifier(
-                    pep440_rs::VersionSpecifiers::from(
-                        pep440_rs::VersionSpecifier::equals_version(wheel.filename.version),
+                source: UvSource::Registry {
+                    version: pep440_rs::VersionSpecifiers::from(
+                        pep440_rs::VersionSpecifier::equals_version(wheel.filename.version.clone()),
                     ),
-                )),
+                    index: None,
+                },
                 marker: None,
             },
 
-            Dist::Built(BuiltDist::DirectUrl(wheel)) => Self {
-                name: wheel.filename.name,
+            Dist::Built(BuiltDist::DirectUrl(wheel)) => UvRequirement {
+                name: wheel.filename.name.clone(),
                 extras: vec![],
-                version_or_url: Some(pep508_rs::VersionOrUrl::Url(wheel.url)),
+                source: UvSource::Url {
+                    url: wheel.url.clone(),
+                    subdirectory: None,
+                },
                 marker: None,
             },
-            Dist::Built(BuiltDist::Path(wheel)) => Self {
-                name: wheel.filename.name,
+            Dist::Built(BuiltDist::Path(wheel)) => UvRequirement {
+                name: wheel.filename.name.clone(),
                 extras: vec![],
-                version_or_url: Some(pep508_rs::VersionOrUrl::Url(wheel.url)),
+                source: UvSource::Path {
+                    path: wheel.path.clone(),
+                    url: wheel.url.clone(),
+                    editable: None,
+                },
                 marker: None,
             },
-            Dist::Source(SourceDist::Registry(sdist)) => Self {
-                name: sdist.filename.name,
+            Dist::Source(SourceDist::Registry(sdist)) => UvRequirement {
+                name: sdist.filename.name.clone(),
                 extras: vec![],
-                version_or_url: Some(pep508_rs::VersionOrUrl::VersionSpecifier(
-                    pep440_rs::VersionSpecifiers::from(
-                        pep440_rs::VersionSpecifier::equals_version(sdist.filename.version),
+                source: UvSource::Registry {
+                    version: pep440_rs::VersionSpecifiers::from(
+                        pep440_rs::VersionSpecifier::equals_version(sdist.filename.version.clone()),
                     ),
-                )),
+                    index: None,
+                },
                 marker: None,
             },
-            Dist::Source(SourceDist::DirectUrl(sdist)) => Self {
-                name: sdist.name,
+            Dist::Source(SourceDist::DirectUrl(sdist)) => UvRequirement {
+                name: sdist.name.clone(),
                 extras: vec![],
-                version_or_url: Some(pep508_rs::VersionOrUrl::Url(sdist.url)),
+                source: UvSource::Url {
+                    url: sdist.url.clone(),
+                    subdirectory: None,
+                },
                 marker: None,
             },
-            Dist::Source(SourceDist::Git(sdist)) => Self {
-                name: sdist.name,
-                extras: vec![],
-                version_or_url: Some(pep508_rs::VersionOrUrl::Url(sdist.url)),
-                marker: None,
-            },
-            Dist::Source(SourceDist::Path(sdist)) => Self {
-                name: sdist.name,
-                extras: vec![],
-                version_or_url: Some(pep508_rs::VersionOrUrl::Url(sdist.url)),
-                marker: None,
-            },
-        }
-    }
-}
+            Dist::Source(SourceDist::Git(sdist)) => {
+                // TODO(konsti)
+                let url = sdist
+                    .url
+                    .as_str()
+                    .strip_prefix("git+")
+                    .expect("Missing git+ prefix for Git URL");
+                let url = Url::parse(url).expect("TODO(konsti)");
+                // TODO(konsti)
+                let subdirectory = url.fragment().and_then(|fragment| {
+                    fragment
+                        .split('&')
+                        .find_map(|fragment| fragment.strip_prefix("subdirectory="))
+                        .map(ToString::to_string)
+                });
+                let git_url = GitUrl::try_from(url).expect("TODO(konsti)");
 
-impl From<InstalledDist> for Requirement {
-    fn from(dist: InstalledDist) -> Self {
-        Self {
+                UvRequirement {
+                    name: sdist.name.clone(),
+                    extras: vec![],
+                    source: UvSource::Git {
+                        url: sdist.url.clone(),
+                        repository: git_url.repository().clone(),
+                        reference: git_url.reference().clone(),
+                        subdirectory,
+                    },
+                    marker: None,
+                }
+            }
+            Dist::Source(SourceDist::Path(sdist)) => UvRequirement {
+                name: sdist.name.clone(),
+                extras: vec![],
+                source: UvSource::Path {
+                    path: sdist.path.clone(),
+                    url: sdist.url.clone(),
+                    editable: None,
+                },
+                marker: None,
+            },
+        },
+        ResolvedDist::Installed(dist) => UvRequirement {
             name: dist.name().clone(),
             extras: vec![],
-            version_or_url: Some(pep508_rs::VersionOrUrl::VersionSpecifier(
-                pep440_rs::VersionSpecifiers::from(pep440_rs::VersionSpecifier::equals_version(
-                    dist.version().clone(),
-                )),
-            )),
+            source: UvSource::Registry {
+                version: pep440_rs::VersionSpecifiers::from(
+                    pep440_rs::VersionSpecifier::equals_version(dist.version().clone()),
+                ),
+                index: None,
+            },
             marker: None,
-        }
-    }
-}
-
-impl From<ResolvedDist> for Requirement {
-    fn from(dist: ResolvedDist) -> Self {
-        match dist {
-            ResolvedDist::Installable(dist) => dist.into(),
-            ResolvedDist::Installed(dist) => dist.into(),
-        }
+        },
     }
 }

@@ -15,8 +15,6 @@ pub enum DirectUrlError {
     GitShaParse(Url, #[source] git2::Error),
     #[error("Not a valid URL: `{0}`")]
     UrlParse(String, #[source] url::ParseError),
-    #[error("Missing `git+` prefix for Git URL: `{0}`")]
-    MissingUrlPrefix(Url),
 }
 
 /// We support three types of URLs for distributions:
@@ -39,9 +37,10 @@ pub enum ParsedUrl {
 ///
 /// Examples:
 /// * `file:///home/ferris/my_project`
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct LocalFileUrl {
     pub url: Url,
+    pub path: PathBuf,
     pub editable: bool,
 }
 
@@ -50,10 +49,10 @@ pub struct LocalFileUrl {
 /// Examples:
 /// * `git+https://git.example.com/MyProject.git`
 /// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct DirectGitUrl {
     pub url: GitUrl,
-    pub subdirectory: Option<PathBuf>,
+    pub subdirectory: Option<String>,
 }
 
 /// An archive url
@@ -62,10 +61,10 @@ pub struct DirectGitUrl {
 /// * wheel: `https://download.pytorch.org/whl/torch-2.0.1-cp39-cp39-manylinux2014_aarch64.whl#sha256=423e0ae257b756bb45a4b49072046772d1ad0c592265c5080070e0767da4e490`
 /// * source dist, correctly named: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz`
 /// * source dist, only extension recognizable: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct DirectArchiveUrl {
     pub url: Url,
-    pub subdirectory: Option<PathBuf>,
+    pub subdirectory: Option<String>,
 }
 
 impl TryFrom<&Url> for DirectGitUrl {
@@ -77,7 +76,7 @@ impl TryFrom<&Url> for DirectGitUrl {
         let url = url_in
             .as_str()
             .strip_prefix("git+")
-            .ok_or_else(|| DirectUrlError::MissingUrlPrefix(url_in.clone()))?;
+            .unwrap_or(url_in.as_str());
         let url = Url::parse(url).map_err(|err| DirectUrlError::UrlParse(url.to_string(), err))?;
         let url = GitUrl::try_from(url)
             .map_err(|err| DirectUrlError::GitShaParse(url_in.clone(), err))?;
@@ -100,12 +99,12 @@ impl From<&Url> for DirectArchiveUrl {
 /// or (direct archive url):
 ///   `https://github.com/foo-labs/foo/archive/master.zip#subdirectory=packages/bar`
 ///   `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
-fn get_subdirectory(url: &Url) -> Option<PathBuf> {
+fn get_subdirectory(url: &Url) -> Option<String> {
     let fragment = url.fragment()?;
     let subdirectory = fragment
         .split('&')
         .find_map(|fragment| fragment.strip_prefix("subdirectory="))?;
-    Some(PathBuf::from(subdirectory))
+    Some(subdirectory.to_string())
 }
 
 /// Return the Git reference of the given URL, if it exists.
@@ -129,6 +128,9 @@ impl TryFrom<&Url> for ParsedUrl {
         } else if url.scheme().eq_ignore_ascii_case("file") {
             Ok(Self::LocalFile(LocalFileUrl {
                 url: url.clone(),
+                path: url
+                    .to_file_path()
+                    .map_err(|()| DirectUrlError::InvalidFileUrl(url.clone()))?,
                 editable: false,
             }))
         } else {
@@ -213,7 +215,7 @@ impl From<DirectArchiveUrl> for Url {
     fn from(value: DirectArchiveUrl) -> Self {
         let mut url = value.url;
         if let Some(subdirectory) = value.subdirectory {
-            url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+            url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
         }
         url
     }
@@ -224,7 +226,7 @@ impl From<DirectGitUrl> for Url {
         let mut url = Self::parse(&format!("{}{}", "git+", Self::from(value.url).as_str()))
             .expect("Git URL is invalid");
         if let Some(subdirectory) = value.subdirectory {
-            url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
+            url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
         }
         url
     }

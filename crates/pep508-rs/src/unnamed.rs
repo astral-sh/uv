@@ -1,14 +1,9 @@
+use crate::{Cursor, MarkerEnvironment, MarkerTree, Pep508Error, VerbatimUrl};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
-
-#[cfg(feature = "pyo3")]
-use pyo3::pyclass;
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-
 use uv_normalize::ExtraName;
-
-use crate::{Cursor, MarkerEnvironment, MarkerTree, Pep508Error, VerbatimUrl};
 
 /// A PEP 508-like, direct URL dependency specifier without a package name.
 ///
@@ -16,7 +11,6 @@ use crate::{Cursor, MarkerEnvironment, MarkerTree, Pep508Error, VerbatimUrl};
 /// dependencies. This isn't compliant with PEP 508, but is common in `requirements.txt`, which
 /// is implementation-defined.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "pyo3", pyclass(module = "pep508"))]
 pub struct UnnamedRequirement {
     /// The direct URL that defines the version specifier.
     pub url: VerbatimUrl,
@@ -27,17 +21,6 @@ pub struct UnnamedRequirement {
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
-}
-
-impl UnnamedRequirement {
-    /// Returns whether the markers apply for the given environment
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        if let Some(marker) = &self.marker {
-            marker.evaluate(env, extras)
-        } else {
-            true
-        }
-    }
 }
 
 impl Display for UnnamedRequirement {
@@ -81,6 +64,17 @@ impl Serialize for UnnamedRequirement {
         S: Serializer,
     {
         serializer.collect_str(self)
+    }
+}
+
+impl UnnamedRequirement {
+    /// Returns whether the markers apply for the given environment
+    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
+        if let Some(marker) = &self.marker {
+            marker.evaluate(env, extras)
+        } else {
+            true
+        }
     }
 }
 

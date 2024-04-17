@@ -1,17 +1,18 @@
 use std::collections::hash_map::Entry;
 use std::hash::BuildHasherDefault;
+use std::ops::Deref;
 
 use anyhow::{bail, Result};
 use rustc_hash::FxHashMap;
 use tracing::{debug, warn};
 
-use distribution_types::Hashed;
 use distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, Dist, IndexLocations, InstalledDist,
-    InstalledMetadata, InstalledVersion, Name, SourceDist,
+    InstalledMetadata, InstalledVersion, Name, SourceDist, UvRequirement, UvSource,
 };
-use pep508_rs::{Requirement, VersionOrUrl};
+use distribution_types::{Hashed, InstalledDirectUrlDist};
 use platform_tags::Tags;
+use pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache, CacheBucket, WheelCache};
 use uv_configuration::{NoBinary, Reinstall};
 use uv_distribution::{
@@ -26,14 +27,14 @@ use crate::{ResolvedEditable, SitePackages};
 /// A planner to generate an [`Plan`] based on a set of requirements.
 #[derive(Debug)]
 pub struct Planner<'a> {
-    requirements: &'a [Requirement],
+    requirements: &'a [UvRequirement],
     editable_requirements: &'a [ResolvedEditable],
 }
 
 impl<'a> Planner<'a> {
     /// Set the requirements use in the [`Plan`].
     #[must_use]
-    pub fn with_requirements(requirements: &'a [Requirement]) -> Self {
+    pub fn with_requirements(requirements: &'a [UvRequirement]) -> Self {
         Self {
             requirements,
             editable_requirements: &[],
@@ -143,7 +144,7 @@ impl<'a> Planner<'a> {
             }
 
             // If we see the same requirement twice, then we have a conflict.
-            let specifier = Specifier::NonEditable(requirement.version_or_url.as_ref());
+            let specifier = Specifier::NonEditable(&requirement.source);
             match seen.entry(requirement.name.clone()) {
                 Entry::Occupied(value) => {
                     if value.get() == &specifier {
@@ -197,40 +198,25 @@ impl<'a> Planner<'a> {
             }
 
             if cache.must_revalidate(&requirement.name) {
-                debug!("Must revalidate requirement: {requirement}");
+                debug!("Must revalidate requirement: {}", requirement.name);
                 remote.push(requirement.clone());
                 continue;
             }
 
             // Identify any cached distributions that satisfy the requirement.
-            match requirement.version_or_url.as_ref() {
-                None => {
-                    if let Some((_version, distribution)) =
-                        registry_index.get(&requirement.name).next()
-                    {
-                        debug!("Requirement already cached: {distribution}");
-                        cached.push(CachedDist::Registry(distribution.clone()));
-                        continue;
-                    }
-                }
-                Some(VersionOrUrl::VersionSpecifier(specifier)) => {
+            match &requirement.source {
+                UvSource::Registry { version, .. } => {
                     if let Some((_version, distribution)) = registry_index
                         .get(&requirement.name)
-                        .find(|(version, _)| specifier.contains(version))
+                        .find(|(version_, _)| version.contains(version_))
                     {
                         debug!("Requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
                 }
-                Some(VersionOrUrl::Url(url)) => {
-                    match Dist::from_url(requirement.name.clone(), url.clone())? {
-                        Dist::Built(BuiltDist::Registry(_)) => {
-                            // Nothing to do.
-                        }
-                        Dist::Source(SourceDist::Registry(_)) => {
-                            // Nothing to do.
-                        }
+                UvSource::Url { url, .. } => {
+                    match Dist::from_https_url(requirement.name.clone(), url.clone())? {
                         Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                             if !wheel.filename.is_compatible(tags) {
                                 bail!(
@@ -272,6 +258,36 @@ impl<'a> Planner<'a> {
                                 }
                             }
                         }
+                        Dist::Source(SourceDist::DirectUrl(sdist)) => {
+                            // Find the most-compatible wheel from the cache, since we don't know
+                            // the filename in advance.
+                            if let Some(wheel) = built_index.url(&sdist)? {
+                                let cached_dist = wheel.into_url_dist(url.clone());
+                                debug!("URL source requirement already cached: {cached_dist}");
+                                cached.push(CachedDist::Url(cached_dist));
+                                continue;
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                UvSource::Git { url, .. } => {
+                    match Dist::from_git_url(requirement.name.clone(), url.clone())? {
+                        Dist::Source(SourceDist::Git(sdist)) => {
+                            // Find the most-compatible wheel from the cache, since we don't know
+                            // the filename in advance.
+                            if let Some(wheel) = built_index.git(&sdist) {
+                                let cached_dist = wheel.into_url_dist(url.clone());
+                                debug!("Git source requirement already cached: {cached_dist}");
+                                cached.push(CachedDist::Url(cached_dist));
+                                continue;
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                UvSource::Path { url, .. } => {
+                    match Dist::from_file_url(requirement.name.clone(), url.clone(), false)? {
                         Dist::Built(BuiltDist::Path(wheel)) => {
                             if !wheel.filename.is_compatible(tags) {
                                 bail!(
@@ -317,16 +333,6 @@ impl<'a> Planner<'a> {
                                 }
                             }
                         }
-                        Dist::Source(SourceDist::DirectUrl(sdist)) => {
-                            // Find the most-compatible wheel from the cache, since we don't know
-                            // the filename in advance.
-                            if let Some(wheel) = built_index.url(&sdist)? {
-                                let cached_dist = wheel.into_url_dist(url.clone());
-                                debug!("URL source requirement already cached: {cached_dist}");
-                                cached.push(CachedDist::Url(cached_dist));
-                                continue;
-                            }
-                        }
                         Dist::Source(SourceDist::Path(sdist)) => {
                             // Find the most-compatible wheel from the cache, since we don't know
                             // the filename in advance.
@@ -337,16 +343,7 @@ impl<'a> Planner<'a> {
                                 continue;
                             }
                         }
-                        Dist::Source(SourceDist::Git(sdist)) => {
-                            // Find the most-compatible wheel from the cache, since we don't know
-                            // the filename in advance.
-                            if let Some(wheel) = built_index.git(&sdist) {
-                                let cached_dist = wheel.into_url_dist(url.clone());
-                                debug!("Git source requirement already cached: {cached_dist}");
-                                cached.push(CachedDist::Url(cached_dist));
-                                continue;
-                            }
-                        }
+                        _ => unreachable!(),
                     }
                 }
             }
@@ -391,7 +388,7 @@ enum Specifier<'a> {
     /// An editable requirement, marked by the installed version of the package.
     Editable(InstalledVersion<'a>),
     /// A non-editable requirement, marked by the version or URL specifier.
-    NonEditable(Option<&'a VersionOrUrl>),
+    NonEditable(&'a UvSource),
 }
 
 #[derive(Debug, Default)]
@@ -406,7 +403,7 @@ pub struct Plan {
 
     /// The distributions that are not already installed in the current environment, and are
     /// not available in the local cache.
-    pub remote: Vec<Requirement>,
+    pub remote: Vec<UvRequirement>,
 
     /// Any distributions that are already installed in the current environment, but will be
     /// re-installed (including upgraded) to satisfy the requirements.
@@ -422,47 +419,133 @@ pub struct Plan {
 /// Returns an error if IO fails during a freshness check for a local path.
 fn installed_satisfies_requirement(
     distribution: &InstalledDist,
-    requirement: &Requirement,
+    requirement: &UvRequirement,
 ) -> Result<bool> {
     // Filter out already-installed packages.
-    match requirement.version_or_url.as_ref() {
-        // Accept any version of the package.
-        None => return Ok(true),
-
+    match &requirement.source {
         // If the requirement comes from a registry, check by name.
-        Some(VersionOrUrl::VersionSpecifier(version_specifier)) => {
-            if version_specifier.contains(distribution.version()) {
+        UvSource::Registry { version, .. } => {
+            if version.contains(distribution.version()) {
                 debug!("Requirement already satisfied: {distribution}");
                 return Ok(true);
             }
+            Ok(false)
         }
+        UvSource::Url {
+            url: requested_url,
+            subdirectory: requested_subdirectory,
+        } => {
+            let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
+            else {
+                return Ok(false);
+            };
+            let DirectUrl::ArchiveUrl {
+                url: installed_url,
+                archive_info: _,
+                subdirectory: installed_subdirectory,
+            } = direct_url.as_ref()
+            else {
+                return Ok(false);
+            };
 
-        // If the requirement comes from a direct URL, check by URL.
-        Some(VersionOrUrl::Url(url)) => {
-            if let InstalledDist::Url(installed) = &distribution {
-                if &installed.url == url.raw() {
-                    // If the requirement came from a local path, check freshness.
-                    if let Some(archive) = (url.scheme() == "file")
-                        .then(|| url.to_file_path().ok())
-                        .flatten()
-                    {
-                        if ArchiveTimestamp::up_to_date_with(
-                            &archive,
-                            ArchiveTarget::Install(distribution),
-                        )? {
-                            debug!("Requirement already satisfied (and up-to-date): {installed}");
-                            return Ok(true);
-                        }
-                        debug!("Requirement already satisfied (but not up-to-date): {installed}");
+            if &requested_url.deref().to_string() != installed_url
+                || requested_subdirectory != installed_subdirectory
+            {
+                return Ok(false);
+            }
+
+            // If the requirement came from a local path, check freshness.
+            if requested_url.scheme() == "file" {
+                if let Ok(archive) = requested_url.to_file_path() {
+                    return if ArchiveTimestamp::up_to_date_with(
+                        &archive,
+                        ArchiveTarget::Install(distribution),
+                    )? {
+                        debug!("Requirement already satisfied (and up-to-date): {requirement}");
+                        Ok(true)
                     } else {
-                        // Otherwise, assume the requirement is up-to-date.
-                        debug!("Requirement already satisfied (assumed up-to-date): {installed}");
-                        return Ok(true);
-                    }
+                        debug!("Requirement already satisfied (but not up-to-date): {requirement}");
+                        Ok(false)
+                    };
                 }
+            }
+
+            // Otherwise, assume the requirement is up-to-date.
+            debug!("Requirement already satisfied (assumed up-to-date): {requirement}");
+            Ok(true)
+        }
+        UvSource::Git {
+            url: _,
+            repository: requested_respository,
+            reference: requested_reference,
+            subdirectory: requested_subdirectory,
+        } => {
+            let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
+            else {
+                return Ok(false);
+            };
+            let DirectUrl::VcsUrl {
+                url: installed_url,
+                vcs_info:
+                    VcsInfo {
+                        vcs: VcsKind::Git,
+                        requested_revision: installed_reference,
+                        commit_id: _,
+                    },
+                subdirectory: installed_subdirectory,
+            } = direct_url.as_ref()
+            else {
+                return Ok(false);
+            };
+            if &requested_respository.to_string() != installed_url
+                || requested_subdirectory != installed_subdirectory
+            {
+                return Ok(false);
+            }
+            if installed_reference.as_deref() != requested_reference.as_str() {
+                debug!(
+                    "Git requirement {requirement} outdated: requested {:?} vs. installed {:?}",
+                    requested_reference, installed_reference
+                );
+                return Ok(false);
+            }
+
+            Ok(true)
+        }
+        UvSource::Path {
+            path,
+            url: requested_url,
+            editable: requested_editable,
+        } => {
+            let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
+            else {
+                return Ok(false);
+            };
+            let DirectUrl::LocalDirectory {
+                url: installed_url,
+                dir_info:
+                    DirInfo {
+                        editable: installed_editable,
+                    },
+            } = direct_url.as_ref()
+            else {
+                return Ok(false);
+            };
+
+            if &requested_url.to_string() != installed_url
+                || requested_editable.unwrap_or_default() != installed_editable.unwrap_or_default()
+            {
+                return Ok(false);
+            }
+
+            if ArchiveTimestamp::up_to_date_with(path, ArchiveTarget::Install(distribution))? {
+                debug!("Requirement already satisfied (and up-to-date): {requirement}");
+                Ok(true)
+            } else {
+                // Otherwise, assume the requirement is up-to-date.
+                debug!("Requirement already satisfied (assumed up-to-date): {requirement}");
+                Ok(false)
             }
         }
     }
-
-    Ok(false)
 }

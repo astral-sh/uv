@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -51,7 +50,7 @@ pub(crate) async fn fetch_git_archive(
     url: &Url,
     cache: &Cache,
     reporter: Option<&Arc<dyn Reporter>>,
-) -> Result<(Fetch, Option<PathBuf>), Error> {
+) -> Result<(Fetch, Option<String>), Error> {
     debug!("Fetching source distribution from Git: {url}");
     let git_dir = cache.bucket(CacheBucket::Git);
 

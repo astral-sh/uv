@@ -1,4 +1,5 @@
 use std::iter::Flatten;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::{collections::BTreeSet, hash::BuildHasherDefault};
 
@@ -7,9 +8,13 @@ use fs_err as fs;
 use rustc_hash::{FxHashMap, FxHashSet};
 use url::Url;
 
-use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
+use distribution_types::{
+    InstalledDirectUrlDist, InstalledDist, InstalledMetadata, InstalledVersion, Name,
+    UvRequirement, UvSource,
+};
 use pep440_rs::{Version, VersionSpecifiers};
 use pep508_rs::{Requirement, VerbatimUrl};
+use pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 use requirements_txt::{EditableRequirement, RequirementEntry, RequirementsTxtRequirement};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
@@ -113,21 +118,27 @@ impl<'a> SitePackages<'a> {
     }
 
     /// Returns an iterator over the installed distributions, represented as requirements.
-    pub fn requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
-        self.iter().map(|dist| Requirement {
+    pub fn requirements(&self) -> impl Iterator<Item = UvRequirement> + '_ {
+        self.iter().map(|dist| UvRequirement {
             name: dist.name().clone(),
             extras: vec![],
-            version_or_url: Some(match dist.installed_version() {
-                InstalledVersion::Version(version) => {
-                    pep508_rs::VersionOrUrl::VersionSpecifier(pep440_rs::VersionSpecifiers::from(
-                        pep440_rs::VersionSpecifier::equals_version(version.clone()),
-                    ))
-                }
-                InstalledVersion::Url(url, ..) => {
-                    pep508_rs::VersionOrUrl::Url(VerbatimUrl::unknown(url.clone()))
-                }
-            }),
             marker: None,
+            source: match dist.installed_version() {
+                InstalledVersion::Version(version) => UvSource::Registry {
+                    version: pep440_rs::VersionSpecifiers::from(
+                        pep440_rs::VersionSpecifier::equals_version(version.clone()),
+                    ),
+                    // TODO(konstin): track index
+                    index: None,
+                },
+                InstalledVersion::Url(url, _version) => {
+                    // TODO(konstin): url types
+                    UvSource::Url {
+                        url: VerbatimUrl::unknown(url.clone()),
+                        subdirectory: None,
+                    }
+                }
+            },
         })
     }
 
@@ -298,7 +309,7 @@ impl<'a> SitePackages<'a> {
         &self,
         requirements: &[RequirementEntry],
         editables: &[EditableRequirement],
-        constraints: &[Requirement],
+        constraints: &[UvRequirement],
     ) -> Result<bool> {
         let mut stack = Vec::<RequirementEntry>::with_capacity(requirements.len());
         let mut seen =
@@ -350,7 +361,9 @@ impl<'a> SitePackages<'a> {
                             &requirement.extras,
                         ) {
                             let dependency = RequirementEntry {
-                                requirement: RequirementsTxtRequirement::Pep508(dependency),
+                                requirement: RequirementsTxtRequirement::Uv(
+                                    UvRequirement::from_requirement(dependency)?,
+                                ),
                                 hashes: vec![],
                             };
                             if seen.insert(dependency.clone()) {
@@ -369,9 +382,7 @@ impl<'a> SitePackages<'a> {
         // Verify that all non-editable requirements are met.
         while let Some(entry) = stack.pop() {
             let installed = match &entry.requirement {
-                RequirementsTxtRequirement::Pep508(requirement) => {
-                    self.get_packages(&requirement.name)
-                }
+                RequirementsTxtRequirement::Uv(requirement) => self.get_packages(&requirement.name),
                 RequirementsTxtRequirement::Unnamed(requirement) => {
                     self.get_urls(requirement.url.raw())
                 }
@@ -382,24 +393,41 @@ impl<'a> SitePackages<'a> {
                     return Ok(false);
                 }
                 [distribution] => {
-                    // Validate that the installed version matches the requirement.
-                    match entry.requirement.version_or_url() {
-                        // Accept any installed version.
-                        None => {}
-
-                        // If the requirement comes from a URL, verify by URL.
-                        Some(pep508_rs::VersionOrUrlRef::Url(url)) => {
-                            let InstalledDist::Url(installed) = &distribution else {
+                    match entry.requirement.source() {
+                        UvSource::Registry { version, .. } => {
+                            // TODO(konsti): Index?
+                            // The installed version doesn't satisfy the requirement.
+                            if !version.contains(distribution.version()) {
+                                return Ok(false);
+                            }
+                        }
+                        UvSource::Url {
+                            url: requested_url,
+                            subdirectory: requested_subdirectory,
+                        } => {
+                            let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) =
+                                &distribution
+                            else {
+                                return Ok(false);
+                            };
+                            let DirectUrl::ArchiveUrl {
+                                url: installed_url,
+                                archive_info: _,
+                                subdirectory: installed_subdirectory,
+                            } = direct_url.as_ref()
+                            else {
                                 return Ok(false);
                             };
 
-                            if &installed.url != url.raw() {
+                            if &requested_url.deref().to_string() != installed_url
+                                || &requested_subdirectory != installed_subdirectory
+                            {
                                 return Ok(false);
                             }
 
                             // If the requirement came from a local path, check freshness.
-                            if url.scheme() == "file" {
-                                if let Ok(archive) = url.to_file_path() {
+                            if requested_url.scheme() == "file" {
+                                if let Ok(archive) = requested_url.to_file_path() {
                                     if !ArchiveTimestamp::up_to_date_with(
                                         &archive,
                                         ArchiveTarget::Install(distribution),
@@ -409,15 +437,75 @@ impl<'a> SitePackages<'a> {
                                 }
                             }
                         }
+                        UvSource::Git {
+                            url: _,
+                            repository: requested_respository,
+                            reference: requested_reference,
+                            subdirectory: requested_subdirectory,
+                        } => {
+                            let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) =
+                                &distribution
+                            else {
+                                return Ok(false);
+                            };
+                            let DirectUrl::VcsUrl {
+                                url: installed_url,
+                                vcs_info:
+                                    VcsInfo {
+                                        vcs: VcsKind::Git,
+                                        requested_revision: installed_reference,
+                                        commit_id: _,
+                                    },
+                                subdirectory: installed_subdirectory,
+                            } = direct_url.as_ref()
+                            else {
+                                return Ok(false);
+                            };
 
-                        Some(pep508_rs::VersionOrUrlRef::VersionSpecifier(version_specifier)) => {
-                            // The installed version doesn't satisfy the requirement.
-                            if !version_specifier.contains(distribution.version()) {
+                            if &requested_respository.to_string() != installed_url
+                                || &requested_subdirectory != installed_subdirectory
+                                || installed_reference.as_deref() != requested_reference.as_str()
+                            {
+                                return Ok(false);
+                            }
+                        }
+                        UvSource::Path {
+                            path,
+                            url: requested_url,
+                            editable: requested_editable,
+                        } => {
+                            // TODO(konsti): Everything installed locally gets passed as url
+                            let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) =
+                                &distribution
+                            else {
+                                return Ok(false);
+                            };
+                            let DirectUrl::LocalDirectory {
+                                url: installed_url,
+                                dir_info:
+                                    DirInfo {
+                                        editable: installed_editable,
+                                    },
+                            } = direct_url.as_ref()
+                            else {
+                                return Ok(false);
+                            };
+
+                            if &requested_url.to_string() != installed_url
+                                || requested_editable.unwrap_or_default()
+                                    != installed_editable.unwrap_or_default()
+                            {
+                                return Ok(false);
+                            }
+
+                            if !ArchiveTimestamp::up_to_date_with(
+                                &path,
+                                ArchiveTarget::Install(distribution),
+                            )? {
                                 return Ok(false);
                             }
                         }
                     }
-
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints {
                         if constraint.name != *distribution.name() {
@@ -428,12 +516,15 @@ impl<'a> SitePackages<'a> {
                             continue;
                         }
 
-                        match &constraint.version_or_url {
-                            // Accept any installed version.
-                            None => {}
-
+                        match &constraint.source {
+                            UvSource::Registry { version, .. } => {
+                                // The installed version doesn't satisfy the requirement.
+                                if !version.contains(distribution.version()) {
+                                    return Ok(false);
+                                }
+                            }
                             // If the requirement comes from a URL, verify by URL.
-                            Some(pep508_rs::VersionOrUrl::Url(url)) => {
+                            UvSource::Url { url, .. } => {
                                 let InstalledDist::Url(installed) = &distribution else {
                                     return Ok(false);
                                 };
@@ -454,12 +545,13 @@ impl<'a> SitePackages<'a> {
                                     }
                                 }
                             }
-
-                            Some(pep508_rs::VersionOrUrl::VersionSpecifier(version_specifier)) => {
-                                // The installed version doesn't satisfy the requirement.
-                                if !version_specifier.contains(distribution.version()) {
-                                    return Ok(false);
-                                }
+                            UvSource::Git { .. } => {
+                                // TODO(konsti)
+                                unreachable!("constraints can't be git dependencies")
+                            }
+                            UvSource::Path { .. } => {
+                                // TODO(konsti)
+                                unreachable!("constraints can't be path dependencies")
                             }
                         }
                     }
@@ -476,7 +568,9 @@ impl<'a> SitePackages<'a> {
                             entry.requirement.extras(),
                         ) {
                             let dependency = RequirementEntry {
-                                requirement: RequirementsTxtRequirement::Pep508(dependency),
+                                requirement: RequirementsTxtRequirement::Uv(
+                                    UvRequirement::from_requirement(dependency)?,
+                                ),
                                 hashes: vec![],
                             };
                             if seen.insert(dependency.clone()) {

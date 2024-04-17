@@ -22,6 +22,7 @@ uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 
 derivative = { workspace = true }
+indexmap = { workspace = true }
 once_cell = { workspace = true }
 pyo3 = { workspace = true, optional = true, features = ["abi3", "extension-module"] }
 pyo3-log = { workspace = true, optional = true }
@@ -32,6 +33,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
+uv-git = { workspace = true }
 
 [dev-dependencies]
 insta = { version = "1.36.1" }

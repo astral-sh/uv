@@ -1,10 +1,9 @@
 use std::fmt::Write;
-
 use std::path::Path;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
-
+use indexmap::IndexMap;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::tempdir_in;
@@ -14,10 +13,12 @@ use distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, LocalDist, LocalEditable,
     LocalEditables, Name, Resolution,
 };
+use distribution_types::{UvRequirement, UvRequirements};
 use install_wheel_rs::linker::LinkMode;
-use pep508_rs::{MarkerEnvironment, Requirement};
+
+use pep508_rs::MarkerEnvironment;
 use platform_tags::Tags;
-use pypi_types::{Metadata23, Yanked};
+use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
 use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
@@ -539,9 +540,9 @@ async fn build_editables(
 /// Resolve a set of requirements, similar to running `pip compile`.
 #[allow(clippy::too_many_arguments)]
 async fn resolve(
-    requirements: Vec<Requirement>,
-    constraints: Vec<Requirement>,
-    overrides: Vec<Requirement>,
+    requirements: Vec<UvRequirement>,
+    constraints: Vec<UvRequirement>,
+    overrides: Vec<UvRequirement>,
     project: Option<PackageName>,
     editables: &[BuiltEditable],
     hasher: &HashStrategy,
@@ -575,12 +576,24 @@ async fn resolve(
     let overrides = Overrides::from_requirements(overrides);
 
     // Map the editables to their metadata.
-    let editables: Vec<(LocalEditable, Metadata23)> = editables
+    let editables: Vec<_> = editables
         .iter()
         .map(|built_editable| {
+            let dependencies: Vec<_> = built_editable
+                .metadata
+                .requires_dist
+                .iter()
+                .cloned()
+                .map(UvRequirement::from_requirement)
+                .collect::<Result<_, _>>()
+                .expect("TODO(konsti)");
             (
                 built_editable.editable.clone(),
                 built_editable.metadata.clone(),
+                UvRequirements {
+                    dependencies,
+                    optional_dependencies: IndexMap::default(),
+                },
             )
         })
         .collect();

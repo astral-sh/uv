@@ -40,15 +40,14 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
+use distribution_types::{DirectUrlError, UvRequirement};
 use pep508_rs::{
-    expand_env_vars, split_scheme, strip_host, Extras, MarkerEnvironment, MarkerTree, Pep508Error,
-    Pep508ErrorSource, Requirement, Scheme, UnnamedRequirement, VerbatimUrl, VersionOrUrl,
-    VersionOrUrlRef,
+    expand_env_vars, split_scheme, strip_host, Extras, Pep508Error, Pep508ErrorSource, Requirement,
+    Scheme, VerbatimUrl,
 };
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
@@ -57,6 +56,10 @@ use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_fs::{normalize_url_path, Simplified};
 use uv_normalize::ExtraName;
 use uv_warnings::warn_user;
+
+pub use crate::requirement::{RequirementsTxtRequirement, RequirementsTxtRequirementError};
+
+mod requirement;
 
 /// We emit one of those for each requirements.txt entry
 enum RequirementsTxtStatement {
@@ -294,7 +297,7 @@ impl Display for EditableRequirement {
 
 /// A [Requirement] with additional metadata from the requirements.txt, currently only hashes but in
 /// the future also editable an similar information
-#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Hash, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct RequirementEntry {
     /// The actual PEP 508 requirement
     pub requirement: RequirementsTxtRequirement,
@@ -302,7 +305,7 @@ pub struct RequirementEntry {
     pub hashes: Vec<String>,
 }
 
-impl Display for RequirementEntry {
+/*impl Display for RequirementEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.requirement)?;
         for hash in &self.hashes {
@@ -310,7 +313,7 @@ impl Display for RequirementEntry {
         }
         Ok(())
     }
-}
+}*/
 
 /// Parsed and flattened requirements.txt with requirements and constraints
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -318,7 +321,7 @@ pub struct RequirementsTxt {
     /// The actual requirements with the hashes.
     pub requirements: Vec<RequirementEntry>,
     /// Constraints included with `-c`.
-    pub constraints: Vec<Requirement>,
+    pub constraints: Vec<UvRequirement>,
     /// Editables with `-e`.
     pub editables: Vec<EditableRequirement>,
     /// The index URL, specified with `--index-url`.
@@ -484,7 +487,7 @@ impl RequirementsTxt {
                     // _requirements_, but we don't want to support that.
                     for entry in sub_constraints.requirements {
                         match entry.requirement {
-                            RequirementsTxtRequirement::Pep508(requirement) => {
+                            RequirementsTxtRequirement::Uv(requirement) => {
                                 data.constraints.push(requirement);
                             }
                             RequirementsTxtRequirement::Unnamed(_) => {
@@ -780,8 +783,15 @@ fn parse_requirement_and_hashes(
     }
 
     let requirement =
-        RequirementsTxtRequirement::parse(requirement, working_dir).map_err(|err| {
-            match err.message {
+        RequirementsTxtRequirement::parse(requirement, working_dir).map_err(|err| match err {
+            RequirementsTxtRequirementError::ParsedUrl(err) => {
+                RequirementsTxtParserError::ParsedUrl {
+                    source: err,
+                    start,
+                    end,
+                }
+            }
+            RequirementsTxtRequirementError::Pep508(err) => match err.message {
                 Pep508ErrorSource::String(_) | Pep508ErrorSource::UrlError(_) => {
                     RequirementsTxtParserError::Pep508 {
                         source: err,
@@ -796,7 +806,7 @@ fn parse_requirement_and_hashes(
                         end,
                     }
                 }
-            }
+            },
         })?;
 
     let hashes = if has_hashes {
@@ -932,6 +942,11 @@ pub enum RequirementsTxtParserError {
         start: usize,
         end: usize,
     },
+    ParsedUrl {
+        source: Box<DirectUrlError>,
+        start: usize,
+        end: usize,
+    },
     Subfile {
         source: Box<RequirementsTxtFileError>,
         start: usize,
@@ -1009,6 +1024,11 @@ impl RequirementsTxtParserError {
                 start: start + offset,
                 end: end + offset,
             },
+            Self::ParsedUrl { source, start, end } => Self::ParsedUrl {
+                source,
+                start: start + offset,
+                end: end + offset,
+            },
             Self::Subfile { source, start, end } => Self::Subfile {
                 source,
                 start: start + offset,
@@ -1059,6 +1079,9 @@ impl Display for RequirementsTxtParserError {
             Self::Pep508 { start, .. } => {
                 write!(f, "Couldn't parse requirement at position {start}")
             }
+            Self::ParsedUrl { start, .. } => {
+                write!(f, "Couldn't URL at position {start}")
+            }
             Self::Subfile { start, .. } => {
                 write!(f, "Error parsing included file at position {start}")
             }
@@ -1090,6 +1113,7 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::UnnamedConstraint { .. } => None,
             Self::UnsupportedRequirement { source, .. } => Some(source),
             Self::Pep508 { source, .. } => Some(source),
+            Self::ParsedUrl { source, .. } => Some(source),
             Self::Subfile { source, .. } => Some(source.as_ref()),
             Self::Parser { .. } => None,
             Self::NonUnicodeUrl { .. } => None,
@@ -1174,6 +1198,13 @@ impl Display for RequirementsTxtFileError {
                 write!(
                     f,
                     "Couldn't parse requirement in `{}` at position {start}",
+                    self.file.user_display(),
+                )
+            }
+            RequirementsTxtParserError::ParsedUrl { start, .. } => {
+                write!(
+                    f,
+                    "Couldn't parse URL in `{}` at position {start}",
                     self.file.user_display(),
                 )
             }
@@ -1281,6 +1312,7 @@ mod test {
     use tempfile::tempdir;
     use test_case::test_case;
     use unscanny::Scanner;
+
     use uv_client::BaseClientBuilder;
     use uv_fs::Simplified;
 
@@ -1723,14 +1755,19 @@ mod test {
         RequirementsTxt {
             requirements: [
                 RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
+                    requirement: Uv(
+                        UvRequirement {
                             name: PackageName(
                                 "flask",
                             ),
                             extras: [],
-                            version_or_url: None,
                             marker: None,
+                            source: Registry {
+                                version: VersionSpecifiers(
+                                    [],
+                                ),
+                                index: None,
+                            },
                         },
                     ),
                     hashes: [],
@@ -1777,14 +1814,19 @@ mod test {
         RequirementsTxt {
             requirements: [
                 RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
+                    requirement: Uv(
+                        UvRequirement {
                             name: PackageName(
                                 "flask",
                             ),
                             extras: [],
-                            version_or_url: None,
                             marker: None,
+                            source: Registry {
+                                version: VersionSpecifiers(
+                                    [],
+                                ),
+                                index: None,
+                            },
                         },
                     ),
                     hashes: [],
@@ -1959,38 +2001,42 @@ mod test {
         RequirementsTxt {
             requirements: [
                 RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
+                    requirement: Uv(
+                        UvRequirement {
                             name: PackageName(
                                 "httpx",
                             ),
                             extras: [],
-                            version_or_url: None,
                             marker: None,
+                            source: Registry {
+                                version: VersionSpecifiers(
+                                    [],
+                                ),
+                                index: None,
+                            },
                         },
                     ),
                     hashes: [],
                 },
                 RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
+                    requirement: Uv(
+                        UvRequirement {
                             name: PackageName(
                                 "flask",
                             ),
                             extras: [],
-                            version_or_url: Some(
-                                VersionSpecifier(
-                                    VersionSpecifiers(
-                                        [
-                                            VersionSpecifier {
-                                                operator: Equal,
-                                                version: "3.0.0",
-                                            },
-                                        ],
-                                    ),
-                                ),
-                            ),
                             marker: None,
+                            source: Registry {
+                                version: VersionSpecifiers(
+                                    [
+                                        VersionSpecifier {
+                                            operator: Equal,
+                                            version: "3.0.0",
+                                        },
+                                    ],
+                                ),
+                                index: None,
+                            },
                         },
                     ),
                     hashes: [
@@ -1998,25 +2044,24 @@ mod test {
                     ],
                 },
                 RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
+                    requirement: Uv(
+                        UvRequirement {
                             name: PackageName(
                                 "requests",
                             ),
                             extras: [],
-                            version_or_url: Some(
-                                VersionSpecifier(
-                                    VersionSpecifiers(
-                                        [
-                                            VersionSpecifier {
-                                                operator: Equal,
-                                                version: "2.26.0",
-                                            },
-                                        ],
-                                    ),
-                                ),
-                            ),
                             marker: None,
+                            source: Registry {
+                                version: VersionSpecifiers(
+                                    [
+                                        VersionSpecifier {
+                                            operator: Equal,
+                                            version: "2.26.0",
+                                        },
+                                    ],
+                                ),
+                                index: None,
+                            },
                         },
                     ),
                     hashes: [
@@ -2024,49 +2069,47 @@ mod test {
                     ],
                 },
                 RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
+                    requirement: Uv(
+                        UvRequirement {
                             name: PackageName(
                                 "black",
                             ),
                             extras: [],
-                            version_or_url: Some(
-                                VersionSpecifier(
-                                    VersionSpecifiers(
-                                        [
-                                            VersionSpecifier {
-                                                operator: Equal,
-                                                version: "21.12b0",
-                                            },
-                                        ],
-                                    ),
-                                ),
-                            ),
                             marker: None,
+                            source: Registry {
+                                version: VersionSpecifiers(
+                                    [
+                                        VersionSpecifier {
+                                            operator: Equal,
+                                            version: "21.12b0",
+                                        },
+                                    ],
+                                ),
+                                index: None,
+                            },
                         },
                     ),
                     hashes: [],
                 },
                 RequirementEntry {
-                    requirement: Pep508(
-                        Requirement {
+                    requirement: Uv(
+                        UvRequirement {
                             name: PackageName(
                                 "mypy",
                             ),
                             extras: [],
-                            version_or_url: Some(
-                                VersionSpecifier(
-                                    VersionSpecifiers(
-                                        [
-                                            VersionSpecifier {
-                                                operator: Equal,
-                                                version: "0.910",
-                                            },
-                                        ],
-                                    ),
-                                ),
-                            ),
                             marker: None,
+                            source: Registry {
+                                version: VersionSpecifiers(
+                                    [
+                                        VersionSpecifier {
+                                            operator: Equal,
+                                            version: "0.910",
+                                        },
+                                    ],
+                                ),
+                                index: None,
+                            },
                         },
                     ),
                     hashes: [],
@@ -2182,112 +2225,5 @@ mod test {
 
         // Assert line and columns are expected
         assert_eq!(line_column, expected, "Issues with input: {input}");
-    }
-}
-
-/// A requirement specifier in a `requirements.txt` file.
-#[derive(Hash, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum RequirementsTxtRequirement {
-    /// A PEP 508-compliant dependency specifier.
-    Pep508(Requirement),
-    /// A PEP 508-like, direct URL dependency specifier.
-    Unnamed(UnnamedRequirement),
-}
-
-impl Display for RequirementsTxtRequirement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Pep508(requirement) => write!(f, "{requirement}"),
-            Self::Unnamed(requirement) => write!(f, "{requirement}"),
-        }
-    }
-}
-
-impl RequirementsTxtRequirement {
-    /// Returns whether the markers apply for the given environment
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        match self {
-            Self::Pep508(requirement) => requirement.evaluate_markers(env, extras),
-            Self::Unnamed(requirement) => requirement.evaluate_markers(env, extras),
-        }
-    }
-
-    /// Returns the extras for the requirement.
-    pub fn extras(&self) -> &[ExtraName] {
-        match self {
-            Self::Pep508(requirement) => requirement.extras.as_slice(),
-            Self::Unnamed(requirement) => requirement.extras.as_slice(),
-        }
-    }
-
-    /// Returns the markers for the requirement.
-    pub fn markers(&self) -> Option<&MarkerTree> {
-        match self {
-            Self::Pep508(requirement) => requirement.marker.as_ref(),
-            Self::Unnamed(requirement) => requirement.marker.as_ref(),
-        }
-    }
-
-    /// Return the version specifier or URL for the requirement.
-    pub fn version_or_url(&self) -> Option<VersionOrUrlRef> {
-        match self {
-            Self::Pep508(requirement) => match requirement.version_or_url.as_ref() {
-                Some(VersionOrUrl::VersionSpecifier(specifiers)) => {
-                    Some(VersionOrUrlRef::VersionSpecifier(specifiers))
-                }
-                Some(VersionOrUrl::Url(url)) => Some(VersionOrUrlRef::Url(url)),
-                None => None,
-            },
-            Self::Unnamed(requirement) => Some(VersionOrUrlRef::Url(&requirement.url)),
-        }
-    }
-}
-
-impl From<Requirement> for RequirementsTxtRequirement {
-    fn from(requirement: Requirement) -> Self {
-        Self::Pep508(requirement)
-    }
-}
-
-impl From<UnnamedRequirement> for RequirementsTxtRequirement {
-    fn from(requirement: UnnamedRequirement) -> Self {
-        Self::Unnamed(requirement)
-    }
-}
-
-impl FromStr for RequirementsTxtRequirement {
-    type Err = Pep508Error;
-
-    /// Parse a requirement as seen in a `requirements.txt` file.
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match Requirement::from_str(input) {
-            Ok(requirement) => Ok(Self::Pep508(requirement)),
-            Err(err) => match err.message {
-                Pep508ErrorSource::UnsupportedRequirement(_) => {
-                    Ok(Self::Unnamed(UnnamedRequirement::from_str(input)?))
-                }
-                _ => Err(err),
-            },
-        }
-    }
-}
-
-impl RequirementsTxtRequirement {
-    /// Parse a requirement as seen in a `requirements.txt` file.
-    pub fn parse(input: &str, working_dir: impl AsRef<Path>) -> Result<Self, Pep508Error> {
-        // Attempt to parse as a PEP 508-compliant requirement.
-        match Requirement::parse(input, &working_dir) {
-            Ok(requirement) => Ok(Self::Pep508(requirement)),
-            Err(err) => match err.message {
-                Pep508ErrorSource::UnsupportedRequirement(_) => {
-                    // If that fails, attempt to parse as a direct URL requirement.
-                    Ok(Self::Unnamed(UnnamedRequirement::parse(
-                        input,
-                        &working_dir,
-                    )?))
-                }
-                _ => Err(err),
-            },
-        }
     }
 }

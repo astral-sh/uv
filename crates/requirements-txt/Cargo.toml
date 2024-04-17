@@ -13,7 +13,9 @@ license = { workspace = true }
 workspace = true
 
 [dependencies]
-pep508_rs = { workspace = true, features = ["rkyv", "serde", "non-pep508-extensions"] }
+distribution-types = { workspace = true }
+pep440_rs = { workspace = true }
+pep508_rs = { workspace = true, features = ["rkyv", "non-pep508-extensions"] }
 uv-client = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
@@ -24,13 +26,15 @@ fs-err = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, optional = true }
 reqwest-middleware = { workspace = true, optional = true }
-serde = { workspace = true }
+serde = { workspace = true, optional = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }
 url = { workspace = true }
 
 [features]
 http = ["reqwest", "reqwest-middleware"]
+serde = ["dep:serde", "pep508_rs/serde"]
 
 [dev-dependencies]
 anyhow = { version = "1.0.80" }

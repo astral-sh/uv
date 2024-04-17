@@ -10,5 +10,6 @@ mod pyproject;
 mod source_tree;
 mod sources;
 mod specification;
+mod tool_sources;
 mod unnamed;
 pub mod upgrade;

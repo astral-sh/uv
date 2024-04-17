@@ -5,24 +5,12 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "werkzeug",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "2.2.3",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: Some(
                         And(
                             [
@@ -51,6 +39,17 @@ RequirementsTxt {
                             ],
                         ),
                     ),
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "2.2.3",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [
@@ -58,24 +57,12 @@ RequirementsTxt {
             ],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "urllib3",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "1.26.15",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: Some(
                         And(
                             [
@@ -104,6 +91,17 @@ RequirementsTxt {
                             ],
                         ),
                     ),
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "1.26.15",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [
@@ -111,24 +109,12 @@ RequirementsTxt {
             ],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "ansicon",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "1.89.0",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: Some(
                         And(
                             [
@@ -168,6 +154,17 @@ RequirementsTxt {
                             ],
                         ),
                     ),
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "1.89.0",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [
@@ -175,24 +172,12 @@ RequirementsTxt {
             ],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "requests-oauthlib",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "1.3.1",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: Some(
                         And(
                             [
@@ -221,6 +206,17 @@ RequirementsTxt {
                             ],
                         ),
                     ),
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "1.3.1",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [
@@ -229,24 +225,12 @@ RequirementsTxt {
             ],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "psycopg2",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "2.9.5",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: Some(
                         And(
                             [
@@ -275,6 +259,17 @@ RequirementsTxt {
                             ],
                         ),
                     ),
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "2.9.5",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [
