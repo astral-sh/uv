@@ -248,7 +248,7 @@ pub(crate) struct PipCompileArgs {
 
     /// Include optional dependencies in the given extra group name; may be provided more than once.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
-    pub(crate) extra: Vec<ExtraName>,
+    pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
     #[arg(long, conflicts_with = "extra")]
@@ -259,11 +259,20 @@ pub(crate) struct PipCompileArgs {
     #[arg(long)]
     pub(crate) no_deps: bool,
 
-    #[arg(long, value_enum, default_value_t = ResolutionMode::default(), env = "UV_RESOLUTION")]
-    pub(crate) resolution: ResolutionMode,
+    /// The strategy to use when selecting between the different compatible versions for a given
+    /// package requirement.
+    ///
+    /// By default, `uv` will use the latest compatible version of each package (`highest`).
+    #[arg(long, value_enum, env = "UV_RESOLUTION")]
+    pub(crate) resolution: Option<ResolutionMode>,
 
-    #[arg(long, value_enum, default_value_t = PreReleaseMode::default(), env = "UV_PRERELEASE")]
-    pub(crate) prerelease: PreReleaseMode,
+    /// The strategy to use when considering pre-release versions.
+    ///
+    /// By default, `uv` will accept pre-releases for packages that _only_ publish pre-releases,
+    /// along with first-party requirements that contain an explicit pre-release marker in the
+    /// declared specifiers (`if-necessary-or-explicit`).
+    #[arg(long, value_enum, env = "UV_PRERELEASE")]
+    pub(crate) prerelease: Option<PreReleaseMode>,
 
     #[arg(long, hide = true)]
     pub(crate) pre: bool,
@@ -289,8 +298,10 @@ pub(crate) struct PipCompileArgs {
     pub(crate) no_header: bool,
 
     /// Choose the style of the annotation comments, which indicate the source of each package.
-    #[arg(long, default_value_t=AnnotationStyle::Split, value_enum)]
-    pub(crate) annotation_style: AnnotationStyle,
+    ///
+    /// Defaults to `split`.
+    #[arg(long, value_enum)]
+    pub(crate) annotation_style: Option<AnnotationStyle>,
 
     /// Change header comment to reflect custom command wrapping `uv pip compile`.
     #[arg(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
@@ -311,7 +322,7 @@ pub(crate) struct PipCompileArgs {
 
     /// Refresh cached data for a specific package.
     #[arg(long)]
-    pub(crate) refresh_package: Vec<PackageName>,
+    pub(crate) refresh_package: Option<Vec<PackageName>>,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -319,8 +330,8 @@ pub(crate) struct PipCompileArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
-    pub(crate) link_mode: install_wheel_rs::linker::LinkMode,
+    #[arg(long, value_enum)]
+    pub(crate) link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
@@ -343,7 +354,7 @@ pub(crate) struct PipCompileArgs {
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
     #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
-    pub(crate) extra_index_url: Vec<Maybe<IndexUrl>>,
+    pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -353,18 +364,20 @@ pub(crate) struct PipCompileArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
-    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
-    /// index.
-    #[arg(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
-    pub(crate) index_strategy: IndexStrategy,
+    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
+    /// same name to a secondary
+    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    pub(crate) index_strategy: Option<IndexStrategy>,
 
-    /// Attempt to use `keyring` for authentication for index urls
+    /// Attempt to use `keyring` for authentication for index URLs.
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
-    #[arg(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProviderType,
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -373,7 +386,7 @@ pub(crate) struct PipCompileArgs {
     ///
     /// If a URL, the page must contain a flat list of links to package files.
     #[arg(long, short)]
-    pub(crate) find_links: Vec<FlatIndexLocation>,
+    pub(crate) find_links: Option<Vec<FlatIndexLocation>>,
 
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
     #[arg(long, short = 'U')]
@@ -382,7 +395,7 @@ pub(crate) struct PipCompileArgs {
     /// Allow upgrades for a specific package, ignoring pinned versions in the existing output
     /// file.
     #[arg(long, short = 'P')]
-    pub(crate) upgrade_package: Vec<PackageName>,
+    pub(crate) upgrade_package: Option<Vec<PackageName>>,
 
     /// Include distribution hashes in the output file.
     #[arg(long)]
@@ -418,11 +431,11 @@ pub(crate) struct PipCompileArgs {
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
     #[arg(long, conflicts_with = "no_build")]
-    pub(crate) only_binary: Vec<PackageNameSpecifier>,
+    pub(crate) only_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(long, short = 'C', alias = "config-settings")]
-    pub(crate) config_setting: Vec<ConfigSettingEntry>,
+    pub(crate) config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// The minimum Python version that should be supported by the compiled requirements (e.g.,
     /// `3.7` or `3.7.9`).
@@ -442,7 +455,7 @@ pub(crate) struct PipCompileArgs {
     /// Specify a package to omit from the output resolution. Its dependencies will still be
     /// included in the resolution. Equivalent to pip-compile's `--unsafe-package` option.
     #[arg(long, alias = "unsafe-package")]
-    pub(crate) no_emit_package: Vec<PackageName>,
+    pub(crate) no_emit_package: Option<Vec<PackageName>>,
 
     /// Include `--index-url` and `--extra-index-url` entries in the generated output file.
     #[arg(long)]
@@ -506,8 +519,8 @@ pub(crate) struct PipSyncArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
-    pub(crate) link_mode: install_wheel_rs::linker::LinkMode,
+    #[arg(long, value_enum)]
+    pub(crate) link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
@@ -530,7 +543,7 @@ pub(crate) struct PipSyncArgs {
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
     #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
-    pub(crate) extra_index_url: Vec<Maybe<IndexUrl>>,
+    pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -539,7 +552,7 @@ pub(crate) struct PipSyncArgs {
     ///
     /// If a URL, the page must contain a flat list of links to package files.
     #[arg(long, short)]
-    pub(crate) find_links: Vec<FlatIndexLocation>,
+    pub(crate) find_links: Option<Vec<FlatIndexLocation>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -549,11 +562,11 @@ pub(crate) struct PipSyncArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
-    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
-    /// index.
-    #[arg(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
-    pub(crate) index_strategy: IndexStrategy,
+    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
+    /// same name to a secondary
+    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    pub(crate) index_strategy: Option<IndexStrategy>,
 
     /// Require a matching hash for each requirement.
     ///
@@ -569,12 +582,14 @@ pub(crate) struct PipSyncArgs {
     #[arg(long)]
     pub(crate) require_hashes: bool,
 
-    /// Attempt to use `keyring` for authentication for index urls
+    /// Attempt to use `keyring` for authentication for index URLs.
     ///
     /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
     /// `uv` will try to use `keyring` via CLI when this flag is used.
-    #[arg(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProviderType,
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -640,7 +655,7 @@ pub(crate) struct PipSyncArgs {
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
     #[arg(long, conflicts_with = "no_build")]
-    pub(crate) no_binary: Vec<PackageNameSpecifier>,
+    pub(crate) no_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
@@ -651,7 +666,7 @@ pub(crate) struct PipSyncArgs {
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
     #[arg(long, conflicts_with = "no_build")]
-    pub(crate) only_binary: Vec<PackageNameSpecifier>,
+    pub(crate) only_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Compile Python files to bytecode.
     ///
@@ -671,7 +686,7 @@ pub(crate) struct PipSyncArgs {
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(long, short = 'C', alias = "config-settings")]
-    pub(crate) config_setting: Vec<ConfigSettingEntry>,
+    pub(crate) config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
@@ -722,7 +737,7 @@ pub(crate) struct PipInstallArgs {
 
     /// Include optional dependencies in the given extra group name; may be provided more than once.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
-    pub(crate) extra: Vec<ExtraName>,
+    pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
     #[arg(long, conflicts_with = "extra")]
@@ -734,7 +749,7 @@ pub(crate) struct PipInstallArgs {
 
     /// Allow upgrade of a specific package.
     #[arg(long, short = 'P')]
-    pub(crate) upgrade_package: Vec<PackageName>,
+    pub(crate) upgrade_package: Option<Vec<PackageName>>,
 
     /// Reinstall all packages, regardless of whether they're already installed.
     #[arg(long, alias = "force-reinstall")]
@@ -742,7 +757,7 @@ pub(crate) struct PipInstallArgs {
 
     /// Reinstall a specific package, regardless of whether it's already installed.
     #[arg(long)]
-    pub(crate) reinstall_package: Vec<PackageName>,
+    pub(crate) reinstall_package: Option<Vec<PackageName>>,
 
     /// Run offline, i.e., without accessing the network.
     #[arg(
@@ -759,7 +774,7 @@ pub(crate) struct PipInstallArgs {
 
     /// Refresh cached data for a specific package.
     #[arg(long)]
-    pub(crate) refresh_package: Vec<PackageName>,
+    pub(crate) refresh_package: Option<Vec<PackageName>>,
 
     /// Ignore package dependencies, instead only installing those packages explicitly listed
     /// on the command line or in the requirements files.
@@ -770,14 +785,23 @@ pub(crate) struct PipInstallArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
-    pub(crate) link_mode: install_wheel_rs::linker::LinkMode,
+    #[arg(long, value_enum)]
+    pub(crate) link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
-    #[arg(long, value_enum, default_value_t = ResolutionMode::default(), env = "UV_RESOLUTION")]
-    pub(crate) resolution: ResolutionMode,
+    /// The strategy to use when selecting between the different compatible versions for a given
+    /// package requirement.
+    ///
+    /// By default, `uv` will use the latest compatible version of each package (`highest`).
+    #[arg(long, value_enum, env = "UV_RESOLUTION")]
+    pub(crate) resolution: Option<ResolutionMode>,
 
-    #[arg(long, value_enum, default_value_t = PreReleaseMode::default(), env = "UV_PRERELEASE")]
-    pub(crate) prerelease: PreReleaseMode,
+    /// The strategy to use when considering pre-release versions.
+    ///
+    /// By default, `uv` will accept pre-releases for packages that _only_ publish pre-releases,
+    /// along with first-party requirements that contain an explicit pre-release marker in the
+    /// declared specifiers (`if-necessary-or-explicit`).
+    #[arg(long, value_enum, env = "UV_PRERELEASE")]
+    pub(crate) prerelease: Option<PreReleaseMode>,
 
     #[arg(long, hide = true)]
     pub(crate) pre: bool,
@@ -803,7 +827,7 @@ pub(crate) struct PipInstallArgs {
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
     #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
-    pub(crate) extra_index_url: Vec<Maybe<IndexUrl>>,
+    pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -812,7 +836,7 @@ pub(crate) struct PipInstallArgs {
     ///
     /// If a URL, the page must contain a flat list of links to package files.
     #[arg(long, short)]
-    pub(crate) find_links: Vec<FlatIndexLocation>,
+    pub(crate) find_links: Option<Vec<FlatIndexLocation>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -822,11 +846,11 @@ pub(crate) struct PipInstallArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
-    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
-    /// index.
-    #[arg(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
-    pub(crate) index_strategy: IndexStrategy,
+    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
+    /// same name to a secondary
+    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    pub(crate) index_strategy: Option<IndexStrategy>,
 
     /// Require a matching hash for each requirement.
     ///
@@ -842,12 +866,14 @@ pub(crate) struct PipInstallArgs {
     #[arg(long)]
     pub(crate) require_hashes: bool,
 
-    /// Attempt to use `keyring` for authentication for index urls
+    /// Attempt to use `keyring` for authentication for index URLs.
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
-    #[arg(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProviderType,
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -913,7 +939,7 @@ pub(crate) struct PipInstallArgs {
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
     #[arg(long, conflicts_with = "no_build")]
-    pub(crate) no_binary: Vec<PackageNameSpecifier>,
+    pub(crate) no_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
@@ -924,7 +950,7 @@ pub(crate) struct PipInstallArgs {
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
     #[arg(long, conflicts_with = "no_build")]
-    pub(crate) only_binary: Vec<PackageNameSpecifier>,
+    pub(crate) only_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Compile Python files to bytecode.
     ///
@@ -944,7 +970,7 @@ pub(crate) struct PipInstallArgs {
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(long, short = 'C', alias = "config-settings")]
-    pub(crate) config_setting: Vec<ConfigSettingEntry>,
+    pub(crate) config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
@@ -995,8 +1021,10 @@ pub(crate) struct PipUninstallArgs {
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
-    #[arg(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProviderType,
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 
     /// Use the system Python to uninstall packages.
     ///
@@ -1209,7 +1237,7 @@ pub(crate) struct VenvArgs {
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
     #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
-    system: bool,
+    pub(crate) system: bool,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
     #[arg(long)]
@@ -1247,8 +1275,8 @@ pub(crate) struct VenvArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
-    pub(crate) link_mode: install_wheel_rs::linker::LinkMode,
+    #[arg(long, value_enum)]
+    pub(crate) link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
@@ -1271,7 +1299,7 @@ pub(crate) struct VenvArgs {
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
     #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
-    pub(crate) extra_index_url: Vec<Maybe<IndexUrl>>,
+    pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -1281,18 +1309,20 @@ pub(crate) struct VenvArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
-    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
-    /// index.
-    #[arg(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
-    pub(crate) index_strategy: IndexStrategy,
+    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
+    /// same name to a secondary
+    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    pub(crate) index_strategy: Option<IndexStrategy>,
 
-    /// Attempt to use `keyring` for authentication for index urls
+    /// Attempt to use `keyring` for authentication for index URLs.
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
-    #[arg(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProviderType,
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 
     /// Run offline, i.e., without accessing the network.
     #[arg(global = true, long)]
