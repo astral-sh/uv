@@ -539,6 +539,7 @@ async fn run() -> Result<ExitStatus> {
             )
             .await
         }
+        Commands::Run(args) => commands::run(args.command, args.args, &cache).await,
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
             command: SelfCommand::Update,
