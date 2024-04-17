@@ -12,7 +12,7 @@ use itertools::Itertools;
 use common::{uv_snapshot, TestContext};
 use uv_fs::Simplified;
 
-use crate::common::{get_bin, BUILD_VENDOR_LINKS_URL};
+use crate::common::{get_bin, venv_bin_path, BUILD_VENDOR_LINKS_URL};
 
 mod common;
 
@@ -2914,6 +2914,128 @@ fn install_index_with_relative_links() {
     );
 
     context.assert_command("import anyio").success();
+}
+
+/// Install a package from an index that requires authentication from the keyring.
+#[test]
+fn install_package_basic_auth_from_keyring() {
+    let context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    context
+        .install()
+        .arg(
+            context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    uv_snapshot!(context.install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("--strict")
+        .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env("PATH", venv_bin_path(context.venv.as_path())), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
+
+/// Install a package from an index that requires authentication
+/// but the keyring has the wrong password
+#[test]
+fn install_package_basic_auth_from_keyring_wrong_password() {
+    let context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    context
+        .install()
+        .arg(
+            context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    uv_snapshot!(context.install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("--strict")
+        .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
+        .env("PATH", venv_bin_path(context.venv.as_path())), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download: anyio==4.3.0
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+    "###
+    );
+}
+
+/// Install a package from an index that requires authentication
+/// but the keyring has the wrong username
+#[test]
+fn install_package_basic_auth_from_keyring_wrong_username() {
+    let context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    context
+        .install()
+        .arg(
+            context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    uv_snapshot!(context.install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("--strict")
+        .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
+        .env("PATH", venv_bin_path(context.venv.as_path())), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download: anyio==4.3.0
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+    "###
+    );
 }
 
 /// Install a package from an index that provides relative links and requires authentication
