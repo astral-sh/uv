@@ -159,6 +159,10 @@ impl BatchPrefetcher {
 
     /// Each time we tried a version for a package, we register that here.
     pub(crate) fn version_tried(&mut self, package: PubGrubPackage) {
+        // Only track base packages, no virtual packages from extras.
+        if matches!(package, PubGrubPackage::Package(_, Some(_), _)) {
+            return;
+        }
         *self.tried_versions.entry(package).or_default() += 1;
     }
 
