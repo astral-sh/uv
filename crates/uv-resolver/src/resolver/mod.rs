@@ -14,7 +14,7 @@ use pubgrub::range::Range;
 use pubgrub::solver::{Incompatibility, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, info_span, instrument, trace, warn, Instrument};
+use tracing::{debug, enabled, info_span, instrument, trace, warn, Instrument, Level};
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
@@ -323,6 +323,9 @@ impl<
                         priorities.get(package).unwrap_or_default()
                     })
             else {
+                if enabled!(Level::DEBUG) {
+                    prefetcher.log_tried_versions();
+                }
                 let selection = state.partial_solution.extract_solution();
                 return ResolutionGraph::from_state(
                     &selection,
@@ -482,6 +485,9 @@ impl<
                             .iter()
                             .any(|(dependency, _)| dependency == package) =>
                     {
+                        if enabled!(Level::DEBUG) {
+                            prefetcher.log_tried_versions();
+                        }
                         return Err(PubGrubError::SelfDependency {
                             package: package.clone(),
                             version: version.clone(),
