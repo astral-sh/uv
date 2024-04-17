@@ -104,9 +104,6 @@ async fn run() -> Result<ExitStatus> {
         }
     };
 
-    // Load the workspace settings.
-    let _ = uv_workspace::Workspace::find(env::current_dir()?)?;
-
     let globals = cli.global_args;
 
     // Configure the `tracing` crate, which controls internal logging.
