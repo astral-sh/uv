@@ -53,15 +53,6 @@ pub struct PipOptions {
     pub no_binary: Option<Vec<PackageNameSpecifier>>,
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
     pub no_build_isolation: Option<bool>,
-    pub resolver: Option<ResolverOptions>,
-    pub installer: Option<InstallerOptions>,
-}
-
-/// A `[tool.uv.pip.resolver]` section.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct ResolverOptions {
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PreReleaseMode>,
     pub no_strip_extras: Option<bool>,
@@ -76,13 +67,7 @@ pub struct ResolverOptions {
     pub emit_index_url: Option<bool>,
     pub emit_find_links: Option<bool>,
     pub annotation_style: Option<AnnotationStyle>,
-}
-
-/// A `[tool.uv.pip.installer]` section.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct InstallerOptions {
+    pub require_hashes: Option<bool>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
 }
