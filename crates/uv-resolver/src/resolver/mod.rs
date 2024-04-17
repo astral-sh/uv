@@ -18,7 +18,7 @@ use tracing::{debug, enabled, info_span, instrument, trace, warn, Instrument, Le
 
 use distribution_types::{
     BuiltDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource, IncompatibleWheel,
-    InstalledDist, Name, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrl,
+    InstalledDist, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrl,
 };
 pub(crate) use locals::Locals;
 use pep440_rs::{Version, MIN_VERSION};
@@ -316,12 +316,9 @@ impl<
             }
 
             // Choose a package version.
-            let Some(highest_priority_pkg) =
-                state
-                    .partial_solution
-                    .pick_highest_priority_pkg(|package, _range| {
-                        priorities.get(package).unwrap_or_default()
-                    })
+            let Some(highest_priority_pkg) = state
+                .partial_solution
+                .pick_highest_priority_pkg(|package, _range| priorities.get(package))
             else {
                 if enabled!(Level::DEBUG) {
                     prefetcher.log_tried_versions();
@@ -523,7 +520,6 @@ impl<
     async fn visit_package(
         &self,
         package: &PubGrubPackage,
-        priorities: &mut PubGrubPriorities,
         request_sink: &tokio::sync::mpsc::Sender<Request>,
     ) -> Result<(), ResolveError> {
         match package {
@@ -537,7 +533,6 @@ impl<
 
                 // Emit a request to fetch the metadata for this package.
                 if self.index.packages.register(name.clone()) {
-                    priorities.add(name.clone());
                     request_sink.send(Request::Package(name.clone())).await?;
                 }
             }
@@ -550,7 +545,6 @@ impl<
                 // Emit a request to fetch the metadata for this distribution.
                 let dist = Dist::from_url(name.clone(), url.clone())?;
                 if self.index.distributions.register(dist.version_id()) {
-                    priorities.add(dist.name().clone());
                     request_sink.send(Request::Dist(dist)).await?;
                 }
             }
@@ -845,9 +839,11 @@ impl<
                 for (package, version) in constraints.iter() {
                     debug!("Adding direct dependency: {package}{version}");
 
+                    // Update the package priorities.
+                    priorities.insert(package, version);
+
                     // Emit a request to fetch the metadata for this package.
-                    self.visit_package(package, priorities, request_sink)
-                        .await?;
+                    self.visit_package(package, request_sink).await?;
                 }
 
                 // Add a dependency on each editable.
@@ -914,9 +910,11 @@ impl<
                     for (dep_package, dep_version) in constraints.iter() {
                         debug!("Adding transitive dependency for {package}{version}: {dep_package}{dep_version}");
 
+                        // Update the package priorities.
+                        priorities.insert(dep_package, dep_version);
+
                         // Emit a request to fetch the metadata for this package.
-                        self.visit_package(dep_package, priorities, request_sink)
-                            .await?;
+                        self.visit_package(dep_package, request_sink).await?;
                     }
 
                     // If a package has an extra, insert a constraint on the base package.
@@ -1029,9 +1027,11 @@ impl<
                 for (package, version) in constraints.iter() {
                     debug!("Adding transitive dependency: {package}{version}");
 
+                    // Update the package priorities.
+                    priorities.insert(package, version);
+
                     // Emit a request to fetch the metadata for this package.
-                    self.visit_package(package, priorities, request_sink)
-                        .await?;
+                    self.visit_package(package, request_sink).await?;
                 }
 
                 // If a package has an extra, insert a constraint on the base package.
