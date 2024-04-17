@@ -771,11 +771,16 @@ pub(crate) struct PipSyncArgs {
     ///
     /// The compile option will process the entire site-packages directory for consistency and
     /// (like pip) ignore all errors.
-    #[arg(long, overrides_with("no_compile"))]
-    pub(crate) compile: bool,
+    #[arg(long, alias = "compile", overrides_with("no_compile_bytecode"))]
+    pub(crate) compile_bytecode: bool,
 
-    #[arg(long, overrides_with("compile"), hide = true)]
-    pub(crate) no_compile: bool,
+    #[arg(
+        long,
+        alias = "no_compile",
+        overrides_with("compile_bytecode"),
+        hide = true
+    )]
+    pub(crate) no_compile_bytecode: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(long, short = 'C', alias = "config-settings")]
@@ -1105,11 +1110,16 @@ pub(crate) struct PipInstallArgs {
     ///
     /// The compile option will process the entire site-packages directory for consistency and
     /// (like pip) ignore all errors.
-    #[arg(long, overrides_with("no_compile"))]
-    pub(crate) compile: bool,
+    #[arg(long, alias = "compile", overrides_with("no_compile_bytecode"))]
+    pub(crate) compile_bytecode: bool,
 
-    #[arg(long, overrides_with("compile"), hide = true)]
-    pub(crate) no_compile: bool,
+    #[arg(
+        long,
+        alias = "no_compile",
+        overrides_with("compile_bytecode"),
+        hide = true
+    )]
+    pub(crate) no_compile_bytecode: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(long, short = 'C', alias = "config-settings")]
