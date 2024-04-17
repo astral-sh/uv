@@ -3901,6 +3901,55 @@ fn find_links_requirements_txt() -> Result<()> {
     Ok(())
 }
 
+
+/// `extras==0.0.2` fails to build (i.e., it always throws). Since `extras==0.0.1` is pinned, we
+/// should never even attempt to build `extras==0.0.2`, despite an unpinned `extras[dev]`
+/// requirement.
+///
+/// This resolution should succeed, but currently fails.
+#[test]
+fn avoid_irrelevant_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc! {r"
+        extras==0.0.1
+        extras[dev]
+    "})?;
+
+    uv_snapshot!(context.filters(), context.compile()
+            .arg("requirements.in")
+            .arg("--find-links")
+            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: extras==0.0.2
+      Caused by: Failed to build: extras==0.0.2
+      Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit status: 1
+    --- stdout:
+
+    --- stderr:
+    Traceback (most recent call last):
+      File "<string>", line 14, in <module>
+      File "[CACHE_DIR]/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+        return self._get_build_requires(config_settings, requirements=['wheel'])
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "[CACHE_DIR]/[TMP]/build_meta.py", line 295, in _get_build_requires
+        self.run_setup()
+      File "[CACHE_DIR]/[TMP]/build_meta.py", line 487, in run_setup
+        super().run_setup(setup_script=setup_script)
+      File "[CACHE_DIR]/[TMP]/build_meta.py", line 311, in run_setup
+        exec(code, locals())
+      File "<string>", line 3, in <module>
+    ZeroDivisionError: division by zero
+    ---
+    "###);
+
+    Ok(())
+}
+
 /// Use an existing resolution for `black==23.10.1`, with stale versions of `click` and `pathspec`.
 /// Nothing should change.
 #[test]

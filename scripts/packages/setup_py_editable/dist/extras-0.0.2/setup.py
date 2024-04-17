@@ -1,12 +1,14 @@
 from setuptools import setup
 
+1/0
+
 setup(
-    name="setup-py-editable",
-    version="0.0.1",
+    name="extras",
+    version="0.0.2",
     install_requires=[
         "httpx",
     ],
     extras_require={
-        'dev': ['anyio'],
+        "dev": ["anyio"],
     }
 )
