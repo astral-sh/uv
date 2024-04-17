@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.1.33
+
+### Breaking changes
+
+Using the keyring requires a username to be provided on index URLs now. Previously, the username `oauth2accesstoken`
+was assumed. This will affect Google Artifact Registry users using `--keyring-provider subprocess` and an index URL
+without a username. The suggested fix is to add the required username to index URLs, e.g., `https://oauth2accesstoken@<url>`.
+
+See [#2976](https://github.com/astral-sh/uv/pull/2976#discussion_r1566521453) for details.
+
+### Enhancements
+
+- Allow passing a virtual environment path to `uv pip --python` ([#3064](https://github.com/astral-sh/uv/pull/3064))
+- Add compatibility argument for `pip list --outdated` ([#3055](https://github.com/astral-sh/uv/pull/3055))
+
+### CLI
+
+- Enable auto-wrapping of `--help` output ([#3058](https://github.com/astral-sh/uv/pull/3058))
+- Show `--require-hashes` CLI argument in help ([#3093](https://github.com/astral-sh/uv/pull/3093))
+
+### Performance
+
+- Incorporate heuristics to improve package prioritization ([#3087](https://github.com/astral-sh/uv/pull/3087))
+
+### Bug fixes
+
+- Fix HTTP authentication when the password includes percent encoded characters (e.g. with Google Artifact Registry) ([#2822](https://github.com/astral-sh/uv/issues/2822))
+- Use usernames from URLs when looking for credentials in netrc files and the keyring [#2563](https://github.com/astral-sh/uv/issues/2563))
+- Skip `HEAD` requests for indexes that return 403 (e.g. PyPICloud) ([#3070](https://github.com/astral-sh/uv/pull/3070))
+- Use kebab-case consistently ([#3080](https://github.com/astral-sh/uv/pull/3080))
+- Show package name in no version for direct dependency error ([#3056](https://github.com/astral-sh/uv/pull/3056))
+- Avoid erroring when encountering `.tar.bz2` source distributions ([#3069](https://github.com/astral-sh/uv/pull/3069))
+
+
 ## 0.1.32
 
 ### Enhancements
