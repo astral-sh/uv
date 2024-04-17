@@ -59,7 +59,7 @@ fn read_options(dir: &Path) -> Result<Option<Options>, WorkspaceError> {
     }
 
     // Read a `pyproject.toml` file in the current directory.
-    let path = path.join("pyproject.toml");
+    let path = dir.join("pyproject.toml");
     match fs_err::read_to_string(&path) {
         Ok(content) => {
             // Parse, but skip any `pyproject.toml` that doesn't have a `[tool.uv]` section.
