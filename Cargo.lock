@@ -5009,6 +5009,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "toml",
+ "tracing",
  "uv-auth",
  "uv-configuration",
  "uv-fs",

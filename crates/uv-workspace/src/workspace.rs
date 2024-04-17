@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_warnings::warn_user;
@@ -52,6 +53,8 @@ fn read_options(dir: &Path) -> Result<Option<Options>, WorkspaceError> {
         Ok(content) => {
             let options: Options = toml::from_str(&content)
                 .map_err(|err| WorkspaceError::UvToml(path.user_display().to_string(), err))?;
+
+            debug!("Found workspace configuration at `{}`", path.display());
             return Ok(Some(options));
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -67,11 +70,21 @@ fn read_options(dir: &Path) -> Result<Option<Options>, WorkspaceError> {
                 WorkspaceError::PyprojectToml(path.user_display().to_string(), err)
             })?;
             let Some(tool) = pyproject.tool else {
+                debug!(
+                    "Skipping `pyproject.toml` in `{}` (no `[tool]` section)",
+                    dir.display()
+                );
                 return Ok(None);
             };
             let Some(options) = tool.uv else {
+                debug!(
+                    "Skipping `pyproject.toml` in `{}` (no `[tool.uv]` section)",
+                    dir.display()
+                );
                 return Ok(None);
             };
+
+            debug!("Found workspace configuration at `{}`", path.display());
             return Ok(Some(options));
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}

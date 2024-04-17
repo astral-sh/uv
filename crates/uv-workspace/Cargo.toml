@@ -30,6 +30,7 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
+tracing = { workspace = true }
 
 [features]
 default = []
