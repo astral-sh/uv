@@ -75,7 +75,9 @@ impl KeyringProvider {
         // Check the full URL first
         // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
         let mut password = match self.backend {
-            KeyringProviderBackend::Subprocess => self.fetch_subprocess(url.as_str(), username).await,
+            KeyringProviderBackend::Subprocess => {
+                self.fetch_subprocess(url.as_str(), username).await
+            }
             #[cfg(test)]
             KeyringProviderBackend::Dummy(ref store) => {
                 self.fetch_dummy(store, url.as_str(), username)
