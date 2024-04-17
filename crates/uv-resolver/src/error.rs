@@ -1,11 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
 use std::ops::Deref;
+use std::sync::Arc;
 
 use dashmap::{DashMap, DashSet};
 use indexmap::IndexMap;
 use pubgrub::range::Range;
-use pubgrub::report::{DefaultStringReporter, DerivationTree, Reporter};
+use pubgrub::report::{DefaultStringReporter, DerivationTree, External, Reporter};
 use rustc_hash::FxHashMap;
 
 use distribution_types::{
@@ -109,6 +110,45 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
     }
 }
 
+/// Given a [`DerivationTree`], collapse any [`External::FromDependencyOf`] incompatibilities
+/// wrap an [`PubGrubPackage::Extra`] package.
+fn collapse_extra_proxies(derivation_tree: &mut DerivationTree<PubGrubPackage, Range<Version>>) {
+    match derivation_tree {
+        DerivationTree::External(_) => {}
+        DerivationTree::Derived(derived) => {
+            match (
+                Arc::make_mut(&mut derived.cause1),
+                Arc::make_mut(&mut derived.cause2),
+            ) {
+                (
+                    DerivationTree::External(External::FromDependencyOf(
+                        PubGrubPackage::Extra(..),
+                        ..,
+                    )),
+                    ref mut cause,
+                ) => {
+                    collapse_extra_proxies(cause);
+                    *derivation_tree = cause.clone();
+                }
+                (
+                    ref mut cause,
+                    DerivationTree::External(External::FromDependencyOf(
+                        PubGrubPackage::Extra(..),
+                        ..,
+                    )),
+                ) => {
+                    collapse_extra_proxies(cause);
+                    *derivation_tree = cause.clone();
+                }
+                _ => {
+                    collapse_extra_proxies(Arc::make_mut(&mut derived.cause1));
+                    collapse_extra_proxies(Arc::make_mut(&mut derived.cause2));
+                }
+            }
+        }
+    }
+}
+
 impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
     fn from(value: pubgrub::error::PubGrubError<UvDependencyProvider>) -> Self {
         match value {
@@ -119,7 +159,9 @@ impl From<pubgrub::error::PubGrubError<UvDependencyProvider>> for ResolveError {
                 unreachable!()
             }
             pubgrub::error::PubGrubError::Failure(inner) => Self::Failure(inner),
-            pubgrub::error::PubGrubError::NoSolution(derivation_tree) => {
+            pubgrub::error::PubGrubError::NoSolution(mut derivation_tree) => {
+                collapse_extra_proxies(&mut derivation_tree);
+
                 Self::NoSolution(NoSolutionError {
                     derivation_tree,
                     // The following should be populated before display for the best error messages
@@ -208,7 +250,8 @@ impl NoSolutionError {
                         BTreeSet::from([python_requirement.target().deref().clone()]),
                     );
                 }
-                PubGrubPackage::Package(name, ..) => {
+                PubGrubPackage::Extra(_, _, _) => {}
+                PubGrubPackage::Package(name, _, _) => {
                     // Avoid including available versions for packages that exist in the derivation
                     // tree, but were never visited during resolution. We _may_ have metadata for
                     // these packages, but it's non-deterministic, and omitting them ensures that
@@ -256,7 +299,7 @@ impl NoSolutionError {
     ) -> Self {
         let mut new = FxHashMap::default();
         for package in self.derivation_tree.packages() {
-            if let PubGrubPackage::Package(name, ..) = package {
+            if let PubGrubPackage::Package(name, _, _) = package {
                 if let Some(entry) = unavailable_packages.get(name) {
                     let reason = entry.value();
                     new.insert(name.clone(), reason.clone());
@@ -275,7 +318,7 @@ impl NoSolutionError {
     ) -> Self {
         let mut new = FxHashMap::default();
         for package in self.derivation_tree.packages() {
-            if let PubGrubPackage::Package(name, ..) = package {
+            if let PubGrubPackage::Package(name, _, _) = package {
                 if let Some(entry) = incomplete_packages.get(name) {
                     let versions = entry.value();
                     for entry in versions {

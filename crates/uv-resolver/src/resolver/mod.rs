@@ -525,6 +525,7 @@ impl<
         match package {
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Python(_) => {}
+            PubGrubPackage::Extra(_, _, _) => {}
             PubGrubPackage::Package(name, _extra, None) => {
                 // Verify that the package is allowed under the hash-checking policy.
                 if !self.hasher.allows_package(name) {
@@ -561,7 +562,7 @@ impl<
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
         for (package, range) in packages {
-            let PubGrubPackage::Package(package_name, _extra, None) = package else {
+            let PubGrubPackage::Package(package_name, None, None) = package else {
                 continue;
             };
             request_sink
@@ -604,16 +605,9 @@ impl<
                 }
             }
 
-            PubGrubPackage::Package(package_name, extra, Some(url)) => {
-                if let Some(extra) = extra {
-                    debug!(
-                        "Searching for a compatible version of {package_name}[{extra}] @ {url} ({range})",
-                    );
-                } else {
-                    debug!(
-                        "Searching for a compatible version of {package_name} @ {url} ({range})"
-                    );
-                }
+            PubGrubPackage::Extra(package_name, _, Some(url))
+            | PubGrubPackage::Package(package_name, _, Some(url)) => {
+                debug!("Searching for a compatible version of {package} @ {url} ({range})");
 
                 // If the dist is an editable, return the version from the editable metadata.
                 if let Some((_local, metadata)) = self.editables.get(package_name) {
@@ -702,7 +696,8 @@ impl<
                 Ok(Some(ResolverVersion::Available(version.clone())))
             }
 
-            PubGrubPackage::Package(package_name, extra, None) => {
+            PubGrubPackage::Extra(package_name, _, None)
+            | PubGrubPackage::Package(package_name, _, None) => {
                 // Wait for the metadata to be available.
                 let versions_response = self
                     .index
@@ -732,13 +727,7 @@ impl<
                     }
                 };
 
-                if let Some(extra) = extra {
-                    debug!(
-                        "Searching for a compatible version of {package_name}[{extra}] ({range})",
-                    );
-                } else {
-                    debug!("Searching for a compatible version of {package_name} ({range})");
-                }
+                debug!("Searching for a compatible version of {package} ({range})");
 
                 // Find a version.
                 let Some(candidate) = self.selector.select(
@@ -770,22 +759,13 @@ impl<
                     }
                     ResolvedDistRef::Installed(_) => Cow::Borrowed("installed"),
                 };
-                if let Some(extra) = extra {
-                    debug!(
-                        "Selecting: {}[{}]=={} ({})",
-                        candidate.name(),
-                        extra,
-                        candidate.version(),
-                        filename,
-                    );
-                } else {
-                    debug!(
-                        "Selecting: {}=={} ({})",
-                        candidate.name(),
-                        candidate.version(),
-                        filename,
-                    );
-                }
+
+                debug!(
+                    "Selecting: {}=={} ({})",
+                    package,
+                    candidate.version(),
+                    filename,
+                );
 
                 // We want to return a package pinned to a specific version; but we _also_ want to
                 // store the exact file that we selected to satisfy that version.
@@ -794,13 +774,16 @@ impl<
                 let version = candidate.version().clone();
 
                 // Emit a request to fetch the metadata for this version.
-                if self.index.distributions.register(candidate.version_id()) {
-                    let request = match dist.for_resolution() {
-                        ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
-                        ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
-                    };
-                    request_sink.send(request).await?;
+                if matches!(package, PubGrubPackage::Package(_, _, _)) {
+                    if self.index.distributions.register(candidate.version_id()) {
+                        let request = match dist.for_resolution() {
+                            ResolvedDistRef::Installable(dist) => Request::Dist(dist.clone()),
+                            ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
+                        };
+                        request_sink.send(request).await?;
+                    }
                 }
+
                 Ok(Some(ResolverVersion::Available(version)))
             }
         }
@@ -896,7 +879,7 @@ impl<
 
                 // Determine if the distribution is editable.
                 if let Some((_local, metadata)) = self.editables.get(package_name) {
-                    let mut constraints = PubGrubDependencies::from_requirements(
+                    let constraints = PubGrubDependencies::from_requirements(
                         &metadata.requires_dist,
                         &self.constraints,
                         &self.overrides,
@@ -915,14 +898,6 @@ impl<
 
                         // Emit a request to fetch the metadata for this package.
                         self.visit_package(dep_package, request_sink).await?;
-                    }
-
-                    // If a package has an extra, insert a constraint on the base package.
-                    if extra.is_some() {
-                        constraints.push(
-                            PubGrubPackage::Package(package_name.clone(), None, url.clone()),
-                            Range::singleton(version.clone()),
-                        );
                     }
 
                     return Ok(Dependencies::Available(constraints.into()));
@@ -1013,7 +988,7 @@ impl<
                     }
                 };
 
-                let mut constraints = PubGrubDependencies::from_requirements(
+                let constraints = PubGrubDependencies::from_requirements(
                     &metadata.requires_dist,
                     &self.constraints,
                     &self.overrides,
@@ -1034,16 +1009,20 @@ impl<
                     self.visit_package(package, request_sink).await?;
                 }
 
-                // If a package has an extra, insert a constraint on the base package.
-                if extra.is_some() {
-                    constraints.push(
-                        PubGrubPackage::Package(package_name.clone(), None, url.clone()),
-                        Range::singleton(version.clone()),
-                    );
-                }
-
                 Ok(Dependencies::Available(constraints.into()))
             }
+
+            // Add a dependency on both the extra and base package.
+            PubGrubPackage::Extra(package_name, extra, url) => Ok(Dependencies::Available(vec![
+                (
+                    PubGrubPackage::Package(package_name.clone(), None, url.clone()),
+                    Range::singleton(version.clone()),
+                ),
+                (
+                    PubGrubPackage::Package(package_name.clone(), Some(extra.clone()), url.clone()),
+                    Range::singleton(version.clone()),
+                ),
+            ])),
         }
     }
 
@@ -1251,6 +1230,7 @@ impl<
             match package {
                 PubGrubPackage::Root(_) => {}
                 PubGrubPackage::Python(_) => {}
+                PubGrubPackage::Extra(_, _, _) => {}
                 PubGrubPackage::Package(package_name, _extra, Some(url)) => {
                     reporter.on_progress(package_name, &VersionOrUrl::Url(url));
                 }

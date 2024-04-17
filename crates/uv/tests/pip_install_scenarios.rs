@@ -932,7 +932,7 @@ fn extra_incompatible_with_extra() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a[extra-c]==1.0.0 is available and package-a[extra-c]==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a[extra-c] depend on package-b==2.0.0.
-          And because package-a[extra-b]==1.0.0 depends on package-b==1.0.0 and only package-a[extra-b]==1.0.0 is available, we can conclude that all versions of package-a[extra-c] and all versions of package-a[extra-b] are incompatible.
+          And because package-a[extra-b]==1.0.0 depends on package-b==1.0.0 and only package-a[extra-b]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
           And because you require package-a[extra-b] and you require package-a[extra-c], we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -1047,7 +1047,7 @@ fn extra_incompatible_with_root() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a[extra]==1.0.0 depends on package-b==1.0.0 and only package-a[extra]==1.0.0 is available, we can conclude that all versions of package-a[extra] depend on package-b==1.0.0.
+      ╰─▶ Because only package-a[extra]==1.0.0 is available and package-a[extra]==1.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-a[extra] depend on package-b==1.0.0.
           And because you require package-a[extra] and you require package-b==2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
