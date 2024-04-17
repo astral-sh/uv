@@ -199,6 +199,10 @@ impl NoBuild {
 #[derive(Debug, Default, Clone, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(deny_unknown_fields, rename_all = "kebab-case")
+)]
 pub enum IndexStrategy {
     /// Only use results from the first index that returns a match for a given package name.
     ///
