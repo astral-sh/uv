@@ -3901,7 +3901,6 @@ fn find_links_requirements_txt() -> Result<()> {
     Ok(())
 }
 
-
 /// `extras==0.0.2` fails to build (i.e., it always throws). Since `extras==0.0.1` is pinned, we
 /// should never even attempt to build `extras==0.0.2`, despite an unpinned `extras[dev]`
 /// requirement.
@@ -3916,7 +3915,11 @@ fn avoid_irrelevant_extras() -> Result<()> {
         extras[dev]
     "})?;
 
-    uv_snapshot!(context.filters(), context.compile()
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.compile()
             .arg("requirements.in")
             .arg("--find-links")
             .arg(context.workspace_root.join("scripts").join("links")), @r###"

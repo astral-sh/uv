@@ -6,7 +6,4 @@ setup(
     install_requires=[
         "httpx",
     ],
-    extras_require={
-        'dev': ['anyio'],
-    }
 )
