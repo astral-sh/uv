@@ -564,7 +564,7 @@ pub(crate) struct PipSyncArgs {
     /// - Editable installs are not supported.
     /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
     ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(long, hide = true)]
+    #[arg(long)]
     pub(crate) require_hashes: bool,
 
     /// Attempt to use `keyring` for authentication for index urls
@@ -837,7 +837,7 @@ pub(crate) struct PipInstallArgs {
     /// - Editable installs are not supported.
     /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
     ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(long, hide = true)]
+    #[arg(long)]
     pub(crate) require_hashes: bool,
 
     /// Attempt to use `keyring` for authentication for index urls
