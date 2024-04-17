@@ -595,7 +595,7 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
 
             commands::run(
-                args.command,
+                args.target,
                 args.args,
                 requirements,
                 args.isolated,
