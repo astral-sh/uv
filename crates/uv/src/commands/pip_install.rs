@@ -57,7 +57,7 @@ pub(crate) async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
-    extras: &ExtrasSpecification<'_>,
+    extras: &ExtrasSpecification,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
     dependency_mode: DependencyMode,
@@ -426,7 +426,7 @@ async fn read_requirements(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
-    extras: &ExtrasSpecification<'_>,
+    extras: &ExtrasSpecification,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),

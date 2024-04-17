@@ -1,13 +1,16 @@
 use std::path::PathBuf;
 
-use distribution_types::{FlatIndexLocation, IndexUrl};
+use distribution_types::IndexLocations;
 use install_wheel_rs::linker::LinkMode;
-use uv_cache::CacheArgs;
+use uv_cache::{CacheArgs, Refresh};
+use uv_client::Connectivity;
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
+    ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary, NoBuild, Reinstall,
+    SetupPyStrategy, TargetTriple, Upgrade,
 };
-use uv_normalize::{ExtraName, PackageName};
-use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
+use uv_normalize::PackageName;
+use uv_requirements::ExtrasSpecification;
+use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
 use uv_workspace::{PipOptions, Workspace};
 
@@ -76,10 +79,8 @@ pub(crate) struct PipCompileSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
-    pub(crate) refresh: bool,
-    pub(crate) refresh_package: Vec<PackageName>,
-    pub(crate) upgrade: bool,
-    pub(crate) upgrade_package: Vec<PackageName>,
+    pub(crate) refresh: Refresh,
+    pub(crate) upgrade: Upgrade,
 
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
@@ -155,11 +156,8 @@ impl PipCompileSettings {
             src_file,
             constraint,
             r#override,
-
-            refresh,
-            refresh_package: refresh_package.unwrap_or_default(),
-            upgrade,
-            upgrade_package: upgrade_package.unwrap_or_default(),
+            refresh: Refresh::from_args(refresh, refresh_package),
+            upgrade: Upgrade::from_args(upgrade, upgrade_package),
 
             // Shared settings.
             shared: PipSharedSettings::combine(
@@ -224,10 +222,8 @@ impl PipCompileSettings {
 pub(crate) struct PipSyncSettings {
     // CLI-only settings.
     pub(crate) src_file: Vec<PathBuf>,
-    pub(crate) reinstall: bool,
-    pub(crate) reinstall_package: Vec<PackageName>,
-    pub(crate) refresh: bool,
-    pub(crate) refresh_package: Vec<PackageName>,
+    pub(crate) reinstall: Reinstall,
+    pub(crate) refresh: Refresh,
 
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
@@ -277,10 +273,8 @@ impl PipSyncSettings {
         Self {
             // CLI-only settings.
             src_file,
-            reinstall,
-            reinstall_package,
-            refresh,
-            refresh_package,
+            reinstall: Reinstall::from_args(reinstall, reinstall_package),
+            refresh: Refresh::from_args(refresh, refresh_package),
 
             // Shared settings.
             shared: PipSharedSettings::combine(
@@ -330,12 +324,9 @@ pub(crate) struct PipInstallSettings {
     pub(crate) editable: Vec<String>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
-    pub(crate) upgrade: bool,
-    pub(crate) upgrade_package: Vec<PackageName>,
-    pub(crate) reinstall: bool,
-    pub(crate) reinstall_package: Vec<PackageName>,
-    pub(crate) refresh: bool,
-    pub(crate) refresh_package: Vec<PackageName>,
+    pub(crate) upgrade: Upgrade,
+    pub(crate) reinstall: Reinstall,
+    pub(crate) refresh: Refresh,
     pub(crate) dry_run: bool,
     // Shared settings.
     pub(crate) shared: PipSharedSettings,
@@ -404,12 +395,9 @@ impl PipInstallSettings {
             editable,
             constraint,
             r#override,
-            upgrade,
-            upgrade_package: upgrade_package.unwrap_or_default(),
-            reinstall,
-            reinstall_package: reinstall_package.unwrap_or_default(),
-            refresh,
-            refresh_package: refresh_package.unwrap_or_default(),
+            upgrade: Upgrade::from_args(upgrade, upgrade_package),
+            reinstall: Reinstall::from_args(reinstall, reinstall_package),
+            refresh: Refresh::from_args(refresh, refresh_package),
             dry_run,
 
             // Shared settings.
@@ -749,24 +737,19 @@ impl VenvSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipSharedSettings {
+    pub(crate) index_locations: IndexLocations,
     pub(crate) python: Option<String>,
     pub(crate) system: bool,
+    pub(crate) extras: ExtrasSpecification,
     pub(crate) break_system_packages: bool,
-    pub(crate) offline: bool,
-    pub(crate) index_url: Option<IndexUrl>,
-    pub(crate) extra_index_url: Vec<IndexUrl>,
-    pub(crate) no_index: bool,
-    pub(crate) find_links: Vec<FlatIndexLocation>,
+    pub(crate) connectivity: Connectivity,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) no_build: bool,
-    pub(crate) no_binary: Vec<PackageNameSpecifier>,
-    pub(crate) only_binary: Vec<PackageNameSpecifier>,
+    pub(crate) no_binary: NoBinary,
+    pub(crate) no_build: NoBuild,
     pub(crate) no_build_isolation: bool,
     pub(crate) strict: bool,
-    pub(crate) extra: Vec<ExtraName>,
-    pub(crate) all_extras: bool,
-    pub(crate) no_deps: bool,
+    pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PreReleaseMode,
     pub(crate) output_file: Option<PathBuf>,
@@ -775,7 +758,7 @@ pub(crate) struct PipSharedSettings {
     pub(crate) no_header: bool,
     pub(crate) custom_compile_command: Option<String>,
     pub(crate) generate_hashes: bool,
-    pub(crate) legacy_setup_py: bool,
+    pub(crate) setup_py: SetupPyStrategy,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
@@ -840,9 +823,21 @@ impl PipSharedSettings {
             .unwrap_or_default();
 
         Self {
-            extra: args.extra.or(extra).unwrap_or_default(),
-            all_extras: args.all_extras.or(all_extras).unwrap_or_default(),
-            no_deps: args.no_deps.or(no_deps).unwrap_or_default(),
+            index_locations: IndexLocations::new(
+                args.index_url.or(index_url),
+                args.extra_index_url.or(extra_index_url).unwrap_or_default(),
+                args.find_links.or(find_links).unwrap_or_default(),
+                args.no_index.or(no_index).unwrap_or_default(),
+            ),
+            extras: ExtrasSpecification::from_args(
+                args.all_extras.or(all_extras).unwrap_or_default(),
+                args.extra.or(extra).unwrap_or_default(),
+            ),
+            dependency_mode: if args.no_deps.or(no_deps).unwrap_or_default() {
+                DependencyMode::Direct
+            } else {
+                DependencyMode::Transitive
+            },
             resolution: args.resolution.or(resolution).unwrap_or_default(),
             prerelease: args.prerelease.or(prerelease).unwrap_or_default(),
             output_file: args.output_file.or(output_file),
@@ -854,24 +849,30 @@ impl PipSharedSettings {
                 .annotation_style
                 .or(annotation_style)
                 .unwrap_or_default(),
-            offline: args.offline.or(offline).unwrap_or_default(),
-            index_url: args.index_url.or(index_url),
-            extra_index_url: args.extra_index_url.or(extra_index_url).unwrap_or_default(),
-            no_index: args.no_index.or(no_index).unwrap_or_default(),
+            connectivity: if args.offline.or(offline).unwrap_or_default() {
+                Connectivity::Offline
+            } else {
+                Connectivity::Online
+            },
             index_strategy: args.index_strategy.or(index_strategy).unwrap_or_default(),
             keyring_provider: args
                 .keyring_provider
                 .or(keyring_provider)
                 .unwrap_or_default(),
-            find_links: args.find_links.or(find_links).unwrap_or_default(),
             generate_hashes: args.generate_hashes.or(generate_hashes).unwrap_or_default(),
-            legacy_setup_py: args.legacy_setup_py.or(legacy_setup_py).unwrap_or_default(),
+            setup_py: if args.legacy_setup_py.or(legacy_setup_py).unwrap_or_default() {
+                SetupPyStrategy::Setuptools
+            } else {
+                SetupPyStrategy::Pep517
+            },
             no_build_isolation: args
                 .no_build_isolation
                 .or(no_build_isolation)
                 .unwrap_or_default(),
-            no_build: args.no_build.or(no_build).unwrap_or_default(),
-            only_binary: args.only_binary.or(only_binary).unwrap_or_default(),
+            no_build: NoBuild::from_args(
+                args.only_binary.or(only_binary).unwrap_or_default(),
+                args.no_build.or(no_build).unwrap_or_default(),
+            ),
             config_setting: args.config_settings.or(config_settings).unwrap_or_default(),
             python_version: args.python_version.or(python_version),
             python_platform: args.python_platform.or(python_platform),
@@ -895,7 +896,7 @@ impl PipSharedSettings {
                 .break_system_packages
                 .or(break_system_packages)
                 .unwrap_or_default(),
-            no_binary: args.no_binary.or(no_binary).unwrap_or_default(),
+            no_binary: NoBinary::from_args(args.no_binary.or(no_binary).unwrap_or_default()),
             compile_bytecode: args
                 .compile_bytecode
                 .or(compile_bytecode)

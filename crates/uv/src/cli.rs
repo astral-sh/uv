@@ -350,7 +350,7 @@ pub(crate) struct PipCompileArgs {
 
     /// Refresh cached data for a specific package.
     #[arg(long)]
-    pub(crate) refresh_package: Option<Vec<PackageName>>,
+    pub(crate) refresh_package: Vec<PackageName>,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -455,7 +455,7 @@ pub(crate) struct PipCompileArgs {
     /// Allow upgrades for a specific package, ignoring pinned versions in the existing output
     /// file.
     #[arg(long, short = 'P')]
-    pub(crate) upgrade_package: Option<Vec<PackageName>>,
+    pub(crate) upgrade_package: Vec<PackageName>,
 
     /// Include distribution hashes in the output file.
     #[arg(long, overrides_with("no_generate_hashes"))]
@@ -901,7 +901,7 @@ pub(crate) struct PipInstallArgs {
 
     /// Allow upgrade of a specific package.
     #[arg(long, short = 'P')]
-    pub(crate) upgrade_package: Option<Vec<PackageName>>,
+    pub(crate) upgrade_package: Vec<PackageName>,
 
     /// Reinstall all packages, regardless of whether they're already installed.
     #[arg(long, alias = "force-reinstall")]
@@ -909,7 +909,7 @@ pub(crate) struct PipInstallArgs {
 
     /// Reinstall a specific package, regardless of whether it's already installed.
     #[arg(long)]
-    pub(crate) reinstall_package: Option<Vec<PackageName>>,
+    pub(crate) reinstall_package: Vec<PackageName>,
 
     #[arg(
         global = true,
@@ -929,7 +929,7 @@ pub(crate) struct PipInstallArgs {
 
     /// Refresh cached data for a specific package.
     #[arg(long)]
-    pub(crate) refresh_package: Option<Vec<PackageName>>,
+    pub(crate) refresh_package: Vec<PackageName>,
 
     /// Ignore package dependencies, instead only installing those packages explicitly listed
     /// on the command line or in the requirements files.

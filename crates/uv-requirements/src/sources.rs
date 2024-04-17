@@ -147,14 +147,25 @@ impl std::fmt::Display for RequirementsSource {
 }
 
 #[derive(Debug, Default, Clone)]
-pub enum ExtrasSpecification<'a> {
+pub enum ExtrasSpecification {
     #[default]
     None,
     All,
-    Some(&'a [ExtraName]),
+    Some(Vec<ExtraName>),
 }
 
-impl ExtrasSpecification<'_> {
+impl ExtrasSpecification {
+    /// Determine the extras specification to use based on the command-line arguments.
+    pub fn from_args(all_extras: bool, extra: Vec<ExtraName>) -> Self {
+        if all_extras {
+            ExtrasSpecification::All
+        } else if extra.is_empty() {
+            ExtrasSpecification::None
+        } else {
+            ExtrasSpecification::Some(extra)
+        }
+    }
+
     /// Returns true if a name is included in the extra specification.
     pub fn contains(&self, name: &ExtraName) -> bool {
         match self {

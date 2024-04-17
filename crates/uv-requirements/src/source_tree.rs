@@ -23,7 +23,7 @@ pub struct SourceTreeResolver<'a, Context: BuildContext + Send + Sync> {
     /// The requirements for the project.
     source_trees: Vec<PathBuf>,
     /// The extras to include when resolving requirements.
-    extras: &'a ExtrasSpecification<'a>,
+    extras: &'a ExtrasSpecification,
     /// The hash policy to enforce.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -36,7 +36,7 @@ impl<'a, Context: BuildContext + Send + Sync> SourceTreeResolver<'a, Context> {
     /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
     pub fn new(
         source_trees: Vec<PathBuf>,
-        extras: &'a ExtrasSpecification<'a>,
+        extras: &'a ExtrasSpecification,
         hasher: &'a HashStrategy,
         context: &'a Context,
         client: &'a RegistryClient,
