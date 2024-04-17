@@ -5026,6 +5026,7 @@ dependencies = [
 name = "uv-workspace"
 version = "0.0.1"
 dependencies = [
+ "dirs-sys",
  "distribution-types",
  "fs-err",
  "install-wheel-rs",
