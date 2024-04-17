@@ -1312,12 +1312,16 @@ pub(crate) struct VenvArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct RunArgs {
-    /// Command
+    /// The command to run.
     pub(crate) command: String,
 
-    /// Arguments
-    #[clap(allow_hyphen_values = true)]
+    /// The arguments to the command.
+    #[arg(allow_hyphen_values = true)]
     pub(crate) args: Vec<String>,
+
+    /// Always use a new virtual environment.
+    #[arg(long)]
+    pub(crate) isolated: bool,
 }
 
 #[derive(Args)]
