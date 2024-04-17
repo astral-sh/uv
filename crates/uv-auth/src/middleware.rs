@@ -137,16 +137,11 @@ impl Middleware for AuthMiddleware {
         //      implementation returns different credentials for different URLs in the
         //      same realm we will use the wrong credentials.
         } else if let Some(credentials) = self.keyring.as_ref().and_then(|keyring| {
-            if let Some(username) = credentials
+            let username = credentials
                 .get()
-                .and_then(|credentials| credentials.username())
-            {
-                debug!("Checking keyring for credentials for {url}");
-                keyring.fetch(request.url(), username)
-            } else {
-                trace!("Skipping keyring lookup for {url} with no username");
-                None
-            }
+                .and_then(|credentials| credentials.username());
+            debug!("Checking keyring for credentials for {url}");
+            keyring.fetch(request.url(), username)
         }) {
             debug!("Found credentials in keyring for {url}");
             request = credentials.authenticate(request);
