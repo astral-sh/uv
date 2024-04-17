@@ -101,7 +101,7 @@ impl Middleware for AuthMiddleware {
         trace!("Handling request for {url}");
 
         // Then check for credentials in (2) the cache
-        let credentials = self.cache().check(request.url(), credentials);
+        let credentials = self.cache().check(request.url(), credentials).await;
 
         // Track credentials that we might want to insert into the cache
         let mut new_credentials = None;
@@ -167,7 +167,7 @@ impl Middleware for AuthMiddleware {
 
             // Update the default credentials eagerly since requests are made concurrently
             // and we want to avoid expensive credential lookups
-            self.cache().set_default(&url, credentials.clone());
+            self.cache().set_default(&url, credentials.clone()).await;
 
             let result = next.run(request, extensions).await;
 
@@ -177,7 +177,7 @@ impl Middleware for AuthMiddleware {
                 .is_ok_and(|response| response.error_for_status_ref().is_ok())
             {
                 trace!("Updating cached credentials for {url}");
-                self.cache().insert(&url, credentials)
+                self.cache().insert(&url, credentials).await
             };
             result
         } else {

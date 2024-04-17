@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::{collections::HashMap, sync::Mutex};
 
 use crate::credentials::Credentials;
 use crate::NetLoc;
+use tokio::sync::Mutex;
 
 use tracing::trace;
 use url::Url;
@@ -67,8 +68,8 @@ impl CredentialsCache {
     /// If complete credentials are provided, they will be returned as [`CheckResponse::Existing`]
     /// If the credentials are partial, i.e. missing a password, the cache will be checked
     /// for a corresponding entry.
-    pub(crate) fn check(&self, url: &Url, credentials: Option<Credentials>) -> CheckResponse {
-        let store = self.store.lock().unwrap();
+    pub(crate) async fn check(&self, url: &Url, credentials: Option<Credentials>) -> CheckResponse {
+        let store = self.store.lock().await;
 
         let credentials = credentials.map(Arc::new);
         let key = CredentialsCache::key(
@@ -109,7 +110,7 @@ impl CredentialsCache {
     }
 
     /// Update the cache with the given credentials if none exist.
-    pub(crate) fn set_default(&self, url: &Url, credentials: Arc<Credentials>) {
+    pub(crate) async fn set_default(&self, url: &Url, credentials: Arc<Credentials>) {
         // Do not cache empty credentials
         if credentials.is_empty() {
             return;
@@ -118,20 +119,20 @@ impl CredentialsCache {
         // Insert an entry for requests including the username
         if let Some(username) = credentials.username() {
             let key = CredentialsCache::key(url, Some(username.to_string()));
-            if !self.contains_key(&key) {
-                self.insert_entry(key, credentials.clone());
+            if !self.contains_key(&key).await {
+                self.insert_entry(key, credentials.clone()).await;
             }
         }
 
         // Insert an entry for requests with no username
         let key = CredentialsCache::key(url, None);
-        if !self.contains_key(&key) {
-            self.insert_entry(key, credentials.clone());
+        if !self.contains_key(&key).await {
+            self.insert_entry(key, credentials.clone()).await;
         }
     }
 
     /// Update the cache with the given credentials.
-    pub(crate) fn insert(&self, url: &Url, credentials: Arc<Credentials>) {
+    pub(crate) async fn insert(&self, url: &Url, credentials: Arc<Credentials>) {
         // Do not cache empty credentials
         if credentials.is_empty() {
             return;
@@ -142,21 +143,27 @@ impl CredentialsCache {
             self.insert_entry(
                 CredentialsCache::key(url, Some(username.to_string())),
                 credentials.clone(),
-            );
+            )
+            .await;
         }
 
         // Insert an entry for requests with no username
-        self.insert_entry(CredentialsCache::key(url, None), credentials.clone());
+        self.insert_entry(CredentialsCache::key(url, None), credentials.clone())
+            .await;
     }
 
     /// Private interface to update a cache entry.
-    fn insert_entry(&self, key: (NetLoc, Option<String>), credentials: Arc<Credentials>) -> bool {
+    async fn insert_entry(
+        &self,
+        key: (NetLoc, Option<String>),
+        credentials: Arc<Credentials>,
+    ) -> bool {
         // Do not cache empty credentials
         if credentials.is_empty() {
             return false;
         }
 
-        let mut store = self.store.lock().unwrap();
+        let mut store = self.store.lock().await;
 
         // Always replace existing entries if we have a password
         if credentials.password().is_some() {
@@ -177,8 +184,8 @@ impl CredentialsCache {
     }
 
     /// Returns true if a key is in the cache.
-    fn contains_key(&self, key: &(NetLoc, Option<String>)) -> bool {
-        let store = self.store.lock().unwrap();
+    async fn contains_key(&self, key: &(NetLoc, Option<String>)) -> bool {
+        let store = self.store.lock().await;
         store.contains_key(key)
     }
 }
