@@ -28,9 +28,10 @@ impl CredentialsCache {
         }
     }
 
-    /// Create an owned cache key for the realm
-    fn realm(url: &Url, username: Username) -> (NetLoc, Username) {
-        (NetLoc::from(url), username)
+    pub(crate) fn statistics(&self) -> String {
+        let realms = self.realms.lock().unwrap();
+        let urls = self.urls.lock().unwrap();
+        format!("realms: {}, urls: {}", realms.len(), urls.len())
     }
 
     /// Return the credentials that should be used for a realm, if any.
@@ -86,14 +87,11 @@ impl CredentialsCache {
         let username = credentials.to_username();
         if username.is_some() {
             let realm = (NetLoc::from(url), username.clone());
-            self.insert_entry(realm, credentials.clone());
+            self.insert_realm(realm, credentials.clone());
         }
 
         // Insert an entry for requests with no username
-        self.insert_entry(
-            CredentialsCache::realm(url, Username::none()),
-            credentials.clone(),
-        );
+        self.insert_realm((NetLoc::from(url), Username::none()), credentials.clone());
 
         // Insert an entry for the URL
         let mut urls = self.urls.lock().unwrap();
@@ -105,18 +103,23 @@ impl CredentialsCache {
     }
 
     /// Private interface to update a cache entry.
-    fn insert_entry(&self, key: (NetLoc, Username), credentials: Arc<Credentials>) -> bool {
+    ///
+    /// Returns replaced credentials, if any.
+    fn insert_realm(
+        &self,
+        key: (NetLoc, Username),
+        credentials: Arc<Credentials>,
+    ) -> Option<Arc<Credentials>> {
         // Do not cache empty credentials
         if credentials.is_empty() {
-            return false;
+            return None;
         }
 
         let mut realms = self.realms.lock().unwrap();
 
         // Always replace existing entries if we have a password
         if credentials.password().is_some() {
-            realms.insert(key, credentials.clone());
-            return true;
+            return realms.insert(key, credentials.clone());
         }
 
         // If we only have a username, add a new entry or replace an existing entry if it doesn't have a password
@@ -124,10 +127,9 @@ impl CredentialsCache {
         if existing.is_none()
             || existing.is_some_and(|credentials| credentials.password().is_none())
         {
-            realms.insert(key, credentials.clone());
-            return true;
+            return realms.insert(key, credentials.clone());
         }
 
-        false
+        None
     }
 }

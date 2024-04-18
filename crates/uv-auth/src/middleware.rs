@@ -134,8 +134,8 @@ impl Middleware for AuthMiddleware {
             // If there's a password, send the request and cache
             if credentials.password().is_some() {
                 trace!("Request for {url} is already fully authenticated");
-                self.complete_request(Some(credentials), request, extensions, next)
-                    .await
+                // Do not populate the cache with these credentials, they should already be populated
+                self.complete_request(None, request, extensions, next).await
             } else {
                 trace!("Request for {url} is missing a password, looking for credentials");
                 // There's just a username, try to find a password
@@ -172,6 +172,9 @@ impl Middleware for AuthMiddleware {
                     return self.complete_request(None, request, extensions, next).await;
                 }
             }
+            let attempt_has_username = credentials
+                .as_ref()
+                .is_some_and(|credentials| credentials.username().is_some());
 
             // Otherise, attempt an anonymous request
             trace!("Attempting unauthenticated request for {url}");
@@ -204,7 +207,7 @@ impl Middleware for AuthMiddleware {
 
                 if let Some(credentials) = credentials.as_ref() {
                     if credentials.password().is_some() {
-                        trace!("Retrying request for {url} with credentials from cache");
+                        trace!("Retrying request for {url} with credentials from cache {credentials:?}");
                         retry_request = credentials.authenticate(retry_request);
                         return self
                             .complete_request(None, retry_request, extensions, next)
@@ -218,14 +221,25 @@ impl Middleware for AuthMiddleware {
                 {
                     retry_request = credentials.authenticate(retry_request);
                     trace!("Retrying request for {url} with {credentials:?}");
-                    self.complete_request(
-                        Some(Arc::new(credentials)),
-                        retry_request,
-                        extensions,
-                        next,
-                    )
-                    .await
+                    return self
+                        .complete_request(
+                            Some(Arc::new(credentials)),
+                            retry_request,
+                            extensions,
+                            next,
+                        )
+                        .await;
                 } else {
+                    if let Some(credentials) = credentials.as_ref() {
+                        if !attempt_has_username {
+                            trace!("Retrying request for {url} with username from cache {credentials:?}");
+                            retry_request = credentials.authenticate(retry_request);
+                            return self
+                                .complete_request(None, retry_request, extensions, next)
+                                .await;
+                        }
+                    }
+
                     Ok(response)
                 }
             } else {
@@ -380,8 +394,9 @@ mod tests {
         Ok(())
     }
 
+    /// Without seeding the cache, authenticated requests are not cached
     #[test(tokio::test)]
-    async fn test_credentials_in_url() -> Result<(), Error> {
+    async fn test_credentials_in_url_no_seed() -> Result<(), Error> {
         let username = "user";
         let password = "password";
 
@@ -397,12 +412,47 @@ mod tests {
         url.set_password(Some(password)).unwrap();
         assert_eq!(client.get(url).send().await?.status(), 200);
 
-        // Works for a URL without credentials now
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            401,
+            "Requests require credentials due to cache optimizations"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_credentials_in_url() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let server = start_test_server(username, password).await;
+        let base_url = Url::parse(&server.uri())?;
+        let cache = CredentialsCache::new();
+        cache.insert(
+            &base_url,
+            Arc::new(Credentials::new(
+                Some(username.to_string()),
+                Some(password.to_string()),
+            )),
+        );
+
+        let client = test_client_builder()
+            .with(AuthMiddleware::new().with_cache(cache))
+            .build();
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        url.set_password(Some(password)).unwrap();
+        assert_eq!(client.get(url).send().await?.status(), 200);
+
+        // Works for a URL without credentials too
         assert_eq!(
             client.get(server.uri()).send().await?.status(),
             200,
-            "Subsequent requests should not require credentials"
+            "Requests should not require credentials"
         );
+
         assert_eq!(
             client
                 .get(format!("{}/foo", server.uri()))
@@ -410,7 +460,7 @@ mod tests {
                 .await?
                 .status(),
             200,
-            "Subsequent requests can be to different paths in the same realm"
+            "Requests can be to different paths in the same realm"
         );
 
         let mut url = base_url.clone();
@@ -431,23 +481,29 @@ mod tests {
         let password = "";
 
         let server = start_test_server(username, password).await;
-        let client = test_client_builder()
-            .with(AuthMiddleware::new().with_cache(CredentialsCache::new()))
-            .build();
-
         let base_url = Url::parse(&server.uri())?;
+        let cache = CredentialsCache::new();
+        cache.insert(
+            &base_url,
+            Arc::new(Credentials::new(Some(username.to_string()), None)),
+        );
+
+        let client = test_client_builder()
+            .with(AuthMiddleware::new().with_cache(cache))
+            .build();
 
         let mut url = base_url.clone();
         url.set_username(username).unwrap();
         url.set_password(None).unwrap();
         assert_eq!(client.get(url).send().await?.status(), 200);
 
-        // Works for a URL without credentials now
+        // Works for a URL without credentials too
         assert_eq!(
             client.get(server.uri()).send().await?.status(),
             200,
-            "Subsequent requests should not require credentials"
+            "Requests should not require credentials"
         );
+
         assert_eq!(
             client
                 .get(format!("{}/foo", server.uri()))
@@ -455,7 +511,7 @@ mod tests {
                 .await?
                 .status(),
             200,
-            "Subsequent requests can be to different paths in the same realm"
+            "Requests can be to different paths in the same realm"
         );
 
         let mut url = base_url.clone();
