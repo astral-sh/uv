@@ -16,6 +16,7 @@ use uv_toolchain::PythonVersion;
 
 use crate::commands::{extra_name_with_clap_error, ListFormat, VersionFormat};
 use crate::compat;
+use crate::target::TargetTriple;
 
 #[derive(Parser)]
 #[command(author, version, long_version = crate::version::version(), about)]
@@ -519,6 +520,14 @@ pub(crate) struct PipCompileArgs {
     /// is assumed. For example, `3.7` is mapped to `3.7.17`.
     #[arg(long, short)]
     pub(crate) python_version: Option<PythonVersion>,
+
+    /// The platform for which requirements should be resolved.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aaarch64-apple-darwin`.
+    #[arg(long)]
+    pub(crate) platform: Option<TargetTriple>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
