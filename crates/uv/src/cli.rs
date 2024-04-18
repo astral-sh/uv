@@ -37,6 +37,7 @@ pub(crate) struct Cli {
 }
 
 #[derive(Parser, Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct GlobalArgs {
     /// Do not print any output.
     #[arg(global = true, long, short, conflicts_with = "verbose")]
@@ -72,8 +73,11 @@ pub(crate) struct GlobalArgs {
     /// However, in some cases, you may want to use the platform's native certificate store,
     /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
     /// included in your system's certificate store.
-    #[arg(global = true, long, env = "UV_NATIVE_TLS")]
+    #[arg(global = true, long, env = "UV_NATIVE_TLS", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_native_tls"))]
     pub(crate) native_tls: bool,
+
+    #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
+    pub(crate) no_native_tls: bool,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]
@@ -675,6 +679,7 @@ pub(crate) struct PipSyncArgs {
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
         group = "discovery",
         overrides_with("no_system")
     )]
@@ -692,6 +697,7 @@ pub(crate) struct PipSyncArgs {
     #[arg(
         long,
         env = "UV_BREAK_SYSTEM_PACKAGES",
+        value_parser = clap::builder::BoolishValueParser::new(),
         requires = "discovery",
         overrides_with("no_break_system_packages")
     )]
@@ -1014,6 +1020,7 @@ pub(crate) struct PipInstallArgs {
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
         group = "discovery",
         overrides_with("no_system")
     )]
@@ -1031,6 +1038,7 @@ pub(crate) struct PipInstallArgs {
     #[arg(
         long,
         env = "UV_BREAK_SYSTEM_PACKAGES",
+        value_parser = clap::builder::BoolishValueParser::new(),
         requires = "discovery",
         overrides_with("no_break_system_packages")
     )]
@@ -1193,6 +1201,7 @@ pub(crate) struct PipUninstallArgs {
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
         group = "discovery",
         overrides_with("no_system")
     )]
@@ -1210,6 +1219,7 @@ pub(crate) struct PipUninstallArgs {
     #[arg(
         long,
         env = "UV_BREAK_SYSTEM_PACKAGES",
+        value_parser = clap::builder::BoolishValueParser::new(),
         requires = "discovery",
         overrides_with("no_break_system_packages")
     )]
@@ -1267,6 +1277,7 @@ pub(crate) struct PipFreezeArgs {
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
         group = "discovery",
         overrides_with("no_system")
     )]
@@ -1329,6 +1340,7 @@ pub(crate) struct PipListArgs {
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
         group = "discovery",
         overrides_with("no_system")
     )]
@@ -1370,6 +1382,7 @@ pub(crate) struct PipCheckArgs {
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
         group = "discovery",
         overrides_with("no_system")
     )]
@@ -1419,6 +1432,7 @@ pub(crate) struct PipShowArgs {
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
         group = "discovery",
         overrides_with("no_system")
     )]
@@ -1455,6 +1469,7 @@ pub(crate) struct VenvArgs {
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
         group = "discovery",
         overrides_with("no_system")
     )]
