@@ -62,14 +62,16 @@ impl KeyringProvider {
         //      This behavior avoids adding ~80ms to every request when the subprocess keyring
         //      provider is being used, but makes assumptions about the typical keyring
         //      use-cases.
-        let mut cache = self.cache.lock().unwrap();
-
         let key = (host.to_string(), username.to_string());
-        if cache.contains(&key) {
-            debug!(
+        {
+            let cache = self.cache.lock().unwrap();
+
+            if cache.contains(&key) {
+                debug!(
                 "Skipping keyring lookup for {username} at {host}, already attempted and found no credentials."
             );
-            return None;
+                return None;
+            }
         }
 
         // Check the full URL first
@@ -92,8 +94,11 @@ impl KeyringProvider {
             };
         }
 
-        if password.is_none() {
-            cache.insert(key);
+        {
+            let mut cache = self.cache.lock().unwrap();
+            if password.is_none() {
+                cache.insert(key);
+            }
         }
 
         password.map(|password| Credentials::new(Some(username.to_string()), Some(password)))

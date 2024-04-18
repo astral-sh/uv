@@ -136,19 +136,25 @@ impl Middleware for AuthMiddleware {
         //      falls back to the host, but we cache the result per host so if a keyring
         //      implementation returns different credentials for different URLs in the
         //      same realm we will use the wrong credentials.
-        } else if let Some(credentials) = self.keyring.as_ref().and_then(|keyring| {
-            if let Some(username) = credentials
-                .get()
-                .and_then(|credentials| credentials.username())
-            {
-                debug!("Checking keyring for credentials for {url}");
-                // how to fix this
-                keyring.fetch(request.url(), username)
-            } else {
-                trace!("Skipping keyring lookup for {url} with no username");
-                None
+        } else if let Some(credentials) = match self.keyring {
+            Some(ref keyring) => {
+                match credentials
+                    .get()
+                    .and_then(|credentials| credentials.username())
+                {
+                    Some(username) => {
+                        debug!("Checking keyring for credentials for {url}");
+                        // how to fix this
+                        keyring.fetch(request.url(), username).await
+                    }
+                    None => {
+                        trace!("Skipping keyring lookup for {url} with no username");
+                        None
+                    }
+                }
             }
-        }) {
+            None => None,
+        } {
             debug!("Found credentials in keyring for {url}");
             request = credentials.authenticate(request);
             new_credentials = Some(Arc::new(credentials));
