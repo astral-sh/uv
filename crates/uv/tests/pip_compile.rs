@@ -7640,7 +7640,8 @@ fn compile_index_url_fallback_prefer_primary() -> Result<()> {
     Ok(())
 }
 
-/// Ensure that the password is hidden when index annotations are displayed via `--emit-index-annotation`.
+/// Ensure that the username and the password are omitted when
+/// index annotations are displayed via `--emit-index-annotation`.
 #[test]
 fn emit_index_annotation_hide_password() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -7659,18 +7660,18 @@ fn emit_index_annotation_hide_password() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] --exclude-newer 2024-03-25T00:00:00Z requirements.in --emit-index-annotation
     certifi==2024.2.2
         # via requests
-        # from https://test-user:****@pypi.org/simple
+        # from https://pypi.org/simple
     charset-normalizer==3.3.2
         # via requests
-        # from https://test-user:****@pypi.org/simple
+        # from https://pypi.org/simple
     idna==3.6
         # via requests
-        # from https://test-user:****@pypi.org/simple
+        # from https://pypi.org/simple
     requests==2.31.0
-        # from https://test-user:****@pypi.org/simple
+        # from https://pypi.org/simple
     urllib3==2.2.1
         # via requests
-        # from https://test-user:****@pypi.org/simple
+        # from https://pypi.org/simple
 
     ----- stderr -----
     Resolved 5 packages in [TIME]

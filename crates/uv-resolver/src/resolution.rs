@@ -747,10 +747,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             if self.include_index_annotation {
                 if let Some(index) = node.index() {
                     let mut url = index.url().clone();
-                    if url.password().is_some() {
-                        // Hide the password.
-                        let _ = url.set_password(Some("****"));
-                    }
+                    // hide the username and password
+                    let _ = url.set_username("");
+                    let _ = url.set_password(None);
                     writeln!(f, "{}", format!("    # from {url}").green())?;
                 }
             }
