@@ -51,6 +51,19 @@ impl IndexUrl {
             Self::Path(url) => url.raw(),
         }
     }
+
+    /// Return the redacted URL for the index, omitting any sensitive credentials.
+    pub fn redacted(&self) -> Cow<'_, Url> {
+        let url = self.url();
+        if url.username().is_empty() && url.password().is_none() {
+            Cow::Borrowed(url)
+        } else {
+            let mut url = url.clone();
+            let _ = url.set_username("");
+            let _ = url.set_password(None);
+            Cow::Owned(url)
+        }
+    }
 }
 
 impl Display for IndexUrl {

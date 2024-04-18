@@ -746,10 +746,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // `# from https://pypi.org/simple`).
             if self.include_index_annotation {
                 if let Some(index) = node.index() {
-                    let mut url = index.url().clone();
-                    // hide the username and password
-                    let _ = url.set_username("");
-                    let _ = url.set_password(None);
+                    let url = index.redacted();
                     writeln!(f, "{}", format!("    # from {url}").green())?;
                 }
             }
