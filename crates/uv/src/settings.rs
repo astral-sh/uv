@@ -36,10 +36,9 @@ impl GlobalSettings {
             } else {
                 args.color
             },
-            native_tls: args.native_tls
-                || workspace
-                    .and_then(|workspace| workspace.options.native_tls)
-                    .unwrap_or(false),
+            native_tls: flag(args.native_tls, args.no_native_tls)
+                .or(workspace.and_then(|workspace| workspace.options.native_tls))
+                .unwrap_or(false),
         }
     }
 }
