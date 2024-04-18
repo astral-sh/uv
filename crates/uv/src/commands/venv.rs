@@ -14,6 +14,7 @@ use thiserror::Error;
 use distribution_types::{DistributionMetadata, IndexLocations, Name, ResolvedDist};
 use install_wheel_rs::linker::LinkMode;
 use pep508_rs::Requirement;
+use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::KeyringProviderType;
@@ -118,6 +119,11 @@ async fn venv_impl(
     } else {
         find_default_python(cache).into_diagnostic()?
     };
+
+    // Add all authenticated sources to the cache.
+    for url in index_locations.urls() {
+        store_credentials_from_url(url);
+    }
 
     writeln!(
         printer.stderr(),
