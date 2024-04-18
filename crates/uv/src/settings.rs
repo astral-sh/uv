@@ -117,6 +117,9 @@ impl PipCompileSettings {
             index_strategy,
             keyring_provider,
             find_links,
+            python,
+            system,
+            no_system,
             upgrade,
             upgrade_package,
             generate_hashes,
@@ -156,6 +159,8 @@ impl PipCompileSettings {
             // Shared settings.
             shared: PipSharedSettings::combine(
                 PipOptions {
+                    python,
+                    system: flag(system, no_system),
                     offline: flag(offline, no_offline),
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {

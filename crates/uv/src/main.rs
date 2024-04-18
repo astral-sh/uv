@@ -257,6 +257,8 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.exclude_newer,
                 args.shared.annotation_style,
                 args.shared.link_mode,
+                args.shared.python,
+                args.shared.system,
                 globals.native_tls,
                 globals.quiet,
                 cache,

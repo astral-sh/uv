@@ -383,6 +383,15 @@ pub(crate) struct PipCompileArgs {
     #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
     pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
+    /// Locations to search for candidate distributions, beyond those found in the indexes.
+    ///
+    /// If a path, the target must be a directory that contains package as wheel files (`.whl`) or
+    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    ///
+    /// If a URL, the page must contain a flat list of links to package files.
+    #[arg(long, short)]
+    pub(crate) find_links: Option<Vec<FlatIndexLocation>>,
+
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
     #[arg(long)]
@@ -406,14 +415,36 @@ pub(crate) struct PipCompileArgs {
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
     pub(crate) keyring_provider: Option<KeyringProviderType>,
 
-    /// Locations to search for candidate distributions, beyond those found in the indexes.
+    /// The Python interpreter against which to compile the requirements.
     ///
-    /// If a path, the target must be a directory that contains package as wheel files (`.whl`) or
-    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    /// By default, `uv` uses the virtual environment in the current working directory or any parent
+    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
+    /// option allows you to specify a different interpreter.
     ///
-    /// If a URL, the page must contain a flat list of links to package files.
-    #[arg(long, short)]
-    pub(crate) find_links: Option<Vec<FlatIndexLocation>>,
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(long, verbatim_doc_comment, group = "discovery")]
+    pub(crate) python: Option<String>,
+
+    /// Install packages into the system Python.
+    ///
+    /// By default, `uv` uses the virtual environment in the current working directory or any parent
+    /// directory, falling back to searching for a Python executable in `PATH`. The `--system`
+    /// option instructs `uv` to avoid using a virtual environment Python and restrict its search to
+    /// the system path.
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        group = "discovery",
+        overrides_with("no_system")
+    )]
+    pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
     #[arg(long, short = 'U')]

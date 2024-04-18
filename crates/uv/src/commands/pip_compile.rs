@@ -27,7 +27,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::Downloader;
-use uv_interpreter::{find_best_python, PythonEnvironment};
+use uv_interpreter::{find_best_python, find_requested_python, PythonEnvironment};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
     upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
@@ -80,6 +80,8 @@ pub(crate) async fn pip_compile(
     exclude_newer: Option<ExcludeNewer>,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
+    python: Option<String>,
+    system: bool,
     native_tls: bool,
     quiet: bool,
     cache: Cache,
@@ -145,7 +147,12 @@ pub(crate) async fn pip_compile(
     }
 
     // Find an interpreter to use for building distributions
-    let interpreter = find_best_python(python_version.as_ref(), &cache)?;
+    let interpreter = if let Some(python) = python.as_ref() {
+        find_requested_python(python, &cache)?
+            .ok_or_else(|| uv_interpreter::Error::RequestedPythonNotFound(python.to_string()))?
+    } else {
+        find_best_python(python_version.as_ref(), system, &cache)?
+    };
     debug!(
         "Using Python {} interpreter at {} for builds",
         interpreter.python_version(),
