@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 async-trait = { workspace = true }
 base64 = { workspace = true }
+futures = { workspace = true }
 http = { workspace = true }
 once_cell = { workspace = true }
 reqwest = { workspace = true }

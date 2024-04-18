@@ -170,31 +170,38 @@ impl KeyringProvider {
 #[cfg(test)]
 mod test {
     use super::*;
+    use futures::FutureExt;
 
-    #[test]
-    fn fetch_url_no_host() {
+    #[tokio::test]
+    async fn fetch_url_no_host() {
         let url = Url::parse("file:/etc/bin/").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::catch_unwind(|| keyring.fetch(&url, "user"));
+        let result = std::panic::AssertUnwindSafe(keyring.fetch(&url, "user"))
+            .catch_unwind()
+            .await;
         assert!(result.is_err());
     }
 
-    #[test]
-    fn fetch_url_with_password() {
+    #[tokio::test]
+    async fn fetch_url_with_password() {
         let url = Url::parse("https://user:password@example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::catch_unwind(|| keyring.fetch(&url, url.username()));
+        let result = std::panic::AssertUnwindSafe(keyring.fetch(&url, url.username()))
+            .catch_unwind()
+            .await;
         assert!(result.is_err());
     }
 
-    #[test]
-    fn fetch_url_with_no_username() {
+    #[tokio::test]
+    async fn fetch_url_with_no_username() {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::catch_unwind(|| keyring.fetch(&url, url.username()));
+        let result = std::panic::AssertUnwindSafe(keyring.fetch(&url, url.username()))
+            .catch_unwind()
+            .await;
         assert!(result.is_err());
     }
 
