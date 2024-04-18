@@ -14,9 +14,10 @@ pub struct CacheArgs {
         long,
         short,
         alias = "no-cache-dir",
-        env = "UV_NO_CACHE"
+        env = "UV_NO_CACHE",
+        value_parser = clap::builder::BoolishValueParser::new(),
     )]
-    pub no_cache: Option<bool>,
+    pub no_cache: bool,
 
     /// Path to the cache directory.
     ///
@@ -35,11 +36,8 @@ impl Cache {
     /// 4. A `.uv_cache` directory in the current working directory.
     ///
     /// Returns an absolute cache dir.
-    pub fn from_settings(
-        no_cache: Option<bool>,
-        cache_dir: Option<PathBuf>,
-    ) -> Result<Self, io::Error> {
-        if no_cache.unwrap_or(false) {
+    pub fn from_settings(no_cache: bool, cache_dir: Option<PathBuf>) -> Result<Self, io::Error> {
+        if no_cache {
             Cache::temp()
         } else if let Some(cache_dir) = cache_dir {
             Cache::from_path(cache_dir)
