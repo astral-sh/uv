@@ -661,7 +661,7 @@ pub(crate) struct PipSyncArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(long, short, verbatim_doc_comment)]
     pub(crate) python: Option<String>,
 
     /// Install packages into the system Python.
@@ -672,12 +672,7 @@ pub(crate) struct PipSyncArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery",
-        overrides_with("no_system")
-    )]
+    #[arg(long, env = "UV_SYSTEM_PYTHON", overrides_with("no_system"))]
     pub(crate) system: bool,
 
     #[arg(long, overrides_with("system"))]
@@ -1000,7 +995,7 @@ pub(crate) struct PipInstallArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(long, short, verbatim_doc_comment)]
     pub(crate) python: Option<String>,
 
     /// Install packages into the system Python.
@@ -1011,12 +1006,7 @@ pub(crate) struct PipInstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery",
-        overrides_with("no_system")
-    )]
+    #[arg(long, env = "UV_SYSTEM_PYTHON", overrides_with("no_system"))]
     pub(crate) system: bool,
 
     #[arg(long, overrides_with("system"))]
@@ -1170,7 +1160,7 @@ pub(crate) struct PipUninstallArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(long, short, verbatim_doc_comment)]
     pub(crate) python: Option<String>,
 
     /// Attempt to use `keyring` for authentication for remote requirements files.
@@ -1190,12 +1180,7 @@ pub(crate) struct PipUninstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery",
-        overrides_with("no_system")
-    )]
+    #[arg(long, env = "UV_SYSTEM_PYTHON", overrides_with("no_system"))]
     pub(crate) system: bool,
 
     #[arg(long, overrides_with("system"))]
@@ -1252,7 +1237,7 @@ pub(crate) struct PipFreezeArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(long, short, verbatim_doc_comment)]
     pub(crate) python: Option<String>,
 
     /// List packages for the system Python.
@@ -1264,12 +1249,7 @@ pub(crate) struct PipFreezeArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery",
-        overrides_with("no_system")
-    )]
+    #[arg(long, env = "UV_SYSTEM_PYTHON", overrides_with("no_system"))]
     pub(crate) system: bool,
 
     #[arg(long, overrides_with("system"))]
@@ -1314,7 +1294,7 @@ pub(crate) struct PipListArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(long, short, verbatim_doc_comment)]
     pub(crate) python: Option<String>,
 
     /// List packages for the system Python.
@@ -1326,12 +1306,7 @@ pub(crate) struct PipListArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery",
-        overrides_with("no_system")
-    )]
+    #[arg(long, env = "UV_SYSTEM_PYTHON", overrides_with("no_system"))]
     pub(crate) system: bool,
 
     #[arg(long, overrides_with("system"))]
@@ -1355,7 +1330,7 @@ pub(crate) struct PipCheckArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(long, short, verbatim_doc_comment)]
     pub(crate) python: Option<String>,
 
     /// List packages for the system Python.
@@ -1367,12 +1342,7 @@ pub(crate) struct PipCheckArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery",
-        overrides_with("no_system")
-    )]
+    #[arg(long, env = "UV_SYSTEM_PYTHON", overrides_with("no_system"))]
     pub(crate) system: bool,
 
     #[arg(long, overrides_with("system"))]
@@ -1404,7 +1374,7 @@ pub(crate) struct PipShowArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(long, short, verbatim_doc_comment)]
     pub(crate) python: Option<String>,
 
     /// List packages for the system Python.
@@ -1416,12 +1386,7 @@ pub(crate) struct PipShowArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery",
-        overrides_with("no_system")
-    )]
+    #[arg(long, env = "UV_SYSTEM_PYTHON", overrides_with("no_system"))]
     pub(crate) system: bool,
 
     #[arg(long, overrides_with("system"))]
@@ -1441,7 +1406,7 @@ pub(crate) struct VenvArgs {
     ///
     /// Note that this is different from `--python-version` in `pip compile`, which takes `3.10` or `3.10.13` and
     /// doesn't look for a Python interpreter on disk.
-    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    #[arg(long, short, verbatim_doc_comment)]
     pub(crate) python: Option<String>,
 
     /// Use the system Python to uninstall packages.
@@ -1452,12 +1417,7 @@ pub(crate) struct VenvArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[arg(
-        long,
-        env = "UV_SYSTEM_PYTHON",
-        group = "discovery",
-        overrides_with("no_system")
-    )]
+    #[arg(long, env = "UV_SYSTEM_PYTHON", overrides_with("no_system"))]
     pub(crate) system: bool,
 
     #[arg(long, overrides_with("system"))]
