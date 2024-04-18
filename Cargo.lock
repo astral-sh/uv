@@ -4466,6 +4466,7 @@ dependencies = [
 name = "uv-auth"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "async-trait",
  "base64 0.22.0",
  "http",

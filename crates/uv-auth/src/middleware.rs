@@ -1,20 +1,23 @@
 use std::sync::Arc;
 
-use http::Extensions;
-
-use netrc::Netrc;
-use reqwest::{Request, Response};
-use reqwest_middleware::{Middleware, Next};
-use tracing::{debug, trace};
+use http::{Extensions, StatusCode};
+use url::Url;
 
 use crate::{
-    cache::CheckResponse, credentials::Credentials, CredentialsCache, KeyringProvider,
-    CREDENTIALS_CACHE,
+    credentials::{Credentials, Username},
+    netloc::NetLoc,
+    CredentialsCache, KeyringProvider, CREDENTIALS_CACHE,
 };
+use anyhow::anyhow;
+use netrc::Netrc;
+use reqwest::{Request, Response};
+use reqwest_middleware::{Error, Middleware, Next};
+use tracing::{debug, trace};
 
-/// A middleware that adds basic authentication to requests based on the netrc file and the keyring.
+/// A middleware that adds basic authentication to requests.
 ///
-/// Netrc support Based on: <https://github.com/gribouille/netrc>.
+/// Uses a cache to propagate credentials from previously seen requests and
+/// fetches credentials from a netrc file and the keyring.
 pub struct AuthMiddleware {
     netrc: Option<Netrc>,
     keyring: Option<KeyringProvider>,
@@ -69,14 +72,39 @@ impl Default for AuthMiddleware {
 
 #[async_trait::async_trait]
 impl Middleware for AuthMiddleware {
+    /// Handle authentication for a request.
+    ///
+    /// If the request has a username and password
+    ///
+    /// - Perform the request
+    /// - Add the username and password to the cache if successful
+    ///
+    /// If the request only has a username:
+    ///
+    /// - Check the cache (realm key) for a password
+    /// - Check the netrc for a password
+    /// - Check the keyring for a password
+    /// - Perform the request
+    /// - Add the username and password to the cache if successful
+    ///
+    /// If the request has no authentication:
+    ///
+    /// - Check the cache (url key)
+    /// - Perform the request
+    /// - On 401 or 403, check for authentication
+    ///     - Check the cache (realm key) for the username and password
+    ///     - Check the netrc for a username and password
+    ///     - Perform the request again if found
+    ///     - Add the username and password to the cache if successful
     async fn handle(
         &self,
         mut request: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
-        // Check for credentials attached to (1) the request itself
+        // Check for credentials attached to the request already
         let credentials = Credentials::from_request(&request);
+
         // In the middleware, existing credentials are already moved from the URL
         // to the headers so for display purposes we restore some information
         let url = if tracing::enabled!(tracing::Level::DEBUG) {
@@ -100,88 +128,184 @@ impl Middleware for AuthMiddleware {
         };
         trace!("Handling request for {url}");
 
-        // Then check for credentials in (2) the cache
-        let credentials = self.cache().check(request.url(), credentials);
+        if let Some(credentials) = credentials {
+            let credentials = Arc::new(credentials);
 
-        // Track credentials that we might want to insert into the cache
-        let mut new_credentials = None;
+            // If there's a password, send the request and cache
+            if credentials.password().is_some() {
+                trace!("Request for {url} is already fully authenticated");
+                self.complete_request(Some(credentials), request, extensions, next)
+                    .await
+            } else {
+                trace!("Request for {url} is missing a password, looking for credentials");
+                // There's just a username, try to find a password
+                let credentials = if let Some(credentials) = self
+                    .cache()
+                    .get_realm(NetLoc::from(request.url()), credentials.to_username())
+                {
+                    request = credentials.authenticate(request);
+                    // Do not insert already-cached credentials
+                    None
+                } else if let Some(credentials) = self
+                    .fetch_credentials(Some(&credentials), request.url())
+                    .await
+                {
+                    request = credentials.authenticate(request);
+                    Some(Arc::new(credentials))
+                } else {
+                    // If we don't find a password, we'll still attempt the request with the existing credentials
+                    Some(credentials)
+                };
 
-        // If already authenticated (including a password), don't query other services
-        if credentials.is_authenticated() {
-            match credentials {
-                // If we get credentials from the cache, update the request
-                CheckResponse::Cached(credentials) => request = credentials.authenticate(request),
-                // If we get credentials from the request, we should update the cache
-                // but don't need to update the request
-                CheckResponse::Uncached(credentials) => new_credentials = Some(credentials.clone()),
-                CheckResponse::None => unreachable!("No credentials cannot be authenticated"),
+                self.complete_request(credentials, request, extensions, next)
+                    .await
             }
-        // Otherwise, look for complete credentials in:
-        // (3) The netrc file
-        } else if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
+        } else {
+            // We have no credentials
+            trace!("Request for {url} is unauthenticated, checking cache");
+
+            // Check the cache for a URL match
+            let credentials = self.cache().get_url(request.url(), Username::none());
+            if let Some(credentials) = credentials.as_ref() {
+                request = credentials.authenticate(request);
+                if credentials.password().is_some() {
+                    return self.complete_request(None, request, extensions, next).await;
+                }
+            }
+
+            // Otherise, attempt an anonymous request
+            trace!("Attempting unauthenticated request for {url}");
+
+            // <https://github.com/TrueLayer/reqwest-middleware/blob/abdf1844c37092d323683c2396b7eefda1418d3c/reqwest-retry/src/middleware.rs#L141-L149>
+            // Clone the request so we can retry it on authentication failure
+            let mut retry_request = request.try_clone().ok_or_else(|| {
+                Error::Middleware(anyhow!(
+                    "Request object is not clonable. Are you passing a streaming body?".to_string()
+                ))
+            })?;
+
+            let response = next.clone().run(request, extensions).await?;
+
+            // And on failure, search for credentials
+            if matches!(
+                response.status(),
+                StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
+            ) {
+                trace!(
+                    "Request for {url} failed with {}, checking for credentials",
+                    response.status()
+                );
+                let credentials = self.cache().get_realm(
+                    NetLoc::from(retry_request.url()),
+                    credentials
+                        .map(|credentials| credentials.to_username())
+                        .unwrap_or(Username::none()),
+                );
+
+                if let Some(credentials) = credentials.as_ref() {
+                    if credentials.password().is_some() {
+                        trace!("Retrying request for {url} with credentials from cache");
+                        retry_request = credentials.authenticate(retry_request);
+                        return self
+                            .complete_request(None, retry_request, extensions, next)
+                            .await;
+                    }
+                }
+
+                if let Some(credentials) = self
+                    .fetch_credentials(credentials.as_deref(), retry_request.url())
+                    .await
+                {
+                    retry_request = credentials.authenticate(retry_request);
+                    trace!("Retrying request for {url} with {credentials:?}");
+                    self.complete_request(
+                        Some(Arc::new(credentials)),
+                        retry_request,
+                        extensions,
+                        next,
+                    )
+                    .await
+                } else {
+                    Ok(response)
+                }
+            } else {
+                Ok(response)
+            }
+        }
+    }
+}
+
+impl AuthMiddleware {
+    /// Run a request to completion.
+    ///
+    /// If credentials are present, insert them into the cache on success.
+    async fn complete_request(
+        &self,
+        credentials: Option<Arc<Credentials>>,
+        request: Request,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> reqwest_middleware::Result<Response> {
+        if let Some(credentials) = credentials {
+            let url = request.url().clone();
+            let result = next.run(request, extensions).await;
+
+            // Update the cache with new credentials on a successful request
+            if result
+                .as_ref()
+                .is_ok_and(|response| response.error_for_status_ref().is_ok())
+            {
+                trace!("Updating cached credentials for {url} to {credentials:?}");
+                self.cache().insert(&url, credentials)
+            };
+
+            result
+        } else {
+            next.run(request, extensions).await
+        }
+    }
+
+    /// Fetch credentials for a URL.
+    ///
+    /// Supports netrc file and keyring lookups.
+    async fn fetch_credentials(
+        &self,
+        credentials: Option<&Credentials>,
+        url: &Url,
+    ) -> Option<Credentials> {
+        // Netrc support based on: <https://github.com/gribouille/netrc>.
+        if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
             trace!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,
-                request.url(),
+                url,
                 credentials
-                    .get()
+                    .as_ref()
                     .and_then(|credentials| credentials.username()),
             )
         }) {
             debug!("Found credentials in netrc file for {url}");
-            request = credentials.authenticate(request);
-            new_credentials = Some(Arc::new(credentials));
-        // (4) The keyring
+            Some(credentials)
         // N.B. The keyring provider performs lookups for the exact URL then
         //      falls back to the host, but we cache the result per host so if a keyring
         //      implementation returns different credentials for different URLs in the
         //      same realm we will use the wrong credentials.
         } else if let Some(credentials) = self.keyring.as_ref().and_then(|keyring| {
             if let Some(username) = credentials
-                .get()
+                .as_ref()
                 .and_then(|credentials| credentials.username())
             {
-                debug!("Checking keyring for credentials for {url}");
-                keyring.fetch(request.url(), username)
+                debug!("Checking keyring for credentials for {username}@{url}");
+                keyring.fetch(url, username)
             } else {
                 trace!("Skipping keyring lookup for {url} with no username");
                 None
             }
         }) {
             debug!("Found credentials in keyring for {url}");
-            request = credentials.authenticate(request);
-            new_credentials = Some(Arc::new(credentials));
-        // No additional credentials were found
+            Some(credentials)
         } else {
-            match credentials {
-                CheckResponse::Cached(credentials) => request = credentials.authenticate(request),
-                CheckResponse::Uncached(credentials) => new_credentials = Some(credentials.clone()),
-                CheckResponse::None => {
-                    debug!("No credentials found for {url}")
-                }
-            }
-        }
-
-        if let Some(credentials) = new_credentials {
-            let url = request.url().clone();
-
-            // Update the default credentials eagerly since requests are made concurrently
-            // and we want to avoid expensive credential lookups
-            self.cache().set_default(&url, credentials.clone());
-
-            let result = next.run(request, extensions).await;
-
-            // Only update the cache with new credentials on a successful request
-            if result
-                .as_ref()
-                .is_ok_and(|response| response.error_for_status_ref().is_ok())
-            {
-                trace!("Updating cached credentials for {url}");
-                self.cache().insert(&url, credentials)
-            };
-            result
-        } else {
-            next.run(request, extensions).await
+            None
         }
     }
 }

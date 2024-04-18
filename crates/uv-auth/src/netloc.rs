@@ -1,3 +1,5 @@
+use std::{fmt::Display, fmt::Formatter};
+
 use url::Url;
 
 /// Used to determine if authentication information should be retained on a new URL.
@@ -32,6 +34,26 @@ impl From<&Url> for NetLoc {
             scheme: url.scheme().to_string(),
             host: url.host_str().map(str::to_string),
             port: url.port(),
+        }
+    }
+}
+
+impl Display for NetLoc {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(port) = self.port {
+            write!(
+                f,
+                "{}://{}:{port}",
+                self.scheme,
+                self.host.as_deref().unwrap_or_default()
+            )
+        } else {
+            write!(
+                f,
+                "{}://{}",
+                self.scheme,
+                self.host.as_deref().unwrap_or_default()
+            )
         }
     }
 }
