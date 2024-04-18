@@ -27,6 +27,7 @@ impl PubGrubDependencies {
         overrides: &Overrides,
         source_name: Option<&PackageName>,
         source_extra: Option<&ExtraName>,
+        source_marker: Option<MarkerTree>,
         urls: &Urls,
         locals: &Locals,
         env: &MarkerEnvironment,
@@ -44,14 +45,27 @@ impl PubGrubDependencies {
             }
 
             // Add the package, plus any extra variants.
-            for result in std::iter::once(to_pubgrub(requirement, None, urls, locals)).chain(
-                requirement
-                    .extras
-                    .clone()
-                    .into_iter()
-                    .map(|extra| to_pubgrub(requirement, Some(extra), urls, locals)),
-            ) {
-                let (mut package, version, marker) = result?;
+            let package = to_pubgrub(requirement, None, None, urls, locals);
+            let virtual_extras = requirement
+                .extras
+                .clone()
+                .into_iter()
+                .map(|extra| to_pubgrub(requirement, Some(extra), None, urls, locals));
+            let virtual_marker = requirement.marker.as_ref().map(|marker| {
+                // Uncomment the below to get marker stacking (albeit it is incorrect
+                // at time of writing).
+                // let mut m = source_marker
+                // .clone()
+                // .unwrap_or_else(|| MarkerTree::And(vec![]));
+                // m.and(marker.clone());
+                let m = marker.clone();
+                to_pubgrub(requirement, None, Some(m), urls, locals)
+            });
+            let it = std::iter::once(package)
+                .chain(virtual_extras)
+                .chain(virtual_marker);
+            for result in it {
+                let (mut package, version, _) = result?;
 
                 // Detect self-dependencies.
                 if let PubGrubPackage::Package { name, extra, .. } = &mut package {
@@ -64,7 +78,7 @@ impl PubGrubDependencies {
                     }
                 }
 
-                dependencies.push((package.clone(), version.clone(), marker));
+                dependencies.push((package.clone(), version.clone(), None));
 
                 // If the requirement was constrained, add those constraints.
                 for constraint in constraints.get(&requirement.name).into_iter().flatten() {
@@ -77,13 +91,13 @@ impl PubGrubDependencies {
                     }
 
                     // Add the package, plus any extra variants.
-                    for result in std::iter::once(to_pubgrub(constraint, None, urls, locals)).chain(
-                        constraint
-                            .extras
-                            .clone()
-                            .into_iter()
-                            .map(|extra| to_pubgrub(constraint, Some(extra), urls, locals)),
-                    ) {
+                    for result in std::iter::once(to_pubgrub(constraint, None, None, urls, locals))
+                        .chain(
+                            constraint.extras.clone().into_iter().map(|extra| {
+                                to_pubgrub(constraint, Some(extra), None, urls, locals)
+                            }),
+                        )
+                    {
                         let (mut package, version, marker) = result?;
 
                         // Detect self-dependencies.
@@ -135,16 +149,17 @@ impl From<PubGrubDependencies> for Vec<(PubGrubPackage, Range<Version>, Option<M
 fn to_pubgrub(
     requirement: &Requirement,
     extra: Option<ExtraName>,
+    marker: Option<MarkerTree>,
     urls: &Urls,
     locals: &Locals,
 ) -> Result<(PubGrubPackage, Range<Version>, Option<MarkerTree>), ResolveError> {
-    let marker = requirement.marker.clone();
+    // let marker = requirement.marker.clone();
     match requirement.version_or_url.as_ref() {
         // The requirement has no specifier (e.g., `flask`).
         None => Ok((
-            PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
+            PubGrubPackage::from_package(requirement.name.clone(), extra, marker, urls),
             Range::full(),
-            marker,
+            None,
         )),
 
         // The requirement has a specifier (e.g., `flask>=1.0`).
@@ -172,9 +187,9 @@ fn to_pubgrub(
             };
 
             Ok((
-                PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
+                PubGrubPackage::from_package(requirement.name.clone(), extra, marker, urls),
                 version,
-                marker,
+                None,
             ))
         }
 
@@ -199,6 +214,7 @@ fn to_pubgrub(
                 PubGrubPackage::Package {
                     name: requirement.name.clone(),
                     extra,
+                    marker: marker.clone(),
                     url: Some(expected.clone()),
                 },
                 Range::full(),

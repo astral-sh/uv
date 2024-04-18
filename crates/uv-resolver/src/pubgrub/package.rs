@@ -1,6 +1,6 @@
 use derivative::Derivative;
 
-use pep508_rs::VerbatimUrl;
+use pep508_rs::{MarkerTree, VerbatimUrl};
 use uv_normalize::{ExtraName, PackageName};
 
 use crate::resolver::Urls;
@@ -50,6 +50,7 @@ pub enum PubGrubPackage {
     Package {
         name: PackageName,
         extra: Option<ExtraName>,
+        marker: Option<MarkerTree>,
         /// The URL of the package, if it was specified in the requirement.
         ///
         /// There are a few challenges that come with URL-based packages, and how they map to
@@ -92,9 +93,19 @@ pub enum PubGrubPackage {
 
 impl PubGrubPackage {
     /// Create a [`PubGrubPackage`] from a package name and optional extra name.
-    pub(crate) fn from_package(name: PackageName, extra: Option<ExtraName>, urls: &Urls) -> Self {
+    pub(crate) fn from_package(
+        name: PackageName,
+        extra: Option<ExtraName>,
+        marker: Option<MarkerTree>,
+        urls: &Urls,
+    ) -> Self {
         let url = urls.get(&name).cloned();
-        Self::Package { name, extra, url }
+        Self::Package {
+            name,
+            extra,
+            marker,
+            url,
+        }
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -127,14 +138,32 @@ impl std::fmt::Display for PubGrubPackage {
             }
             Self::Python(_) => write!(f, "Python"),
             Self::Package {
-                name, extra: None, ..
+                name,
+                extra: None,
+                marker: None,
+                ..
             } => write!(f, "{name}"),
             Self::Package {
                 name,
+                extra: None,
+                marker: Some(ref marker),
+                ..
+            } => write!(f, "{name}{{{marker}}}"),
+            Self::Package {
+                name,
                 extra: Some(extra),
+                marker: None,
                 ..
             } => {
                 write!(f, "{name}[{extra}]")
+            }
+            Self::Package {
+                name,
+                extra: Some(extra),
+                marker: Some(ref marker),
+                ..
+            } => {
+                write!(f, "{name}[{extra}]{{{marker}}}")
             }
         }
     }

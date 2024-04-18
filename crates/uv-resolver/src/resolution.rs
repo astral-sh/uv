@@ -47,6 +47,8 @@ pub struct ResolutionGraph {
     hashes: FxHashMap<PackageName, Vec<Hashes>>,
     /// The enabled extras for every distribution in this resolution.
     extras: FxHashMap<PackageName, Vec<ExtraName>>,
+    /// The markers tracked for a particular version of a package.
+    markers: FxHashMap<(PackageName, Version), MarkerTree>,
     /// The set of editable requirements in this resolution.
     editables: Editables,
     /// Any diagnostics that were encountered while building the graph.
@@ -85,6 +87,7 @@ impl ResolutionGraph {
             BuildHasherDefault::default(),
         );
         let mut extras = FxHashMap::default();
+        let mut markers = FxHashMap::default();
         let mut diagnostics = Vec::new();
 
         // Add every package to the graph.
@@ -92,12 +95,26 @@ impl ResolutionGraph {
             resolution.packages.len(),
             BuildHasherDefault::default(),
         );
+        // dbg!(&resolution.packages);
         for (package, versions) in &resolution.packages {
-            for (version, markers) in versions {
+            for (version, _markers) in versions {
                 match package {
                     PubGrubPackage::Package {
                         name: package_name,
                         extra: None,
+                        marker: Some(ref marker),
+                        url: None,
+                    } => {
+                        let key = (package_name.clone(), version.clone());
+                        markers
+                            .entry(key)
+                            .or_insert_with(|| MarkerTree::Or(vec![]))
+                            .or(marker.clone());
+                    }
+                    PubGrubPackage::Package {
+                        name: package_name,
+                        extra: None,
+                        marker: None,
                         url: None,
                     } => {
                         // Create the distribution.
@@ -129,13 +146,14 @@ impl ResolutionGraph {
                         // Add the distribution to the graph.
                         let index = petgraph.add_node(ResolvedNode {
                             dist: pinned_package,
-                            markers: markers.clone(),
+                            markers: None,
                         });
                         inverse.insert(package_name, index);
                     }
                     PubGrubPackage::Package {
                         name: package_name,
                         extra: None,
+                        marker: None,
                         url: Some(url),
                     } => {
                         // Create the distribution.
@@ -167,13 +185,14 @@ impl ResolutionGraph {
                         // Add the distribution to the graph.
                         let index = petgraph.add_node(ResolvedNode {
                             dist: pinned_package.into(),
-                            markers: markers.clone(),
+                            markers: None,
                         });
                         inverse.insert(package_name, index);
                     }
                     PubGrubPackage::Package {
                         name: package_name,
                         extra: Some(extra),
+                        marker: None,
                         url: None,
                     } => {
                         // Validate that the `extra` exists.
@@ -229,6 +248,7 @@ impl ResolutionGraph {
                     PubGrubPackage::Package {
                         name: package_name,
                         extra: Some(extra),
+                        marker: None,
                         url: Some(url),
                     } => {
                         // Validate that the `extra` exists.
@@ -296,6 +316,7 @@ impl ResolutionGraph {
             petgraph,
             hashes,
             extras,
+            markers,
             editables,
             diagnostics,
         })
@@ -627,6 +648,12 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 let node = if let Some((editable, _)) = self.resolution.editables.get(name) {
                     Node::Editable(name, editable)
                 } else if self.include_extras {
+                    let version = match dist.version_or_url() {
+                        VersionOrUrl::Version(v) => v.clone(),
+                        _ => unreachable!(),
+                    };
+                    let key = (dist.name().clone(), version.clone());
+                    let marker = self.resolution.markers.get(&key);
                     Node::Distribution(
                         name,
                         dist,
@@ -634,10 +661,16 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             .extras
                             .get(name)
                             .map_or(&[], |extras| extras.as_slice()),
-                        node.markers.as_ref(),
+                        marker,
                     )
                 } else {
-                    Node::Distribution(name, dist, &[], node.markers.as_ref())
+                    let version = match dist.version_or_url() {
+                        VersionOrUrl::Version(v) => v.clone(),
+                        _ => unreachable!(),
+                    };
+                    let key = (dist.name().clone(), version.clone());
+                    let marker = self.resolution.markers.get(&key);
+                    Node::Distribution(name, dist, &[], marker)
                 };
                 Some((index, node))
             })

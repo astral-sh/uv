@@ -30,7 +30,7 @@ pub(crate) use urls::Urls;
 use uv_client::{FlatIndex, RegistryClient};
 use uv_distribution::DistributionDatabase;
 use uv_interpreter::Interpreter;
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_types::{BuildContext, Constraints, InstalledPackagesProvider, Overrides};
 
 use crate::candidate_selector::{CandidateDist, CandidateSelector};
@@ -473,6 +473,7 @@ impl<
                             Dependencies::Available(constraints) => constraints,
                         };
 
+                        /*
                         let parent = &package;
                         // eprintln!("===== {:?} {:?} =====", parent.name(), version);
                         for &(ref package, ref versions, ref marker) in dependencies.iter() {
@@ -500,16 +501,17 @@ impl<
                             // };
                             if let Some(ref marker) = *marker {
                                 // eprintln!("dep: {:?} {} ; {}", package.name(), range, marker);
-                                state
-                                    .markers
-                                    .entry(package.clone())
-                                    .or_insert_with(|| MarkerTree::And(vec![]))
-                                    .and(marker.clone());
+                                // state
+                                // .markers
+                                // .entry(package.clone())
+                                // .or_insert_with(|| MarkerTree::And(vec![]))
+                                // .and(marker.clone());
                             } else {
                                 // eprintln!("dep: {:?} {}", package.name(), range);
                             }
                         }
                         // eprintln!("==========");
+                        */
 
                         // Add that package and version if the dependencies are not problematic.
                         let dep_incompats = state.pubgrub.add_incompatibility_from_dependencies(
@@ -651,6 +653,7 @@ impl<
             PubGrubPackage::Package {
                 name: package_name,
                 extra,
+                marker,
                 url: Some(url),
             } => {
                 if let Some(extra) = extra {
@@ -721,6 +724,7 @@ impl<
             PubGrubPackage::Package {
                 name: package_name,
                 extra,
+                marker,
                 url: None,
             } => {
                 // Wait for the metadata to be available.
@@ -845,30 +849,43 @@ impl<
             Dependencies::Available(deps) => deps,
             Dependencies::Unavailable(err) => return Ok(vec![Dependencies::Unavailable(err)]),
         };
-        let mut by_name: FxHashMap<&PackageName, Vec<&Dep>> = FxHashMap::default();
+        // let mut by_grouping: FxHashMap<(&PackageName, &Option<ExtraName>, bool), Vec<&Dep>> =
+        // FxHashMap::default();
+        // let mut by_grouping: FxHashMap<&PackageName, Vec<&Dep>> = FxHashMap::default();
+        // This assumes that the version ranges are non-overlapping. When we do this for real,
+        // I believe it is true that we do NOT want to fork when there are overlapping version
+        // ranges.
+        let mut by_grouping: FxHashMap<&PackageName, FxHashMap<&Range<Version>, Vec<&Dep>>> =
+            FxHashMap::default();
         for dep in deps.iter() {
-            let (ref pkg, _, _) = *dep;
+            let (ref pkg, ref range, _) = *dep;
             let name = match *pkg {
                 PubGrubPackage::Root(_) | PubGrubPackage::Python(_) => unreachable!(),
                 PubGrubPackage::Package { ref name, .. } => name,
             };
-            by_name.entry(name).or_insert(vec![]).push(dep);
+            by_grouping
+                .entry(name)
+                .or_insert(FxHashMap::default())
+                .entry(range)
+                .or_insert(vec![])
+                .push(dep);
         }
         let mut forks: Vec<Vec<Dep>> = vec![vec![]];
-        for (_, mut deps) in by_name {
-            if deps.len() <= 1 {
-                let dep = deps.pop().unwrap();
-                for fork in forks.iter_mut() {
-                    fork.push(dep.clone());
+        for (_, mut groups) in by_grouping {
+            if groups.len() <= 1 {
+                for deps in groups.into_values() {
+                    for fork in forks.iter_mut() {
+                        fork.extend(deps.iter().map(|dep| (*dep).clone()));
+                    }
                 }
             } else {
                 let mut new_forks: Vec<Vec<Dep>> = vec![];
-                for dep in deps {
-                    let mut new_forks_for_dep = forks.clone();
-                    for fork in new_forks_for_dep.iter_mut() {
-                        fork.push(dep.clone());
+                for deps in groups.into_values() {
+                    let mut new_forks_for_group = forks.clone();
+                    for fork in new_forks_for_group.iter_mut() {
+                        fork.extend(deps.iter().map(|dep| (*dep).clone()));
                     }
-                    new_forks.extend(new_forks_for_dep);
+                    new_forks.extend(new_forks_for_group);
                 }
                 forks = new_forks;
             }
@@ -894,6 +911,7 @@ impl<
                     &self.overrides,
                     None,
                     None,
+                    None,
                     &self.urls,
                     &self.locals,
                     self.markers,
@@ -917,7 +935,7 @@ impl<
                 // Add a dependency on each editable.
                 for (editable, metadata) in self.editables.iter() {
                     constraints.push(
-                        PubGrubPackage::from_package(metadata.name.clone(), None, &self.urls),
+                        PubGrubPackage::from_package(metadata.name.clone(), None, None, &self.urls),
                         Range::singleton(metadata.version.clone()),
                         None,
                     );
@@ -926,6 +944,7 @@ impl<
                             PubGrubPackage::from_package(
                                 metadata.name.clone(),
                                 Some(extra.clone()),
+                                None,
                                 &self.urls,
                             ),
                             Range::singleton(metadata.version.clone()),
@@ -939,9 +958,28 @@ impl<
 
             PubGrubPackage::Python(_) => Ok(Dependencies::Available(Vec::default())),
 
+            /*
             PubGrubPackage::Package {
                 name: package_name,
                 extra,
+                marker: Some(marker),
+                url,
+            } => {
+                let package = PubGrubPackage::Package {
+                    name: package_name.clone(),
+                    extra: None,
+                    marker: None,
+                    url: url.clone(),
+                };
+                let version = Range::singleton(version.clone());
+                let constraint = (package, version, None);
+                Ok(Dependencies::Available(vec![constraint]))
+            }
+            */
+            PubGrubPackage::Package {
+                name: package_name,
+                extra,
+                marker,
                 url,
             } => {
                 // If we're excluding transitive dependencies, short-circuit.
@@ -976,6 +1014,7 @@ impl<
                         &self.overrides,
                         Some(package_name),
                         extra.as_ref(),
+                        marker.clone(),
                         &self.urls,
                         &self.locals,
                         self.markers,
@@ -990,11 +1029,12 @@ impl<
                     }
 
                     // If a package has an extra, insert a constraint on the base package.
-                    if extra.is_some() {
+                    if extra.is_some() || marker.is_some() {
                         constraints.push(
                             PubGrubPackage::Package {
                                 name: package_name.clone(),
                                 extra: None,
+                                marker: None,
                                 url: url.clone(),
                             },
                             Range::singleton(version.clone()),
@@ -1043,6 +1083,7 @@ impl<
                     &self.overrides,
                     Some(package_name),
                     extra.as_ref(),
+                    marker.clone(),
                     &self.urls,
                     &self.locals,
                     self.markers,
@@ -1057,11 +1098,12 @@ impl<
                 }
 
                 // If a package has an extra, insert a constraint on the base package.
-                if extra.is_some() {
+                if extra.is_some() || marker.is_some() {
                     constraints.push(
                         PubGrubPackage::Package {
                             name: package_name.clone(),
                             extra: None,
+                            marker: None,
                             url: url.clone(),
                         },
                         Range::singleton(version.clone()),
@@ -1279,18 +1321,26 @@ impl<
     }
 
     fn on_progress(&self, package: &PubGrubPackage, version: &Version) {
-        // if let Some(reporter) = self.reporter.as_ref() {
-        // match package {
-        // PubGrubPackage::Root(_) => {}
-        // PubGrubPackage::Python(_) => {}
-        // PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-        // reporter.on_progress(package_name, &VersionOrUrl::Url(url));
-        // }
-        // PubGrubPackage::Package(package_name, _extra, None) => {
-        // reporter.on_progress(package_name, &VersionOrUrl::Version(version));
-        // }
-        // }
-        // }
+        if let Some(reporter) = self.reporter.as_ref() {
+            match package {
+                PubGrubPackage::Root(_) => {}
+                PubGrubPackage::Python(_) => {}
+                PubGrubPackage::Package {
+                    name: package_name,
+                    url: Some(url),
+                    ..
+                } => {
+                    reporter.on_progress(package_name, &VersionOrUrl::Url(url));
+                }
+                PubGrubPackage::Package {
+                    name: package_name,
+                    url: None,
+                    ..
+                } => {
+                    reporter.on_progress(package_name, &VersionOrUrl::Version(version));
+                }
+            }
+        }
     }
 
     fn on_complete(&self) {
