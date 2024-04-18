@@ -33,6 +33,7 @@ use uv_configuration::{BuildKind, NoBuild};
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_types::{BuildContext, SourceBuildTrait};
+use uv_warnings::warn_user;
 
 use crate::error::Error;
 use crate::git::{fetch_git_archive, resolve_precise};
@@ -1338,8 +1339,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 return Ok(Some(metadata));
             }
-            Err(err @ (Error::MissingPyprojectToml | Error::DynamicPyprojectToml(_))) => {
+            Err(err @ Error::MissingPyprojectToml) => {
                 debug!("No static `pyproject.toml` available for: {source} ({err:?})");
+            }
+            Err(Error::DynamicPyprojectToml(err)) => {
+                dbg!(&source);
+                warn_user!("Invalid `pyproject.toml` for {source}, trying PEP 517 to extract metadata: {err}");
             }
             Err(err) => return Err(err),
         }

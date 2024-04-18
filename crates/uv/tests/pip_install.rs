@@ -195,6 +195,32 @@ dependencies = ["flask==1.0.x"]
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Url(
+        Path(
+            PathSourceUrl {
+                url: Url {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "[TEMP_DIR]/",
+                    query: None,
+                    fragment: None,
+                },
+                path: "[TEMP_DIR]/",
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for file://[TEMP_DIR]/, trying PEP 517 to extract metadata: TOML parse error at line 3, column 17
+      |
+    3 | dependencies = ["flask==1.0.x"]
+      |                 ^^^^^^^^^^^^^^
+    after parsing 1.0, found ".x" after it, which is not part of a valid version
+    flask==1.0.x
+         ^^^^^^^
+
     error: Failed to build: file://[TEMP_DIR]/
       Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit code: 1
     --- stdout:
@@ -393,6 +419,25 @@ build-backend = "poetry.core.masonry.api"
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Url(
+        Path(
+            PathSourceUrl {
+                url: Url {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "/tmp/.tmpv1zBXS/",
+                    query: None,
+                    fragment: None,
+                },
+                path: "/tmp/.tmpv1zBXS",
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for file:///tmp/.tmpv1zBXS/, trying PEP 517 to extract metadata: metadata field project not found
     Resolved 4 packages in [TIME]
     Downloaded 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -1767,6 +1812,36 @@ fn install_sdist_resolution_lowest() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        DirectUrl(
+            DirectUrlSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "files.pythonhosted.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -1800,6 +1875,36 @@ fn direct_url_zip_file_bunk_permissions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        DirectUrl(
+            DirectUrlSourceDist {
+                name: PackageName(
+                    "opensafely-pipeline",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for opensafely-pipeline @ https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 6 packages in [TIME]
     Downloaded 5 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -2440,6 +2545,36 @@ fn no_build_isolation() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        DirectUrl(
+            DirectUrlSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "files.pythonhosted.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     error: Failed to download and build: anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz
       Caused by: Failed to build: anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
@@ -2611,6 +2746,36 @@ fn dry_run_install_url_dependency() -> std::result::Result<(), Box<dyn std::erro
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        DirectUrl(
+            DirectUrlSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "files.pythonhosted.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 3 packages in [TIME]
     Would download 3 packages
     Would install 3 packages
@@ -2639,6 +2804,36 @@ fn dry_run_uninstall_url_dependency() -> std::result::Result<(), Box<dyn std::er
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        DirectUrl(
+            DirectUrlSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "files.pythonhosted.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 3 packages in [TIME]
     Downloaded 3 packages in [TIME]
     Installed 3 packages in [TIME]

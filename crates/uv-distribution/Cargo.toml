@@ -23,12 +23,13 @@ platform-tags = { workspace = true }
 pypi-types = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
+uv-configuration = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true, features = ["vendored-openssl"] }
 uv-normalize = { workspace = true }
 uv-types = { workspace = true }
-uv-configuration = { workspace = true }
+uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }

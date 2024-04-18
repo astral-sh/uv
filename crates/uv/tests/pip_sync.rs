@@ -1148,6 +1148,34 @@ fn install_local_source_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Path(
+            PathSourceDist {
+                name: PackageName(
+                    "wheel",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "file",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: None,
+                        port: None,
+                        path: "[TEMP_DIR]/wheel-0.42.0.tar.gz",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "file://[TEMP_DIR]/wheel-0.42.0.tar.gz",
+                    ),
+                },
+                path: "[TEMP_DIR]/wheel-0.42.0.tar.gz",
+                editable: false,
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for wheel @ file://[TEMP_DIR]/wheel-0.42.0.tar.gz, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1185,6 +1213,36 @@ fn install_ujson() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        DirectUrl(
+            DirectUrlSourceDist {
+                name: PackageName(
+                    "ujson",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "files.pythonhosted.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for ujson @ https://files.pythonhosted.org/packages/43/1a/b0a027144aa5c8f4ea654f4afdd634578b450807bb70b9f8bad00d6f6d3c/ujson-5.7.0.tar.gz, trying PEP 517 to extract metadata: metadata field project not found
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1224,6 +1282,36 @@ fn install_build_system_no_backend() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        DirectUrl(
+            DirectUrlSourceDist {
+                name: PackageName(
+                    "build-system-no-backend",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "files.pythonhosted.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for build-system-no-backend @ https://files.pythonhosted.org/packages/ec/25/1e531108ca027dc3a3b37d351f4b86d811df4884c6a81cd99e73b8b589f5/build-system-no-backend-0.1.0.tar.gz, trying PEP 517 to extract metadata: metadata field project not found
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1262,6 +1350,36 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        DirectUrl(
+            DirectUrlSourceDist {
+                name: PackageName(
+                    "tqdm",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "files.pythonhosted.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for tqdm @ https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1557,6 +1675,34 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Path(
+            PathSourceDist {
+                name: PackageName(
+                    "wheel",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "file",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: None,
+                        port: None,
+                        path: "[TEMP_DIR]/wheel-0.42.0.tar.gz",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "file://[TEMP_DIR]/wheel-0.42.0.tar.gz",
+                    ),
+                },
+                path: "[TEMP_DIR]/wheel-0.42.0.tar.gz",
+                editable: false,
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for wheel @ file://[TEMP_DIR]/wheel-0.42.0.tar.gz, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3486,6 +3632,36 @@ fn require_hashes_source_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        DirectUrl(
+            DirectUrlSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "files.pythonhosted.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -4193,6 +4369,74 @@ fn require_hashes_at_least_one() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Registry(
+            RegistrySourceDist {
+                filename: SourceDistFilename {
+                    name: PackageName(
+                        "anyio",
+                    ),
+                    version: "4.0.0",
+                    extension: TarGz,
+                },
+                file: File {
+                    dist_info_metadata: false,
+                    filename: "anyio-4.0.0.tar.gz",
+                    hashes: [
+                        HashDigest {
+                            algorithm: Sha256,
+                            digest: "f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a",
+                        },
+                    ],
+                    requires_python: Some(
+                        VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: GreaterThanEqual,
+                                    version: "3.8",
+                                },
+                            ],
+                        ),
+                    ),
+                    size: Some(
+                        153297,
+                    ),
+                    upload_time_utc_ms: Some(
+                        1693434246703,
+                    ),
+                    url: AbsoluteUrl(
+                        "https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz",
+                    ),
+                    yanked: Some(
+                        Bool(
+                            false,
+                        ),
+                    ),
+                },
+                index: Pypi(
+                    VerbatimUrl {
+                        url: Url {
+                            scheme: "https",
+                            cannot_be_a_base: false,
+                            username: "",
+                            password: None,
+                            host: Some(
+                                Domain(
+                                    "pypi.org",
+                                ),
+                            ),
+                            port: None,
+                            path: "/simple",
+                            query: None,
+                            fragment: None,
+                        },
+                        given: None,
+                    },
+                ),
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio==4.0.0, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]

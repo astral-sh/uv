@@ -453,6 +453,25 @@ build-backend = "poetry.core.masonry.api"
         # via anyio
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Url(
+        Path(
+            PathSourceUrl {
+                url: Url {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "/tmp/.tmpllXygF/",
+                    query: None,
+                    fragment: None,
+                },
+                path: "/tmp/.tmpllXygF",
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for file:///tmp/.tmpllXygF/, trying PEP 517 to extract metadata: metadata field project not found
     Resolved 7 packages in [TIME]
     "###
     );
@@ -516,6 +535,25 @@ setup(
         # via anyio
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Url(
+        Path(
+            PathSourceUrl {
+                url: Url {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "/tmp/.tmpj37FaG/",
+                    query: None,
+                    fragment: None,
+                },
+                path: "/tmp/.tmpj37FaG",
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for file:///tmp/.tmpj37FaG/, trying PEP 517 to extract metadata: metadata field project not found
     Resolved 4 packages in [TIME]
     "###
     );
@@ -914,6 +952,36 @@ fn compile_sdist_resolution_lowest() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        DirectUrl(
+            DirectUrlSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "files.pythonhosted.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 3 packages in [TIME]
     "###
     );
@@ -1611,6 +1679,36 @@ fn compatible_repeated_url_dependency() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/agronholm/anyio.git@4.3.0",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/agronholm/anyio.git@4.3.0",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ git+https://github.com/agronholm/anyio.git@4.3.0, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 3 packages in [TIME]
     "###
     );
@@ -1636,6 +1734,66 @@ fn conflicting_repeated_url_dependency() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/agronholm/anyio.git@4.3.0",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/agronholm/anyio.git@4.3.0",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ git+https://github.com/agronholm/anyio.git@4.3.0, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/agronholm/anyio.git@4.0.0",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/agronholm/anyio.git@4.0.0",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ git+https://github.com/agronholm/anyio.git@4.0.0, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     error: Requirements contain conflicting URLs for package `anyio`:
     - git+https://github.com/agronholm/anyio.git@4.3.0
     - git+https://github.com/agronholm/anyio.git@4.0.0
@@ -1671,6 +1829,36 @@ fn compatible_narrowed_url_dependency() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/agronholm/anyio.git@4.3.0",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/agronholm/anyio.git@4.3.0",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ git+https://github.com/agronholm/anyio.git@4.3.0, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 3 packages in [TIME]
     "###
     );
@@ -1704,6 +1892,36 @@ fn compatible_broader_url_dependency() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/agronholm/anyio@437a7e310925a962cab4a58fcd2455fbcd578d51",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/agronholm/anyio@437a7e310925a962cab4a58fcd2455fbcd578d51",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ git+https://github.com/agronholm/anyio@437a7e310925a962cab4a58fcd2455fbcd578d51, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 3 packages in [TIME]
     "###
     );
@@ -1737,6 +1955,36 @@ fn compatible_repeated_narrowed_url_dependency() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/agronholm/anyio.git@4.3.0",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/agronholm/anyio.git@4.3.0",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ git+https://github.com/agronholm/anyio.git@4.3.0, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 3 packages in [TIME]
     "###
     );
@@ -1765,6 +2013,66 @@ fn incompatible_narrowed_url_dependency() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/agronholm/anyio.git@4.3.0",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/agronholm/anyio.git@4.3.0",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ git+https://github.com/agronholm/anyio.git@4.3.0, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/agronholm/anyio.git@master",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/agronholm/anyio.git@master",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ git+https://github.com/agronholm/anyio.git@master, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     error: Requirements contain conflicting URLs for package `anyio`:
     - git+https://github.com/agronholm/anyio@437a7e310925a962cab4a58fcd2455fbcd578d51
     - git+https://github.com/agronholm/anyio.git@master
@@ -1795,6 +2103,36 @@ fn allowed_transitive_git_dependency() -> Result<()> {
         # via hatchling-editable
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "iniconfig",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for iniconfig @ git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 2 packages in [TIME]
     "###
     );
@@ -1829,6 +2167,36 @@ fn allowed_transitive_url_dependency() -> Result<()> {
         # via hatchling-editable
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "iniconfig",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for iniconfig @ git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 2 packages in [TIME]
     "###
     );
@@ -1864,6 +2232,36 @@ fn allowed_transitive_canonical_url_dependency() -> Result<()> {
         # via hatchling-editable
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "iniconfig",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for iniconfig @ git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 2 packages in [TIME]
     "###
     );
@@ -1895,6 +2293,36 @@ fn allowed_transitive_url_path_dependency() -> Result<()> {
         # via hatchling-editable
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "iniconfig",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for iniconfig @ git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 2 packages in [TIME]
     "###
     );
@@ -3291,6 +3719,36 @@ fn compile_editable_url_requirement() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "iniconfig",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for iniconfig @ git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 2 packages in [TIME]
     "###);
 
@@ -3593,6 +4051,36 @@ fn generate_hashes_source_distribution_url() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        DirectUrl(
+            DirectUrlSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "files.pythonhosted.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 3 packages in [TIME]
     "###
     );
@@ -3660,6 +4148,36 @@ fn generate_hashes_git() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Git(
+            GitSourceDist {
+                name: PackageName(
+                    "anyio",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "git+https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "github.com",
+                            ),
+                        ),
+                        port: None,
+                        path: "/agronholm/anyio@4.3.0",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "git+https://github.com/agronholm/anyio@4.3.0",
+                    ),
+                },
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for anyio @ git+https://github.com/agronholm/anyio@4.3.0, trying PEP 517 to extract metadata: The following field was marked as dynamic: version
     Resolved 3 packages in [TIME]
     "###
     );
@@ -3737,6 +4255,34 @@ fn generate_hashes_local_directory() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Path(
+            PathSourceDist {
+                name: PackageName(
+                    "poetry-editable",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "file",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: None,
+                        port: None,
+                        path: "[WORKSPACE]/scripts/packages/poetry_editable",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "../../scripts/packages/poetry_editable",
+                    ),
+                },
+                path: "[WORKSPACE]/scripts/packages/poetry_editable",
+                editable: false,
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for poetry-editable @ file://[WORKSPACE]/scripts/packages/poetry_editable, trying PEP 517 to extract metadata: metadata field project not found
     Resolved 4 packages in [TIME]
     "###);
 
@@ -6344,6 +6890,41 @@ fn compile_root_uri_non_editable() -> Result<()> {
     root-editable @ ${ROOT_PATH}
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Path(
+            PathSourceDist {
+                name: PackageName(
+                    "root-editable",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "file",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: None,
+                        port: None,
+                        path: "[WORKSPACE]/scripts/packages/root_editable",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "${ROOT_PATH}",
+                    ),
+                },
+                path: "[WORKSPACE]/scripts/packages/root_editable",
+                editable: false,
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for root-editable @ file://[WORKSPACE]/scripts/packages/root_editable, trying PEP 517 to extract metadata: TOML parse error at line 17, column 3
+       |
+    17 |   "black @ {root:uri}/../black_editable"
+       |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    relative path without a working directory: {root:uri}/../black_editable
+    black @ {root:uri}/../black_editable
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     Resolved 2 packages in [TIME]
     "###
     );
@@ -6751,6 +7332,34 @@ fn unnamed_path_requirement() -> Result<()> {
         # via requests
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Path(
+            PathSourceDist {
+                name: PackageName(
+                    "poetry-editable",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "file",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: None,
+                        port: None,
+                        path: "[WORKSPACE]/scripts/packages/poetry_editable",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "../../scripts/packages/poetry_editable",
+                    ),
+                },
+                path: "[WORKSPACE]/scripts/packages/poetry_editable",
+                editable: false,
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for poetry-editable @ file://[WORKSPACE]/scripts/packages/poetry_editable, trying PEP 517 to extract metadata: metadata field project not found
     Resolved 14 packages in [TIME]
     "###);
 
@@ -6856,6 +7465,34 @@ fn dynamic_dependencies() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Dist(
+        Path(
+            PathSourceDist {
+                name: PackageName(
+                    "hatchling-dynamic",
+                ),
+                url: VerbatimUrl {
+                    url: Url {
+                        scheme: "file",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: None,
+                        port: None,
+                        path: "[WORKSPACE]/scripts/packages/hatchling_dynamic",
+                        query: None,
+                        fragment: None,
+                    },
+                    given: Some(
+                        "../../scripts/packages/hatchling_dynamic",
+                    ),
+                },
+                path: "[WORKSPACE]/scripts/packages/hatchling_dynamic",
+                editable: false,
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for hatchling-dynamic @ file://[WORKSPACE]/scripts/packages/hatchling_dynamic, trying PEP 517 to extract metadata: The following field was marked as dynamic: dependencies
     Resolved 4 packages in [TIME]
     "###);
 
@@ -7805,6 +8442,110 @@ fn no_version_for_direct_dependency() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ you require pypyp ∅
+    "###
+    );
+
+    Ok(())
+}
+
+/// Ensure that the fallback to PEP 517 isn't silent.
+#[test]
+fn invalid_pyproject_toml() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_in = context.temp_dir.child("pyproject.toml");
+    requirements_in.write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.0.0"
+        dependencies = ["tqdm>4,<=5", "i n v a l i d"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.compile()
+        .arg("pyproject.toml"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    [crates/uv-distribution/src/source/mod.rs:1346:17] &source = Url(
+        Path(
+            PathSourceUrl {
+                url: Url {
+                    scheme: "file",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: None,
+                    port: None,
+                    path: "[TEMP_DIR]/",
+                    query: None,
+                    fragment: None,
+                },
+                path: "[TEMP_DIR]/",
+            },
+        ),
+    )
+    warning: Invalid `pyproject.toml` for file://[TEMP_DIR]/, trying PEP 517 to extract metadata: TOML parse error at line 4, column 31
+      |
+    4 | dependencies = ["tqdm>4,<=5", "i n v a l i d"]
+      |                               ^^^^^^^^^^^^^^^
+    Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `n`
+    i n v a l i d
+      ^
+
+    error: Failed to build: file://[TEMP_DIR]/
+      Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit status: 1
+    --- stdout:
+    configuration error: `project.dependencies[1]` must be pep508
+    DESCRIPTION:
+        Project dependency specification according to PEP 508
+
+    GIVEN VALUE:
+        "i n v a l i d"
+
+    OFFENDING RULE: 'format'
+
+    DEFINITION:
+        {
+            "$id": "#/definitions/dependency",
+            "title": "Dependency",
+            "type": "string",
+            "format": "pep508"
+        }
+    --- stderr:
+    Traceback (most recent call last):
+      File "<string>", line 14, in <module>
+      File "[CACHE_DIR]/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+        return self._get_build_requires(config_settings, requirements=['wheel'])
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "[CACHE_DIR]/[TMP]/build_meta.py", line 295, in _get_build_requires
+        self.run_setup()
+      File "[CACHE_DIR]/[TMP]/build_meta.py", line 487, in run_setup
+        super().run_setup(setup_script=setup_script)
+      File "[CACHE_DIR]/[TMP]/build_meta.py", line 311, in run_setup
+        exec(code, locals())
+      File "<string>", line 1, in <module>
+      File "[CACHE_DIR]/[TMP]/__init__.py", line 104, in setup
+        return distutils.core.setup(**attrs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "[CACHE_DIR]/[TMP]/core.py", line 159, in setup
+        dist.parse_config_files()
+      File "[CACHE_DIR]/[TMP]/_virtualenv.py", line 22, in parse_config_files
+        result = old_parse_config_files(self, *args, **kwargs)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "[CACHE_DIR]/[TMP]/dist.py", line 631, in parse_config_files
+        pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
+      File "[CACHE_DIR]/[TMP]/pyprojecttoml.py", line 68, in apply_configuration
+        config = read_configuration(filepath, True, ignore_option_errors, dist)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "[CACHE_DIR]/[TMP]/pyprojecttoml.py", line 129, in read_configuration
+        validate(subset, filepath)
+      File "[CACHE_DIR]/[TMP]/pyprojecttoml.py", line 57, in validate
+        raise ValueError(f"{error}/n{summary}") from None
+    ValueError: invalid pyproject.toml config: `project.dependencies[1]`.
+    configuration error: `project.dependencies[1]` must be pep508
+    ---
     "###
     );
 
