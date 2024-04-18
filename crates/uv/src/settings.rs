@@ -47,7 +47,7 @@ impl GlobalSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct CacheSettings {
-    pub(crate) no_cache: Option<bool>,
+    pub(crate) no_cache: bool,
     pub(crate) cache_dir: Option<PathBuf>,
 }
 
@@ -55,9 +55,10 @@ impl CacheSettings {
     /// Resolve the [`CacheSettings`] from the CLI and workspace configuration.
     pub(crate) fn resolve(args: CacheArgs, workspace: Option<&Workspace>) -> Self {
         Self {
-            no_cache: args
-                .no_cache
-                .or(workspace.and_then(|workspace| workspace.options.no_cache)),
+            no_cache: args.no_cache
+                || workspace
+                    .and_then(|workspace| workspace.options.no_cache)
+                    .unwrap_or(false),
             cache_dir: args
                 .cache_dir
                 .or_else(|| workspace.and_then(|workspace| workspace.options.cache_dir.clone())),
