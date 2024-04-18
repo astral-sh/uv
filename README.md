@@ -469,6 +469,8 @@ uv accepts the following command-line arguments as environment variables:
 - `UV_INDEX_STRATEGY`: Equivalent to the `--index-strategy` command-line argument. For example, if
   set to `unsafe-any-match`, uv will consider versions of a given package available across all
   index URLs, rather than limiting its search to the first index URL that contains the package.
+- `UV_REQUIRE_HASHES`: Equivalent to the `--require-hashes` command-line argument. If set to `true`,
+  uv will require that all dependencies have a hash specified in the requirements file.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
