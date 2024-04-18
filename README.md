@@ -488,8 +488,11 @@ In addition, uv respects the following environment variables:
   See: [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
 - `VIRTUAL_ENV`: Used to detect an activated virtual environment.
 - `CONDA_PREFIX`: Used to detect an activated Conda environment.
-- `PROMPT`: Used to detect the appropriate activation script after generating a virtual environment.
-- `NU_VERSION`: Used to detect the appropriate activation script after generating a virtual environment.
+- `PROMPT`: Used to detect the use of the Windows Command Prompt (as opposed to PowerShell).
+- `NU_VERSION`: Used to detect the use of NuShell.
+- `FISH_VERSION`: Used to detect the use of the Fish shell.
+- `BASH_VERSION`: Used to detect the use of the Bash shell.
+- `ZSH_VERSION`: Used to detect the use of the Zsh shell.
 
 ## Custom CA Certificates
 
