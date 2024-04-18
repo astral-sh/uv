@@ -669,7 +669,8 @@ pub(crate) struct PipSyncArgs {
     /// - Editable installs are not supported.
     /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
     ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(long, overrides_with("no_require_hashes"))]
+    #[arg(long,         env = "UV_REQUIRE_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_require_hashes"))]
     pub(crate) require_hashes: bool,
 
     #[arg(long, overrides_with("require_hashes"), hide = true)]
@@ -1010,7 +1011,8 @@ pub(crate) struct PipInstallArgs {
     /// - Editable installs are not supported.
     /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
     ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(long, overrides_with("no_require_hashes"))]
+    #[arg(long,         env = "UV_REQUIRE_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_require_hashes"))]
     pub(crate) require_hashes: bool,
 
     #[arg(long, overrides_with("require_hashes"), hide = true)]
