@@ -18,6 +18,7 @@ use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options};
 
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_field_names)]
 pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PreReleaseStrategy,
@@ -224,7 +225,7 @@ impl CandidateSelector {
             let map: BTreeMap<&Version, VersionMapDistHandle> = version_maps
                 .iter()
                 .rev()
-                .flat_map(|version_map| version_map.iter())
+                .flat_map(VersionMap::iter)
                 .collect();
             if highest {
                 Self::select_candidate(map.into_iter().rev(), package_name, range, allow_prerelease)
@@ -243,7 +244,12 @@ impl CandidateSelector {
                 })
             } else {
                 version_maps.iter().find_map(|version_map| {
-                    Self::select_candidate(version_map.iter(), package_name, range, allow_prerelease)
+                    Self::select_candidate(
+                        version_map.iter(),
+                        package_name,
+                        range,
+                        allow_prerelease,
+                    )
                 })
             }
         }

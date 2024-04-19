@@ -120,6 +120,13 @@
           "enum": [
             "unsafe-any-match"
           ]
+        },
+        {
+          "description": "Search for every package name across all indexes, trying to find the highest version in any index. If a package version is in multiple indexes, only look at the entry for the first index.\n\nThis most closely matches pip's behavior, but also means malicious indexes can publish a newer package version than what is in your index, and this will be used instead of the version from your own index.",
+          "type": "string",
+          "enum": [
+            "unsafe-highest"
+          ]
         }
       ]
     },
