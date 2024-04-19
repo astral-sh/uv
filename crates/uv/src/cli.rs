@@ -1637,6 +1637,10 @@ pub(crate) struct RunArgs {
     /// Always use a new virtual environment.
     #[arg(long)]
     pub(crate) isolated: bool,
+
+    /// Run with the given packages installed.
+    #[arg(long)]
+    pub(crate) with: Vec<String>,
 }
 
 #[derive(Args)]
