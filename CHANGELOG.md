@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.34
+
+### CLI
+
+- Allow `--python` and `--system` on `pip compile` ([#3115](https://github.com/astral-sh/uv/pull/3115))
+- Remove `Option<bool>` for `--no-cache` ([#3129](https://github.com/astral-sh/uv/pull/3129))
+- Rename `--compile` to `--compile-bytecode` ([#3102](https://github.com/astral-sh/uv/pull/3102))
+- Accept `0`, `1`, and similar values for Boolean environment variables ([#3113](https://github.com/astral-sh/uv/pull/3113))
+
+### Configuration
+
+- Add `UV_REQUIRE_HASHES` environment variable ([#3125](https://github.com/astral-sh/uv/pull/3125))
+- Add negation flags to the CLI ([#3050](https://github.com/astral-sh/uv/pull/3050))
+
+### Bug fixes
+
+- Avoid fetching unnecessary extra versions during resolution ([#3100](https://github.com/astral-sh/uv/pull/3100))
+- Avoid deprioritizing recursive editables ([#3133](https://github.com/astral-sh/uv/pull/3133))
+- Avoid treating localhost URLs as local file paths ([#3132](https://github.com/astral-sh/uv/pull/3132))
+- Hide password in the index printed via `--emit-index-annotation` ([#3112](https://github.com/astral-sh/uv/pull/3112))
+- Restore seeding of authentication cache from index URLs ([#3124](https://github.com/astral-sh/uv/pull/3124))
+
 ## 0.1.33
 
 ### Breaking changes
@@ -32,7 +54,6 @@ See [#2976](https://github.com/astral-sh/uv/pull/2976#discussion_r1566521453) fo
 - Use kebab-case consistently ([#3080](https://github.com/astral-sh/uv/pull/3080))
 - Show package name in no version for direct dependency error ([#3056](https://github.com/astral-sh/uv/pull/3056))
 - Avoid erroring when encountering `.tar.bz2` source distributions ([#3069](https://github.com/astral-sh/uv/pull/3069))
-
 
 ## 0.1.32
 
