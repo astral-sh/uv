@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -1632,7 +1633,7 @@ pub(crate) struct RunArgs {
 
     /// The arguments to the command.
     #[arg(allow_hyphen_values = true)]
-    pub(crate) args: Vec<String>,
+    pub(crate) args: Vec<OsString>,
 
     /// Always use a new virtual environment for execution.
     #[arg(long)]
