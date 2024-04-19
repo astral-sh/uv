@@ -418,7 +418,7 @@ date, allowing reproduction of installations regardless of new package releases.
 as a RFC 3339 timestamp (e.g., `2006-12-02T02:07:43Z`) or UTC date in the same format (e.g., `2006-12-02`).
 
 Note the package index must support the `upload-time` field as specified in [`PEP 700`](https://peps.python.org/pep-0700/).
-If the field is not present for a given distribution, the distribution will be treated as unavailable.
+If the field is not present for a given distribution, the distribution will be treated as older than the given date.
 
 To ensure reproducibility, messages for unsatisfiable resolutions will not mention that distributions were excluded
 due to the `--exclude-newer` flag — newer distributions will be treated as if they do not exist.

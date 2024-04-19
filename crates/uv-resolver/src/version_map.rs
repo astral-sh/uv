@@ -372,7 +372,7 @@ impl VersionMapLazy {
                                 "{} is missing an upload date, but user provided: {exclude_newer}",
                                 file.filename,
                             );
-                            (true, None)
+                            (false, None)
                         }
                         _ => (false, None),
                     }
