@@ -43,6 +43,7 @@ pub(crate) async fn run(
     args: Vec<String>,
     mut requirements: Vec<RequirementsSource>,
     isolated: bool,
+    no_workspace: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -52,9 +53,10 @@ pub(crate) async fn run(
     // cannot be applied to transitive dependencies.
     let overrides = requirements.clone();
 
-    // TODO(zanieb): Provide an opt-out for this behavior
-    if let Some(workspace_requirements) = find_workspace_requirements()? {
-        requirements.extend(workspace_requirements);
+    if !no_workspace {
+        if let Some(workspace_requirements) = find_workspace_requirements()? {
+            requirements.extend(workspace_requirements);
+        }
     }
 
     // Detect the current Python interpreter.
