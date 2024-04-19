@@ -398,12 +398,14 @@ impl<'a> SitePackages<'a> {
                             }
 
                             // If the requirement came from a local path, check freshness.
-                            if let Ok(archive) = url.to_file_path() {
-                                if !ArchiveTimestamp::up_to_date_with(
-                                    &archive,
-                                    ArchiveTarget::Install(distribution),
-                                )? {
-                                    return Ok(false);
+                            if url.scheme() == "file" {
+                                if let Ok(archive) = url.to_file_path() {
+                                    if !ArchiveTimestamp::up_to_date_with(
+                                        &archive,
+                                        ArchiveTarget::Install(distribution),
+                                    )? {
+                                        return Ok(false);
+                                    }
                                 }
                             }
                         }
@@ -441,12 +443,14 @@ impl<'a> SitePackages<'a> {
                                 }
 
                                 // If the requirement came from a local path, check freshness.
-                                if let Ok(archive) = url.to_file_path() {
-                                    if !ArchiveTimestamp::up_to_date_with(
-                                        &archive,
-                                        ArchiveTarget::Install(distribution),
-                                    )? {
-                                        return Ok(false);
+                                if url.scheme() == "file" {
+                                    if let Ok(archive) = url.to_file_path() {
+                                        if !ArchiveTimestamp::up_to_date_with(
+                                            &archive,
+                                            ArchiveTarget::Install(distribution),
+                                        )? {
+                                            return Ok(false);
+                                        }
                                     }
                                 }
                             }
