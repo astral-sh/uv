@@ -411,7 +411,7 @@ package requirements. uv's resolver makes a best-effort attempt to generate a re
 compatible with any machine running on the target `--platform`, which should be sufficient for
 most use cases, but may lose fidelity for complex package and platform combinations._
 
-### Reproducible resolution
+### Time-restricted reproducible resolutions
 
 uv supports an `--exclude-newer` option to limit resolution to distributions published before a specific
 date, allowing reproduction of installations regardless of new package releases. The date may be specified
@@ -422,6 +422,21 @@ If the field is not present for a given distribution, the distribution will be t
 
 To ensure reproducibility, messages for unsatisfiable resolutions will not mention that distributions were excluded
 due to the `--exclude-newer` flag — newer distributions will be treated as if they do not exist.
+
+### Custom CA certificates
+
+By default, uv loads certificates from the bundled `webpki-roots` crate. The `webpki-roots` are a
+reliable set of trust roots from Mozilla, and including them in uv improves portability and
+performance (especially on macOS, where reading the system trust store incurs a significant delay).
+
+However, in some cases, you may want to use the platform's native certificate store, especially if
+you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your
+system's certificate store. To instruct uv to use the system's trust store, run uv with the
+`--native-tls` command-line flag, or set the `UV_NATIVE_TLS` environment variable to `true`.
+
+If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT_FILE` environment
+variable to the path of the certificate bundle, to instruct uv to use that file instead of the
+system's trust store.
 
 ## Platform support
 
@@ -509,21 +524,6 @@ In addition, uv respects the following environment variables:
 - `FISH_VERSION`: Used to detect the use of the Fish shell.
 - `BASH_VERSION`: Used to detect the use of the Bash shell.
 - `ZSH_VERSION`: Used to detect the use of the Zsh shell.
-
-## Custom CA Certificates
-
-By default, uv loads certificates from the bundled `webpki-roots` crate. The `webpki-roots` are a
-reliable set of trust roots from Mozilla, and including them in uv improves portability and
-performance (especially on macOS, where reading the system trust store incurs a significant delay).
-
-However, in some cases, you may want to use the platform's native certificate store, especially if
-you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your
-system's certificate store. To instruct uv to use the system's trust store, run uv with the
-`--native-tls` command-line flag, or set the `UV_NATIVE_TLS` environment variable to `true`.
-
-If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT_FILE` environment
-variable to the path of the certificate bundle, to instruct uv to use that file instead of the
-system's trust store.
 
 ## Acknowledgements
 
