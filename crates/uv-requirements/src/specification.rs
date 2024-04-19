@@ -51,7 +51,7 @@ impl RequirementsSpecification {
     #[instrument(skip_all, level = Level::DEBUG, fields(source = % source))]
     pub async fn from_source(
         source: &RequirementsSource,
-        extras: &ExtrasSpecification<'_>,
+        extras: &ExtrasSpecification,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         Ok(match source {
@@ -224,7 +224,7 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
-        extras: &ExtrasSpecification<'_>,
+        extras: &ExtrasSpecification,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         let mut spec = Self::default();

@@ -53,7 +53,7 @@ pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
-    extras: ExtrasSpecification<'_>,
+    extras: ExtrasSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
@@ -131,7 +131,7 @@ pub(crate) async fn pip_compile(
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
     if source_trees.is_empty() {
-        if let ExtrasSpecification::Some(extras) = extras {
+        if let ExtrasSpecification::Some(extras) = &extras {
             let mut unused_extras = extras
                 .iter()
                 .filter(|extra| !used_extras.contains(extra))

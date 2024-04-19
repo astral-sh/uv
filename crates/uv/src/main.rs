@@ -10,12 +10,9 @@ use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
 use tracing::instrument;
 
-use distribution_types::IndexLocations;
-use uv_cache::{Cache, Refresh};
-use uv_client::Connectivity;
-use uv_configuration::{NoBinary, NoBuild, Reinstall, SetupPyStrategy, Upgrade};
-use uv_requirements::{ExtrasSpecification, RequirementsSource};
-use uv_resolver::DependencyMode;
+use uv_cache::Cache;
+
+use uv_requirements::RequirementsSource;
 
 use crate::cli::{CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace};
 #[cfg(feature = "self-update")]
@@ -178,7 +175,7 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCompileSettings::resolve(args, workspace);
 
-            let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
+            let cache = cache.with_refresh(args.refresh);
             let requirements = args
                 .src_file
                 .into_iter()
@@ -194,43 +191,17 @@ async fn run() -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
-            let index_urls = IndexLocations::new(
-                args.shared.index_url,
-                args.shared.extra_index_url,
-                args.shared.find_links,
-                args.shared.no_index,
-            );
-            // TODO(charlie): Move into `PipCompileSettings::resolve`.
-            let extras = if args.shared.all_extras {
-                ExtrasSpecification::All
-            } else if args.shared.extra.is_empty() {
-                ExtrasSpecification::None
-            } else {
-                ExtrasSpecification::Some(&args.shared.extra)
-            };
-            let upgrade = Upgrade::from_args(args.upgrade, args.upgrade_package);
-            let no_build = NoBuild::from_args(args.shared.only_binary, args.shared.no_build);
-            let dependency_mode = if args.shared.no_deps {
-                DependencyMode::Direct
-            } else {
-                DependencyMode::Transitive
-            };
-            let setup_py = if args.shared.legacy_setup_py {
-                SetupPyStrategy::Setuptools
-            } else {
-                SetupPyStrategy::Pep517
-            };
 
             commands::pip_compile(
                 &requirements,
                 &constraints,
                 &overrides,
-                extras,
+                args.shared.extras,
                 args.shared.output_file.as_deref(),
                 args.shared.resolution,
                 args.shared.prerelease,
-                dependency_mode,
-                upgrade,
+                args.shared.dependency_mode,
+                args.upgrade,
                 args.shared.generate_hashes,
                 args.shared.no_emit_package,
                 args.shared.no_strip_extras,
@@ -241,18 +212,14 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.emit_find_links,
                 args.shared.emit_marker_expression,
                 args.shared.emit_index_annotation,
-                index_urls,
+                args.shared.index_locations,
                 args.shared.index_strategy,
                 args.shared.keyring_provider,
-                setup_py,
+                args.shared.setup_py,
                 args.shared.config_setting,
-                if args.shared.offline {
-                    Connectivity::Offline
-                } else {
-                    Connectivity::Online
-                },
+                args.shared.connectivity,
                 args.shared.no_build_isolation,
-                no_build,
+                args.shared.no_build,
                 args.shared.python_version,
                 args.shared.python_platform,
                 args.shared.exclude_newer,
@@ -275,46 +242,28 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, workspace);
 
-            let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
-            let index_urls = IndexLocations::new(
-                args.shared.index_url,
-                args.shared.extra_index_url,
-                args.shared.find_links,
-                args.shared.no_index,
-            );
+            let cache = cache.with_refresh(args.refresh);
             let sources = args
                 .src_file
                 .into_iter()
                 .map(RequirementsSource::from_requirements_file)
                 .collect::<Vec<_>>();
-            let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
-            let no_binary = NoBinary::from_args(args.shared.no_binary);
-            let no_build = NoBuild::from_args(args.shared.only_binary, args.shared.no_build);
-            let setup_py = if args.shared.legacy_setup_py {
-                SetupPyStrategy::Setuptools
-            } else {
-                SetupPyStrategy::Pep517
-            };
 
             commands::pip_sync(
                 &sources,
-                &reinstall,
+                &args.reinstall,
                 args.shared.link_mode,
                 args.shared.compile_bytecode,
                 args.shared.require_hashes,
-                index_urls,
+                args.shared.index_locations,
                 args.shared.index_strategy,
                 args.shared.keyring_provider,
-                setup_py,
-                if args.shared.offline {
-                    Connectivity::Offline
-                } else {
-                    Connectivity::Online
-                },
+                args.shared.setup_py,
+                args.shared.connectivity,
                 &args.shared.config_setting,
                 args.shared.no_build_isolation,
-                no_build,
-                no_binary,
+                args.shared.no_build,
+                args.shared.no_binary,
                 args.shared.strict,
                 args.shared.python,
                 args.shared.system,
@@ -331,7 +280,7 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipInstallSettings::resolve(args, workspace);
 
-            let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
+            let cache = cache.with_refresh(args.refresh);
             let requirements = args
                 .package
                 .into_iter()
@@ -353,60 +302,29 @@ async fn run() -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
-            let index_urls = IndexLocations::new(
-                args.shared.index_url,
-                args.shared.extra_index_url,
-                args.shared.find_links,
-                args.shared.no_index,
-            );
-            let extras = if args.shared.all_extras {
-                ExtrasSpecification::All
-            } else if args.shared.extra.is_empty() {
-                ExtrasSpecification::None
-            } else {
-                ExtrasSpecification::Some(&args.shared.extra)
-            };
-            let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
-            let upgrade = Upgrade::from_args(args.upgrade, args.upgrade_package);
-            let no_binary = NoBinary::from_args(args.shared.no_binary);
-            let no_build = NoBuild::from_args(args.shared.only_binary, args.shared.no_build);
-            let dependency_mode = if args.shared.no_deps {
-                DependencyMode::Direct
-            } else {
-                DependencyMode::Transitive
-            };
-            let setup_py = if args.shared.legacy_setup_py {
-                SetupPyStrategy::Setuptools
-            } else {
-                SetupPyStrategy::Pep517
-            };
 
             commands::pip_install(
                 &requirements,
                 &constraints,
                 &overrides,
-                &extras,
+                &args.shared.extras,
                 args.shared.resolution,
                 args.shared.prerelease,
-                dependency_mode,
-                upgrade,
-                index_urls,
+                args.shared.dependency_mode,
+                args.upgrade,
+                args.shared.index_locations,
                 args.shared.index_strategy,
                 args.shared.keyring_provider,
-                reinstall,
+                args.reinstall,
                 args.shared.link_mode,
                 args.shared.compile_bytecode,
                 args.shared.require_hashes,
-                setup_py,
-                if args.shared.offline {
-                    Connectivity::Offline
-                } else {
-                    Connectivity::Online
-                },
+                args.shared.setup_py,
+                args.shared.connectivity,
                 &args.shared.config_setting,
                 args.shared.no_build_isolation,
-                no_build,
-                no_binary,
+                args.shared.no_build,
+                args.shared.no_binary,
                 args.shared.strict,
                 args.shared.exclude_newer,
                 args.shared.python,
@@ -441,11 +359,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.system,
                 args.shared.break_system_packages,
                 cache,
-                if args.shared.offline {
-                    Connectivity::Offline
-                } else {
-                    Connectivity::Online
-                },
+                args.shared.connectivity,
                 globals.native_tls,
                 args.shared.keyring_provider,
                 printer,
@@ -534,13 +448,6 @@ async fn run() -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::VenvSettings::resolve(args, workspace);
 
-            let index_locations = IndexLocations::new(
-                args.shared.index_url,
-                args.shared.extra_index_url,
-                args.shared.find_links,
-                args.shared.no_index,
-            );
-
             // Since we use ".venv" as the default name, we use "." as the default prompt.
             let prompt = args.prompt.or_else(|| {
                 if args.name == PathBuf::from(".venv") {
@@ -554,16 +461,12 @@ async fn run() -> Result<ExitStatus> {
                 &args.name,
                 args.shared.python.as_deref(),
                 args.shared.link_mode,
-                &index_locations,
+                &args.shared.index_locations,
                 args.shared.index_strategy,
                 args.shared.keyring_provider,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
-                if args.shared.offline {
-                    Connectivity::Offline
-                } else {
-                    Connectivity::Online
-                },
+                args.shared.connectivity,
                 args.seed,
                 args.shared.exclude_newer,
                 globals.native_tls,
