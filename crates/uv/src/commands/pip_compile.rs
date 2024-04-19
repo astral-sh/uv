@@ -79,7 +79,7 @@ pub(crate) async fn pip_compile(
     no_build_isolation: bool,
     no_build: NoBuild,
     python_version: Option<PythonVersion>,
-    target: Option<TargetTriple>,
+    python_platform: Option<TargetTriple>,
     exclude_newer: Option<ExcludeNewer>,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
@@ -195,16 +195,16 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let tags = match (target, python_version.as_ref()) {
-        (Some(target), Some(python_version)) => Cow::Owned(Tags::from_env(
-            &target.platform(),
+    let tags = match (python_platform, python_version.as_ref()) {
+        (Some(python_platform), Some(python_version)) => Cow::Owned(Tags::from_env(
+            &python_platform.platform(),
             (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
             interpreter.gil_disabled(),
         )?),
-        (Some(target), None) => Cow::Owned(Tags::from_env(
-            &target.platform(),
+        (Some(python_platform), None) => Cow::Owned(Tags::from_env(
+            &python_platform.platform(),
             interpreter.python_tuple(),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
@@ -221,11 +221,11 @@ pub(crate) async fn pip_compile(
     };
 
     // Apply the platform tags to the markers.
-    let markers = match (target, python_version) {
-        (Some(target), Some(python_version)) => {
-            Cow::Owned(python_version.markers(&target.markers(interpreter.markers())))
+    let markers = match (python_platform, python_version) {
+        (Some(python_platform), Some(python_version)) => {
+            Cow::Owned(python_version.markers(&python_platform.markers(interpreter.markers())))
         }
-        (Some(target), None) => Cow::Owned(target.markers(interpreter.markers())),
+        (Some(python_platform), None) => Cow::Owned(python_platform.markers(interpreter.markers())),
         (None, Some(python_version)) => Cow::Owned(python_version.markers(interpreter.markers())),
         (None, None) => Cow::Borrowed(interpreter.markers()),
     };
