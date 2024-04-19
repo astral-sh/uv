@@ -436,6 +436,16 @@
             "null"
           ]
         },
+        "python-platform": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TargetTriple"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "python-version": {
           "anyOf": [
             {
@@ -540,6 +550,81 @@
           "type": "string",
           "enum": [
             "lowest-direct"
+          ]
+        }
+      ]
+    },
+    "TargetTriple": {
+      "description": "The supported target triples. Each triple consists of an architecture, vendor, and operating system.\n\nSee: <https://doc.rust-lang.org/nightly/rustc/platform-support.html>",
+      "oneOf": [
+        {
+          "description": "An alias for `x86_64-pc-windows-msvc`, the default target for Windows.",
+          "type": "string",
+          "enum": [
+            "windows"
+          ]
+        },
+        {
+          "description": "An alias for `x86_64-unknown-linux-gnu`, the default target for Linux.",
+          "type": "string",
+          "enum": [
+            "linux"
+          ]
+        },
+        {
+          "description": "An alias for `aarch64-apple-darwin`, the default target for macOS.",
+          "type": "string",
+          "enum": [
+            "macos"
+          ]
+        },
+        {
+          "description": "An x86 Windows target.",
+          "type": "string",
+          "enum": [
+            "x8664-pc-windows-msvc"
+          ]
+        },
+        {
+          "description": "An x86 Linux target.",
+          "type": "string",
+          "enum": [
+            "x8664-unknown-linux-gnu"
+          ]
+        },
+        {
+          "description": "An ARM-based macOS target, as seen on Apple Silicon devices.",
+          "type": "string",
+          "enum": [
+            "aarch64-apple-darwin"
+          ]
+        },
+        {
+          "description": "An x86 macOS target.",
+          "type": "string",
+          "enum": [
+            "x8664-apple-darwin"
+          ]
+        },
+        {
+          "description": "An ARM64 Linux target.",
+          "type": "string",
+          "enum": [
+            "aarch64-unknown-linux-gnu"
+          ]
+        },
+        {
+          "description": "An ARM64 Linux target.",
+          "type": "string",
+          "enum": [
+            "aarch64-unknown-linux-musl"
+          ]
+        },
+        {
+          "description": "An x86_64 Linux target.",
+          "type": "string",
+          "enum": [
+            "x8664-unknown-linux-musl"
           ]
         }
       ]

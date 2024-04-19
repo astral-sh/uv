@@ -9,7 +9,7 @@ use clap::{Args, Parser, Subcommand};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
+    ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
@@ -17,7 +17,6 @@ use uv_toolchain::PythonVersion;
 
 use crate::commands::{extra_name_with_clap_error, ListFormat, VersionFormat};
 use crate::compat;
-use crate::target::TargetTriple;
 
 #[derive(Parser)]
 #[command(author, version, long_version = crate::version::version(), about)]

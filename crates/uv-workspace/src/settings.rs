@@ -4,7 +4,9 @@ use serde::Deserialize;
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
-use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier};
+use uv_configuration::{
+    ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
+};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
@@ -70,6 +72,7 @@ pub struct PipOptions {
     pub legacy_setup_py: Option<bool>,
     pub config_settings: Option<ConfigSettings>,
     pub python_version: Option<PythonVersion>,
+    pub python_platform: Option<TargetTriple>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub no_emit_package: Option<Vec<PackageName>>,
     pub emit_index_url: Option<bool>,

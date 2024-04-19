@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
 use uv_cache::CacheArgs;
-use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier};
+use uv_configuration::{
+    ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
+};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
@@ -14,7 +16,6 @@ use crate::cli::{
     PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
-use crate::target::TargetTriple;
 
 /// The resolved global settings to use for any invocation of the CLI.
 #[allow(clippy::struct_excessive_bools)]
@@ -75,7 +76,6 @@ pub(crate) struct PipCompileSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
-    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) refresh: bool,
     pub(crate) refresh_package: Vec<PackageName>,
     pub(crate) upgrade: bool,
@@ -155,7 +155,7 @@ impl PipCompileSettings {
             src_file,
             constraint,
             r#override,
-            python_platform,
+
             refresh,
             refresh_package: refresh_package.unwrap_or_default(),
             upgrade,
@@ -201,6 +201,7 @@ impl PipCompileSettings {
                         config_settings.into_iter().collect::<ConfigSettings>()
                     }),
                     python_version,
+                    python_platform,
                     exclude_newer,
                     no_emit_package,
                     emit_index_url: flag(emit_index_url, no_emit_index_url),
@@ -777,6 +778,7 @@ pub(crate) struct PipSharedSettings {
     pub(crate) legacy_setup_py: bool,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) python_version: Option<PythonVersion>,
+    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) no_emit_package: Vec<PackageName>,
     pub(crate) emit_index_url: bool,
@@ -822,6 +824,7 @@ impl PipSharedSettings {
             legacy_setup_py,
             config_settings,
             python_version,
+            python_platform,
             exclude_newer,
             no_emit_package,
             emit_index_url,
@@ -871,6 +874,7 @@ impl PipSharedSettings {
             only_binary: args.only_binary.or(only_binary).unwrap_or_default(),
             config_setting: args.config_settings.or(config_settings).unwrap_or_default(),
             python_version: args.python_version.or(python_version),
+            python_platform: args.python_platform.or(python_platform),
             exclude_newer: args.exclude_newer.or(exclude_newer),
             no_emit_package: args.no_emit_package.or(no_emit_package).unwrap_or_default(),
             emit_index_url: args.emit_index_url.or(emit_index_url).unwrap_or_default(),

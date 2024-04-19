@@ -5,8 +5,15 @@ use platform_tags::{Arch, Os, Platform};
 /// system.
 ///
 /// See: <https://doc.rust-lang.org/nightly/rustc/platform-support.html>
-#[derive(Debug, Clone, Copy, Eq, PartialEq, clap::ValueEnum)]
-pub(crate) enum TargetTriple {
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(deny_unknown_fields, rename_all = "kebab-case")
+)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum TargetTriple {
     /// An alias for `x86_64-pc-windows-msvc`, the default target for Windows.
     Windows,
 
@@ -17,37 +24,37 @@ pub(crate) enum TargetTriple {
     Macos,
 
     /// An x86 Windows target.
-    #[value(name = "x86_64-pc-windows-msvc")]
+    #[cfg_attr(feature = "clap", value(name = "x86_64-pc-windows-msvc"))]
     X8664PcWindowsMsvc,
 
     /// An x86 Linux target.
-    #[value(name = "x86_64-unknown-linux-gnu")]
+    #[cfg_attr(feature = "clap", value(name = "x86_64-unknown-linux-gnu"))]
     X8664UnknownLinuxGnu,
 
     /// An ARM-based macOS target, as seen on Apple Silicon devices.
-    #[value(name = "aarch64-apple-darwin")]
+    #[cfg_attr(feature = "clap", value(name = "aarch64-apple-darwin"))]
     Aarch64AppleDarwin,
 
     /// An x86 macOS target.
-    #[value(name = "x86_64-apple-darwin")]
+    #[cfg_attr(feature = "clap", value(name = "x86_64-apple-darwin"))]
     X8664AppleDarwin,
 
     /// An ARM64 Linux target.
-    #[value(name = "aarch64-unknown-linux-gnu")]
+    #[cfg_attr(feature = "clap", value(name = "aarch64-unknown-linux-gnu"))]
     Aarch64UnknownLinuxGnu,
 
     /// An ARM64 Linux target.
-    #[value(name = "aarch64-unknown-linux-musl")]
+    #[cfg_attr(feature = "clap", value(name = "aarch64-unknown-linux-musl"))]
     Aarch64UnknownLinuxMusl,
 
     /// An x86_64 Linux target.
-    #[value(name = "x86_64-unknown-linux-musl")]
+    #[cfg_attr(feature = "clap", value(name = "x86_64-unknown-linux-musl"))]
     X8664UnknownLinuxMusl,
 }
 
 impl TargetTriple {
     /// Return the [`Platform`] for the target.
-    pub(crate) fn platform(self) -> Platform {
+    pub fn platform(self) -> Platform {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => Platform::new(Os::Windows, Arch::X86_64),
             Self::Linux | Self::X8664UnknownLinuxGnu => Platform::new(
@@ -88,7 +95,7 @@ impl TargetTriple {
     }
 
     /// Return the `platform_machine` value for the target.
-    pub(crate) fn platform_machine(self) -> &'static str {
+    pub fn platform_machine(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "x86_64",
             Self::Linux | Self::X8664UnknownLinuxGnu => "x86_64",
@@ -101,7 +108,7 @@ impl TargetTriple {
     }
 
     /// Return the `platform_system` value for the target.
-    pub(crate) fn platform_system(self) -> &'static str {
+    pub fn platform_system(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "Windows",
             Self::Linux | Self::X8664UnknownLinuxGnu => "Linux",
@@ -114,7 +121,7 @@ impl TargetTriple {
     }
 
     /// Return the `platform_version` value for the target.
-    pub(crate) fn platform_version(self) -> &'static str {
+    pub fn platform_version(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "",
             Self::Linux | Self::X8664UnknownLinuxGnu => "",
@@ -127,7 +134,7 @@ impl TargetTriple {
     }
 
     /// Return the `platform_release` value for the target.
-    pub(crate) fn platform_release(self) -> &'static str {
+    pub fn platform_release(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "",
             Self::Linux | Self::X8664UnknownLinuxGnu => "",
@@ -140,7 +147,7 @@ impl TargetTriple {
     }
 
     /// Return the `os_name` value for the target.
-    pub(crate) fn os_name(self) -> &'static str {
+    pub fn os_name(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "nt",
             Self::Linux | Self::X8664UnknownLinuxGnu => "posix",
@@ -153,7 +160,7 @@ impl TargetTriple {
     }
 
     /// Return the `sys_platform` value for the target.
-    pub(crate) fn sys_platform(self) -> &'static str {
+    pub fn sys_platform(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "win32",
             Self::Linux | Self::X8664UnknownLinuxGnu => "linux",
@@ -170,7 +177,7 @@ impl TargetTriple {
     ///
     /// The returned [`MarkerEnvironment`] will preserve the base environment's Python version
     /// markers, but override its platform markers.
-    pub(crate) fn markers(self, base: &MarkerEnvironment) -> MarkerEnvironment {
+    pub fn markers(self, base: &MarkerEnvironment) -> MarkerEnvironment {
         MarkerEnvironment {
             // Platform markers
             os_name: self.os_name().to_string(),
