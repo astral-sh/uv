@@ -46,6 +46,7 @@ use uv_warnings::warn_user;
 use crate::commands::reporters::{DownloadReporter, ResolverReporter};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
+use crate::target::TargetTriple;
 
 /// Resolve a set of requirements into a set of pinned versions.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
@@ -78,6 +79,7 @@ pub(crate) async fn pip_compile(
     no_build_isolation: bool,
     no_build: NoBuild,
     python_version: Option<PythonVersion>,
+    target: Option<TargetTriple>,
     exclude_newer: Option<ExcludeNewer>,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
@@ -193,21 +195,40 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let tags = if let Some(python_version) = python_version.as_ref() {
-        Cow::Owned(Tags::from_env(
+    let tags = match (target, python_version.as_ref()) {
+        (Some(target), Some(python_version)) => Cow::Owned(Tags::from_env(
+            &target.platform(),
+            (python_version.major(), python_version.minor()),
+            interpreter.implementation_name(),
+            interpreter.implementation_tuple(),
+            interpreter.gil_disabled(),
+        )?),
+        (Some(target), None) => Cow::Owned(Tags::from_env(
+            &target.platform(),
+            interpreter.python_tuple(),
+            interpreter.implementation_name(),
+            interpreter.implementation_tuple(),
+            interpreter.gil_disabled(),
+        )?),
+        (None, Some(python_version)) => Cow::Owned(Tags::from_env(
             interpreter.platform(),
             (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
             interpreter.gil_disabled(),
-        )?)
-    } else {
-        Cow::Borrowed(interpreter.tags()?)
+        )?),
+        (None, None) => Cow::Borrowed(interpreter.tags()?),
     };
-    let markers = python_version.map_or_else(
-        || Cow::Borrowed(interpreter.markers()),
-        |python_version| Cow::Owned(python_version.markers(interpreter.markers())),
-    );
+
+    // Apply the platform tags to the markers.
+    let markers = match (target, python_version) {
+        (Some(target), Some(python_version)) => {
+            Cow::Owned(python_version.markers(&target.markers(interpreter.markers())))
+        }
+        (Some(target), None) => Cow::Owned(target.markers(interpreter.markers())),
+        (None, Some(python_version)) => Cow::Owned(python_version.markers(interpreter.markers())),
+        (None, None) => Cow::Borrowed(interpreter.markers()),
+    };
 
     // Generate, but don't enforce hashes for the requirements.
     let hasher = if generate_hashes {

@@ -14,6 +14,7 @@ use crate::cli::{
     PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
+use crate::target::TargetTriple;
 
 /// The resolved global settings to use for any invocation of the CLI.
 #[allow(clippy::struct_excessive_bools)]
@@ -74,6 +75,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraint: Vec<PathBuf>,
     pub(crate) r#override: Vec<PathBuf>,
+    pub(crate) platform: Option<TargetTriple>,
     pub(crate) refresh: bool,
     pub(crate) refresh_package: Vec<PackageName>,
     pub(crate) upgrade: bool,
@@ -134,6 +136,7 @@ impl PipCompileSettings {
             only_binary,
             config_setting,
             python_version,
+            platform,
             exclude_newer,
             no_emit_package,
             emit_index_url,
@@ -152,6 +155,7 @@ impl PipCompileSettings {
             src_file,
             constraint,
             r#override,
+            platform,
             refresh,
             refresh_package: refresh_package.unwrap_or_default(),
             upgrade,
