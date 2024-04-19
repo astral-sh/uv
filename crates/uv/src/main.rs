@@ -597,7 +597,7 @@ async fn run() -> Result<ExitStatus> {
             commands::run(
                 args.command,
                 args.args,
-                &requirements,
+                requirements,
                 args.isolated,
                 &cache,
                 printer,

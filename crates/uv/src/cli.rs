@@ -1634,7 +1634,7 @@ pub(crate) struct RunArgs {
     #[arg(allow_hyphen_values = true)]
     pub(crate) args: Vec<String>,
 
-    /// Always use a new virtual environment.
+    /// Always use a new virtual environment for execution.
     #[arg(long)]
     pub(crate) isolated: bool,
 
