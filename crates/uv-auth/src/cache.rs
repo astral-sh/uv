@@ -62,7 +62,9 @@ impl CredentialsCache {
         debug_assert!(url.username().is_empty());
         let urls = self.urls.lock().unwrap();
         for ((cached_url, cached_username), credentials) in urls.iter() {
-            if cached_username == &username && url.as_str().starts_with(cached_url.as_str()) {
+            // Allow credentials with a username to be returned even if the query does not provide a username
+            let username_match = username.is_none() || cached_username == &username;
+            if username_match && url.as_str().starts_with(cached_url.as_str()) {
                 trace!("Found cached credentials with prefix {cached_url}");
                 return Some(credentials.clone());
             }
