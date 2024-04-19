@@ -439,6 +439,7 @@ pub(crate) struct PipCompileArgs {
     #[arg(
         long,
         env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
         group = "discovery",
         overrides_with("no_system")
     )]
