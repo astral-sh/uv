@@ -1328,6 +1328,80 @@ fn install_git_private_https_pat_not_authorized() {
     "###);
 }
 
+/// Install a package from a private GitHub repository using a PAT
+/// Does not use `git`, instead installs a distribution artifact.
+/// Include a public GitHub repository too, to ensure that the authentication is not erroneously copied over.
+#[test]
+#[cfg(all(not(windows), feature = "git"))]
+fn install_github_artifact_private_https_pat_mixed_with_public() {
+    let context = TestContext::new("3.8");
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+
+    let filters: Vec<_> = [(token.as_str(), "***")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    let private_package = format!(
+        "uv-private-pypackage @ https://{token}@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl"
+    );
+    let public_package = "uv-public-pypackage @ https://raw.githubusercontent.com/astral-test/uv-public-pypackage/main/dist/uv_public_pypackage-0.1.0-py3-none-any.whl";
+
+    uv_snapshot!(filters, context.install().arg(private_package).arg(public_package),
+    @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + uv-private-pypackage==0.1.0 (from https://***@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
+     + uv-public-pypackage==0.1.0 (from https://raw.githubusercontent.com/astral-test/uv-public-pypackage/main/dist/uv_public_pypackage-0.1.0-py3-none-any.whl)
+    "###);
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
+}
+
+/// Install packages from multiple private GitHub repositories with separate PATS
+/// Does not use `git`, instead installs a distribution artifact.
+#[test]
+#[cfg(all(not(windows), feature = "git"))]
+fn install_github_artifact_private_https_multiple_pat() {
+    let context = TestContext::new("3.8");
+    let token_1 = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token_2 = decode_token(READ_ONLY_GITHUB_TOKEN_2);
+
+    let filters: Vec<_> = [(token_1.as_str(), "***_1"), (token_2.as_str(), "***_2")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    let package_1 = format!(
+        "uv-private-pypackage @ https://{token_1}@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl"
+    );
+    let package_2 = format!(
+        "uv-private-pypackage-2 @ https://{token_2}@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl"
+    );
+
+    uv_snapshot!(filters, context.install().arg(package_1).arg(package_2)
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + uv-private-pypackage==0.1.0 (from https://***_1@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
+     + uv-private-pypackage-2==0.1.0 (from https://***_2@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl)
+    "###);
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
+}
+
 /// Install a package without using pre-built wheels.
 #[test]
 fn reinstall_no_binary() {
