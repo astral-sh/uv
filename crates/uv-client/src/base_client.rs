@@ -9,8 +9,7 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::Path;
 use tracing::debug;
-use uv_auth::AuthMiddleware;
-use uv_configuration::KeyringProviderType;
+use uv_auth::{AuthMiddleware, KeyringProvider};
 use uv_fs::Simplified;
 use uv_version::version;
 use uv_warnings::warn_user_once;
@@ -22,7 +21,7 @@ use crate::Connectivity;
 /// A builder for an [`BaseClient`].
 #[derive(Debug, Clone)]
 pub struct BaseClientBuilder<'a> {
-    keyring: KeyringProviderType,
+    keyring_provider: KeyringProvider,
     native_tls: bool,
     retries: u32,
     connectivity: Connectivity,
@@ -40,7 +39,7 @@ impl Default for BaseClientBuilder<'_> {
 impl BaseClientBuilder<'_> {
     pub fn new() -> Self {
         Self {
-            keyring: KeyringProviderType::default(),
+            keyring_provider: KeyringProvider::default(),
             native_tls: false,
             connectivity: Connectivity::Online,
             retries: 3,
@@ -53,8 +52,8 @@ impl BaseClientBuilder<'_> {
 
 impl<'a> BaseClientBuilder<'a> {
     #[must_use]
-    pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
-        self.keyring = keyring_type;
+    pub fn keyring_provider(mut self, keyring_provider: KeyringProvider) -> Self {
+        self.keyring_provider = keyring_provider;
         self
     }
 
@@ -170,8 +169,7 @@ impl<'a> BaseClientBuilder<'a> {
                 let client = client.with(retry_strategy);
 
                 // Initialize the authentication middleware to set headers.
-                let client =
-                    client.with(AuthMiddleware::new().with_keyring(self.keyring.to_provider()));
+                let client = client.with(AuthMiddleware::new(self.keyring_provider));
 
                 client.build()
             }

@@ -17,10 +17,9 @@ use distribution_types::{IndexLocations, LocalEditable, LocalEditables, Verbatim
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
-use uv_auth::store_credentials_from_url;
+use uv_auth::{KeyringProvider, GLOBAL_AUTH_STORE};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::KeyringProviderType;
 use uv_configuration::{
     ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, SetupPyStrategy,
     Upgrade,
@@ -71,7 +70,7 @@ pub(crate) async fn pip_compile(
     include_index_annotation: bool,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
-    keyring_provider: KeyringProviderType,
+    keyring_provider: KeyringProvider,
     setup_py: SetupPyStrategy,
     config_settings: ConfigSettings,
     connectivity: Connectivity,
@@ -101,7 +100,7 @@ pub(crate) async fn pip_compile(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(keyring_provider);
+        .keyring_provider(keyring_provider);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -220,9 +219,9 @@ pub(crate) async fn pip_compile(
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
 
-    // Add all authenticated sources to the cache.
+    // Add all authenticated sources to the store.
     for url in index_locations.urls() {
-        store_credentials_from_url(url);
+        GLOBAL_AUTH_STORE.save_from_url(url);
     }
 
     // Initialize the registry client.
@@ -231,7 +230,7 @@ pub(crate) async fn pip_compile(
         .connectivity(connectivity)
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
-        .keyring(keyring_provider)
+        .keyring_provider(keyring_provider)
         .markers(&markers)
         .platform(interpreter.platform())
         .build();

@@ -3007,21 +3007,15 @@ fn install_package_basic_auth_from_keyring() {
         .arg("--strict")
         .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
         .env("PATH", venv_bin_path(context.venv.as_path())), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Downloaded 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
+    error: Failed to download: anyio==4.3.0
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
     "###
     );
-
-    context.assert_command("import anyio").success();
 }
 
 /// Install a package from an index that requires authentication

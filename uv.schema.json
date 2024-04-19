@@ -126,18 +126,18 @@
     "IndexUrl": {
       "type": "string"
     },
-    "KeyringProviderType": {
-      "description": "Keyring provider type to use for credential lookup.",
+    "KeyringProvider": {
+      "description": "Keyring provider to use for authentication\n\nSee <https://pip.pypa.io/en/stable/topics/authentication/#keyring-support>",
       "oneOf": [
         {
-          "description": "Do not use keyring for credential lookup.",
+          "description": "Will not use keyring for authentication",
           "type": "string",
           "enum": [
             "disabled"
           ]
         },
         {
-          "description": "Use the `keyring` command for credential lookup.",
+          "description": "Will use keyring CLI command for authentication",
           "type": "string",
           "enum": [
             "subprocess"
@@ -316,7 +316,7 @@
         "keyring-provider": {
           "anyOf": [
             {
-              "$ref": "#/definitions/KeyringProviderType"
+              "$ref": "#/definitions/KeyringProvider"
             },
             {
               "type": "null"

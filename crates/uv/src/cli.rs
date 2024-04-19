@@ -6,10 +6,10 @@ use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
+use uv_auth::KeyringProvider;
 use uv_cache::CacheArgs;
-use uv_configuration::{
-    ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-};
+use uv_configuration::IndexStrategy;
+use uv_configuration::{ConfigSettingEntry, PackageNameSpecifier};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
@@ -413,7 +413,7 @@ pub(crate) struct PipCompileArgs {
     ///
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: Option<KeyringProviderType>,
+    pub(crate) keyring_provider: Option<KeyringProvider>,
 
     /// The Python interpreter against which to compile the requirements.
     ///
@@ -683,7 +683,7 @@ pub(crate) struct PipSyncArgs {
     ///
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: Option<KeyringProviderType>,
+    pub(crate) keyring_provider: Option<KeyringProvider>,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -1025,7 +1025,7 @@ pub(crate) struct PipInstallArgs {
     ///
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: Option<KeyringProviderType>,
+    pub(crate) keyring_provider: Option<KeyringProvider>,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -1221,7 +1221,7 @@ pub(crate) struct PipUninstallArgs {
     ///
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: Option<KeyringProviderType>,
+    pub(crate) keyring_provider: Option<KeyringProvider>,
 
     /// Use the system Python to uninstall packages.
     ///
@@ -1594,7 +1594,7 @@ pub(crate) struct VenvArgs {
     ///
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: Option<KeyringProviderType>,
+    pub(crate) keyring_provider: Option<KeyringProvider>,
 
     /// Run offline, i.e., without accessing the network.
     #[arg(long, overrides_with("no_offline"))]

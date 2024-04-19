@@ -2,8 +2,9 @@ use std::path::PathBuf;
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
+use uv_auth::KeyringProvider;
 use uv_cache::CacheArgs;
-use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier};
+use uv_configuration::{ConfigSettings, IndexStrategy, PackageNameSpecifier};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
@@ -753,7 +754,7 @@ pub(crate) struct PipSharedSettings {
     pub(crate) no_index: bool,
     pub(crate) find_links: Vec<FlatIndexLocation>,
     pub(crate) index_strategy: IndexStrategy,
-    pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) keyring_provider: KeyringProvider,
     pub(crate) no_build: bool,
     pub(crate) no_binary: Vec<PackageNameSpecifier>,
     pub(crate) only_binary: Vec<PackageNameSpecifier>,

@@ -14,8 +14,6 @@ workspace = true
 
 [dependencies]
 pep508_rs = { workspace = true }
-uv-cache = { workspace = true }
-uv-auth = { workspace = true }
 uv-normalize = { workspace = true }
 
 anyhow = { workspace = true }

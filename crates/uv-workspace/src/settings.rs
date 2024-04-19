@@ -4,7 +4,8 @@ use serde::Deserialize;
 
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use install_wheel_rs::linker::LinkMode;
-use uv_configuration::{ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier};
+use uv_auth::KeyringProvider;
+use uv_configuration::{ConfigSettings, IndexStrategy, PackageNameSpecifier};
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
 use uv_toolchain::PythonVersion;
@@ -50,7 +51,7 @@ pub struct PipOptions {
     pub no_index: Option<bool>,
     pub find_links: Option<Vec<FlatIndexLocation>>,
     pub index_strategy: Option<IndexStrategy>,
-    pub keyring_provider: Option<KeyringProviderType>,
+    pub keyring_provider: Option<KeyringProvider>,
     pub no_build: Option<bool>,
     pub no_binary: Option<Vec<PackageNameSpecifier>>,
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
