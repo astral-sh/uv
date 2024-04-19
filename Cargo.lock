@@ -4595,6 +4595,7 @@ dependencies = [
  "clap",
  "itertools 0.12.1",
  "pep508_rs",
+ "platform-tags",
  "rustc-hash",
  "schemars",
  "serde",

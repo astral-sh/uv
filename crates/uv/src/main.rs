@@ -50,7 +50,6 @@ mod logging;
 mod printer;
 mod settings;
 mod shell;
-mod target;
 mod version;
 
 #[instrument]
@@ -255,7 +254,7 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.no_build_isolation,
                 no_build,
                 args.shared.python_version,
-                args.python_platform,
+                args.shared.python_platform,
                 args.shared.exclude_newer,
                 args.shared.annotation_style,
                 args.shared.link_mode,
