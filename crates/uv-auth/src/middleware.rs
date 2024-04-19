@@ -146,8 +146,9 @@ impl Middleware for AuthMiddleware {
             // If there's a password, send the request and cache
             if credentials.password().is_some() {
                 trace!("Request for {url} is already fully authenticated");
-                // Do not populate the cache with these credentials, they should already be populated
-                return self.complete_request(None, request, extensions, next).await;
+                return self
+                    .complete_request(Some(credentials), request, extensions, next)
+                    .await;
             }
 
             trace!("Request for {url} is missing a password, looking for credentials");
@@ -424,17 +425,37 @@ mod tests {
         url.set_password(Some(password)).unwrap();
         assert_eq!(client.get(url).send().await?.status(), 200);
 
+        // Works for a URL without credentials now
         assert_eq!(
             client.get(server.uri()).send().await?.status(),
+            200,
+            "Subsequent requests should not require credentials"
+        );
+
+        assert_eq!(
+            client
+                .get(format!("{}/foo", server.uri()))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests can be to different paths in the same realm"
+        );
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        url.set_password(Some("invalid")).unwrap();
+        assert_eq!(
+            client.get(url).send().await?.status(),
             401,
-            "Requests require credentials due to cache optimizations"
+            "Credentials in the URL should take precedence and fail"
         );
 
         Ok(())
     }
 
     #[test(tokio::test)]
-    async fn test_credentials_in_url() -> Result<(), Error> {
+    async fn test_credentials_in_url_seed() -> Result<(), Error> {
         let username = "user";
         let password = "password";
 
@@ -1017,6 +1038,15 @@ mod tests {
             200,
             "Requests can be to different paths in the same realm"
         );
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_1_foo")?)
+                .send()
+                .await?
+                .status(),
+            401,
+            "Requests to paths with a matching prefix but different resource segments should fail"
+        );
 
         assert_eq!(
             client.get(base_url_3.clone()).send().await?.status(),
@@ -1142,7 +1172,15 @@ mod tests {
             200,
             "Requests can be to different paths in the same prefix"
         );
-
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_1_foo")?)
+                .send()
+                .await?
+                .status(),
+            401,
+            "Requests to paths with a matching prefix but different resource segments should fail"
+        );
         assert_eq!(
             client.get(base_url_3.clone()).send().await?.status(),
             200,
