@@ -74,12 +74,18 @@ impl Default for AuthMiddleware {
 impl Middleware for AuthMiddleware {
     /// Handle authentication for a request.
     ///
-    /// If the request has a username and password
+    /// ## If the request has a username and password
+    ///
+    /// We already have a fully authenticated request and we don't need to perform a look-up.
     ///
     /// - Perform the request
     /// - Add the username and password to the cache if successful
     ///
-    /// If the request only has a username:
+    /// ## If the request only has a username
+    ///
+    /// We probably need additional authentication, because a username is provided.
+    /// We'll avoid making a request we expect to fail and look for a password.
+    /// The discovered credentials must have the requested username to be used.
     ///
     /// - Check the cache (realm key) for a password
     /// - Check the netrc for a password
@@ -87,11 +93,17 @@ impl Middleware for AuthMiddleware {
     /// - Perform the request
     /// - Add the username and password to the cache if successful
     ///
-    /// If the request has no authentication:
+    /// ## If the request has no authentication
+    ///
+    /// We may or may not need authentication. We'll check for cached credentials for the URL,
+    /// which is relatively specific and can save us an expensive failed request. Otherwise,
+    /// we'll make the request and look for less-specific credentials on failure i.e. if the
+    /// server tells us authorization is needed. This pattern avoids attaching credentials to
+    /// requests that do not need them, which can cause some servers to deny the request.
     ///
     /// - Check the cache (url key)
     /// - Perform the request
-    /// - On 401 or 403, check for authentication
+    /// - On 401, 403, or 404 check for authentication if there was a cache miss
     ///     - Check the cache (realm key) for the username and password
     ///     - Check the netrc for a username and password
     ///     - Perform the request again if found
