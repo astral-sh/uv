@@ -418,8 +418,6 @@ pub(crate) async fn pip_install(
         validate(&resolution, &venv, printer)?;
     }
 
-    uv_auth::display_cache_statistics();
-
     Ok(ExitStatus::Success)
 }
 

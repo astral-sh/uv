@@ -35,7 +35,3 @@ pub fn store_credentials_from_url(url: &Url) -> bool {
         false
     }
 }
-
-pub fn display_cache_statistics() {
-    trace!("Cache statistics: {}", CREDENTIALS_CACHE.statistics());
-}
