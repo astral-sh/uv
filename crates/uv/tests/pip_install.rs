@@ -24,6 +24,7 @@ const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
 ];
 
 // This is a fine-grained token that only has read-only access to the `uv-private-pypackage-2` repository
+#[cfg(not(windows))]
 const READ_ONLY_GITHUB_TOKEN_2: &[&str] = &[
     "Z2l0aHViX3BhdA==",
     "MTFCR0laQTdRMHV1MEpwaFp4dFFyRwo=",
@@ -1332,7 +1333,7 @@ fn install_git_private_https_pat_not_authorized() {
 /// Does not use `git`, instead installs a distribution artifact.
 /// Include a public GitHub repository too, to ensure that the authentication is not erroneously copied over.
 #[test]
-#[cfg(all(not(windows), feature = "git"))]
+#[cfg(not(windows))]
 fn install_github_artifact_private_https_pat_mixed_with_public() {
     let context = TestContext::new("3.8");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -1367,7 +1368,7 @@ fn install_github_artifact_private_https_pat_mixed_with_public() {
 /// Install packages from multiple private GitHub repositories with separate PATS
 /// Does not use `git`, instead installs a distribution artifact.
 #[test]
-#[cfg(all(not(windows), feature = "git"))]
+#[cfg(not(windows))]
 fn install_github_artifact_private_https_multiple_pat() {
     let context = TestContext::new("3.8");
     let token_1 = decode_token(READ_ONLY_GITHUB_TOKEN);
