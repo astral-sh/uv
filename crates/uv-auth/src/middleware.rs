@@ -135,7 +135,7 @@ impl Middleware for AuthMiddleware {
             if credentials.password().is_some() {
                 trace!("Request for {url} is already fully authenticated");
                 // Do not populate the cache with these credentials, they should already be populated
-                return self.complete_request(None, request, extensions, next).await
+                return self.complete_request(None, request, extensions, next).await;
             }
 
             trace!("Request for {url} is missing a password, looking for credentials");
@@ -158,8 +158,9 @@ impl Middleware for AuthMiddleware {
                 Some(credentials)
             };
 
-            return self.complete_request(credentials, request, extensions, next)
-                .await
+            return self
+                .complete_request(credentials, request, extensions, next)
+                .await;
         }
 
         // We have no credentials
@@ -208,7 +209,9 @@ impl Middleware for AuthMiddleware {
 
             if let Some(credentials) = credentials.as_ref() {
                 if credentials.password().is_some() {
-                    trace!("Retrying request for {url} with credentials from cache {credentials:?}");
+                    trace!(
+                        "Retrying request for {url} with credentials from cache {credentials:?}"
+                    );
                     retry_request = credentials.authenticate(retry_request);
                     return self
                         .complete_request(None, retry_request, extensions, next)
@@ -223,17 +226,14 @@ impl Middleware for AuthMiddleware {
                 retry_request = credentials.authenticate(retry_request);
                 trace!("Retrying request for {url} with {credentials:?}");
                 return self
-                    .complete_request(
-                        Some(Arc::new(credentials)),
-                        retry_request,
-                        extensions,
-                        next,
-                    )
+                    .complete_request(Some(Arc::new(credentials)), retry_request, extensions, next)
                     .await;
             } else {
                 if let Some(credentials) = credentials.as_ref() {
                     if !attempt_has_username {
-                        trace!("Retrying request for {url} with username from cache {credentials:?}");
+                        trace!(
+                            "Retrying request for {url} with username from cache {credentials:?}"
+                        );
                         retry_request = credentials.authenticate(retry_request);
                         return self
                             .complete_request(None, retry_request, extensions, next)
@@ -809,7 +809,6 @@ mod tests {
             "Requests should not require credentials"
         );
 
-
         assert_eq!(
             client
                 .get(format!("{}/foo", server_1.uri()))
@@ -848,13 +847,10 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
-                    .with_keyring(Some(KeyringProvider::dummy([(
-                        (base_url_1.host_str().unwrap(), username_1),
-                        password_1,
-                    ), (
-                        (base_url_2.host_str().unwrap(), username_2),
-                        password_2,
-                    )]))),
+                    .with_keyring(Some(KeyringProvider::dummy([
+                        ((base_url_1.host_str().unwrap(), username_1), password_1),
+                        ((base_url_2.host_str().unwrap(), username_2), password_2),
+                    ]))),
             )
             .build();
 
@@ -892,20 +888,12 @@ mod tests {
         );
 
         assert_eq!(
-            client
-                .get(format!("{}/foo", url_1))
-                .send()
-                .await?
-                .status(),
+            client.get(format!("{}/foo", url_1)).send().await?.status(),
             200,
             "Requests can be to different paths in the same realm"
         );
         assert_eq!(
-            client
-                .get(format!("{}/foo", url_2))
-                .send()
-                .await?
-                .status(),
+            client.get(format!("{}/foo", url_2)).send().await?.status(),
             200,
             "Requests can be to different paths in the same realm"
         );
@@ -1027,7 +1015,6 @@ mod tests {
         Ok(())
     }
 
-
     #[test(tokio::test)]
     async fn test_credentials_from_keyring_mixed_authentication_in_realm() -> Result<(), Error> {
         let username_1 = "user1";
@@ -1085,16 +1072,12 @@ mod tests {
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
-                    .with_keyring(Some(KeyringProvider::dummy([(
-                        (base_url_1.host_str().unwrap(), username_1),
-                        password_1,
-                    ), (
-                        (base_url_2.host_str().unwrap(), username_2),
-                        password_2,
-                    )]))),
+                    .with_keyring(Some(KeyringProvider::dummy([
+                        ((base_url_1.host_str().unwrap(), username_1), password_1),
+                        ((base_url_2.host_str().unwrap(), username_2), password_2),
+                    ]))),
             )
             .build();
-
 
         // Both servers do not work without a username
         assert_eq!(
@@ -1156,5 +1139,4 @@ mod tests {
 
         Ok(())
     }
-
 }
