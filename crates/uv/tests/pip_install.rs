@@ -1379,10 +1379,10 @@ fn install_github_artifact_private_https_multiple_pat() {
         .collect();
 
     let package_1 = format!(
-        "uv-private-pypackage @ https://{token_1}@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl"
+        "uv-private-pypackage @ https://astral-test-bot:{token_1}@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl"
     );
     let package_2 = format!(
-        "uv-private-pypackage-2 @ https://{token_2}@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl"
+        "uv-private-pypackage-2 @ https://astral-test-bot:{token_2}@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl"
     );
 
     uv_snapshot!(filters, context.install().arg(package_1).arg(package_2)
@@ -1395,8 +1395,8 @@ fn install_github_artifact_private_https_multiple_pat() {
     Resolved 2 packages in [TIME]
     Downloaded 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from https://***_1@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
-     + uv-private-pypackage-2==0.1.0 (from https://***_2@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl)
+     + uv-private-pypackage==0.1.0 (from https://astral-test-bot:***_1@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
+     + uv-private-pypackage-2==0.1.0 (from https://astral-test-bot:***_2@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
