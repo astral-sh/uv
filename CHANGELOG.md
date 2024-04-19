@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.35
+
+### Enhancements
+
+- Add a `--python-platform` argument to enable resolving against a target platform ([#3111](https://github.com/astral-sh/uv/pull/3111))
+- Enforce HTTP timeouts on a per-read (rather than per-request) basis ([#3144](https://github.com/astral-sh/uv/pull/3144))
+
+### Bug fixes
+
+- Avoid preferring constrained over unconstrained packages ([#3148](https://github.com/astral-sh/uv/pull/3148))
+- Allow `UV_SYSTEM_PYTHON=1` in addition to `UV_SYSTEM_PYTHON=true` ([#3136](https://github.com/astral-sh/uv/pull/3136))
+
 ## 0.1.34
 
 ### CLI
