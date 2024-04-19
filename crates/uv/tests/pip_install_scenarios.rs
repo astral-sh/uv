@@ -460,14 +460,7 @@ fn dependency_excludes_range_of_compatible_versions() {
       ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
               package-a>=2.0.0,<=3.0.0
-          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
-          And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that any of:
-              package-a<2.0.0
-              package-a>=3.0.0
-          depends on one of:
-              package-b<=1.0.0
-              package-b>=3.0.0
-           (1)
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
           Because only the following versions of package-c are available:
               package-c==1.0.0
@@ -477,13 +470,8 @@ fn dependency_excludes_range_of_compatible_versions() {
               package-a<2.0.0
               package-a>=3.0.0
 
-          And because we know from (1) that any of:
-              package-a<2.0.0
-              package-a>=3.0.0
-          depends on one of:
-              package-b<=1.0.0
-              package-b>=3.0.0
-          we can conclude that all versions of package-c depend on one of:
+          And because we know from (1) that package-a<2.0.0 depends on package-b==1.0.0, we can conclude that package-a!=3.0.0, all versions of package-c, package-b!=1.0.0 are incompatible.
+          And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all versions of package-c depend on one of:
               package-b<=1.0.0
               package-b>=3.0.0
 
@@ -597,14 +585,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
       ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
               package-a>=2.0.0,<=3.0.0
-          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
-          And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that any of:
-              package-a<2.0.0
-              package-a>=3.0.0
-          depends on one of:
-              package-b<=1.0.0
-              package-b>=3.0.0
-           (1)
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
           Because only the following versions of package-c are available:
               package-c==1.0.0
@@ -614,13 +595,8 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
               package-a<2.0.0
               package-a>=3.0.0
 
-          And because we know from (1) that any of:
-              package-a<2.0.0
-              package-a>=3.0.0
-          depends on one of:
-              package-b<=1.0.0
-              package-b>=3.0.0
-          we can conclude that all versions of package-c depend on one of:
+          And because we know from (1) that package-a<2.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-c, package-a!=3.0.0, package-b!=1.0.0 are incompatible.
+          And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all versions of package-c depend on one of:
               package-b<=1.0.0
               package-b>=3.0.0
 
@@ -3355,8 +3331,10 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-c<2.0.0b1 is available and package-a==1.0.0 depends on package-c>=2.0.0b1, we can conclude that package-a==1.0.0 cannot be used.
-          And because only package-a==1.0.0 is available and you require package-a, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c>=2.0.0b1, we can conclude that all versions of package-a depend on package-c>=2.0.0b1.
+          And because only package-c<2.0.0b1 is available, we can conclude that all versions of package-a depend on package-c>3.0.0.
+          And because package-b==1.0.0 depends on package-c and only package-b==1.0.0 is available, we can conclude that all versions of package-b and all versions of package-a are incompatible.
+          And because you require package-a and you require package-b, we can conclude that the requirements are unsatisfiable.
 
           hint: package-c was requested with a pre-release marker (e.g., package-c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
