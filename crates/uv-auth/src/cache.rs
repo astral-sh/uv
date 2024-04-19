@@ -29,7 +29,7 @@ impl CredentialsCache {
         }
     }
 
-    /// Return the credentials that should be used for a realm, if any.
+    /// Return the credentials that should be used for a realm and username, if any.
     pub(crate) fn get_realm(&self, realm: Realm, username: Username) -> Option<Arc<Credentials>> {
         let realms = self.realms.lock().unwrap();
         let name = if let Some(username) = username.as_deref() {
@@ -50,11 +50,11 @@ impl CredentialsCache {
             })
     }
 
-    /// Return the cached credentials for a URL, if any.
+    /// Return the cached credentials for a URL and username, if any.
     ///
-    /// Note we do not cache per URL and username, but if a username is passed we will confirm that the
-    /// cached username is equal to the provided one otherwise `None` is returned.
-    /// If multiple usernames are used per URL, we will fallback to the realm cache.
+    /// Note we do not cache per username, but if a username is passed we will confirm that the
+    /// cached credentials have a username equal to the provided one — otherwise `None` is returned.
+    /// If multiple usernames are used per URL, the realm cache should be queried instead.
     pub(crate) fn get_url(&self, url: &Url, username: Username) -> Option<Arc<Credentials>> {
         let urls = self.urls.lock().unwrap();
         let credentials = urls.get(url);
