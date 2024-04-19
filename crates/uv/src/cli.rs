@@ -529,7 +529,7 @@ pub(crate) struct PipCompileArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aaarch64-apple-darwin`.
     #[arg(long)]
-    pub(crate) platform: Option<TargetTriple>,
+    pub(crate) python_platform: Option<TargetTriple>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
