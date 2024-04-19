@@ -831,10 +831,17 @@ impl<
 
                 // Add a dependency on each editable.
                 for (editable, metadata) in self.editables.iter() {
-                    constraints.push(
-                        PubGrubPackage::from_package(metadata.name.clone(), None, &self.urls),
-                        Range::singleton(metadata.version.clone()),
-                    );
+                    let package =
+                        PubGrubPackage::from_package(metadata.name.clone(), None, &self.urls);
+                    let version = Range::singleton(metadata.version.clone());
+
+                    // Update the package priorities.
+                    priorities.insert(&package, &version);
+
+                    // Add the editable as a direct dependency.
+                    constraints.push(package, version);
+
+                    // Add a dependency on each extra.
                     for extra in &editable.extras {
                         constraints.push(
                             PubGrubPackage::from_package(
@@ -891,7 +898,7 @@ impl<
                     )?;
 
                     for (dep_package, dep_version) in constraints.iter() {
-                        debug!("Adding transitive dependency for {package}{version}: {dep_package}{dep_version}");
+                        debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
 
                         // Update the package priorities.
                         priorities.insert(dep_package, dep_version);
@@ -999,14 +1006,14 @@ impl<
                     self.markers,
                 )?;
 
-                for (package, version) in constraints.iter() {
-                    debug!("Adding transitive dependency: {package}{version}");
+                for (dep_package, dep_version) in constraints.iter() {
+                    debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
 
                     // Update the package priorities.
-                    priorities.insert(package, version);
+                    priorities.insert(dep_package, dep_version);
 
                     // Emit a request to fetch the metadata for this package.
-                    self.visit_package(package, request_sink).await?;
+                    self.visit_package(dep_package, request_sink).await?;
                 }
 
                 Ok(Dependencies::Available(constraints.into()))
