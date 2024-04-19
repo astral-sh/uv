@@ -2,7 +2,7 @@ mod cache;
 mod credentials;
 mod keyring;
 mod middleware;
-mod netloc;
+mod realm;
 
 use std::sync::Arc;
 
@@ -11,8 +11,8 @@ use credentials::Credentials;
 
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
-use netloc::NetLoc;
 use once_cell::sync::Lazy;
+use realm::Realm;
 use tracing::trace;
 use url::Url;
 

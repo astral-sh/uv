@@ -2,14 +2,15 @@ use std::sync::Arc;
 use std::{collections::HashMap, sync::Mutex};
 
 use crate::credentials::{Credentials, Username};
-use crate::NetLoc;
+use crate::Realm;
 
 use tracing::trace;
 use url::Url;
 
 pub struct CredentialsCache {
-    realms: Mutex<HashMap<(NetLoc, Username), Arc<Credentials>>>,
-    #[allow(clippy::type_complexity)]
+    /// A cache per realm and username
+    realms: Mutex<HashMap<(Realm, Username), Arc<Credentials>>>,
+    /// A cache per URL, uses a trie for efficient prefix queries.
     urls: Mutex<UrlTrie>,
 }
 
@@ -29,14 +30,14 @@ impl CredentialsCache {
     }
 
     /// Return the credentials that should be used for a realm, if any.
-    pub(crate) fn get_realm(&self, netloc: NetLoc, username: Username) -> Option<Arc<Credentials>> {
+    pub(crate) fn get_realm(&self, realm: Realm, username: Username) -> Option<Arc<Credentials>> {
         let realms = self.realms.lock().unwrap();
         let name = if let Some(username) = username.as_deref() {
-            format!("{username}@{netloc}")
+            format!("{username}@{realm}")
         } else {
-            netloc.to_string()
+            realm.to_string()
         };
-        let key = (netloc, username);
+        let key = (realm, username);
 
         realms
             .get(&key)
@@ -53,6 +54,7 @@ impl CredentialsCache {
     ///
     /// Note we do not cache per URL and username, but if a username is passed we will confirm that the
     /// cached username is equal to the provided one otherwise `None` is returned.
+    /// If multiple usernames are used per URL, we will fallback to the realm cache.
     pub(crate) fn get_url(&self, url: &Url, username: Username) -> Option<Arc<Credentials>> {
         let urls = self.urls.lock().unwrap();
         let credentials = urls.get(url);
@@ -76,12 +78,12 @@ impl CredentialsCache {
         // Insert an entry for requests including the username
         let username = credentials.to_username();
         if username.is_some() {
-            let realm = (NetLoc::from(url), username.clone());
+            let realm = (Realm::from(url), username.clone());
             self.insert_realm(realm, credentials.clone());
         }
 
         // Insert an entry for requests with no username
-        self.insert_realm((NetLoc::from(url), Username::none()), credentials.clone());
+        self.insert_realm((Realm::from(url), Username::none()), credentials.clone());
 
         // Insert an entry for the URL
         let mut urls = self.urls.lock().unwrap();
@@ -93,7 +95,7 @@ impl CredentialsCache {
     /// Returns replaced credentials, if any.
     fn insert_realm(
         &self,
-        key: (NetLoc, Username),
+        key: (Realm, Username),
         credentials: Arc<Credentials>,
     ) -> Option<Arc<Credentials>> {
         // Do not cache empty credentials
@@ -140,8 +142,8 @@ impl UrlTrie {
 
     fn get(&self, url: &Url) -> Option<&Arc<Credentials>> {
         let mut state = 0;
-        let netloc = NetLoc::from(url).to_string();
-        for component in [netloc.as_str()]
+        let realm = Realm::from(url).to_string();
+        for component in [realm.as_str()]
             .into_iter()
             .chain(url.path_segments().unwrap().filter(|item| !item.is_empty()))
         {
@@ -156,8 +158,8 @@ impl UrlTrie {
 
     fn insert(&mut self, url: Url, value: Arc<Credentials>) {
         let mut state = 0;
-        let netloc = NetLoc::from(&url).to_string();
-        for component in [netloc.as_str()]
+        let realm = Realm::from(&url).to_string();
+        for component in [realm.as_str()]
             .into_iter()
             .chain(url.path_segments().unwrap().filter(|item| !item.is_empty()))
         {

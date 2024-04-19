@@ -22,13 +22,13 @@ use url::Url;
 // However, `url` (and therefore `reqwest`) sets the `port` to `None` if it matches the default port
 // so we do not need any special handling here.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct NetLoc {
+pub(crate) struct Realm {
     scheme: String,
     host: Option<String>,
     port: Option<u16>,
 }
 
-impl From<&Url> for NetLoc {
+impl From<&Url> for Realm {
     fn from(url: &Url) -> Self {
         Self {
             scheme: url.scheme().to_string(),
@@ -38,7 +38,7 @@ impl From<&Url> for NetLoc {
     }
 }
 
-impl Display for NetLoc {
+impl Display for Realm {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(port) = self.port {
             write!(
@@ -62,84 +62,84 @@ impl Display for NetLoc {
 mod tests {
     use url::{ParseError, Url};
 
-    use crate::NetLoc;
+    use crate::Realm;
 
     #[test]
     fn test_should_retain_auth() -> Result<(), ParseError> {
         // Exact match (https)
         assert_eq!(
-            NetLoc::from(&Url::parse("https://example.com")?),
-            NetLoc::from(&Url::parse("https://example.com")?)
+            Realm::from(&Url::parse("https://example.com")?),
+            Realm::from(&Url::parse("https://example.com")?)
         );
 
         // Exact match (with port)
         assert_eq!(
-            NetLoc::from(&Url::parse("https://example.com:1234")?),
-            NetLoc::from(&Url::parse("https://example.com:1234")?)
+            Realm::from(&Url::parse("https://example.com:1234")?),
+            Realm::from(&Url::parse("https://example.com:1234")?)
         );
 
         // Exact match (http)
         assert_eq!(
-            NetLoc::from(&Url::parse("http://example.com")?),
-            NetLoc::from(&Url::parse("http://example.com")?)
+            Realm::from(&Url::parse("http://example.com")?),
+            Realm::from(&Url::parse("http://example.com")?)
         );
 
         // Okay, path differs
         assert_eq!(
-            NetLoc::from(&Url::parse("http://example.com/foo")?),
-            NetLoc::from(&Url::parse("http://example.com/bar")?)
+            Realm::from(&Url::parse("http://example.com/foo")?),
+            Realm::from(&Url::parse("http://example.com/bar")?)
         );
 
         // Okay, default port differs (https)
         assert_eq!(
-            NetLoc::from(&Url::parse("https://example.com:443")?),
-            NetLoc::from(&Url::parse("https://example.com")?)
+            Realm::from(&Url::parse("https://example.com:443")?),
+            Realm::from(&Url::parse("https://example.com")?)
         );
 
         // Okay, default port differs (http)
         assert_eq!(
-            NetLoc::from(&Url::parse("http://example.com:80")?),
-            NetLoc::from(&Url::parse("http://example.com")?)
+            Realm::from(&Url::parse("http://example.com:80")?),
+            Realm::from(&Url::parse("http://example.com")?)
         );
 
         // Mismatched scheme
         assert_ne!(
-            NetLoc::from(&Url::parse("https://example.com")?),
-            NetLoc::from(&Url::parse("http://example.com")?)
+            Realm::from(&Url::parse("https://example.com")?),
+            Realm::from(&Url::parse("http://example.com")?)
         );
 
         // Mismatched scheme, we explicitly do not allow upgrade to https
         assert_ne!(
-            NetLoc::from(&Url::parse("http://example.com")?),
-            NetLoc::from(&Url::parse("https://example.com")?)
+            Realm::from(&Url::parse("http://example.com")?),
+            Realm::from(&Url::parse("https://example.com")?)
         );
 
         // Mismatched host
         assert_ne!(
-            NetLoc::from(&Url::parse("https://foo.com")?),
-            NetLoc::from(&Url::parse("https://bar.com")?)
+            Realm::from(&Url::parse("https://foo.com")?),
+            Realm::from(&Url::parse("https://bar.com")?)
         );
 
         // Mismatched port
         assert_ne!(
-            NetLoc::from(&Url::parse("https://example.com:1234")?),
-            NetLoc::from(&Url::parse("https://example.com:5678")?)
+            Realm::from(&Url::parse("https://example.com:1234")?),
+            Realm::from(&Url::parse("https://example.com:5678")?)
         );
 
         // Mismatched port, with one as default for scheme
         assert_ne!(
-            NetLoc::from(&Url::parse("https://example.com:443")?),
-            NetLoc::from(&Url::parse("https://example.com:5678")?)
+            Realm::from(&Url::parse("https://example.com:443")?),
+            Realm::from(&Url::parse("https://example.com:5678")?)
         );
         assert_ne!(
-            NetLoc::from(&Url::parse("https://example.com:1234")?),
-            NetLoc::from(&Url::parse("https://example.com:443")?)
+            Realm::from(&Url::parse("https://example.com:1234")?),
+            Realm::from(&Url::parse("https://example.com:443")?)
         );
 
         // Mismatched port, with default for a different scheme
         assert_ne!(
-            NetLoc::from(&Url::parse("https://example.com:80")?),
-            NetLoc::from(&Url::parse("https://example.com")?)
+            Realm::from(&Url::parse("https://example.com:80")?),
+            Realm::from(&Url::parse("https://example.com")?)
         );
 
         Ok(())

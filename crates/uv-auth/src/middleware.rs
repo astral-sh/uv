@@ -5,7 +5,7 @@ use url::Url;
 
 use crate::{
     credentials::{Credentials, Username},
-    netloc::NetLoc,
+    realm::Realm,
     CredentialsCache, KeyringProvider, CREDENTIALS_CACHE,
 };
 use anyhow::anyhow;
@@ -155,7 +155,7 @@ impl Middleware for AuthMiddleware {
             // There's just a username, try to find a password
             let credentials = if let Some(credentials) = self
                 .cache()
-                .get_realm(NetLoc::from(request.url()), credentials.to_username())
+                .get_realm(Realm::from(request.url()), credentials.to_username())
             {
                 request = credentials.authenticate(request);
                 // Do not insert already-cached credentials
@@ -214,7 +214,7 @@ impl Middleware for AuthMiddleware {
                 response.status()
             );
             let credentials = self.cache().get_realm(
-                NetLoc::from(retry_request.url()),
+                Realm::from(retry_request.url()),
                 credentials
                     .map(|credentials| credentials.to_username())
                     .unwrap_or(Username::none()),
