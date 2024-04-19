@@ -147,7 +147,6 @@ impl UrlTrie {
             .into_iter()
             .chain(url.path_segments().unwrap().filter(|item| !item.is_empty()))
         {
-            dbg!(component);
             state = self.states[state].get(component)?;
             if let Some(ref value) = self.states[state].value {
                 return Some(value);
