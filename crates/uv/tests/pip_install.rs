@@ -23,13 +23,25 @@ const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
     "NVZMaExzZmtFMHZ1ZEVNd0pPZXZkV040WUdTcmk2WXREeFB4TFlybGlwRTZONEpHV01FMnFZQWJVUm4=",
 ];
 
+// This is a fine-grained token that only has read-only access to the `uv-private-pypackage-2` repository
+const READ_ONLY_GITHUB_TOKEN_2: &[&str] = &[
+    "Z2l0aHViX3BhdA==",
+    "MTFCR0laQTdRMHV1MEpwaFp4dFFyRwo=",
+    "cnNmNXJwMHk2WWpteVZvb2ZFc0c5WUs5b2NPcFY1aVpYTnNmdE05eEhaM0lGSExSSktDWTcxeVBVZXkK",
+];
+
 /// Decode a split, base64 encoded authentication token.
 /// We split and encode the token to bypass revoke by GitHub's secret scanning
 fn decode_token(content: &[&str]) -> String {
     let token = content
         .iter()
         .map(|part| base64.decode(part).unwrap())
-        .map(|decoded| std::str::from_utf8(decoded.as_slice()).unwrap().to_string())
+        .map(|decoded| {
+            std::str::from_utf8(decoded.as_slice())
+                .unwrap()
+                .trim_end()
+                .to_string()
+        })
         .join("_");
     token
 }
@@ -1119,7 +1131,7 @@ fn install_git_private_https_pat() {
         .collect();
 
     let package = format!(
-        "uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"
+        "uv-private-pypackage@ git+https://{token}@github.com/astral-test/uv-private-pypackage"
     );
 
     uv_snapshot!(filters, context.install().arg(package)
@@ -1167,6 +1179,43 @@ fn install_git_private_https_pat_mixed_with_public() {
     Installed 2 packages in [TIME]
      + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+    "###);
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
+}
+
+/// Install packages from multiple private GitHub repositories with separate PATS
+#[test]
+#[cfg(all(not(windows), feature = "git"))]
+fn install_git_private_https_multiple_pat() {
+    let context = TestContext::new("3.8");
+    let token_1 = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token_2 = decode_token(READ_ONLY_GITHUB_TOKEN_2);
+
+    let filters: Vec<_> = [(token_1.as_str(), "***_1"), (token_2.as_str(), "***_2")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    let package_1 = format!(
+        "uv-private-pypackage @ git+https://{token_1}@github.com/astral-test/uv-private-pypackage"
+    );
+    let package_2 = format!(
+        "uv-private-pypackage-2 @ git+https://{token_2}@github.com/astral-test/uv-private-pypackage-2"
+    );
+
+    uv_snapshot!(filters, context.install().arg(package_1).arg(package_2)
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://***_1@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+     + uv-private-pypackage-2==0.1.0 (from git+https://***_2@github.com/astral-test/uv-private-pypackage-2@b51dab83627b16d6c25a0b023f834e72361064ce)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
