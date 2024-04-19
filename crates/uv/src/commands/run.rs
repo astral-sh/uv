@@ -39,7 +39,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 /// Run a command.
 #[allow(clippy::unnecessary_wraps, clippy::too_many_arguments)]
 pub(crate) async fn run(
-    command: String,
+    target: Option<String>,
     args: Vec<String>,
     mut requirements: Vec<RequirementsSource>,
     isolated: bool,
@@ -47,6 +47,8 @@ pub(crate) async fn run(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let command = target.unwrap_or("python".to_string());
+
     // Copy the requirements into a set of overrides; we'll use this to prioritize
     // requested requirements over those discovered in the project.
     // We must retain these requirements as direct dependencies too, as overrides
@@ -88,7 +90,8 @@ pub(crate) async fn run(
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
-    debug!("Running `{command} {}`", args.join(" "));
+    let space = if args.is_empty() { "" } else { " " };
+    debug!("Running `{command}{space}{}`", args.join(" "));
     let mut handle = process.spawn()?;
     let status = handle.wait().await?;
 

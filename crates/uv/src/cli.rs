@@ -1628,7 +1628,7 @@ pub(crate) struct VenvArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct RunArgs {
     /// The command to run.
-    pub(crate) command: String,
+    pub(crate) target: Option<String>,
 
     /// The arguments to the command.
     #[arg(allow_hyphen_values = true)]
