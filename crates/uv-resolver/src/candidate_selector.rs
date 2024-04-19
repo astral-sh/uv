@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use pubgrub::range::Range;
 
 use distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
@@ -5,6 +7,7 @@ use distribution_types::{DistributionMetadata, IncompatibleWheel, Name, Prioriti
 use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use tracing::debug;
+use uv_configuration::IndexStrategy;
 use uv_normalize::PackageName;
 use uv_types::InstalledPackagesProvider;
 
@@ -18,6 +21,7 @@ use crate::{Exclusions, Manifest, Options};
 pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PreReleaseStrategy,
+    index_strategy: IndexStrategy,
 }
 
 impl CandidateSelector {
@@ -38,6 +42,7 @@ impl CandidateSelector {
                 manifest,
                 markers,
             ),
+            index_strategy: options.index_strategy,
         }
     }
 
@@ -51,6 +56,12 @@ impl CandidateSelector {
     #[allow(dead_code)]
     pub(crate) fn prerelease_strategy(&self) -> &PreReleaseStrategy {
         &self.prerelease_strategy
+    }
+
+    #[inline]
+    #[allow(dead_code)]
+    pub(crate) fn index_strategy(&self) -> &IndexStrategy {
+        &self.index_strategy
     }
 }
 
@@ -208,19 +219,33 @@ impl CandidateSelector {
         let highest = self.use_highest_version(package_name);
         let allow_prerelease = self.allow_prereleases(package_name);
 
-        if highest {
-            version_maps.iter().find_map(|version_map| {
-                Self::select_candidate(
-                    version_map.iter().rev(),
-                    package_name,
-                    range,
-                    allow_prerelease,
-                )
-            })
+        if self.index_strategy == IndexStrategy::UnsafeHighest {
+            // merge all indices together before resolving any candidates
+            let map: BTreeMap<&Version, VersionMapDistHandle> = version_maps
+                .iter()
+                .rev()
+                .flat_map(|version_map| version_map.iter())
+                .collect();
+            if highest {
+                Self::select_candidate(map.into_iter().rev(), package_name, range, allow_prerelease)
+            } else {
+                Self::select_candidate(map.into_iter(), package_name, range, allow_prerelease)
+            }
         } else {
-            version_maps.iter().find_map(|version_map| {
-                Self::select_candidate(version_map.iter(), package_name, range, allow_prerelease)
-            })
+            if highest {
+                version_maps.iter().find_map(|version_map| {
+                    Self::select_candidate(
+                        version_map.iter().rev(),
+                        package_name,
+                        range,
+                        allow_prerelease,
+                    )
+                })
+            } else {
+                version_maps.iter().find_map(|version_map| {
+                    Self::select_candidate(version_map.iter(), package_name, range, allow_prerelease)
+                })
+            }
         }
     }
 

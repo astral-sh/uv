@@ -196,7 +196,7 @@ impl NoBuild {
     }
 }
 
-#[derive(Debug, Default, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 #[cfg_attr(
@@ -223,6 +223,14 @@ pub enum IndexStrategy {
     ///
     /// See: https://peps.python.org/pep-0708/
     UnsafeAnyMatch,
+    /// Search for every package name across all indexes, trying to find the highest version in
+    /// any index. If a package version is in multiple indexes, only look at the entry for the first
+    /// index.
+    ///
+    /// This most closely matches pip's behavior, but also means malicious indexes can publish a newer
+    /// package version than what is in your index, and this will be used instead of the version
+    /// from your own index.
+    UnsafeHighest,
 }
 
 #[cfg(test)]
