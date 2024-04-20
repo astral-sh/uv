@@ -224,6 +224,18 @@ fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
     }
 }
 
+/// Parse a string into a [`PathBuf`], mapping the empty string to `None`.
+fn parse_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match PathBuf::from_str(input) {
+            Ok(path) => Ok(Maybe::Some(path)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct PipCompileArgs {
@@ -240,8 +252,8 @@ pub(crate) struct PipCompileArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short)]
-    pub(crate) constraint: Vec<PathBuf>,
+    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_file_path)]
+    pub(crate) constraint: Vec<Maybe<PathBuf>>,
 
     /// Override versions using the given requirements files.
     ///
@@ -869,8 +881,8 @@ pub(crate) struct PipInstallArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short)]
-    pub(crate) constraint: Vec<PathBuf>,
+    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_file_path)]
+    pub(crate) constraint: Vec<Maybe<PathBuf>>,
 
     /// Override versions using the given requirements files.
     ///
