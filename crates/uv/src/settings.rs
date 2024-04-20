@@ -268,6 +268,8 @@ impl PipSyncSettings {
             compile_bytecode,
             no_compile_bytecode,
             config_setting,
+            python_version,
+            python_platform,
             strict,
             no_strict,
             compat_args: _,
@@ -306,6 +308,8 @@ impl PipSyncSettings {
                     config_settings: config_setting.map(|config_settings| {
                         config_settings.into_iter().collect::<ConfigSettings>()
                     }),
+                    python_version,
+                    python_platform,
                     link_mode,
                     compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
                     require_hashes: flag(require_hashes, no_require_hashes),
@@ -385,6 +389,8 @@ impl PipInstallSettings {
             compile_bytecode,
             no_compile_bytecode,
             config_setting,
+            python_version,
+            python_platform,
             strict,
             no_strict,
             exclude_newer,
@@ -442,6 +448,8 @@ impl PipInstallSettings {
                     config_settings: config_setting.map(|config_settings| {
                         config_settings.into_iter().collect::<ConfigSettings>()
                     }),
+                    python_version,
+                    python_platform,
                     exclude_newer,
                     link_mode,
                     compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
