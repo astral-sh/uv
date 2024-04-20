@@ -13,7 +13,9 @@ import tempfile
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    parser = argparse.ArgumentParser(description="Check a Python interpreter.")
+    parser = argparse.ArgumentParser(
+        description="Check an embedded Python interpreter."
+    )
     parser.add_argument("--uv", help="Path to a uv binary.")
     args = parser.parse_args()
 
@@ -49,40 +51,47 @@ if __name__ == "__main__":
         env = os.environ.copy()
         env["CONDA_PREFIX"] = ""
         env["VIRTUAL_ENV"] = ""
-        subprocess.run(
-            [uv, "pip", "install", "pylint", "--verbose"],
-            cwd=temp_dir,
-            check=True,
-            env=env,
-        )
 
-        # Ensure that the package (`pylint`) is installed in the virtual environment.
-        logging.info("Checking that `pylint` is installed.")
-        code = subprocess.run(
-            [executable, "-c", "import pylint"],
-            cwd=temp_dir,
-        )
-        if code.returncode != 0:
-            raise Exception(
-                "The package `pylint` isn't installed in the virtual environment."
+        # Install, verify, and uninstall a few packages.
+        for package in ["pylint", "numpy"]:
+            # Install the package.
+            logging.info(
+                f"Installing the package `{package}` into the virtual environment..."
+            )
+            subprocess.run(
+                [uv, "pip", "install", package, "--verbose"],
+                cwd=temp_dir,
+                check=True,
+                env=env,
             )
 
-        # Uninstall the package (`pylint`).
-        logging.info("Uninstalling the package `pylint`.")
-        subprocess.run(
-            [uv, "pip", "uninstall", "pylint", "--verbose"],
-            cwd=temp_dir,
-            check=True,
-            env=env,
-        )
-
-        # Ensure that the package (`pylint`) isn't installed in the virtual environment.
-        logging.info("Checking that `pylint` isn't installed.")
-        code = subprocess.run(
-            [executable, "-m", "pip", "show", "pylint"],
-            cwd=temp_dir,
-        )
-        if code.returncode == 0:
-            raise Exception(
-                "The package `pylint` is installed in the virtual environment (but shouldn't be)."
+            # Ensure that the package is installed in the virtual environment.
+            logging.info(f"Checking that `{package}` is installed.")
+            code = subprocess.run(
+                [executable, "-c", f"import {package}"],
+                cwd=temp_dir,
             )
+            if code.returncode != 0:
+                raise Exception(
+                    f"The package `{package}` isn't installed in the virtual environment."
+                )
+
+            # Uninstall the package.
+            logging.info(f"Uninstalling the package `{package}`.")
+            subprocess.run(
+                [uv, "pip", "uninstall", package, "--verbose"],
+                cwd=temp_dir,
+                check=True,
+                env=env,
+            )
+
+            # Ensure that the package isn't installed in the virtual environment.
+            logging.info(f"Checking that `{package}` isn't installed.")
+            code = subprocess.run(
+                [executable, "-m", "pip", "show", package],
+                cwd=temp_dir,
+            )
+            if code.returncode == 0:
+                raise Exception(
+                    f"The package `{package}` is installed in the virtual environment (but shouldn't be)."
+                )
