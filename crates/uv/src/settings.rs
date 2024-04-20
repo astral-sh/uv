@@ -154,7 +154,10 @@ impl PipCompileSettings {
         Self {
             // CLI-only settings.
             src_file,
-            constraint,
+            constraint: constraint
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             r#override,
             refresh: Refresh::from_args(refresh, refresh_package),
             upgrade: Upgrade::from_args(upgrade, upgrade_package),
@@ -393,7 +396,10 @@ impl PipInstallSettings {
             package,
             requirement,
             editable,
-            constraint,
+            constraint: constraint
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             r#override,
             upgrade: Upgrade::from_args(upgrade, upgrade_package),
             reinstall: Reinstall::from_args(reinstall, reinstall_package),
