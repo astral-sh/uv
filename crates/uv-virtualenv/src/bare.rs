@@ -179,11 +179,7 @@ pub fn create_bare_venv(
             match fs_err::copy(shim, scripts.join(python_exe)) {
                 Ok(_) => {}
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    let launcher = match python_exe {
-                        "python.exe" => "venvwlauncher.exe",
-                        "pythonw.exe" => "venvwlauncher.exe",
-                        _ => unreachable!(),
-                    };
+                    let launcher = python_exe;
 
                     // If `python.exe` doesn't exist, try the `venvlaucher.exe` shim.
                     let shim = interpreter
