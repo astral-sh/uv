@@ -689,6 +689,40 @@ jobs:
       - name: "Validate global Python install"
         run: py -3.13 ./scripts/check_system_python.py --uv ./uv.exe
 
+  system-test-windows-embedded-python-310:
+    needs: build-binary-windows
+    name: "check system | embedded python3.10 on windows"
+    runs-on: windows-latest
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+
+      # Download embedded Python.
+      - name: "Download embedded Python"
+        run: curl -LsSf https://www.python.org/ftp/python/3.11.8/python-3.11.8-embed-amd64.zip -o python-3.11.8-embed-amd64.zip
+
+      - name: "Unzip embedded Python"
+        run: 7z x python-3.11.8-embed-amd64.zip -oembedded-python
+
+      - name: "Show embedded Python contents"
+        run: ls embedded-python
+
+      - name: "Set PATH"
+        run: echo "${{ github.workspace }}\embedded-python" >> $env:GITHUB_PATH
+
+      - name: "Print Python path"
+        run: echo $(which python)
+
+      - name: "Validate global Python install"
+        run: python ./scripts/check_embedded_python.py --uv ./uv.exe
+
   system-test-choco:
     needs: build-binary-windows
     name: "check system | python3.12 via chocolatey"
