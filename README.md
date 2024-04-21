@@ -527,6 +527,14 @@ In addition, uv respects the following environment variables:
 - `BASH_VERSION`: Used to detect the use of the Bash shell.
 - `ZSH_VERSION`: Used to detect the use of the Zsh shell.
 
+## Versioning
+
+uv uses a custom versioning scheme in which the minor version number is bumped for breaking changes,
+and the patch version number is bumped for bug fixes, enhancements, and other non-breaking changes.
+
+uv does not yet have a stable API; once uv's API is stable (v1.0.0), the versioning scheme will
+adhere to [Semantic Versioning](https://semver.org/).
+
 ## Acknowledgements
 
 uv's dependency resolver uses [PubGrub](https://github.com/pubgrub-rs/pubgrub) under the hood.
