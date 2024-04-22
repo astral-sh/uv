@@ -204,61 +204,61 @@ impl Middleware for AuthMiddleware {
 
         let response = next.clone().run(request, extensions).await?;
 
-        // And on failure, search for credentials
-        if matches!(
+        // If we don't fail with authorization related codes, return the response
+        if !matches!(
             response.status(),
             StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
         ) {
-            trace!(
-                "Request for {url} failed with {}, checking for credentials",
-                response.status()
-            );
-            let credentials = self.cache().get_realm(
-                Realm::from(retry_request.url()),
-                credentials
-                    .map(|credentials| credentials.to_username())
-                    .unwrap_or(Username::none()),
-            );
-
-            if let Some(credentials) = credentials.as_ref() {
-                if credentials.password().is_some() {
-                    trace!(
-                        "Retrying request for {url} with credentials from cache {credentials:?}"
-                    );
-                    retry_request = credentials.authenticate(retry_request);
-                    return self
-                        .complete_request(None, retry_request, extensions, next)
-                        .await;
-                }
-            }
-
-            if let Some(credentials) = self
-                .fetch_credentials(credentials.as_deref(), retry_request.url())
-                .await
-            {
-                retry_request = credentials.authenticate(retry_request);
-                trace!("Retrying request for {url} with {credentials:?}");
-                return self
-                    .complete_request(Some(Arc::new(credentials)), retry_request, extensions, next)
-                    .await;
-            } else {
-                if let Some(credentials) = credentials.as_ref() {
-                    if !attempt_has_username {
-                        trace!(
-                            "Retrying request for {url} with username from cache {credentials:?}"
-                        );
-                        retry_request = credentials.authenticate(retry_request);
-                        return self
-                            .complete_request(None, retry_request, extensions, next)
-                            .await;
-                    }
-                }
-
-                Ok(response)
-            }
-        } else {
-            Ok(response)
+            return Ok(response);
         }
+
+        // Otherwise, search for credentials
+        trace!(
+            "Request for {url} failed with {}, checking for credentials",
+            response.status()
+        );
+
+        // Check in the cache first
+        let credentials = self.cache().get_realm(
+            Realm::from(retry_request.url()),
+            credentials
+                .map(|credentials| credentials.to_username())
+                .unwrap_or(Username::none()),
+        );
+        if let Some(credentials) = credentials.as_ref() {
+            if credentials.password().is_some() {
+                trace!("Retrying request for {url} with credentials from cache {credentials:?}");
+                retry_request = credentials.authenticate(retry_request);
+                return self
+                    .complete_request(None, retry_request, extensions, next)
+                    .await;
+            }
+        }
+
+        // Then, fetch from external services.
+        // Here we use the username from the cache if present.
+        if let Some(credentials) = self
+            .fetch_credentials(credentials.as_deref(), retry_request.url())
+            .await
+        {
+            retry_request = credentials.authenticate(retry_request);
+            trace!("Retrying request for {url} with {credentials:?}");
+            return self
+                .complete_request(Some(Arc::new(credentials)), retry_request, extensions, next)
+                .await;
+        }
+
+        if let Some(credentials) = credentials.as_ref() {
+            if !attempt_has_username {
+                trace!("Retrying request for {url} with username from cache {credentials:?}");
+                retry_request = credentials.authenticate(retry_request);
+                return self
+                    .complete_request(None, retry_request, extensions, next)
+                    .await;
+            }
+        }
+
+        Ok(response)
     }
 }
 
@@ -273,23 +273,24 @@ impl AuthMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
-        if let Some(credentials) = credentials {
-            let url = request.url().clone();
-            let result = next.run(request, extensions).await;
+        let Some(credentials) = credentials else {
+            // Nothing to insert into the cache if we don't have credentials
+            return next.run(request, extensions).await;
+        };
 
-            // Update the cache with new credentials on a successful request
-            if result
-                .as_ref()
-                .is_ok_and(|response| response.error_for_status_ref().is_ok())
-            {
-                trace!("Updating cached credentials for {url} to {credentials:?}");
-                self.cache().insert(&url, credentials)
-            };
+        let url = request.url().clone();
+        let result = next.run(request, extensions).await;
 
-            result
-        } else {
-            next.run(request, extensions).await
-        }
+        // Update the cache with new credentials on a successful request
+        if result
+            .as_ref()
+            .is_ok_and(|response| response.error_for_status_ref().is_ok())
+        {
+            trace!("Updating cached credentials for {url} to {credentials:?}");
+            self.cache().insert(&url, credentials)
+        };
+
+        result
     }
 
     /// Fetch credentials for a URL.
