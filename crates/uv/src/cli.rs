@@ -79,6 +79,13 @@ pub(crate) struct GlobalArgs {
 
     #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
     pub(crate) no_native_tls: bool,
+
+    /// Whether to enable experimental, preview features.
+    #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
+    pub(crate) preview: bool,
+
+    #[arg(global = true, long, overrides_with("preview"), hide = true)]
+    pub(crate) no_preview: bool,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]

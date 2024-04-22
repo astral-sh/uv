@@ -476,6 +476,9 @@ async fn run() -> Result<ExitStatus> {
             .await
         }
         Commands::Run(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::RunSettings::resolve(args, workspace);
+
             let requirements = args
                 .with
                 .into_iter()
@@ -502,6 +505,7 @@ async fn run() -> Result<ExitStatus> {
                 requirements,
                 args.isolated,
                 args.no_workspace,
+                globals.preview,
                 &cache,
                 printer,
             )

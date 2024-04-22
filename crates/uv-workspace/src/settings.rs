@@ -33,6 +33,7 @@ pub(crate) struct Tools {
 pub struct Options {
     pub native_tls: Option<bool>,
     pub no_cache: Option<bool>,
+    pub preview: Option<bool>,
     pub cache_dir: Option<PathBuf>,
     pub pip: Option<PipOptions>,
 }

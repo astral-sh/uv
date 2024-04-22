@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 use distribution_types::IndexLocations;
@@ -5,7 +6,7 @@ use install_wheel_rs::linker::LinkMode;
 use uv_cache::{CacheArgs, Refresh};
 use uv_client::Connectivity;
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary, NoBuild, Reinstall,
+    ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
     SetupPyStrategy, TargetTriple, Upgrade,
 };
 use uv_normalize::PackageName;
@@ -16,7 +17,7 @@ use uv_workspace::{PipOptions, Workspace};
 
 use crate::cli::{
     ColorChoice, GlobalArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs,
-    PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, VenvArgs,
+    PipListArgs, PipShowArgs, PipSyncArgs, PipUninstallArgs, RunArgs, VenvArgs,
 };
 use crate::commands::ListFormat;
 
@@ -28,6 +29,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) verbose: u8,
     pub(crate) color: ColorChoice,
     pub(crate) native_tls: bool,
+    pub(crate) preview: PreviewMode,
 }
 
 impl GlobalSettings {
@@ -44,6 +46,11 @@ impl GlobalSettings {
             native_tls: flag(args.native_tls, args.no_native_tls)
                 .or(workspace.and_then(|workspace| workspace.options.native_tls))
                 .unwrap_or(false),
+            preview: PreviewMode::from(
+                flag(args.preview, args.no_preview)
+                    .or(workspace.and_then(|workspace| workspace.options.preview))
+                    .unwrap_or(false),
+            ),
         }
     }
 }
@@ -67,6 +74,41 @@ impl CacheSettings {
             cache_dir: args
                 .cache_dir
                 .or_else(|| workspace.and_then(|workspace| workspace.options.cache_dir.clone())),
+        }
+    }
+}
+
+/// The resolved settings to use for a `run` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct RunSettings {
+    // CLI-only settings.
+    pub(crate) target: Option<String>,
+    pub(crate) args: Vec<OsString>,
+    pub(crate) isolated: bool,
+    pub(crate) with: Vec<String>,
+    pub(crate) no_workspace: bool,
+}
+
+impl RunSettings {
+    /// Resolve the [`RunSettings`] from the CLI and workspace configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: RunArgs, _workspace: Option<Workspace>) -> Self {
+        let RunArgs {
+            target,
+            args,
+            isolated,
+            with,
+            no_workspace,
+        } = args;
+
+        Self {
+            // CLI-only settings.
+            target,
+            args,
+            isolated,
+            with,
+            no_workspace,
         }
     }
 }

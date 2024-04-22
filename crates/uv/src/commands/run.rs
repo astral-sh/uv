@@ -17,11 +17,13 @@ use std::{env, iter};
 use tempfile::{tempdir_in, TempDir};
 use tokio::process::Command;
 use tracing::debug;
+use uv_warnings::warn_user;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient, RegistryClientBuilder};
 use uv_configuration::{
-    ConfigSettings, Constraints, NoBinary, NoBuild, Overrides, Reinstall, SetupPyStrategy,
+    ConfigSettings, Constraints, NoBinary, NoBuild, Overrides, PreviewMode, Reinstall,
+    SetupPyStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
@@ -45,9 +47,14 @@ pub(crate) async fn run(
     mut requirements: Vec<RequirementsSource>,
     isolated: bool,
     no_workspace: bool,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    if preview.is_disabled() {
+        warn_user!("`uv run` is experimental and may change without warning.");
+    }
+
     let command = if let Some(target) = target {
         let target_path = PathBuf::from(&target);
         if target_path
