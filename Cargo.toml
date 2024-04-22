@@ -105,8 +105,7 @@ petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "c26e485213e39582c6f2e4d45c0328422670e7a7" }
 pyo3 = { version = "0.21.0" }
-# for pyo3 0.21.0+ support (https://github.com/vorner/pyo3-log/pull/45)
-pyo3-log = { git = "https://github.com/a1phyr/pyo3-log", rev = "76ff388163dd1100eb70ba164d59a42795829bdb" }
+pyo3-log = { version = "0.10.0" }
 rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.15" }
