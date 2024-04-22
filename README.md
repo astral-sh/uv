@@ -502,7 +502,7 @@ uv accepts the following command-line arguments as environment variables:
   index URLs, rather than limiting its search to the first index URL that contains the package.
 - `UV_REQUIRE_HASHES`: Equivalent to the `--require-hashes` command-line argument. If set to `true`,
   uv will require that all dependencies have a hash specified in the requirements file.
-- 'UV_CONSTRAINT': Equivalent to the `--constraint` command-line argument. If set, uv will use this
+- `UV_CONSTRAINT`: Equivalent to the `--constraint` command-line argument. If set, uv will use this
   file as the constraints file. Uses space-separated list of files.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
