@@ -67,7 +67,7 @@ pub(crate) async fn fetch_git_archive(
     )
     .map_err(Error::CacheWrite)?;
 
-    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Error::Git)?;
+    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Box::new)?;
 
     // Fetch the Git repository.
     let source = if let Some(reporter) = reporter {
@@ -95,7 +95,7 @@ pub(crate) async fn resolve_precise(
     cache: &Cache,
     reporter: Option<&Arc<dyn Reporter>>,
 ) -> Result<Option<Url>, Error> {
-    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Error::Git)?;
+    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Box::new)?;
 
     // If the Git reference already contains a complete SHA, short-circuit.
     if url.precise().is_some() {

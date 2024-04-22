@@ -116,7 +116,7 @@ impl CachedDist {
                         editable: dist.editable,
                     })))
                 } else {
-                    DirectUrl::try_from(dist.url.raw()).map(Some)
+                    Ok(Some(DirectUrl::try_from(dist.url.raw())?))
                 }
             }
         }

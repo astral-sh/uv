@@ -1,9 +1,23 @@
+use anyhow::{Error, Result};
 use std::path::PathBuf;
-
-use anyhow::{Context, Error, Result};
+use thiserror::Error;
 use url::Url;
 
 use uv_git::{GitSha, GitUrl};
+
+#[derive(Debug, Error)]
+pub enum DirectUrlError {
+    #[error("Unsupported URL prefix `{prefix}` in URL: `{url}`")]
+    UnsupportedUrlPrefix { prefix: String, url: Url },
+    #[error("Invalid path in file URL: `{0}`")]
+    InvalidFileUrl(Url),
+    #[error("Failed to parse Git reference from URL: `{0}`")]
+    GitShaParse(Url, #[source] git2::Error),
+    #[error("Not a valid URL: `{0}`")]
+    UrlParse(String, #[source] url::ParseError),
+    #[error("Missing `git+` prefix for Git URL: `{0}`")]
+    MissingUrlPrefix(Url),
+}
 
 #[derive(Debug)]
 pub enum DirectUrl {
@@ -49,17 +63,18 @@ pub struct DirectArchiveUrl {
 }
 
 impl TryFrom<&Url> for DirectGitUrl {
-    type Error = Error;
+    type Error = DirectUrlError;
 
-    fn try_from(url: &Url) -> Result<Self, Self::Error> {
-        let subdirectory = get_subdirectory(url);
+    fn try_from(url_in: &Url) -> Result<Self, Self::Error> {
+        let subdirectory = get_subdirectory(url_in);
 
-        let url = url
+        let url = url_in
             .as_str()
             .strip_prefix("git+")
-            .context("Missing git+ prefix for Git URL")?;
-        let url = Url::parse(url)?;
-        let url = GitUrl::try_from(url)?;
+            .ok_or_else(|| DirectUrlError::MissingUrlPrefix(url_in.clone()))?;
+        let url = Url::parse(url).map_err(|err| DirectUrlError::UrlParse(url.to_string(), err))?;
+        let url = GitUrl::try_from(url)
+            .map_err(|err| DirectUrlError::GitShaParse(url_in.clone(), err))?;
         Ok(Self { url, subdirectory })
     }
 }
@@ -94,15 +109,16 @@ pub fn git_reference(url: &Url) -> Result<Option<GitSha>, Error> {
 }
 
 impl TryFrom<&Url> for DirectUrl {
-    type Error = Error;
+    type Error = DirectUrlError;
 
     fn try_from(url: &Url) -> Result<Self, Self::Error> {
         if let Some((prefix, ..)) = url.scheme().split_once('+') {
             match prefix {
                 "git" => Ok(Self::Git(DirectGitUrl::try_from(url)?)),
-                _ => Err(Error::msg(format!(
-                    "Unsupported URL prefix `{prefix}` in URL: {url}",
-                ))),
+                _ => Err(DirectUrlError::UnsupportedUrlPrefix {
+                    prefix: prefix.to_string(),
+                    url: url.clone(),
+                }),
             }
         } else if url.scheme().eq_ignore_ascii_case("file") {
             Ok(Self::LocalFile(LocalFileUrl {

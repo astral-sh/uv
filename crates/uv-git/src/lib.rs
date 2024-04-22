@@ -51,7 +51,7 @@ impl GitUrl {
 }
 
 impl TryFrom<Url> for GitUrl {
-    type Error = anyhow::Error;
+    type Error = git2::Error;
 
     /// Initialize a [`GitUrl`] source from a URL.
     fn try_from(mut url: Url) -> Result<Self, Self::Error> {
