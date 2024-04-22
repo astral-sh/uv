@@ -244,3 +244,5 @@ build-local-artifacts = false
 local-artifacts-jobs = ["./build-binaries", "./build-docker"]
 # Publish jobs to run in CI
 publish-jobs = ["./publish-pypi"]
+# We allow modifications for Docker package publish permissions
+allow-dirty = ["ci"]
