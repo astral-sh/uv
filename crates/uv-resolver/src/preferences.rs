@@ -12,7 +12,7 @@ use uv_normalize::PackageName;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
-    #[error("direct URL requirements without package names are not supported: {0}")]
+    #[error("direct URL requirements without package names are not supported: `{0}`")]
     Bare(UnnamedRequirement),
     #[error(transparent)]
     Hash(#[from] HashError),
