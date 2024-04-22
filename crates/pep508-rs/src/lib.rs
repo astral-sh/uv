@@ -1367,8 +1367,9 @@ fn parse_unnamed_requirement(
 #[cfg(feature = "pyo3")]
 #[pymodule]
 #[pyo3(name = "pep508_rs")]
-pub fn python_module(py: Python<'_>, m: &PyModule) -> PyResult<()> {
+pub fn python_module(py: Python<'_>, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
     // Allowed to fail if we embed this module in another
+
     #[allow(unused_must_use)]
     {
         pyo3_log::try_init();
@@ -1379,7 +1380,7 @@ pub fn python_module(py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<Requirement>()?;
     m.add_class::<MarkerEnvironment>()?;
-    m.add("Pep508Error", py.get_type::<PyPep508Error>())?;
+    m.add("Pep508Error", py.get_type_bound::<PyPep508Error>())?;
     Ok(())
 }
 
