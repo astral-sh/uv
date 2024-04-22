@@ -112,7 +112,7 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-        let default_timeout = 10;
+        let default_timeout = 30;
         let timeout = env::var("UV_HTTP_TIMEOUT")
             .or_else(|_| env::var("UV_REQUEST_TIMEOUT"))
             .or_else(|_| env::var("HTTP_TIMEOUT"))
