@@ -19,8 +19,14 @@ pub enum DirectUrlError {
     MissingUrlPrefix(Url),
 }
 
+/// Uv support three types of URLs for distributions:
+/// * The path to a file or directory (`file://`)
+/// * A git repository (`git+https://` or `git+ssh://`), optionally with a subdirectory and/or
+///   string to checkout.
+/// * A remote archive (`https://`), optional with a subdirectory (source dist only)
+/// A URL in a requirement `foo @ <url>` must be one of the above.
 #[derive(Debug)]
-pub enum DirectUrl {
+pub enum ParsedUrl {
     /// The direct URL is a path to a local directory or file.
     LocalFile(LocalFileUrl),
     /// The direct URL is path to a Git repository.
@@ -108,7 +114,7 @@ pub fn git_reference(url: &Url) -> Result<Option<GitSha>, Error> {
     Ok(url.precise())
 }
 
-impl TryFrom<&Url> for DirectUrl {
+impl TryFrom<&Url> for ParsedUrl {
     type Error = DirectUrlError;
 
     fn try_from(url: &Url) -> Result<Self, Self::Error> {
@@ -131,14 +137,14 @@ impl TryFrom<&Url> for DirectUrl {
     }
 }
 
-impl TryFrom<&DirectUrl> for pypi_types::DirectUrl {
+impl TryFrom<&ParsedUrl> for pypi_types::DirectUrl {
     type Error = Error;
 
-    fn try_from(value: &DirectUrl) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &ParsedUrl) -> std::result::Result<Self, Self::Error> {
         match value {
-            DirectUrl::LocalFile(value) => Self::try_from(value),
-            DirectUrl::Git(value) => Self::try_from(value),
-            DirectUrl::Archive(value) => Self::try_from(value),
+            ParsedUrl::LocalFile(value) => Self::try_from(value),
+            ParsedUrl::Git(value) => Self::try_from(value),
+            ParsedUrl::Archive(value) => Self::try_from(value),
         }
     }
 }
@@ -187,12 +193,12 @@ impl TryFrom<&DirectGitUrl> for pypi_types::DirectUrl {
     }
 }
 
-impl From<DirectUrl> for Url {
-    fn from(value: DirectUrl) -> Self {
+impl From<ParsedUrl> for Url {
+    fn from(value: ParsedUrl) -> Self {
         match value {
-            DirectUrl::LocalFile(value) => value.into(),
-            DirectUrl::Git(value) => value.into(),
-            DirectUrl::Archive(value) => value.into(),
+            ParsedUrl::LocalFile(value) => value.into(),
+            ParsedUrl::Git(value) => value.into(),
+            ParsedUrl::Archive(value) => value.into(),
         }
     }
 }
@@ -229,35 +235,35 @@ mod tests {
     use anyhow::Result;
     use url::Url;
 
-    use crate::direct_url::DirectUrl;
+    use crate::direct_url::ParsedUrl;
 
     #[test]
     fn direct_url_from_url() -> Result<()> {
         let expected = Url::parse("file:///path/to/directory")?;
-        let actual = Url::from(DirectUrl::try_from(&expected)?);
+        let actual = Url::from(ParsedUrl::try_from(&expected)?);
         assert_eq!(expected, actual);
 
         let expected = Url::parse("git+https://github.com/pallets/flask.git")?;
-        let actual = Url::from(DirectUrl::try_from(&expected)?);
+        let actual = Url::from(ParsedUrl::try_from(&expected)?);
         assert_eq!(expected, actual);
 
         let expected = Url::parse("git+https://github.com/pallets/flask.git#subdirectory=pkg_dir")?;
-        let actual = Url::from(DirectUrl::try_from(&expected)?);
+        let actual = Url::from(ParsedUrl::try_from(&expected)?);
         assert_eq!(expected, actual);
 
         let expected = Url::parse("git+https://github.com/pallets/flask.git@2.0.0")?;
-        let actual = Url::from(DirectUrl::try_from(&expected)?);
+        let actual = Url::from(ParsedUrl::try_from(&expected)?);
         assert_eq!(expected, actual);
 
         let expected =
             Url::parse("git+https://github.com/pallets/flask.git@2.0.0#subdirectory=pkg_dir")?;
-        let actual = Url::from(DirectUrl::try_from(&expected)?);
+        let actual = Url::from(ParsedUrl::try_from(&expected)?);
         assert_eq!(expected, actual);
 
         // TODO(charlie): Preserve other fragments.
         let expected =
             Url::parse("git+https://github.com/pallets/flask.git#egg=flask&subdirectory=pkg_dir")?;
-        let actual = Url::from(DirectUrl::try_from(&expected)?);
+        let actual = Url::from(ParsedUrl::try_from(&expected)?);
         assert_ne!(expected, actual);
 
         Ok(())
