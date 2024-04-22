@@ -19,7 +19,7 @@ pub enum DirectUrlError {
     MissingUrlPrefix(Url),
 }
 
-/// Uv support three types of URLs for distributions:
+/// We support three types of URLs for distributions:
 /// * The path to a file or directory (`file://`)
 /// * A git repository (`git+https://` or `git+ssh://`), optionally with a subdirectory and/or
 ///   string to checkout.
