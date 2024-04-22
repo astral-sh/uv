@@ -45,6 +45,7 @@ pub(crate) async fn run(
     target: Option<String>,
     mut args: Vec<OsString>,
     mut requirements: Vec<RequirementsSource>,
+    python: Option<String>,
     isolated: bool,
     no_workspace: bool,
     preview: PreviewMode,
@@ -86,7 +87,15 @@ pub(crate) async fn run(
     // Detect the current Python interpreter.
     // TODO(zanieb): Create ephemeral environments
     // TODO(zanieb): Accept `--python`
-    let run_env = environment_for_run(&requirements, &overrides, isolated, cache, printer).await?;
+    let run_env = environment_for_run(
+        &requirements,
+        &overrides,
+        python.as_deref(),
+        isolated,
+        cache,
+        printer,
+    )
+    .await?;
     let python_env = run_env.python;
 
     // Construct the command
@@ -164,6 +173,7 @@ fn find_workspace_requirements() -> Result<Option<Vec<RequirementsSource>>> {
 async fn environment_for_run(
     requirements: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    python: Option<&str>,
     isolated: bool,
     cache: &Cache,
     printer: Printer,
@@ -194,34 +204,41 @@ async fn environment_for_run(
     )
     .await?;
 
-    // Check if the current environment satisfies the requirements
-    if let Some(venv) = current_venv {
-        // Determine the set of installed packages.
-        let site_packages = SitePackages::from_executable(&venv)?;
-
-        // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
-        // enough to let us remove this check. But right now, for large environments, it's an order of
-        // magnitude faster to validate the environment than to resolve the requirements.
-        if spec.source_trees.is_empty()
-            && site_packages.satisfies(&spec.requirements, &spec.editables, &spec.constraints)?
-        {
-            debug!("Current environment satisfies requirements");
-            return Ok(RunEnvironment {
-                python: venv,
-                _temp_dir_drop: None,
-            });
-        }
-    }
-    // Otherwise, we need a new environment
-
-    // Find an interpreter to use
-    // TODO(zanieb): Populate `python` from the user
-    let python = None;
+    // Determine an interpreter to use
     let python_env = if let Some(python) = python {
         PythonEnvironment::from_requested_python(python, cache)?
     } else {
         PythonEnvironment::from_default_python(cache)?
     };
+
+    // Check if the current environment satisfies the requirements
+    if let Some(venv) = current_venv {
+        // Ensure it matches the selected interpreter
+        // TODO(zanieb): We should check if a version was requested and see if the environment meets that
+        //               too but this can wait until we refactor interpreter discovery
+        if venv.root() == python_env.root() {
+            // Determine the set of installed packages.
+            let site_packages = SitePackages::from_executable(&venv)?;
+
+            // If the requirements are already satisfied, we're done. Ideally, the resolver would be fast
+            // enough to let us remove this check. But right now, for large environments, it's an order of
+            // magnitude faster to validate the environment than to resolve the requirements.
+            if spec.source_trees.is_empty()
+                && site_packages.satisfies(
+                    &spec.requirements,
+                    &spec.editables,
+                    &spec.constraints,
+                )?
+            {
+                debug!("Current environment satisfies requirements");
+                return Ok(RunEnvironment {
+                    python: venv,
+                    _temp_dir_drop: None,
+                });
+            }
+        }
+    }
+    // Otherwise, we need a new environment
 
     // Create a virtual environment
     // TODO(zanieb): Move this path derivation elsewhere
