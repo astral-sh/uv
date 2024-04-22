@@ -1049,6 +1049,7 @@ dependencies = [
  "cache-key",
  "distribution-filename",
  "fs-err",
+ "git2",
  "itertools 0.12.1",
  "once_cell",
  "pep440_rs",
