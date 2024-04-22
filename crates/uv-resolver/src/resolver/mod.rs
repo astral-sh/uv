@@ -864,7 +864,7 @@ impl<
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
                     // still required for reporting diagnostics.
-                    if extra.is_some() {
+                    if extra.is_some() && self.editables.get(package_name).is_none() {
                         // Determine the distribution to lookup.
                         let dist = match url {
                             Some(url) => PubGrubDistribution::from_url(package_name, url),

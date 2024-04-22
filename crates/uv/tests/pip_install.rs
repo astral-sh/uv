@@ -1495,6 +1495,33 @@ fn no_deps() {
     context.assert_command("import flask").failure();
 }
 
+/// Install an editable package from the command line into a virtual environment, ignoring its
+/// dependencies.
+#[test]
+fn no_deps_editable() {
+    let context = TestContext::new("3.12");
+
+    // Install the editable version of Black. This should remove the registry-based version.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("--no-deps")
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable[dev]")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    "###
+    );
+
+    context.assert_command("import black").success();
+    context.assert_command("import aiohttp").failure();
+}
+
 /// Upgrade a package.
 #[test]
 fn install_upgrade() {
