@@ -1,7 +1,7 @@
-use std::{env, io, iter};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
+use std::{env, io, iter};
 
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
@@ -17,9 +17,9 @@ use zip::ZipWriter;
 use pypi_types::DirectUrl;
 use uv_fs::Simplified;
 
-use crate::{Error, Layout};
 use crate::record::RecordEntry;
 use crate::script::Script;
+use crate::{Error, Layout};
 
 const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 
@@ -190,7 +190,8 @@ pub(crate) fn windows_script_launcher(
         // We're using the zip writer, but with stored compression
         // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
         // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
-        let stored = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let stored =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
         let mut archive = ZipWriter::new(Cursor::new(&mut payload));
         let error_msg = "Writing to Vec<u8> should never fail";
         archive.start_file("__main__.py", stored).expect(error_msg);
@@ -733,8 +734,8 @@ mod test {
 
     use indoc::{formatdoc, indoc};
 
-    use crate::Error;
     use crate::wheel::format_shebang;
+    use crate::Error;
 
     use super::{parse_key_value_file, parse_wheel_file, read_record_file, relative_to, Script};
 
