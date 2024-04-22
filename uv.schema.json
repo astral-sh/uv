@@ -31,6 +31,12 @@
           "type": "null"
         }
       ]
+    },
+    "preview": {
+      "type": [
+        "boolean",
+        "null"
+      ]
     }
   },
   "additionalProperties": false,
