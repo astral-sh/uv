@@ -6,7 +6,7 @@ use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use uv_distribution::is_same_reference;
 use uv_normalize::PackageName;
 
-use crate::{Manifest, ResolveError};
+use crate::{DependencyMode, Manifest, ResolveError};
 
 /// A map of package names to their associated, required URLs.
 #[derive(Debug, Default)]
@@ -16,6 +16,7 @@ impl Urls {
     pub(crate) fn from_manifest(
         manifest: &Manifest,
         markers: &MarkerEnvironment,
+        dependencies: DependencyMode,
     ) -> Result<Self, ResolveError> {
         let mut urls: FxHashMap<PackageName, VerbatimUrl> = FxHashMap::default();
 
@@ -37,7 +38,7 @@ impl Urls {
         }
 
         // Add all direct requirements and constraints. If there are any conflicts, return an error.
-        for requirement in manifest.requirements(markers) {
+        for requirement in manifest.requirements(markers, dependencies) {
             if let Some(pep508_rs::VersionOrUrl::Url(url)) = &requirement.version_or_url {
                 if let Some(previous) = urls.insert(requirement.name.clone(), url.clone()) {
                     if !is_equal(&previous, url) {
