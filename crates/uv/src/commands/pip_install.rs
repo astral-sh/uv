@@ -586,19 +586,24 @@ async fn resolve(
         .collect();
 
     // Determine any lookahead requirements.
-    let lookaheads = LookaheadResolver::new(
-        &requirements,
-        &constraints,
-        &overrides,
-        &editables,
-        hasher,
-        build_dispatch,
-        client,
-        index,
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve(markers)
-    .await?;
+    let lookaheads = match options.dependency_mode {
+        DependencyMode::Transitive => {
+            LookaheadResolver::new(
+                &requirements,
+                &constraints,
+                &overrides,
+                &editables,
+                hasher,
+                build_dispatch,
+                client,
+                index,
+            )
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve(markers)
+            .await?
+        }
+        DependencyMode::Direct => Vec::new(),
+    };
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(

@@ -4,7 +4,7 @@ use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, VersionOrUrl};
 use uv_normalize::PackageName;
 
-use crate::{Manifest, Preference};
+use crate::{DependencyMode, Manifest, Preference};
 
 /// A set of package versions that are permitted, even if they're marked as yanked by the
 /// relevant index.
@@ -12,11 +12,15 @@ use crate::{Manifest, Preference};
 pub struct AllowedYanks(FxHashMap<PackageName, FxHashSet<Version>>);
 
 impl AllowedYanks {
-    pub fn from_manifest(manifest: &Manifest, markers: &MarkerEnvironment) -> Self {
+    pub fn from_manifest(
+        manifest: &Manifest,
+        markers: &MarkerEnvironment,
+        dependencies: DependencyMode,
+    ) -> Self {
         let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();
 
         for requirement in manifest
-            .requirements(markers)
+            .requirements(markers, dependencies)
             .chain(manifest.preferences.iter().map(Preference::requirement))
         {
             let Some(VersionOrUrl::VersionSpecifier(specifiers)) = &requirement.version_or_url

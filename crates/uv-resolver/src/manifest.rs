@@ -1,11 +1,12 @@
 use distribution_types::LocalEditable;
+use either::Either;
 use pep508_rs::{MarkerEnvironment, Requirement};
 use pypi_types::Metadata23;
 use uv_configuration::{Constraints, Overrides};
 use uv_normalize::PackageName;
 use uv_types::RequestedRequirements;
 
-use crate::{preferences::Preference, Exclusions};
+use crate::{preferences::Preference, DependencyMode, Exclusions};
 
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Clone, Debug)]
@@ -97,64 +98,103 @@ impl Manifest {
     pub fn requirements<'a>(
         &'a self,
         markers: &'a MarkerEnvironment,
+        mode: DependencyMode,
     ) -> impl Iterator<Item = &Requirement> {
-        self.lookaheads
-            .iter()
-            .flat_map(|lookahead| {
-                self.overrides
-                    .apply(lookahead.requirements())
-                    .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
-            })
-            .chain(self.editables.iter().flat_map(|(editable, metadata)| {
-                self.overrides
-                    .apply(&metadata.requires_dist)
-                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
-            }))
-            .chain(
-                self.overrides
-                    .apply(&self.requirements)
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[])),
-            )
-            .chain(
-                self.constraints
-                    .requirements()
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[])),
-            )
-            .chain(
-                self.overrides
-                    .requirements()
-                    .filter(|requirement| requirement.evaluate_markers(markers, &[])),
-            )
+        match mode {
+            // Include all direct and transitive requirements, with constraints and overrides applied.
+            DependencyMode::Transitive => Either::Left( self
+                .lookaheads
+                .iter()
+                .flat_map(|lookahead| {
+                    self.overrides
+                        .apply(lookahead.requirements())
+                        .filter(|requirement| {
+                            requirement.evaluate_markers(markers, lookahead.extras())
+                        })
+                })
+                .chain(self.editables.iter().flat_map(|(editable, metadata)| {
+                    self.overrides
+                        .apply(&metadata.requires_dist)
+                        .filter(|requirement| {
+                            requirement.evaluate_markers(markers, &editable.extras)
+                        })
+                }))
+                .chain(
+                    self.overrides
+                        .apply(&self.requirements)
+                        .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+                )
+                .chain(
+                    self.constraints
+                        .requirements()
+                        .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+                )
+                .chain(
+                    self.overrides
+                        .requirements()
+                        .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+                ))
+            ,
+
+            // Include direct requirements, with constraints and overrides applied.
+            DependencyMode::Direct => Either::Right(
+                self.overrides.apply(&   self.requirements)
+                .chain(self.constraints.requirements())
+                .chain(self.overrides.requirements())
+                .filter(|requirement| requirement.evaluate_markers(markers, &[]))),
+        }
     }
 
-    /// Return an iterator over the names of all direct dependency requirements.
+    /// Return an iterator over the names of all user-provided requirements.
+    ///
+    /// This includes:
+    /// - Direct requirements
+    /// - Dependencies of editable requirements
+    /// - Transitive dependencies of local package requirements
     ///
     /// At time of writing, this is used for:
     /// - Determining which packages should use the "lowest-compatible version" of a package, when
     ///   the `lowest-direct` strategy is in use.
-    pub fn direct_dependencies<'a>(
+    pub fn user_requirements<'a>(
         &'a self,
         markers: &'a MarkerEnvironment,
-    ) -> impl Iterator<Item = &PackageName> {
-        self.lookaheads
-            .iter()
-            .filter(|lookahead| lookahead.direct())
-            .flat_map(|lookahead| {
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = &Requirement> {
+        match mode {
+            // Include direct requirements, dependencies of editables, and transitive dependencies
+            // of local packages.
+            DependencyMode::Transitive => Either::Left(
+                self.lookaheads
+                    .iter()
+                    .filter(|lookahead| lookahead.direct())
+                    .flat_map(|lookahead| {
+                        self.overrides
+                            .apply(lookahead.requirements())
+                            .filter(|requirement| {
+                                requirement.evaluate_markers(markers, lookahead.extras())
+                            })
+                    })
+                    .chain(self.editables.iter().flat_map(|(editable, metadata)| {
+                        self.overrides
+                            .apply(&metadata.requires_dist)
+                            .filter(|requirement| {
+                                requirement.evaluate_markers(markers, &editable.extras)
+                            })
+                    }))
+                    .chain(
+                        self.overrides
+                            .apply(&self.requirements)
+                            .filter(|requirement| requirement.evaluate_markers(markers, &[])),
+                    ),
+            ),
+
+            // Restrict to the direct requirements.
+            DependencyMode::Direct => Either::Right(
                 self.overrides
-                    .apply(lookahead.requirements())
-                    .filter(|requirement| requirement.evaluate_markers(markers, lookahead.extras()))
-            })
-            .chain(self.editables.iter().flat_map(|(editable, metadata)| {
-                self.overrides
-                    .apply(&metadata.requires_dist)
-                    .filter(|requirement| requirement.evaluate_markers(markers, &editable.extras))
-            }))
-            .chain(
-                self.overrides
-                    .apply(&self.requirements)
+                    .apply(self.requirements.iter())
                     .filter(|requirement| requirement.evaluate_markers(markers, &[])),
-            )
-            .map(|requirement| &requirement.name)
+            ),
+        }
     }
 
     /// Apply the overrides and constraints to a set of requirements.
