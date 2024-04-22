@@ -4979,6 +4979,7 @@ dependencies = [
  "pep440_rs",
  "pep508_rs",
  "pypi-types",
+ "requirements-txt",
  "rustc-hash",
  "serde",
  "serde_json",

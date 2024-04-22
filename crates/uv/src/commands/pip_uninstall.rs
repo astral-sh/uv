@@ -6,7 +6,8 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use distribution_types::{InstalledMetadata, Name};
-use pep508_rs::{Requirement, RequirementsTxtRequirement, UnnamedRequirement};
+use pep508_rs::{Requirement, UnnamedRequirement};
+use requirements_txt::RequirementsTxtRequirement;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::KeyringProviderType;
