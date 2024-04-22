@@ -445,7 +445,7 @@ jobs:
     needs: build-binary-linux
     name: "check system | python on rocky linux"
     runs-on: ubuntu-latest
-    container: rockylinux:8
+    container: rockylinux:9
     steps:
       - uses: actions/checkout@v4
 
