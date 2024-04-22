@@ -13,7 +13,8 @@ use crate::{Cursor, Pep508Error, Pep508ErrorSource};
 use pep440_rs::{Version, VersionPattern, VersionSpecifier};
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, PyAny, PyResult, Python,
+    basic::CompareOp, exceptions::PyValueError, pyclass, pymethods, types::PyAnyMethods, PyResult,
+    Python,
 };
 #[cfg(feature = "serde")]
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
@@ -476,9 +477,9 @@ impl MarkerEnvironment {
     /// Query the current python interpreter to get the correct marker value
     #[staticmethod]
     fn current(py: Python<'_>) -> PyResult<Self> {
-        let os = py.import("os")?;
-        let platform = py.import("platform")?;
-        let sys = py.import("sys")?;
+        let os = py.import_bound("os")?;
+        let platform = py.import_bound("platform")?;
+        let sys = py.import_bound("sys")?;
         let python_version_tuple: (String, String, String) = platform
             .getattr("python_version_tuple")?
             .call0()?
@@ -487,7 +488,7 @@ impl MarkerEnvironment {
         // See pseudocode at
         // https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers
         let name = sys.getattr("implementation")?.getattr("name")?.extract()?;
-        let info: &PyAny = sys.getattr("implementation")?.getattr("version")?;
+        let info = sys.getattr("implementation")?.getattr("version")?;
         let kind = info.getattr("releaselevel")?.extract::<String>()?;
         let implementation_version: String = format!(
             "{}.{}.{}{}",

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.36
+
+### Enhancements
+
+- Add support for embedded Python on Windows ([#3161](https://github.com/astral-sh/uv/pull/3161))
+- Add Docker image publishing to release pipeline ([#3155](https://github.com/astral-sh/uv/pull/3155))
+
+### Configuration
+
+- Add `UV_CONSTRAINT` environment variable to provide value for `--constraint`  ([#3162](https://github.com/astral-sh/uv/pull/3162))
+
+### Bug fixes
+
+- Avoid waiting for metadata for `--no-deps` editables ([#3188](https://github.com/astral-sh/uv/pull/3188))
+- Fix `venvlauncher.exe` reference in venv creation ([#3160](https://github.com/astral-sh/uv/pull/3160))
+- Fix authentication for URLs with a shared realm ([#3130](https://github.com/astral-sh/uv/pull/3130))
+- Restrict observed requirements to direct when `--no-deps` is specified ([#3191](https://github.com/astral-sh/uv/pull/3191))
+
+### Documentation
+
+- Add a versioning policy to the README ([#3151](https://github.com/astral-sh/uv/pull/3151))
+
 ## 0.1.35
 
 ### Enhancements

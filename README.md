@@ -33,7 +33,7 @@ replacement for common `pip` and `pip-tools` workflows.
 - 🧪 Tested at-scale against the top 10,000 PyPI packages.
 - 🖥️ Support for macOS, Linux, and Windows.
 - 🧰 Advanced features such as [dependency version overrides](#dependency-overrides) and
-   [alternative resolution strategies](#resolution-strategy).
+  [alternative resolution strategies](#resolution-strategy).
 - ⁉️ Best-in-class error messages with a conflict-tracking resolver.
 - 🤝 Support for a wide range of advanced `pip` features, including editable installs, Git
   dependencies, direct URL dependencies, local dependencies, constraints, source distributions,
@@ -502,7 +502,7 @@ uv accepts the following command-line arguments as environment variables:
   index URLs, rather than limiting its search to the first index URL that contains the package.
 - `UV_REQUIRE_HASHES`: Equivalent to the `--require-hashes` command-line argument. If set to `true`,
   uv will require that all dependencies have a hash specified in the requirements file.
-- 'UV_CONSTRAINT': Equivalent to the `--constraint` command-line argument. If set, uv will use this
+- `UV_CONSTRAINT`: Equivalent to the `--constraint` command-line argument. If set, uv will use this
   file as the constraints file. Uses space-separated list of files.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
@@ -516,7 +516,7 @@ In addition, uv respects the following environment variables:
   enable trace-level logging. See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
   for more.
 - `HTTP_TIMEOUT` (or `UV_HTTP_TIMEOUT`): If set, uv will use this value (in seconds) as the timeout
-  for HTTP requests.
+  for HTTP reads (default: 30s).
 - `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`.
   See: [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
 - `VIRTUAL_ENV`: Used to detect an activated virtual environment.

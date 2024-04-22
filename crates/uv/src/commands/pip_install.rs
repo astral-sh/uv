@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Write;
 
 use std::path::Path;
@@ -24,11 +25,11 @@ use uv_cache::Cache;
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
 };
-use uv_configuration::KeyringProviderType;
 use uv_configuration::{
     ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, Reinstall,
     SetupPyStrategy, Upgrade,
 };
+use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{BuiltEditable, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
@@ -42,6 +43,7 @@ use uv_resolver::{
     DependencyMode, ExcludeNewer, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options,
     OptionsBuilder, PreReleaseMode, Preference, ResolutionGraph, ResolutionMode, Resolver,
 };
+use uv_toolchain::PythonVersion;
 use uv_types::{BuildIsolation, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -75,6 +77,8 @@ pub(crate) async fn pip_install(
     no_build_isolation: bool,
     no_build: NoBuild,
     no_binary: NoBinary,
+    python_version: Option<PythonVersion>,
+    python_platform: Option<TargetTriple>,
     strict: bool,
     exclude_newer: Option<ExcludeNewer>,
     python: Option<String>,
@@ -182,10 +186,43 @@ pub(crate) async fn pip_install(
         return Ok(ExitStatus::Success);
     }
 
-    // Determine the tags, markers, and interpreter to use for resolution.
     let interpreter = venv.interpreter().clone();
-    let tags = venv.interpreter().tags()?;
-    let markers = venv.interpreter().markers();
+
+    // Determine the tags, markers, and interpreter to use for resolution.
+    let tags = match (python_platform, python_version.as_ref()) {
+        (Some(python_platform), Some(python_version)) => Cow::Owned(Tags::from_env(
+            &python_platform.platform(),
+            (python_version.major(), python_version.minor()),
+            interpreter.implementation_name(),
+            interpreter.implementation_tuple(),
+            interpreter.gil_disabled(),
+        )?),
+        (Some(python_platform), None) => Cow::Owned(Tags::from_env(
+            &python_platform.platform(),
+            interpreter.python_tuple(),
+            interpreter.implementation_name(),
+            interpreter.implementation_tuple(),
+            interpreter.gil_disabled(),
+        )?),
+        (None, Some(python_version)) => Cow::Owned(Tags::from_env(
+            interpreter.platform(),
+            (python_version.major(), python_version.minor()),
+            interpreter.implementation_name(),
+            interpreter.implementation_tuple(),
+            interpreter.gil_disabled(),
+        )?),
+        (None, None) => Cow::Borrowed(interpreter.tags()?),
+    };
+
+    // Apply the platform tags to the markers.
+    let markers = match (python_platform, python_version) {
+        (Some(python_platform), Some(python_version)) => {
+            Cow::Owned(python_version.markers(&python_platform.markers(interpreter.markers())))
+        }
+        (Some(python_platform), None) => Cow::Owned(python_platform.markers(interpreter.markers())),
+        (None, Some(python_version)) => Cow::Owned(python_version.markers(interpreter.markers())),
+        (None, None) => Cow::Borrowed(interpreter.markers()),
+    };
 
     // Collect the set of required hashes.
     let hasher = if require_hashes {
@@ -194,7 +231,7 @@ pub(crate) async fn pip_install(
                 .iter()
                 .chain(overrides.iter())
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            markers,
+            &markers,
         )?
     } else {
         HashStrategy::None
@@ -216,7 +253,7 @@ pub(crate) async fn pip_install(
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .markers(markers)
+        .markers(&markers)
         .platform(interpreter.platform())
         .build();
 
@@ -224,7 +261,7 @@ pub(crate) async fn pip_install(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &hasher, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, &tags, &hasher, &no_build, &no_binary)
     };
 
     // Determine whether to enable build isolation.
@@ -317,7 +354,7 @@ pub(crate) async fn pip_install(
             &hasher,
             &cache,
             &interpreter,
-            tags,
+            &tags,
             &client,
             &resolve_dispatch,
             printer,
@@ -344,8 +381,8 @@ pub(crate) async fn pip_install(
         &reinstall,
         &upgrade,
         &interpreter,
-        tags,
-        markers,
+        &tags,
+        &markers,
         &client,
         &flat_index,
         &index,
@@ -402,7 +439,7 @@ pub(crate) async fn pip_install(
         compile,
         &index_locations,
         &hasher,
-        tags,
+        &tags,
         &client,
         &in_flight,
         &install_dispatch,
@@ -586,19 +623,24 @@ async fn resolve(
         .collect();
 
     // Determine any lookahead requirements.
-    let lookaheads = LookaheadResolver::new(
-        &requirements,
-        &constraints,
-        &overrides,
-        &editables,
-        hasher,
-        build_dispatch,
-        client,
-        index,
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve(markers)
-    .await?;
+    let lookaheads = match options.dependency_mode {
+        DependencyMode::Transitive => {
+            LookaheadResolver::new(
+                &requirements,
+                &constraints,
+                &overrides,
+                &editables,
+                hasher,
+                build_dispatch,
+                client,
+                index,
+            )
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve(markers)
+            .await?
+        }
+        DependencyMode::Direct => Vec::new(),
+    };
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(

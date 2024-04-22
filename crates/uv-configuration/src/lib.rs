@@ -5,6 +5,7 @@ pub use constraints::*;
 pub use name_specifiers::*;
 pub use overrides::*;
 pub use package_options::*;
+pub use preview::*;
 pub use target_triple::*;
 
 mod authentication;
@@ -14,4 +15,5 @@ mod constraints;
 mod name_specifiers;
 mod overrides;
 mod package_options;
+mod preview;
 mod target_triple;

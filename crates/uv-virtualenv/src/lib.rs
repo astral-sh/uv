@@ -1,9 +1,9 @@
 use std::io;
 use std::path::Path;
 
-use platform_tags::PlatformError;
 use thiserror::Error;
 
+use platform_tags::PlatformError;
 use uv_interpreter::{Interpreter, PythonEnvironment};
 
 pub use crate::bare::create_bare_venv;
@@ -20,6 +20,8 @@ pub enum Error {
     Platform(#[from] PlatformError),
     #[error("Reserved key used for pyvenv.cfg: {0}")]
     ReservedConfigKey(String),
+    #[error("Could not find a suitable Python executable for the virtual environment based on the interpreter: {0}")]
+    NotFound(String),
 }
 
 /// The value to use for the shell prompt when inside a virtual environment.

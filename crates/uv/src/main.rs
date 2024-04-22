@@ -264,6 +264,8 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.no_build_isolation,
                 args.shared.no_build,
                 args.shared.no_binary,
+                args.shared.python_version,
+                args.shared.python_platform,
                 args.shared.strict,
                 args.shared.python,
                 args.shared.system,
@@ -325,6 +327,8 @@ async fn run() -> Result<ExitStatus> {
                 args.shared.no_build_isolation,
                 args.shared.no_build,
                 args.shared.no_binary,
+                args.shared.python_version,
+                args.shared.python_platform,
                 args.shared.strict,
                 args.shared.exclude_newer,
                 args.shared.python,
@@ -476,6 +480,9 @@ async fn run() -> Result<ExitStatus> {
             .await
         }
         Commands::Run(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::RunSettings::resolve(args, workspace);
+
             let requirements = args
                 .with
                 .into_iter()
@@ -502,6 +509,7 @@ async fn run() -> Result<ExitStatus> {
                 requirements,
                 args.isolated,
                 args.no_workspace,
+                globals.preview,
                 &cache,
                 printer,
             )

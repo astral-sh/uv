@@ -2,12 +2,14 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
-use tracing::{instrument, Level};
+use tracing::instrument;
 
 use cache_key::CanonicalUrl;
 use distribution_types::{FlatIndexLocation, IndexUrl};
-use pep508_rs::{Requirement, RequirementsTxtRequirement};
-use requirements_txt::{EditableRequirement, FindLink, RequirementEntry, RequirementsTxt};
+use pep508_rs::Requirement;
+use requirements_txt::{
+    EditableRequirement, FindLink, RequirementEntry, RequirementsTxt, RequirementsTxtRequirement,
+};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild};
 use uv_fs::Simplified;
@@ -48,7 +50,7 @@ pub struct RequirementsSpecification {
 
 impl RequirementsSpecification {
     /// Read the requirements and constraints from a source.
-    #[instrument(skip_all, level = Level::DEBUG, fields(source = % source))]
+    #[instrument(skip_all, level = tracing::Level::DEBUG, fields(source = % source))]
     pub async fn from_source(
         source: &RequirementsSource,
         extras: &ExtrasSpecification,

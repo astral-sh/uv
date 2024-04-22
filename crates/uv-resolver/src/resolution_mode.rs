@@ -3,7 +3,7 @@ use rustc_hash::FxHashSet;
 use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
-use crate::Manifest;
+use crate::{DependencyMode, Manifest};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
@@ -42,13 +42,17 @@ impl ResolutionStrategy {
         mode: ResolutionMode,
         manifest: &Manifest,
         markers: &MarkerEnvironment,
+        dependencies: DependencyMode,
     ) -> Self {
         match mode {
             ResolutionMode::Highest => Self::Highest,
             ResolutionMode::Lowest => Self::Lowest,
-            ResolutionMode::LowestDirect => {
-                Self::LowestDirect(manifest.direct_dependencies(markers).cloned().collect())
-            }
+            ResolutionMode::LowestDirect => Self::LowestDirect(
+                manifest
+                    .user_requirements(markers, dependencies)
+                    .map(|requirement| requirement.name.clone())
+                    .collect(),
+            ),
         }
     }
 }
