@@ -4,6 +4,7 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
+anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 http = { workspace = true }
