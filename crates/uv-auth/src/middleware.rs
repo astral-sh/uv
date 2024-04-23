@@ -12,8 +12,7 @@ use anyhow::anyhow;
 use netrc::Netrc;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
-use tracing::debug;
-
+use tracing::{debug, trace};
 /// A middleware that adds basic authentication to requests.
 ///
 /// Uses a cache to propagate credentials from previously seen requests and
@@ -114,8 +113,6 @@ impl Middleware for AuthMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
-        debug!("Applying auth middleware");
-
         // Check for credentials attached to the request already
         let credentials = Credentials::from_request(&request);
 
@@ -140,7 +137,7 @@ impl Middleware for AuthMiddleware {
         } else {
             request.url().to_string()
         };
-        debug!("Handling request for {url}");
+        trace!("Handling request for {url}");
 
         // <https://github.com/TrueLayer/reqwest-middleware/blob/abdf1844c37092d323683c2396b7eefda1418d3c/reqwest-retry/src/middleware.rs#L141-L149>
         // Clone the request so we can retry it on authentication failure
@@ -154,12 +151,12 @@ impl Middleware for AuthMiddleware {
             let credentials = Arc::new(credentials);
 
             if credentials.password().is_some() {
-                debug!("Request for {url} is already fully authenticated");
+                trace!("Request for {url} is already fully authenticated");
                 return self
                     .complete_request(Some(credentials), request, extensions, next)
                     .await;
             } else {
-                debug!("Request for {url} is missing a password, looking for credentials");
+                trace!("Request for {url} is missing a password, looking for credentials");
 
                 // There's just a username, try to find a password
                 // 1. First try the cache.
@@ -167,7 +164,7 @@ impl Middleware for AuthMiddleware {
                     .cache()
                     .get_realm(Realm::from(request.url()), credentials.to_username())
                 {
-                    debug!("Got cached credentials");
+                    trace!("Got cached credentials");
                     let cache_authed_request = cached_credentials.authenticate(request);
                     // 1.1 Make a request with the cached credentials; if it works, we are done.
                     // If it fails with an auth error, fall back to cache-miss behaviour.
@@ -219,7 +216,7 @@ impl Middleware for AuthMiddleware {
             }
         } else {
             // We have no credentials
-            debug!("Request for {url} is unauthenticated, checking cache");
+            trace!("Request for {url} is unauthenticated, checking cache");
 
             // Check the cache for a URL match
             let credentials = self.cache().get_url(request.url(), Username::none());
@@ -234,7 +231,7 @@ impl Middleware for AuthMiddleware {
                 .is_some_and(|credentials| credentials.username().is_some());
 
             // Otherise, attempt an anonymous request
-            debug!("Attempting unauthenticated request for {url}");
+            trace!("Attempting unauthenticated request for {url}");
 
             // If we don't fail with authorization related codes, return the response
             let (response, auth_failure) = self
@@ -245,7 +242,7 @@ impl Middleware for AuthMiddleware {
             }
 
             // Otherwise, search for credentials
-            debug!("Request for {url} failed with auth error, checking for credentials");
+            trace!("Request for {url} failed with auth error, checking for credentials");
 
             // Check in the cache first
             let credentials = self.cache().get_realm(
@@ -256,7 +253,7 @@ impl Middleware for AuthMiddleware {
             );
             if let Some(credentials) = credentials.as_ref() {
                 if credentials.password().is_some() {
-                    debug!(
+                    trace!(
                         "Retrying request for {url} with credentials from cache {credentials:?}"
                     );
                     retry_request = credentials.authenticate(retry_request);
@@ -273,7 +270,7 @@ impl Middleware for AuthMiddleware {
                 .await
             {
                 retry_request = credentials.authenticate(retry_request);
-                debug!("Retrying request for {url} with {credentials:?}");
+                trace!("Retrying request for {url} with {credentials:?}");
                 return self
                     .complete_request(Some(Arc::new(credentials)), retry_request, extensions, next)
                     .await;
@@ -281,7 +278,7 @@ impl Middleware for AuthMiddleware {
 
             if let Some(credentials) = credentials.as_ref() {
                 if !attempt_has_username {
-                    debug!("Retrying request for {url} with username from cache {credentials:?}");
+                    trace!("Retrying request for {url} with username from cache {credentials:?}");
                     retry_request = credentials.authenticate(retry_request);
                     return self
                         .complete_request(None, retry_request, extensions, next)
@@ -318,7 +315,7 @@ impl AuthMiddleware {
             .as_ref()
             .is_ok_and(|response| response.error_for_status_ref().is_ok())
         {
-            debug!("Updating cached credentials for {url} to {credentials:?}");
+            trace!("Updating cached credentials for {url} to {credentials:?}");
             self.cache().insert(&url, credentials)
         };
 
@@ -353,7 +350,7 @@ impl AuthMiddleware {
     ) -> Option<Credentials> {
         // Netrc support based on: <https://github.com/gribouille/netrc>.
         if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
-            debug!("Checking netrc for credentials for {url}");
+            trace!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,
                 url,
@@ -376,7 +373,7 @@ impl AuthMiddleware {
                 debug!("Checking keyring for credentials for {username}@{url}");
                 keyring.fetch(url, username)
             } else {
-                debug!("Skipping keyring lookup for {url} with no username");
+                trace!("Skipping keyring lookup for {url} with no username");
                 None
             }
         }) {

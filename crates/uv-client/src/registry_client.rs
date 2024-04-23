@@ -236,9 +236,7 @@ impl RegistryClient {
                         break;
                     }
                 }
-                Err(CachedClientError::Client(err)) => {
-                    debug!("Cached client error");
-                    match err.into_kind() {
+                Err(CachedClientError::Client(err)) => match err.into_kind() {
                     ErrorKind::Offline(_) => continue,
                     ErrorKind::ReqwestError(err) => {
                         if err.status() == Some(StatusCode::NOT_FOUND)
@@ -249,8 +247,7 @@ impl RegistryClient {
                         return Err(ErrorKind::from(err).into());
                     }
                     other => return Err(other.into()),
-                }
-            },
+                },
                 Err(CachedClientError::Callback(err)) => return Err(err),
             };
         }
