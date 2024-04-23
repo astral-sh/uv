@@ -321,7 +321,6 @@ impl AuthMiddleware {
         } else if let Some(credentials) = match self.keyring {
             Some(ref keyring) => {
                 match credentials
-                    .get()
                     .and_then(|credentials| credentials.username())
                 {
                     Some(username) => {
