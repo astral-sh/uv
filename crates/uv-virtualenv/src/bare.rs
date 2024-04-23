@@ -11,10 +11,10 @@ use fs_err::File;
 use pypi_types::Scheme;
 use tracing::info;
 
+use crate::{Error, Prompt};
 use uv_fs::Simplified;
 use uv_interpreter::{Interpreter, Virtualenv};
-
-use crate::{Error, Prompt};
+use uv_version::version;
 
 /// The bash activate scripts with the venv dependent paths patches out
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -47,7 +47,6 @@ pub fn create_bare_venv(
     interpreter: &Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
-    extra_cfg: Vec<(String, String)>,
 ) -> Result<Virtualenv, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment. This is typically the Python executable
@@ -218,23 +217,6 @@ pub fn create_bare_venv(
         fs::write(scripts.join(name), activator)?;
     }
 
-    // Validate extra_cfg
-    let reserved_keys = [
-        "home",
-        "implementation",
-        "version_info",
-        "include-system-site-packages",
-        "base-prefix",
-        "base-exec-prefix",
-        "base-executable",
-        "prompt",
-    ];
-    for (key, _) in &extra_cfg {
-        if reserved_keys.contains(&key.as_str()) {
-            return Err(Error::ReservedConfigKey(key.to_string()));
-        }
-    }
-
     let mut pyvenv_cfg_data: Vec<(String, String)> = vec![
         (
             "home".to_string(),
@@ -244,6 +226,7 @@ pub fn create_bare_venv(
             "implementation".to_string(),
             interpreter.markers().platform_python_implementation.clone(),
         ),
+        ("uv".to_string(), version().to_string()),
         (
             "version_info".to_string(),
             interpreter.markers().python_full_version.string.clone(),
@@ -256,10 +239,7 @@ pub fn create_bare_venv(
                 "false".to_string()
             },
         ),
-    ]
-    .into_iter()
-    .chain(extra_cfg)
-    .collect();
+    ];
 
     if let Some(prompt) = prompt {
         pyvenv_cfg_data.push(("prompt".to_string(), prompt));

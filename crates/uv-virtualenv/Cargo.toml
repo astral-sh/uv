@@ -26,6 +26,7 @@ pypi-types = { workspace = true }
 uv-cache = { workspace = true }
 uv-fs = { workspace = true }
 uv-interpreter = { workspace = true }
+uv-version = { workspace = true }
 
 anstream = { workspace = true }
 cachedir = { workspace = true }

@@ -5035,6 +5035,7 @@ dependencies = [
  "uv-cache",
  "uv-fs",
  "uv-interpreter",
+ "uv-version",
 ]
 
 [[package]]

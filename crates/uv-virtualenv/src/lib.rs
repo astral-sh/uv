@@ -18,8 +18,6 @@ pub enum Error {
     InterpreterError(#[from] uv_interpreter::Error),
     #[error(transparent)]
     Platform(#[from] PlatformError),
-    #[error("Reserved key used for pyvenv.cfg: {0}")]
-    ReservedConfigKey(String),
     #[error("Could not find a suitable Python executable for the virtual environment based on the interpreter: {0}")]
     NotFound(String),
 }
@@ -53,16 +51,9 @@ pub fn create_venv(
     interpreter: Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
-    extra_cfg: Vec<(String, String)>,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
-    let virtualenv = create_bare_venv(
-        location,
-        &interpreter,
-        prompt,
-        system_site_packages,
-        extra_cfg,
-    )?;
+    let virtualenv = create_bare_venv(location, &interpreter, prompt, system_site_packages)?;
 
     // Create the corresponding `PythonEnvironment`.
     let interpreter = interpreter.with_virtualenv(virtualenv);
