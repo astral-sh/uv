@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::RwLock;
 
 use tokio::process::Command;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, instrument, trace, warn};
 use url::Url;
 
 use crate::credentials::Credentials;
@@ -78,6 +78,7 @@ impl KeyringProvider {
 
         // Check the full URL first
         // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
+        trace!("Checking keyring for URL {url}");
         let mut password = match self.backend {
             KeyringProviderBackend::Subprocess => {
                 self.fetch_subprocess(url.as_str(), username).await
@@ -89,6 +90,7 @@ impl KeyringProvider {
         };
         // And fallback to a check for the host
         if password.is_none() {
+            trace!("Checking keyring for host {host}");
             password = match self.backend {
                 KeyringProviderBackend::Subprocess => self.fetch_subprocess(host, username).await,
                 #[cfg(test)]
