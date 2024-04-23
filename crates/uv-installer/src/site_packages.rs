@@ -9,8 +9,8 @@ use url::Url;
 
 use distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
 use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::{Requirement, RequirementsTxtRequirement, VerbatimUrl};
-use requirements_txt::{EditableRequirement, RequirementEntry};
+use pep508_rs::{Requirement, VerbatimUrl};
+use requirements_txt::{EditableRequirement, RequirementEntry, RequirementsTxtRequirement};
 use uv_cache::{ArchiveTarget, ArchiveTimestamp};
 use uv_interpreter::PythonEnvironment;
 use uv_normalize::PackageName;
@@ -398,12 +398,14 @@ impl<'a> SitePackages<'a> {
                             }
 
                             // If the requirement came from a local path, check freshness.
-                            if let Ok(archive) = url.to_file_path() {
-                                if !ArchiveTimestamp::up_to_date_with(
-                                    &archive,
-                                    ArchiveTarget::Install(distribution),
-                                )? {
-                                    return Ok(false);
+                            if url.scheme() == "file" {
+                                if let Ok(archive) = url.to_file_path() {
+                                    if !ArchiveTimestamp::up_to_date_with(
+                                        &archive,
+                                        ArchiveTarget::Install(distribution),
+                                    )? {
+                                        return Ok(false);
+                                    }
                                 }
                             }
                         }
@@ -441,12 +443,14 @@ impl<'a> SitePackages<'a> {
                                 }
 
                                 // If the requirement came from a local path, check freshness.
-                                if let Ok(archive) = url.to_file_path() {
-                                    if !ArchiveTimestamp::up_to_date_with(
-                                        &archive,
-                                        ArchiveTarget::Install(distribution),
-                                    )? {
-                                        return Ok(false);
+                                if url.scheme() == "file" {
+                                    if let Ok(archive) = url.to_file_path() {
+                                        if !ArchiveTimestamp::up_to_date_with(
+                                            &archive,
+                                            ArchiveTarget::Install(distribution),
+                                        )? {
+                                            return Ok(false);
+                                        }
                                     }
                                 }
                             }
@@ -566,14 +570,14 @@ impl Diagnostic {
             } => format!(
                 "The package `{package}` requires `{requirement}`, but `{version}` is installed."
             ),
-            Self::DuplicatePackage { package, paths} => {
+            Self::DuplicatePackage { package, paths } => {
                 let mut paths = paths.clone();
                 paths.sort();
                 format!(
                     "The package `{package}` has multiple installed distributions:{}",
                     paths.iter().fold(String::new(), |acc, path| acc + &format!("\n  - {}", path.display()))
                 )
-            },
+            }
         }
     }
 

@@ -9,7 +9,7 @@ use pep440_rs::{Operator, Version, VersionSpecifier, VersionSpecifierBuildError}
 use pep508_rs::{MarkerEnvironment, VersionOrUrl};
 use uv_normalize::PackageName;
 
-use crate::Manifest;
+use crate::{DependencyMode, Manifest};
 
 #[derive(Debug, Default)]
 pub(crate) struct Locals {
@@ -19,12 +19,16 @@ pub(crate) struct Locals {
 
 impl Locals {
     /// Determine the set of permitted local versions in the [`Manifest`].
-    pub(crate) fn from_manifest(manifest: &Manifest, markers: &MarkerEnvironment) -> Self {
+    pub(crate) fn from_manifest(
+        manifest: &Manifest,
+        markers: &MarkerEnvironment,
+        dependencies: DependencyMode,
+    ) -> Self {
         let mut required: FxHashMap<PackageName, Version> = FxHashMap::default();
 
         // Add all direct requirements and constraints. There's no need to look for conflicts,
         // since conflicts will be enforced by the solver.
-        for requirement in manifest.requirements(markers) {
+        for requirement in manifest.requirements(markers, dependencies) {
             if let Some(version_or_url) = requirement.version_or_url.as_ref() {
                 for local in iter_locals(version_or_url) {
                     required.insert(requirement.name.clone(), local);

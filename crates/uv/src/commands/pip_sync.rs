@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Write;
 
 use anstream::eprint;
@@ -14,14 +15,15 @@ use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
+use uv_auth::store_credentials_from_url;
 use uv_cache::{ArchiveTarget, ArchiveTimestamp, Cache};
 use uv_client::{
     BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient, RegistryClientBuilder,
 };
-use uv_configuration::KeyringProviderType;
 use uv_configuration::{
     ConfigSettings, IndexStrategy, NoBinary, NoBuild, Reinstall, SetupPyStrategy,
 };
+use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{is_dynamic, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
@@ -31,6 +33,7 @@ use uv_requirements::{
     SourceTreeResolver,
 };
 use uv_resolver::{DependencyMode, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Resolver};
+use uv_toolchain::PythonVersion;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
 
@@ -55,6 +58,8 @@ pub(crate) async fn pip_sync(
     no_build_isolation: bool,
     no_build: NoBuild,
     no_binary: NoBinary,
+    python_version: Option<PythonVersion>,
+    python_platform: Option<TargetTriple>,
     strict: bool,
     python: Option<String>,
     system: bool,
@@ -130,9 +135,43 @@ pub(crate) async fn pip_sync(
 
     let _lock = venv.lock()?;
 
+    let interpreter = venv.interpreter();
+
     // Determine the current environment markers.
-    let tags = venv.interpreter().tags()?;
-    let markers = venv.interpreter().markers();
+    let tags = match (python_platform, python_version.as_ref()) {
+        (Some(python_platform), Some(python_version)) => Cow::Owned(Tags::from_env(
+            &python_platform.platform(),
+            (python_version.major(), python_version.minor()),
+            interpreter.implementation_name(),
+            interpreter.implementation_tuple(),
+            interpreter.gil_disabled(),
+        )?),
+        (Some(python_platform), None) => Cow::Owned(Tags::from_env(
+            &python_platform.platform(),
+            interpreter.python_tuple(),
+            interpreter.implementation_name(),
+            interpreter.implementation_tuple(),
+            interpreter.gil_disabled(),
+        )?),
+        (None, Some(python_version)) => Cow::Owned(Tags::from_env(
+            interpreter.platform(),
+            (python_version.major(), python_version.minor()),
+            interpreter.implementation_name(),
+            interpreter.implementation_tuple(),
+            interpreter.gil_disabled(),
+        )?),
+        (None, None) => Cow::Borrowed(interpreter.tags()?),
+    };
+
+    // Apply the platform tags to the markers.
+    let markers = match (python_platform, python_version) {
+        (Some(python_platform), Some(python_version)) => {
+            Cow::Owned(python_version.markers(&python_platform.markers(interpreter.markers())))
+        }
+        (Some(python_platform), None) => Cow::Owned(python_platform.markers(interpreter.markers())),
+        (None, Some(python_version)) => Cow::Owned(python_version.markers(interpreter.markers())),
+        (None, None) => Cow::Borrowed(interpreter.markers()),
+    };
 
     // Collect the set of required hashes.
     let hasher = if require_hashes {
@@ -140,7 +179,7 @@ pub(crate) async fn pip_sync(
             requirements
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            markers,
+            &markers,
         )?
     } else {
         HashStrategy::None
@@ -149,6 +188,11 @@ pub(crate) async fn pip_sync(
     // Incorporate any index locations from the provided sources.
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+
+    // Add all authenticated sources to the cache.
+    for url in index_locations.urls() {
+        store_credentials_from_url(url);
+    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -165,7 +209,7 @@ pub(crate) async fn pip_sync(
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
         let entries = client.fetch(index_locations.flat_index()).await?;
-        FlatIndex::from_entries(entries, tags, &hasher, &no_build, &no_binary)
+        FlatIndex::from_entries(entries, &tags, &hasher, &no_build, &no_binary)
     };
 
     // Create a shared in-memory index.
@@ -241,7 +285,7 @@ pub(crate) async fn pip_sync(
         reinstall,
         &hasher,
         venv.interpreter(),
-        tags,
+        &tags,
         &cache,
         &client,
         &build_dispatch,
@@ -267,7 +311,7 @@ pub(crate) async fn pip_sync(
             &index_locations,
             &cache,
             &venv,
-            tags,
+            &tags,
         )
         .context("Failed to determine installation plan")?;
 
@@ -361,7 +405,7 @@ pub(crate) async fn pip_sync(
     } else {
         let start = std::time::Instant::now();
 
-        let downloader = Downloader::new(&cache, tags, &hasher, &client, &build_dispatch)
+        let downloader = Downloader::new(&cache, &tags, &hasher, &client, &build_dispatch)
             .with_reporter(DownloadReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = downloader

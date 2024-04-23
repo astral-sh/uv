@@ -16,6 +16,7 @@ pub(crate) use pip_list::pip_list;
 pub(crate) use pip_show::pip_show;
 pub(crate) use pip_sync::pip_sync;
 pub(crate) use pip_uninstall::pip_uninstall;
+pub(crate) use run::run;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 use uv_cache::Cache;
@@ -40,6 +41,7 @@ mod pip_show;
 mod pip_sync;
 mod pip_uninstall;
 mod reporters;
+mod run;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod venv;

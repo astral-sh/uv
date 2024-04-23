@@ -1,20 +1,23 @@
 use std::sync::Arc;
 
-use http::Extensions;
-
-use netrc::Netrc;
-use reqwest::{Request, Response};
-use reqwest_middleware::{Middleware, Next};
-use tracing::{debug, trace};
+use http::{Extensions, StatusCode};
+use url::Url;
 
 use crate::{
-    cache::CheckResponse, credentials::Credentials, CredentialsCache, KeyringProvider,
-    CREDENTIALS_CACHE,
+    credentials::{Credentials, Username},
+    realm::Realm,
+    CredentialsCache, KeyringProvider, CREDENTIALS_CACHE,
 };
+use anyhow::anyhow;
+use netrc::Netrc;
+use reqwest::{Request, Response};
+use reqwest_middleware::{Error, Middleware, Next};
+use tracing::{debug, trace};
 
-/// A middleware that adds basic authentication to requests based on the netrc file and the keyring.
+/// A middleware that adds basic authentication to requests.
 ///
-/// Netrc support Based on: <https://github.com/gribouille/netrc>.
+/// Uses a cache to propagate credentials from previously seen requests and
+/// fetches credentials from a netrc file and the keyring.
 pub struct AuthMiddleware {
     netrc: Option<Netrc>,
     keyring: Option<KeyringProvider>,
@@ -69,14 +72,51 @@ impl Default for AuthMiddleware {
 
 #[async_trait::async_trait]
 impl Middleware for AuthMiddleware {
+    /// Handle authentication for a request.
+    ///
+    /// ## If the request has a username and password
+    ///
+    /// We already have a fully authenticated request and we don't need to perform a look-up.
+    ///
+    /// - Perform the request
+    /// - Add the username and password to the cache if successful
+    ///
+    /// ## If the request only has a username
+    ///
+    /// We probably need additional authentication, because a username is provided.
+    /// We'll avoid making a request we expect to fail and look for a password.
+    /// The discovered credentials must have the requested username to be used.
+    ///
+    /// - Check the cache (realm key) for a password
+    /// - Check the netrc for a password
+    /// - Check the keyring for a password
+    /// - Perform the request
+    /// - Add the username and password to the cache if successful
+    ///
+    /// ## If the request has no authentication
+    ///
+    /// We may or may not need authentication. We'll check for cached credentials for the URL,
+    /// which is relatively specific and can save us an expensive failed request. Otherwise,
+    /// we'll make the request and look for less-specific credentials on failure i.e. if the
+    /// server tells us authorization is needed. This pattern avoids attaching credentials to
+    /// requests that do not need them, which can cause some servers to deny the request.
+    ///
+    /// - Check the cache (url key)
+    /// - Perform the request
+    /// - On 401, 403, or 404 check for authentication if there was a cache miss
+    ///     - Check the cache (realm key) for the username and password
+    ///     - Check the netrc for a username and password
+    ///     - Perform the request again if found
+    ///     - Add the username and password to the cache if successful
     async fn handle(
         &self,
         mut request: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
-        // Check for credentials attached to (1) the request itself
+        // Check for credentials attached to the request already
         let credentials = Credentials::from_request(&request);
+
         // In the middleware, existing credentials are already moved from the URL
         // to the headers so for display purposes we restore some information
         let url = if tracing::enabled!(tracing::Level::DEBUG) {
@@ -100,38 +140,180 @@ impl Middleware for AuthMiddleware {
         };
         trace!("Handling request for {url}");
 
-        // Then check for credentials in (2) the cache
-        let credentials = self.cache().check(request.url(), credentials);
+        if let Some(credentials) = credentials {
+            let credentials = Arc::new(credentials);
 
-        // Track credentials that we might want to insert into the cache
-        let mut new_credentials = None;
-
-        // If already authenticated (including a password), don't query other services
-        if credentials.is_authenticated() {
-            match credentials {
-                // If we get credentials from the cache, update the request
-                CheckResponse::Cached(credentials) => request = credentials.authenticate(request),
-                // If we get credentials from the request, we should update the cache
-                // but don't need to update the request
-                CheckResponse::Uncached(credentials) => new_credentials = Some(credentials.clone()),
-                CheckResponse::None => unreachable!("No credentials cannot be authenticated"),
+            // If there's a password, send the request and cache
+            if credentials.password().is_some() {
+                trace!("Request for {url} is already fully authenticated");
+                return self
+                    .complete_request(Some(credentials), request, extensions, next)
+                    .await;
             }
-        // Otherwise, look for complete credentials in:
-        // (3) The netrc file
-        } else if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
+
+            trace!("Request for {url} is missing a password, looking for credentials");
+            // There's just a username, try to find a password
+            let credentials = if let Some(credentials) = self
+                .cache()
+                .get_realm(Realm::from(request.url()), credentials.to_username())
+            {
+                request = credentials.authenticate(request);
+                // Do not insert already-cached credentials
+                None
+            } else if let Some(credentials) = self
+                .fetch_credentials(Some(&credentials), request.url())
+                .await
+            {
+                request = credentials.authenticate(request);
+                Some(Arc::new(credentials))
+            } else {
+                // If we don't find a password, we'll still attempt the request with the existing credentials
+                Some(credentials)
+            };
+
+            return self
+                .complete_request(credentials, request, extensions, next)
+                .await;
+        }
+
+        // We have no credentials
+        trace!("Request for {url} is unauthenticated, checking cache");
+
+        // Check the cache for a URL match
+        let credentials = self.cache().get_url(request.url(), Username::none());
+        if let Some(credentials) = credentials.as_ref() {
+            request = credentials.authenticate(request);
+            if credentials.password().is_some() {
+                return self.complete_request(None, request, extensions, next).await;
+            }
+        }
+        let attempt_has_username = credentials
+            .as_ref()
+            .is_some_and(|credentials| credentials.username().is_some());
+
+        // Otherise, attempt an anonymous request
+        trace!("Attempting unauthenticated request for {url}");
+
+        // <https://github.com/TrueLayer/reqwest-middleware/blob/abdf1844c37092d323683c2396b7eefda1418d3c/reqwest-retry/src/middleware.rs#L141-L149>
+        // Clone the request so we can retry it on authentication failure
+        let mut retry_request = request.try_clone().ok_or_else(|| {
+            Error::Middleware(anyhow!(
+                "Request object is not clonable. Are you passing a streaming body?".to_string()
+            ))
+        })?;
+
+        let response = next.clone().run(request, extensions).await?;
+
+        // If we don't fail with authorization related codes, return the response
+        if !matches!(
+            response.status(),
+            StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
+        ) {
+            return Ok(response);
+        }
+
+        // Otherwise, search for credentials
+        trace!(
+            "Request for {url} failed with {}, checking for credentials",
+            response.status()
+        );
+
+        // Check in the cache first
+        let credentials = self.cache().get_realm(
+            Realm::from(retry_request.url()),
+            credentials
+                .map(|credentials| credentials.to_username())
+                .unwrap_or(Username::none()),
+        );
+        if let Some(credentials) = credentials.as_ref() {
+            if credentials.password().is_some() {
+                trace!("Retrying request for {url} with credentials from cache {credentials:?}");
+                retry_request = credentials.authenticate(retry_request);
+                return self
+                    .complete_request(None, retry_request, extensions, next)
+                    .await;
+            }
+        }
+
+        // Then, fetch from external services.
+        // Here we use the username from the cache if present.
+        if let Some(credentials) = self
+            .fetch_credentials(credentials.as_deref(), retry_request.url())
+            .await
+        {
+            retry_request = credentials.authenticate(retry_request);
+            trace!("Retrying request for {url} with {credentials:?}");
+            return self
+                .complete_request(Some(Arc::new(credentials)), retry_request, extensions, next)
+                .await;
+        }
+
+        if let Some(credentials) = credentials.as_ref() {
+            if !attempt_has_username {
+                trace!("Retrying request for {url} with username from cache {credentials:?}");
+                retry_request = credentials.authenticate(retry_request);
+                return self
+                    .complete_request(None, retry_request, extensions, next)
+                    .await;
+            }
+        }
+
+        Ok(response)
+    }
+}
+
+impl AuthMiddleware {
+    /// Run a request to completion.
+    ///
+    /// If credentials are present, insert them into the cache on success.
+    async fn complete_request(
+        &self,
+        credentials: Option<Arc<Credentials>>,
+        request: Request,
+        extensions: &mut Extensions,
+        next: Next<'_>,
+    ) -> reqwest_middleware::Result<Response> {
+        let Some(credentials) = credentials else {
+            // Nothing to insert into the cache if we don't have credentials
+            return next.run(request, extensions).await;
+        };
+
+        let url = request.url().clone();
+        let result = next.run(request, extensions).await;
+
+        // Update the cache with new credentials on a successful request
+        if result
+            .as_ref()
+            .is_ok_and(|response| response.error_for_status_ref().is_ok())
+        {
+            trace!("Updating cached credentials for {url} to {credentials:?}");
+            self.cache().insert(&url, credentials)
+        };
+
+        result
+    }
+
+    /// Fetch credentials for a URL.
+    ///
+    /// Supports netrc file and keyring lookups.
+    async fn fetch_credentials(
+        &self,
+        credentials: Option<&Credentials>,
+        url: &Url,
+    ) -> Option<Credentials> {
+        // Netrc support based on: <https://github.com/gribouille/netrc>.
+        if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
             trace!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,
-                request.url(),
+                url,
                 credentials
-                    .get()
+                    .as_ref()
                     .and_then(|credentials| credentials.username()),
             )
         }) {
             debug!("Found credentials in netrc file for {url}");
-            request = credentials.authenticate(request);
-            new_credentials = Some(Arc::new(credentials));
-        // (4) The keyring
+            Some(credentials)
         // N.B. The keyring provider performs lookups for the exact URL then
         //      falls back to the host, but we cache the result per host so if a keyring
         //      implementation returns different credentials for different URLs in the
@@ -143,8 +325,8 @@ impl Middleware for AuthMiddleware {
                     .and_then(|credentials| credentials.username())
                 {
                     Some(username) => {
-                        debug!("Checking keyring for credentials for {url}");
-                        keyring.fetch(request.url(), username).await
+                        debug!("Checking keyring for credentials for {username}@{url}");
+                        keyring.fetch(url, username).await
                     }
                     None => {
                         trace!("Skipping keyring lookup for {url} with no username");
@@ -155,39 +337,9 @@ impl Middleware for AuthMiddleware {
             None => None,
         } {
             debug!("Found credentials in keyring for {url}");
-            request = credentials.authenticate(request);
-            new_credentials = Some(Arc::new(credentials));
-        // No additional credentials were found
+            Some(credentials)
         } else {
-            match credentials {
-                CheckResponse::Cached(credentials) => request = credentials.authenticate(request),
-                CheckResponse::Uncached(credentials) => new_credentials = Some(credentials.clone()),
-                CheckResponse::None => {
-                    debug!("No credentials found for {url}")
-                }
-            }
-        }
-
-        if let Some(credentials) = new_credentials {
-            let url = request.url().clone();
-
-            // Update the default credentials eagerly since requests are made concurrently
-            // and we want to avoid expensive credential lookups
-            self.cache().set_default(&url, credentials.clone());
-
-            let result = next.run(request, extensions).await;
-
-            // Only update the cache with new credentials on a successful request
-            if result
-                .as_ref()
-                .is_ok_and(|response| response.error_for_status_ref().is_ok())
-            {
-                trace!("Updating cached credentials for {url}");
-                self.cache().insert(&url, credentials)
-            };
-            result
-        } else {
-            next.run(request, extensions).await
+            None
         }
     }
 }
@@ -202,7 +354,7 @@ mod tests {
     use test_log::test;
 
     use url::Url;
-    use wiremock::matchers::{basic_auth, method};
+    use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -262,8 +414,9 @@ mod tests {
         Ok(())
     }
 
+    /// Without seeding the cache, authenticated requests are not cached
     #[test(tokio::test)]
-    async fn test_credentials_in_url() -> Result<(), Error> {
+    async fn test_credentials_in_url_no_seed() -> Result<(), Error> {
         let username = "user";
         let password = "password";
 
@@ -285,6 +438,7 @@ mod tests {
             200,
             "Subsequent requests should not require credentials"
         );
+
         assert_eq!(
             client
                 .get(format!("{}/foo", server.uri()))
@@ -292,7 +446,61 @@ mod tests {
                 .await?
                 .status(),
             200,
-            "Subsequent requests can be to different paths in the same realm"
+            "Requests can be to different paths in the same realm"
+        );
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        url.set_password(Some("invalid")).unwrap();
+        assert_eq!(
+            client.get(url).send().await?.status(),
+            401,
+            "Credentials in the URL should take precedence and fail"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_credentials_in_url_seed() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let server = start_test_server(username, password).await;
+        let base_url = Url::parse(&server.uri())?;
+        let cache = CredentialsCache::new();
+        cache.insert(
+            &base_url,
+            Arc::new(Credentials::new(
+                Some(username.to_string()),
+                Some(password.to_string()),
+            )),
+        );
+
+        let client = test_client_builder()
+            .with(AuthMiddleware::new().with_cache(cache))
+            .build();
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        url.set_password(Some(password)).unwrap();
+        assert_eq!(client.get(url).send().await?.status(), 200);
+
+        // Works for a URL without credentials too
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            200,
+            "Requests should not require credentials"
+        );
+
+        assert_eq!(
+            client
+                .get(format!("{}/foo", server.uri()))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests can be to different paths in the same realm"
         );
 
         let mut url = base_url.clone();
@@ -313,23 +521,29 @@ mod tests {
         let password = "";
 
         let server = start_test_server(username, password).await;
-        let client = test_client_builder()
-            .with(AuthMiddleware::new().with_cache(CredentialsCache::new()))
-            .build();
-
         let base_url = Url::parse(&server.uri())?;
+        let cache = CredentialsCache::new();
+        cache.insert(
+            &base_url,
+            Arc::new(Credentials::new(Some(username.to_string()), None)),
+        );
+
+        let client = test_client_builder()
+            .with(AuthMiddleware::new().with_cache(cache))
+            .build();
 
         let mut url = base_url.clone();
         url.set_username(username).unwrap();
         url.set_password(None).unwrap();
         assert_eq!(client.get(url).send().await?.status(), 200);
 
-        // Works for a URL without credentials now
+        // Works for a URL without credentials too
         assert_eq!(
             client.get(server.uri()).send().await?.status(),
             200,
-            "Subsequent requests should not require credentials"
+            "Requests should not require credentials"
         );
+
         assert_eq!(
             client
                 .get(format!("{}/foo", server.uri()))
@@ -337,7 +551,7 @@ mod tests {
                 .await?
                 .status(),
             200,
-            "Subsequent requests can be to different paths in the same realm"
+            "Requests can be to different paths in the same realm"
         );
 
         let mut url = base_url.clone();
@@ -585,6 +799,399 @@ mod tests {
             client.get(url).send().await?.status(),
             401,
             "Credentials are not pulled from the keyring when given another username"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_credentials_in_url_multiple_realms() -> Result<(), Error> {
+        let username_1 = "user1";
+        let password_1 = "password1";
+        let server_1 = start_test_server(username_1, password_1).await;
+        let base_url_1 = Url::parse(&server_1.uri())?;
+
+        let username_2 = "user2";
+        let password_2 = "password2";
+        let server_2 = start_test_server(username_2, password_2).await;
+        let base_url_2 = Url::parse(&server_2.uri())?;
+
+        let cache = CredentialsCache::new();
+        // Seed the cache with our credentials
+        cache.insert(
+            &base_url_1,
+            Arc::new(Credentials::new(
+                Some(username_1.to_string()),
+                Some(password_1.to_string()),
+            )),
+        );
+        cache.insert(
+            &base_url_2,
+            Arc::new(Credentials::new(
+                Some(username_2.to_string()),
+                Some(password_2.to_string()),
+            )),
+        );
+
+        let client = test_client_builder()
+            .with(AuthMiddleware::new().with_cache(cache))
+            .build();
+
+        // Both servers should work
+        assert_eq!(
+            client.get(server_1.uri()).send().await?.status(),
+            200,
+            "Requests should not require credentials"
+        );
+        assert_eq!(
+            client.get(server_2.uri()).send().await?.status(),
+            200,
+            "Requests should not require credentials"
+        );
+
+        assert_eq!(
+            client
+                .get(format!("{}/foo", server_1.uri()))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests can be to different paths in the same realm"
+        );
+        assert_eq!(
+            client
+                .get(format!("{}/foo", server_2.uri()))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests can be to different paths in the same realm"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_credentials_from_keyring_multiple_realms() -> Result<(), Error> {
+        let username_1 = "user1";
+        let password_1 = "password1";
+        let server_1 = start_test_server(username_1, password_1).await;
+        let base_url_1 = Url::parse(&server_1.uri())?;
+
+        let username_2 = "user2";
+        let password_2 = "password2";
+        let server_2 = start_test_server(username_2, password_2).await;
+        let base_url_2 = Url::parse(&server_2.uri())?;
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_keyring(Some(KeyringProvider::dummy([
+                        ((base_url_1.host_str().unwrap(), username_1), password_1),
+                        ((base_url_2.host_str().unwrap(), username_2), password_2),
+                    ]))),
+            )
+            .build();
+
+        // Both servers do not work without a username
+        assert_eq!(
+            client.get(server_1.uri()).send().await?.status(),
+            401,
+            "Requests should require a username"
+        );
+        assert_eq!(
+            client.get(server_2.uri()).send().await?.status(),
+            401,
+            "Requests should require a username"
+        );
+
+        let mut url_1 = base_url_1.clone();
+        url_1.set_username(username_1).unwrap();
+        assert_eq!(
+            client.get(url_1.clone()).send().await?.status(),
+            200,
+            "Requests with a username should succeed"
+        );
+        assert_eq!(
+            client.get(server_2.uri()).send().await?.status(),
+            401,
+            "Credentials should not be re-used for the second server"
+        );
+
+        let mut url_2 = base_url_2.clone();
+        url_2.set_username(username_2).unwrap();
+        assert_eq!(
+            client.get(url_2.clone()).send().await?.status(),
+            200,
+            "Requests with a username should succeed"
+        );
+
+        assert_eq!(
+            client.get(format!("{}/foo", url_1)).send().await?.status(),
+            200,
+            "Requests can be to different paths in the same realm"
+        );
+        assert_eq!(
+            client.get(format!("{}/foo", url_2)).send().await?.status(),
+            200,
+            "Requests can be to different paths in the same realm"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_credentials_in_url_mixed_authentication_in_realm() -> Result<(), Error> {
+        let username_1 = "user1";
+        let password_1 = "password1";
+        let username_2 = "user2";
+        let password_2 = "password2";
+
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_1.*"))
+            .and(basic_auth(username_1, password_1))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_2.*"))
+            .and(basic_auth(username_2, password_2))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        // Create a third, public prefix
+        // It will throw a 401 if it recieves credentials
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_3.*"))
+            .and(basic_auth(username_1, password_1))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_3.*"))
+            .and(basic_auth(username_2, password_2))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_3.*"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let base_url = Url::parse(&server.uri())?;
+        let base_url_1 = base_url.join("prefix_1")?;
+        let base_url_2 = base_url.join("prefix_2")?;
+        let base_url_3 = base_url.join("prefix_3")?;
+
+        let cache = CredentialsCache::new();
+
+        // Seed the cache with our credentials
+        cache.insert(
+            &base_url_1,
+            Arc::new(Credentials::new(
+                Some(username_1.to_string()),
+                Some(password_1.to_string()),
+            )),
+        );
+        cache.insert(
+            &base_url_2,
+            Arc::new(Credentials::new(
+                Some(username_2.to_string()),
+                Some(password_2.to_string()),
+            )),
+        );
+
+        let client = test_client_builder()
+            .with(AuthMiddleware::new().with_cache(cache))
+            .build();
+
+        // Both servers should work
+        assert_eq!(
+            client.get(base_url_1.clone()).send().await?.status(),
+            200,
+            "Requests should not require credentials"
+        );
+        assert_eq!(
+            client.get(base_url_2.clone()).send().await?.status(),
+            200,
+            "Requests should not require credentials"
+        );
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_1/foo")?)
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests can be to different paths in the same realm"
+        );
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_2/foo")?)
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests can be to different paths in the same realm"
+        );
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_1_foo")?)
+                .send()
+                .await?
+                .status(),
+            401,
+            "Requests to paths with a matching prefix but different resource segments should fail"
+        );
+
+        assert_eq!(
+            client.get(base_url_3.clone()).send().await?.status(),
+            200,
+            "Requests to the 'public' prefix should not use credentials"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_credentials_from_keyring_mixed_authentication_in_realm() -> Result<(), Error> {
+        let username_1 = "user1";
+        let password_1 = "password1";
+        let username_2 = "user2";
+        let password_2 = "password2";
+
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_1.*"))
+            .and(basic_auth(username_1, password_1))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_2.*"))
+            .and(basic_auth(username_2, password_2))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        // Create a third, public prefix
+        // It will throw a 401 if it recieves credentials
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_3.*"))
+            .and(basic_auth(username_1, password_1))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_3.*"))
+            .and(basic_auth(username_2, password_2))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_3.*"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let base_url = Url::parse(&server.uri())?;
+        let base_url_1 = base_url.join("prefix_1")?;
+        let base_url_2 = base_url.join("prefix_2")?;
+        let base_url_3 = base_url.join("prefix_3")?;
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_keyring(Some(KeyringProvider::dummy([
+                        ((base_url_1.host_str().unwrap(), username_1), password_1),
+                        ((base_url_2.host_str().unwrap(), username_2), password_2),
+                    ]))),
+            )
+            .build();
+
+        // Both servers do not work without a username
+        assert_eq!(
+            client.get(base_url_1.clone()).send().await?.status(),
+            401,
+            "Requests should require a username"
+        );
+        assert_eq!(
+            client.get(base_url_2.clone()).send().await?.status(),
+            401,
+            "Requests should require a username"
+        );
+
+        let mut url_1 = base_url_1.clone();
+        url_1.set_username(username_1).unwrap();
+        assert_eq!(
+            client.get(url_1.clone()).send().await?.status(),
+            200,
+            "Requests with a username should succeed"
+        );
+        assert_eq!(
+            client.get(base_url_2.clone()).send().await?.status(),
+            401,
+            "Credentials should not be re-used for the second prefix"
+        );
+
+        let mut url_2 = base_url_2.clone();
+        url_2.set_username(username_2).unwrap();
+        assert_eq!(
+            client.get(url_2.clone()).send().await?.status(),
+            200,
+            "Requests with a username should succeed"
+        );
+
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_1/foo")?)
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests can be to different paths in the same prefix"
+        );
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_2/foo")?)
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests can be to different paths in the same prefix"
+        );
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_1_foo")?)
+                .send()
+                .await?
+                .status(),
+            401,
+            "Requests to paths with a matching prefix but different resource segments should fail"
+        );
+        assert_eq!(
+            client.get(base_url_3.clone()).send().await?.status(),
+            200,
+            "Requests to the 'public' prefix should not use credentials"
         );
 
         Ok(())

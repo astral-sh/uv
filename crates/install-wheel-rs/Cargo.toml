@@ -39,6 +39,7 @@ platform-info = { workspace = true }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
+schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

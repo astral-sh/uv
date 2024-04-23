@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -8,7 +9,7 @@ use clap::{Args, Parser, Subcommand};
 use distribution_types::{FlatIndexLocation, IndexUrl};
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
+    ConfigSettingEntry, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PreReleaseMode, ResolutionMode};
@@ -30,9 +31,14 @@ pub(crate) struct Cli {
 
     #[command(flatten)]
     pub(crate) cache_args: CacheArgs,
+
+    /// The path to a `pyproject.toml` or `uv.toml` file to use for configuration.
+    #[arg(long, short, env = "UV_CONFIG_FILE", hide = true)]
+    pub(crate) config_file: Option<PathBuf>,
 }
 
 #[derive(Parser, Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct GlobalArgs {
     /// Do not print any output.
     #[arg(global = true, long, short, conflicts_with = "verbose")]
@@ -68,8 +74,18 @@ pub(crate) struct GlobalArgs {
     /// However, in some cases, you may want to use the platform's native certificate store,
     /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
     /// included in your system's certificate store.
-    #[arg(global = true, long, env = "UV_NATIVE_TLS")]
+    #[arg(global = true, long, env = "UV_NATIVE_TLS", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_native_tls"))]
     pub(crate) native_tls: bool,
+
+    #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
+    pub(crate) no_native_tls: bool,
+
+    /// Whether to enable experimental, preview features.
+    #[arg(global = true, long, hide = true, env = "UV_PREVIEW", value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
+    pub(crate) preview: bool,
+
+    #[arg(global = true, long, overrides_with("preview"), hide = true)]
+    pub(crate) no_preview: bool,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]
@@ -111,6 +127,8 @@ pub(crate) enum Commands {
     /// Clear the cache, removing all entries or those linked to specific packages.
     #[command(hide = true)]
     Clean(CleanArgs),
+    #[clap(hide = true)]
+    Run(RunArgs),
     /// Display uv's version
     Version {
         #[arg(long, value_enum, default_value = "text")]
@@ -213,6 +231,18 @@ fn parse_index_url(input: &str) -> Result<Maybe<IndexUrl>, String> {
     }
 }
 
+/// Parse a string into a [`PathBuf`], mapping the empty string to `None`.
+fn parse_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match PathBuf::from_str(input) {
+            Ok(path) => Ok(Maybe::Some(path)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct PipCompileArgs {
@@ -229,8 +259,8 @@ pub(crate) struct PipCompileArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short)]
-    pub(crate) constraint: Vec<PathBuf>,
+    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_file_path)]
+    pub(crate) constraint: Vec<Maybe<PathBuf>>,
 
     /// Override versions using the given requirements files.
     ///
@@ -246,22 +276,37 @@ pub(crate) struct PipCompileArgs {
 
     /// Include optional dependencies in the given extra group name; may be provided more than once.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
-    pub(crate) extra: Vec<ExtraName>,
+    pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
     #[arg(long, conflicts_with = "extra")]
     pub(crate) all_extras: bool,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub(crate) no_all_extras: bool,
 
     /// Ignore package dependencies, instead only add those packages explicitly listed
     /// on the command line to the resulting the requirements file.
     #[arg(long)]
     pub(crate) no_deps: bool,
 
-    #[arg(long, value_enum, default_value_t = ResolutionMode::default(), env = "UV_RESOLUTION")]
-    pub(crate) resolution: ResolutionMode,
+    #[arg(long, overrides_with("no_deps"), hide = true)]
+    pub(crate) deps: bool,
 
-    #[arg(long, value_enum, default_value_t = PreReleaseMode::default(), env = "UV_PRERELEASE")]
-    pub(crate) prerelease: PreReleaseMode,
+    /// The strategy to use when selecting between the different compatible versions for a given
+    /// package requirement.
+    ///
+    /// By default, `uv` will use the latest compatible version of each package (`highest`).
+    #[arg(long, value_enum, env = "UV_RESOLUTION")]
+    pub(crate) resolution: Option<ResolutionMode>,
+
+    /// The strategy to use when considering pre-release versions.
+    ///
+    /// By default, `uv` will accept pre-releases for packages that _only_ publish pre-releases,
+    /// along with first-party requirements that contain an explicit pre-release marker in the
+    /// declared specifiers (`if-necessary-or-explicit`).
+    #[arg(long, value_enum, env = "UV_PRERELEASE")]
+    pub(crate) prerelease: Option<PreReleaseMode>,
 
     #[arg(long, hide = true)]
     pub(crate) pre: bool,
@@ -275,20 +320,31 @@ pub(crate) struct PipCompileArgs {
     /// By default, `uv` strips extras, as any packages pulled in by the extras are already included
     /// as dependencies in the output file directly. Further, output files generated with
     /// `--no-strip-extras` cannot be used as constraints files in `install` and `sync` invocations.
-    #[arg(long)]
+    #[arg(long, overrides_with("strip_extras"))]
     pub(crate) no_strip_extras: bool,
 
+    #[arg(long, overrides_with("no_strip_extras"), hide = true)]
+    pub(crate) strip_extras: bool,
+
     /// Exclude comment annotations indicating the source of each package.
-    #[arg(long)]
+    #[arg(long, overrides_with("annotate"))]
     pub(crate) no_annotate: bool,
 
+    #[arg(long, overrides_with("no_annotate"), hide = true)]
+    pub(crate) annotate: bool,
+
     /// Exclude the comment header at the top of the generated output file.
-    #[arg(long)]
+    #[arg(long, overrides_with("header"))]
     pub(crate) no_header: bool,
 
+    #[arg(long, overrides_with("no_header"), hide = true)]
+    pub(crate) header: bool,
+
     /// Choose the style of the annotation comments, which indicate the source of each package.
-    #[arg(long, default_value_t=AnnotationStyle::Split, value_enum)]
-    pub(crate) annotation_style: AnnotationStyle,
+    ///
+    /// Defaults to `split`.
+    #[arg(long, value_enum)]
+    pub(crate) annotation_style: Option<AnnotationStyle>,
 
     /// Change header comment to reflect custom command wrapping `uv pip compile`.
     #[arg(long, env = "UV_CUSTOM_COMPILE_COMMAND")]
@@ -299,9 +355,13 @@ pub(crate) struct PipCompileArgs {
         global = true,
         long,
         conflicts_with = "refresh",
-        conflicts_with = "refresh_package"
+        conflicts_with = "refresh_package",
+        overrides_with("no_offline")
     )]
     pub(crate) offline: bool,
+
+    #[arg(long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
     #[arg(long)]
@@ -317,8 +377,8 @@ pub(crate) struct PipCompileArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
-    pub(crate) link_mode: install_wheel_rs::linker::LinkMode,
+    #[arg(long, value_enum)]
+    pub(crate) link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
@@ -341,7 +401,16 @@ pub(crate) struct PipCompileArgs {
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
     #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
-    pub(crate) extra_index_url: Vec<Maybe<IndexUrl>>,
+    pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
+
+    /// Locations to search for candidate distributions, beyond those found in the indexes.
+    ///
+    /// If a path, the target must be a directory that contains package as wheel files (`.whl`) or
+    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    ///
+    /// If a URL, the page must contain a flat list of links to package files.
+    #[arg(long, short)]
+    pub(crate) find_links: Option<Vec<FlatIndexLocation>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -351,27 +420,52 @@ pub(crate) struct PipCompileArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
-    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
-    /// index.
-    #[arg(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
-    pub(crate) index_strategy: IndexStrategy,
+    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
+    /// same name to a secondary
+    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    pub(crate) index_strategy: Option<IndexStrategy>,
 
-    /// Attempt to use `keyring` for authentication for index urls
+    /// Attempt to use `keyring` for authentication for index URLs.
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
-    #[arg(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProviderType,
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 
-    /// Locations to search for candidate distributions, beyond those found in the indexes.
+    /// The Python interpreter against which to compile the requirements.
     ///
-    /// If a path, the target must be a directory that contains package as wheel files (`.whl`) or
-    /// source distributions (`.tar.gz` or `.zip`) at the top level.
+    /// By default, `uv` uses the virtual environment in the current working directory or any parent
+    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
+    /// option allows you to specify a different interpreter.
     ///
-    /// If a URL, the page must contain a flat list of links to package files.
-    #[arg(long, short)]
-    pub(crate) find_links: Vec<FlatIndexLocation>,
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(long, verbatim_doc_comment, group = "discovery")]
+    pub(crate) python: Option<String>,
+
+    /// Install packages into the system Python.
+    ///
+    /// By default, `uv` uses the virtual environment in the current working directory or any parent
+    /// directory, falling back to searching for a Python executable in `PATH`. The `--system`
+    /// option instructs `uv` to avoid using a virtual environment Python and restrict its search to
+    /// the system path.
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        group = "discovery",
+        overrides_with("no_system")
+    )]
+    pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 
     /// Allow package upgrades, ignoring pinned versions in the existing output file.
     #[arg(long, short = 'U')]
@@ -383,19 +477,28 @@ pub(crate) struct PipCompileArgs {
     pub(crate) upgrade_package: Vec<PackageName>,
 
     /// Include distribution hashes in the output file.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_generate_hashes"))]
     pub(crate) generate_hashes: bool,
+
+    #[arg(long, overrides_with("generate_hashes"), hide = true)]
+    pub(crate) no_generate_hashes: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_legacy_setup_py"))]
     pub(crate) legacy_setup_py: bool,
+
+    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
+    pub(crate) no_legacy_setup_py: bool,
 
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(long)]
+    #[arg(long, overrides_with("build_isolation"))]
     pub(crate) no_build_isolation: bool,
+
+    #[arg(long, overrides_with("no_build_isolation"), hide = true)]
+    pub(crate) build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -404,8 +507,16 @@ pub(crate) struct PipCompileArgs {
     /// exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
-    #[arg(long, conflicts_with = "only_binary")]
+    #[arg(long, conflicts_with = "only_binary", overrides_with = "build")]
     pub(crate) no_build: bool,
+
+    #[arg(
+        long,
+        conflicts_with = "only_binary",
+        overrides_with("no_build"),
+        hide = true
+    )]
+    pub(crate) build: bool,
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
@@ -416,11 +527,11 @@ pub(crate) struct PipCompileArgs {
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
     #[arg(long, conflicts_with = "no_build")]
-    pub(crate) only_binary: Vec<PackageNameSpecifier>,
+    pub(crate) only_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(long, short = 'C', alias = "config-settings")]
-    pub(crate) config_setting: Vec<ConfigSettingEntry>,
+    pub(crate) config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// The minimum Python version that should be supported by the compiled requirements (e.g.,
     /// `3.7` or `3.7.9`).
@@ -429,6 +540,14 @@ pub(crate) struct PipCompileArgs {
     /// is assumed. For example, `3.7` is mapped to `3.7.17`.
     #[arg(long, short)]
     pub(crate) python_version: Option<PythonVersion>,
+
+    /// The platform for which requirements should be resolved.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aaarch64-apple-darwin`.
+    #[arg(long)]
+    pub(crate) python_platform: Option<TargetTriple>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -440,15 +559,21 @@ pub(crate) struct PipCompileArgs {
     /// Specify a package to omit from the output resolution. Its dependencies will still be
     /// included in the resolution. Equivalent to pip-compile's `--unsafe-package` option.
     #[arg(long, alias = "unsafe-package")]
-    pub(crate) no_emit_package: Vec<PackageName>,
+    pub(crate) no_emit_package: Option<Vec<PackageName>>,
 
     /// Include `--index-url` and `--extra-index-url` entries in the generated output file.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_emit_index_url"))]
     pub(crate) emit_index_url: bool,
 
+    #[arg(long, overrides_with("emit_index_url"), hide = true)]
+    pub(crate) no_emit_index_url: bool,
+
     /// Include `--find-links` entries in the generated output file.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_emit_find_links"))]
     pub(crate) emit_find_links: bool,
+
+    #[arg(long, overrides_with("emit_find_links"), hide = true)]
+    pub(crate) no_emit_find_links: bool,
 
     /// Whether to emit a marker string indicating when it is known that the
     /// resulting set of pinned dependencies is valid.
@@ -456,13 +581,19 @@ pub(crate) struct PipCompileArgs {
     /// The pinned dependencies may be valid even when the marker expression is
     /// false, but when the expression is true, the requirements are known to
     /// be correct.
-    #[arg(long, hide = true)]
+    #[arg(long, overrides_with("no_emit_marker_expression"), hide = true)]
     pub(crate) emit_marker_expression: bool,
+
+    #[arg(long, overrides_with("emit_marker_expression"), hide = true)]
+    pub(crate) no_emit_marker_expression: bool,
 
     /// Include comment annotations indicating the index used to resolve each package (e.g.,
     /// `# from https://pypi.org/simple`).
-    #[arg(long)]
+    #[arg(long, overrides_with("no_emit_index_annotation"))]
     pub(crate) emit_index_annotation: bool,
+
+    #[arg(long, overrides_with("emit_index_annotation"), hide = true)]
+    pub(crate) no_emit_index_annotation: bool,
 
     #[command(flatten)]
     pub(crate) compat_args: compat::PipCompileCompatArgs,
@@ -483,14 +614,17 @@ pub(crate) struct PipSyncArgs {
     #[arg(long)]
     pub(crate) reinstall_package: Vec<PackageName>,
 
-    /// Run offline, i.e., without accessing the network.
     #[arg(
         global = true,
         long,
         conflicts_with = "refresh",
-        conflicts_with = "refresh_package"
+        conflicts_with = "refresh_package",
+        overrides_with("no_offline")
     )]
     pub(crate) offline: bool,
+
+    #[arg(long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
     #[arg(long)]
@@ -504,8 +638,8 @@ pub(crate) struct PipSyncArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
-    pub(crate) link_mode: install_wheel_rs::linker::LinkMode,
+    #[arg(long, value_enum)]
+    pub(crate) link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
@@ -528,7 +662,7 @@ pub(crate) struct PipSyncArgs {
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
     #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
-    pub(crate) extra_index_url: Vec<Maybe<IndexUrl>>,
+    pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -537,7 +671,7 @@ pub(crate) struct PipSyncArgs {
     ///
     /// If a URL, the page must contain a flat list of links to package files.
     #[arg(long, short)]
-    pub(crate) find_links: Vec<FlatIndexLocation>,
+    pub(crate) find_links: Option<Vec<FlatIndexLocation>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -547,11 +681,11 @@ pub(crate) struct PipSyncArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
-    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
-    /// index.
-    #[arg(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
-    pub(crate) index_strategy: IndexStrategy,
+    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
+    /// same name to a secondary
+    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    pub(crate) index_strategy: Option<IndexStrategy>,
 
     /// Require a matching hash for each requirement.
     ///
@@ -564,15 +698,21 @@ pub(crate) struct PipSyncArgs {
     /// - Editable installs are not supported.
     /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
     ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(long, hide = true)]
+    #[arg(long,         env = "UV_REQUIRE_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_require_hashes"))]
     pub(crate) require_hashes: bool,
 
-    /// Attempt to use `keyring` for authentication for index urls
+    #[arg(long, overrides_with("require_hashes"), hide = true)]
+    pub(crate) no_require_hashes: bool,
+
+    /// Attempt to use `keyring` for authentication for index URLs.
     ///
     /// Function's similar to `pip`'s `--keyring-provider subprocess` argument,
     /// `uv` will try to use `keyring` via CLI when this flag is used.
-    #[arg(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProviderType,
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -597,8 +737,17 @@ pub(crate) struct PipSyncArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
     ///
@@ -606,19 +755,34 @@ pub(crate) struct PipSyncArgs {
     /// environments, when installing into Python installations that are managed by an external
     /// package manager, like `apt`. It should be used with caution, as such Python installations
     /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
-    #[arg(long, env = "UV_BREAK_SYSTEM_PACKAGES", requires = "discovery")]
+    #[arg(
+        long,
+        env = "UV_BREAK_SYSTEM_PACKAGES",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        requires = "discovery",
+        overrides_with("no_break_system_packages")
+    )]
     pub(crate) break_system_packages: bool,
+
+    #[arg(long, overrides_with("break_system_packages"))]
+    pub(crate) no_break_system_packages: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_legacy_setup_py"))]
     pub(crate) legacy_setup_py: bool,
+
+    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
+    pub(crate) no_legacy_setup_py: bool,
 
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(long)]
+    #[arg(long, overrides_with("build_isolation"))]
     pub(crate) no_build_isolation: bool,
+
+    #[arg(long, overrides_with("no_build_isolation"), hide = true)]
+    pub(crate) build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -627,8 +791,22 @@ pub(crate) struct PipSyncArgs {
     /// exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
-    #[arg(long, conflicts_with = "no_binary", conflicts_with = "only_binary")]
+    #[arg(
+        long,
+        conflicts_with = "no_binary",
+        conflicts_with = "only_binary",
+        overrides_with("build")
+    )]
     pub(crate) no_build: bool,
+
+    #[arg(
+        long,
+        conflicts_with = "no_binary",
+        conflicts_with = "only_binary",
+        overrides_with("no_build"),
+        hide = true
+    )]
+    pub(crate) build: bool,
 
     /// Don't install pre-built wheels.
     ///
@@ -638,7 +816,7 @@ pub(crate) struct PipSyncArgs {
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
     #[arg(long, conflicts_with = "no_build")]
-    pub(crate) no_binary: Vec<PackageNameSpecifier>,
+    pub(crate) no_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
@@ -649,7 +827,7 @@ pub(crate) struct PipSyncArgs {
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
     #[arg(long, conflicts_with = "no_build")]
-    pub(crate) only_binary: Vec<PackageNameSpecifier>,
+    pub(crate) only_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Compile Python files to bytecode.
     ///
@@ -660,21 +838,50 @@ pub(crate) struct PipSyncArgs {
     ///
     /// The compile option will process the entire site-packages directory for consistency and
     /// (like pip) ignore all errors.
-    #[arg(long)]
-    pub(crate) compile: bool,
+    #[arg(long, alias = "compile", overrides_with("no_compile_bytecode"))]
+    pub(crate) compile_bytecode: bool,
 
-    /// Don't compile Python files to bytecode.
-    #[arg(long, hide = true, conflicts_with = "compile")]
-    pub(crate) no_compile: bool,
+    #[arg(
+        long,
+        alias = "no_compile",
+        overrides_with("compile_bytecode"),
+        hide = true
+    )]
+    pub(crate) no_compile_bytecode: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(long, short = 'C', alias = "config-settings")]
-    pub(crate) config_setting: Vec<ConfigSettingEntry>,
+    pub(crate) config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// The minimum Python version that should be supported by the requirements (e.g.,
+    /// `3.7` or `3.7.9`).
+    ///
+    /// If a patch version is omitted, the most recent known patch version for that minor version
+    /// is assumed. For example, `3.7` is mapped to `3.7.17`.
+    #[arg(long)]
+    pub(crate) python_version: Option<PythonVersion>,
+
+    /// The platform for which requirements should be installed.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aaarch64-apple-darwin`.
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
+    #[arg(long)]
+    pub(crate) python_platform: Option<TargetTriple>,
 
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_strict"))]
     pub(crate) strict: bool,
+
+    #[arg(long, overrides_with("strict"), hide = true)]
+    pub(crate) no_strict: bool,
 
     #[command(flatten)]
     pub(crate) compat_args: compat::PipSyncCompatArgs,
@@ -703,8 +910,8 @@ pub(crate) struct PipInstallArgs {
     /// trigger the installation of that package.
     ///
     /// This is equivalent to pip's `--constraint` option.
-    #[arg(long, short)]
-    pub(crate) constraint: Vec<PathBuf>,
+    #[arg(long, short, env = "UV_CONSTRAINT", value_delimiter = ' ', value_parser = parse_file_path)]
+    pub(crate) constraint: Vec<Maybe<PathBuf>>,
 
     /// Override versions using the given requirements files.
     ///
@@ -720,11 +927,14 @@ pub(crate) struct PipInstallArgs {
 
     /// Include optional dependencies in the given extra group name; may be provided more than once.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
-    pub(crate) extra: Vec<ExtraName>,
+    pub(crate) extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
-    #[arg(long, conflicts_with = "extra")]
+    #[arg(long, conflicts_with = "extra", overrides_with = "no_all_extras")]
     pub(crate) all_extras: bool,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub(crate) no_all_extras: bool,
 
     /// Allow package upgrades.
     #[arg(long, short = 'U')]
@@ -742,14 +952,17 @@ pub(crate) struct PipInstallArgs {
     #[arg(long)]
     pub(crate) reinstall_package: Vec<PackageName>,
 
-    /// Run offline, i.e., without accessing the network.
     #[arg(
         global = true,
         long,
         conflicts_with = "refresh",
-        conflicts_with = "refresh_package"
+        conflicts_with = "refresh_package",
+        overrides_with("no_offline")
     )]
     pub(crate) offline: bool,
+
+    #[arg(long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
 
     /// Refresh all cached data.
     #[arg(long)]
@@ -761,21 +974,33 @@ pub(crate) struct PipInstallArgs {
 
     /// Ignore package dependencies, instead only installing those packages explicitly listed
     /// on the command line or in the requirements files.
-    #[arg(long)]
+    #[arg(long, overrides_with("deps"))]
     pub(crate) no_deps: bool,
+
+    #[arg(long, overrides_with("no_deps"), hide = true)]
+    pub(crate) deps: bool,
 
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
-    pub(crate) link_mode: install_wheel_rs::linker::LinkMode,
+    #[arg(long, value_enum)]
+    pub(crate) link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
-    #[arg(long, value_enum, default_value_t = ResolutionMode::default(), env = "UV_RESOLUTION")]
-    pub(crate) resolution: ResolutionMode,
+    /// The strategy to use when selecting between the different compatible versions for a given
+    /// package requirement.
+    ///
+    /// By default, `uv` will use the latest compatible version of each package (`highest`).
+    #[arg(long, value_enum, env = "UV_RESOLUTION")]
+    pub(crate) resolution: Option<ResolutionMode>,
 
-    #[arg(long, value_enum, default_value_t = PreReleaseMode::default(), env = "UV_PRERELEASE")]
-    pub(crate) prerelease: PreReleaseMode,
+    /// The strategy to use when considering pre-release versions.
+    ///
+    /// By default, `uv` will accept pre-releases for packages that _only_ publish pre-releases,
+    /// along with first-party requirements that contain an explicit pre-release marker in the
+    /// declared specifiers (`if-necessary-or-explicit`).
+    #[arg(long, value_enum, env = "UV_PRERELEASE")]
+    pub(crate) prerelease: Option<PreReleaseMode>,
 
     #[arg(long, hide = true)]
     pub(crate) pre: bool,
@@ -801,7 +1026,7 @@ pub(crate) struct PipInstallArgs {
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
     #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
-    pub(crate) extra_index_url: Vec<Maybe<IndexUrl>>,
+    pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
     /// Locations to search for candidate distributions, beyond those found in the indexes.
     ///
@@ -810,7 +1035,7 @@ pub(crate) struct PipInstallArgs {
     ///
     /// If a URL, the page must contain a flat list of links to package files.
     #[arg(long, short)]
-    pub(crate) find_links: Vec<FlatIndexLocation>,
+    pub(crate) find_links: Option<Vec<FlatIndexLocation>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -820,11 +1045,11 @@ pub(crate) struct PipInstallArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
-    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
-    /// index.
-    #[arg(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
-    pub(crate) index_strategy: IndexStrategy,
+    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
+    /// same name to a secondary
+    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    pub(crate) index_strategy: Option<IndexStrategy>,
 
     /// Require a matching hash for each requirement.
     ///
@@ -837,15 +1062,21 @@ pub(crate) struct PipInstallArgs {
     /// - Editable installs are not supported.
     /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
     ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
-    #[arg(long, hide = true)]
+    #[arg(long,         env = "UV_REQUIRE_HASHES",
+        value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_require_hashes"))]
     pub(crate) require_hashes: bool,
 
-    /// Attempt to use `keyring` for authentication for index urls
+    #[arg(long, overrides_with("require_hashes"), hide = true)]
+    pub(crate) no_require_hashes: bool,
+
+    /// Attempt to use `keyring` for authentication for index URLs.
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
-    #[arg(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProviderType,
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -870,8 +1101,17 @@ pub(crate) struct PipInstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
     ///
@@ -879,19 +1119,34 @@ pub(crate) struct PipInstallArgs {
     /// environments, when installing into Python installations that are managed by an external
     /// package manager, like `apt`. It should be used with caution, as such Python installations
     /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
-    #[arg(long, env = "UV_BREAK_SYSTEM_PACKAGES", requires = "discovery")]
+    #[arg(
+        long,
+        env = "UV_BREAK_SYSTEM_PACKAGES",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        requires = "discovery",
+        overrides_with("no_break_system_packages")
+    )]
     pub(crate) break_system_packages: bool,
+
+    #[arg(long, overrides_with("break_system_packages"))]
+    pub(crate) no_break_system_packages: bool,
 
     /// Use legacy `setuptools` behavior when building source distributions without a
     /// `pyproject.toml`.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_legacy_setup_py"))]
     pub(crate) legacy_setup_py: bool,
+
+    #[arg(long, overrides_with("legacy_setup_py"), hide = true)]
+    pub(crate) no_legacy_setup_py: bool,
 
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
-    #[arg(long)]
+    #[arg(long, overrides_with("build_isolation"))]
     pub(crate) no_build_isolation: bool,
+
+    #[arg(long, overrides_with("no_build_isolation"), hide = true)]
+    pub(crate) build_isolation: bool,
 
     /// Don't build source distributions.
     ///
@@ -900,8 +1155,22 @@ pub(crate) struct PipInstallArgs {
     /// exit with an error.
     ///
     /// Alias for `--only-binary :all:`.
-    #[arg(long, conflicts_with = "no_binary", conflicts_with = "only_binary")]
+    #[arg(
+        long,
+        conflicts_with = "no_binary",
+        conflicts_with = "only_binary",
+        overrides_with("build")
+    )]
     pub(crate) no_build: bool,
+
+    #[arg(
+        long,
+        conflicts_with = "no_binary",
+        conflicts_with = "only_binary",
+        overrides_with("no_build"),
+        hide = true
+    )]
+    pub(crate) build: bool,
 
     /// Don't install pre-built wheels.
     ///
@@ -911,7 +1180,7 @@ pub(crate) struct PipInstallArgs {
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
     #[arg(long, conflicts_with = "no_build")]
-    pub(crate) no_binary: Vec<PackageNameSpecifier>,
+    pub(crate) no_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
@@ -922,7 +1191,7 @@ pub(crate) struct PipInstallArgs {
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
     #[arg(long, conflicts_with = "no_build")]
-    pub(crate) only_binary: Vec<PackageNameSpecifier>,
+    pub(crate) only_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Compile Python files to bytecode.
     ///
@@ -933,21 +1202,50 @@ pub(crate) struct PipInstallArgs {
     ///
     /// The compile option will process the entire site-packages directory for consistency and
     /// (like pip) ignore all errors.
-    #[arg(long)]
-    pub(crate) compile: bool,
+    #[arg(long, alias = "compile", overrides_with("no_compile_bytecode"))]
+    pub(crate) compile_bytecode: bool,
 
-    /// Don't compile Python files to bytecode.
-    #[arg(long, hide = true, conflicts_with = "compile")]
-    pub(crate) no_compile: bool,
+    #[arg(
+        long,
+        alias = "no_compile",
+        overrides_with("compile_bytecode"),
+        hide = true
+    )]
+    pub(crate) no_compile_bytecode: bool,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(long, short = 'C', alias = "config-settings")]
-    pub(crate) config_setting: Vec<ConfigSettingEntry>,
+    pub(crate) config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// The minimum Python version that should be supported by the requirements (e.g.,
+    /// `3.7` or `3.7.9`).
+    ///
+    /// If a patch version is omitted, the most recent known patch version for that minor version
+    /// is assumed. For example, `3.7` is mapped to `3.7.17`.
+    #[arg(long)]
+    pub(crate) python_version: Option<PythonVersion>,
+
+    /// The platform for which requirements should be installed.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aaarch64-apple-darwin`.
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
+    #[arg(long)]
+    pub(crate) python_platform: Option<TargetTriple>,
 
     /// Validate the virtual environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_strict"))]
     pub(crate) strict: bool,
+
+    #[arg(long, overrides_with("strict"), hide = true)]
+    pub(crate) no_strict: bool,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -993,8 +1291,10 @@ pub(crate) struct PipUninstallArgs {
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
-    #[arg(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProviderType,
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 
     /// Use the system Python to uninstall packages.
     ///
@@ -1004,8 +1304,17 @@ pub(crate) struct PipUninstallArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 
     /// Allow `uv` to modify an `EXTERNALLY-MANAGED` Python installation.
     ///
@@ -1013,12 +1322,24 @@ pub(crate) struct PipUninstallArgs {
     /// environments, when installing into Python installations that are managed by an external
     /// package manager, like `apt`. It should be used with caution, as such Python installations
     /// explicitly recommend against modifications by other package managers (like `uv` or `pip`).
-    #[arg(long, env = "UV_BREAK_SYSTEM_PACKAGES", requires = "discovery")]
+    #[arg(
+        long,
+        env = "UV_BREAK_SYSTEM_PACKAGES",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        requires = "discovery",
+        overrides_with("no_break_system_packages")
+    )]
     pub(crate) break_system_packages: bool,
 
+    #[arg(long, overrides_with("break_system_packages"))]
+    pub(crate) no_break_system_packages: bool,
+
     /// Run offline, i.e., without accessing the network.
-    #[arg(global = true, long)]
+    #[arg(long, overrides_with("no_offline"))]
     pub(crate) offline: bool,
+
+    #[arg(long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
 }
 
 #[derive(Args)]
@@ -1030,8 +1351,11 @@ pub(crate) struct PipFreezeArgs {
 
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_strict"))]
     pub(crate) strict: bool,
+
+    #[arg(long, overrides_with("strict"), hide = true)]
+    pub(crate) no_strict: bool,
 
     /// The Python interpreter for which packages should be listed.
     ///
@@ -1056,8 +1380,17 @@ pub(crate) struct PipFreezeArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 }
 
 #[derive(Args)]
@@ -1081,8 +1414,11 @@ pub(crate) struct PipListArgs {
 
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_strict"))]
     pub(crate) strict: bool,
+
+    #[arg(long, overrides_with("strict"), hide = true)]
+    pub(crate) no_strict: bool,
 
     /// The Python interpreter for which packages should be listed.
     ///
@@ -1107,8 +1443,17 @@ pub(crate) struct PipListArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 
     #[command(flatten)]
     pub(crate) compat_args: compat::PipListCompatArgs,
@@ -1140,8 +1485,17 @@ pub(crate) struct PipCheckArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 }
 
 #[derive(Args)]
@@ -1152,8 +1506,11 @@ pub(crate) struct PipShowArgs {
 
     /// Validate the virtual environment, to detect packages with missing dependencies or other
     /// issues.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_strict"))]
     pub(crate) strict: bool,
+
+    #[arg(long, overrides_with("strict"), hide = true)]
+    pub(crate) no_strict: bool,
 
     /// The Python interpreter for which packages should be listed.
     ///
@@ -1178,8 +1535,17 @@ pub(crate) struct PipShowArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        group = "discovery",
+        overrides_with("no_system")
+    )]
     pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 }
 
 #[derive(Args)]
@@ -1206,8 +1572,17 @@ pub(crate) struct VenvArgs {
     ///
     /// WARNING: `--system` is intended for use in continuous integration (CI) environments and
     /// should be used with caution, as it can modify the system Python installation.
-    #[arg(long, env = "UV_SYSTEM_PYTHON", group = "discovery")]
-    system: bool,
+    #[arg(
+        long,
+        env = "UV_SYSTEM_PYTHON",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        group = "discovery",
+        overrides_with("no_system")
+    )]
+    pub(crate) system: bool,
+
+    #[arg(long, overrides_with("system"))]
+    pub(crate) no_system: bool,
 
     /// Install seed packages (`pip`, `setuptools`, and `wheel`) into the virtual environment.
     #[arg(long)]
@@ -1245,8 +1620,8 @@ pub(crate) struct VenvArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
-    #[arg(long, value_enum, default_value_t = install_wheel_rs::linker::LinkMode::default())]
-    pub(crate) link_mode: install_wheel_rs::linker::LinkMode,
+    #[arg(long, value_enum)]
+    pub(crate) link_mode: Option<install_wheel_rs::linker::LinkMode>,
 
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
@@ -1269,7 +1644,7 @@ pub(crate) struct VenvArgs {
     /// as it finds it in an index. That is, it isn't possible for `uv` to
     /// consider versions of the same package across multiple indexes.
     #[arg(long, env = "UV_EXTRA_INDEX_URL", value_delimiter = ' ', value_parser = parse_index_url)]
-    pub(crate) extra_index_url: Vec<Maybe<IndexUrl>>,
+    pub(crate) extra_index_url: Option<Vec<Maybe<IndexUrl>>>,
 
     /// Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those
     /// discovered via `--find-links`.
@@ -1279,22 +1654,27 @@ pub(crate) struct VenvArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, `uv` will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index. This prevents "dependency confusion"
-    /// attacks, whereby an attack can upload a malicious package under the same name to a secondary
-    /// index.
-    #[arg(long, default_value_t, value_enum, env = "UV_INDEX_STRATEGY")]
-    pub(crate) index_strategy: IndexStrategy,
+    /// limit resolutions to those present on that first index (`first-match`. This prevents
+    /// "dependency confusion" attacks, whereby an attack can upload a malicious package under the
+    /// same name to a secondary
+    #[arg(long, value_enum, env = "UV_INDEX_STRATEGY")]
+    pub(crate) index_strategy: Option<IndexStrategy>,
 
-    /// Attempt to use `keyring` for authentication for index urls
+    /// Attempt to use `keyring` for authentication for index URLs.
     ///
     /// Due to not having Python imports, only `--keyring-provider subprocess` argument is currently
     /// implemented `uv` will try to use `keyring` via CLI when this flag is used.
-    #[arg(long, default_value_t, value_enum, env = "UV_KEYRING_PROVIDER")]
-    pub(crate) keyring_provider: KeyringProviderType,
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = "UV_KEYRING_PROVIDER")]
+    pub(crate) keyring_provider: Option<KeyringProviderType>,
 
     /// Run offline, i.e., without accessing the network.
-    #[arg(global = true, long)]
+    #[arg(long, overrides_with("no_offline"))]
     pub(crate) offline: bool,
+
+    #[arg(long, overrides_with("offline"), hide = true)]
+    pub(crate) no_offline: bool,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -1305,6 +1685,30 @@ pub(crate) struct VenvArgs {
 
     #[command(flatten)]
     pub(crate) compat_args: compat::VenvCompatArgs,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub(crate) struct RunArgs {
+    /// The command to run.
+    pub(crate) target: Option<String>,
+
+    /// The arguments to the command.
+    #[arg(allow_hyphen_values = true)]
+    pub(crate) args: Vec<OsString>,
+
+    /// Always use a new virtual environment for execution.
+    #[arg(long)]
+    pub(crate) isolated: bool,
+
+    /// Run with the given packages installed.
+    #[arg(long)]
+    pub(crate) with: Vec<String>,
+
+    /// Run without the current workspace installed.
+    #[arg(long)]
+    pub(crate) no_workspace: bool,
+    // TODO(zanieb): Consider alternative names like `--no-project` or `--without-project`
 }
 
 #[derive(Args)]

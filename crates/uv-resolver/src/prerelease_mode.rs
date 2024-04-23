@@ -3,7 +3,7 @@ use rustc_hash::FxHashSet;
 use pep508_rs::{MarkerEnvironment, VersionOrUrl};
 use uv_normalize::PackageName;
 
-use crate::Manifest;
+use crate::{DependencyMode, Manifest};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
@@ -12,6 +12,7 @@ use crate::Manifest;
     feature = "serde",
     serde(deny_unknown_fields, rename_all = "kebab-case")
 )]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum PreReleaseMode {
     /// Disallow all pre-release versions.
     Disallow,
@@ -59,6 +60,7 @@ impl PreReleaseStrategy {
         mode: PreReleaseMode,
         manifest: &Manifest,
         markers: &MarkerEnvironment,
+        dependencies: DependencyMode,
     ) -> Self {
         match mode {
             PreReleaseMode::Disallow => Self::Disallow,
@@ -66,7 +68,7 @@ impl PreReleaseStrategy {
             PreReleaseMode::IfNecessary => Self::IfNecessary,
             PreReleaseMode::Explicit => Self::Explicit(
                 manifest
-                    .requirements(markers)
+                    .requirements(markers, dependencies)
                     .filter(|requirement| {
                         let Some(version_or_url) = &requirement.version_or_url else {
                             return false;
@@ -86,7 +88,7 @@ impl PreReleaseStrategy {
             ),
             PreReleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(
                 manifest
-                    .requirements(markers)
+                    .requirements(markers, dependencies)
                     .filter(|requirement| {
                         let Some(version_or_url) = &requirement.version_or_url else {
                             return false;

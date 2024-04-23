@@ -52,3 +52,24 @@ impl std::fmt::Display for ExcludeNewer {
         self.0.fmt(f)
     }
 }
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ExcludeNewer {
+    fn schema_name() -> String {
+        "ExcludeNewer".to_string()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            string: Some(Box::new(schemars::schema::StringValidation {
+                pattern: Some(
+                    r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2}))?$".to_string(),
+                ),
+                ..schemars::schema::StringValidation::default()
+            })),
+            ..Default::default()
+        }
+        .into()
+    }
+}

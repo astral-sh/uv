@@ -3297,7 +3297,7 @@ fn require_hashes_wheel_no_binary() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: anyio==4.0.0
-      Caused by: Hash mismatch for anyio==4.0.0
+      Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
       sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -3390,7 +3390,7 @@ fn require_hashes_source_only_binary() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: anyio==4.0.0
-      Caused by: Hash mismatch for anyio==4.0.0
+      Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
       sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
@@ -3423,7 +3423,7 @@ fn require_hashes_wrong_digest() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: anyio==4.0.0
-      Caused by: Hash mismatch for anyio==4.0.0
+      Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
       sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -3456,7 +3456,7 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: anyio==4.0.0
-      Caused by: Hash mismatch for anyio==4.0.0
+      Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
       sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -3524,8 +3524,8 @@ fn require_hashes_source_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz
-      Caused by: Hash mismatch for anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz
+    error: Failed to download and build `anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz`
+      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz`
 
     Expected:
       sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
@@ -3555,8 +3555,8 @@ fn require_hashes_source_url_mismatch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz
-      Caused by: Hash mismatch for anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz
+    error: Failed to download and build `anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz`
+      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/74/17/5075225ee1abbb93cd7fc30a2d343c6a3f5f71cf388f14768a7a38256581/anyio-4.0.0.tar.gz`
 
     Expected:
       sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
@@ -3627,7 +3627,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
-      Caused by: Hash mismatch for anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
     Expected:
       sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -3682,7 +3682,7 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
-      Caused by: Hash mismatch for anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
     Expected:
       sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -3712,8 +3712,8 @@ fn require_hashes_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82
-      Caused by: Hash-checking is not supported for Git repositories: anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82
+    error: Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
+      Caused by: Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
     "###
     );
 
@@ -3742,8 +3742,8 @@ fn require_hashes_source_tree() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: black @ file://[WORKSPACE]/scripts/packages/black_editable
-      Caused by: Hash-checking is not supported for local directories: black @ file://[WORKSPACE]/scripts/packages/black_editable
+    error: Failed to build `black @ file://[WORKSPACE]/scripts/packages/black_editable`
+      Caused by: Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/scripts/packages/black_editable`
     "###
     );
 
@@ -3790,7 +3790,7 @@ fn require_hashes_re_download() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: anyio==4.0.0
-      Caused by: Hash mismatch for anyio==4.0.0
+      Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
       sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -3881,7 +3881,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl
-      Caused by: Hash mismatch for tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl
+      Caused by: Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
 
     Expected:
       sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -3948,8 +3948,8 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz
-      Caused by: Hash mismatch for tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz
+    error: Failed to build `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
+      Caused by: Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
 
     Expected:
       sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -4162,7 +4162,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
-      Caused by: Hash mismatch for anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
     Expected:
       md5:520d85e19168705cdf0223621b18831a
@@ -4292,7 +4292,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
-      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
       sha256:123
@@ -4322,7 +4322,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
-      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
       sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
@@ -4414,7 +4414,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
-      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
       sha256:123
@@ -4443,7 +4443,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
-      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
       sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
@@ -4520,8 +4520,8 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: example-a-961b4c22==1.0.0
-      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+    error: Failed to download and build `example-a-961b4c22==1.0.0`
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
       sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
@@ -4614,7 +4614,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
-      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
       sha256:123
@@ -4643,7 +4643,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to download distributions
       Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
-      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
       sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
@@ -4720,8 +4720,8 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: example-a-961b4c22==1.0.0
-      Caused by: Hash mismatch for example-a-961b4c22==1.0.0
+    error: Failed to download and build `example-a-961b4c22==1.0.0`
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
       sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e

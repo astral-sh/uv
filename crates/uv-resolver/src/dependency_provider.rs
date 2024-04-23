@@ -18,7 +18,7 @@ impl DependencyProvider for UvDependencyProvider {
     fn prioritize(&self, _package: &Self::P, _range: &Self::VS) -> Self::Priority {
         unimplemented!()
     }
-    type Priority = PubGrubPriority;
+    type Priority = Option<PubGrubPriority>;
 
     type Err = Infallible;
 

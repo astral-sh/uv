@@ -28,9 +28,6 @@ pub(crate) struct PipCompileCompatArgs {
     no_reuse_hashes: bool,
 
     #[clap(long, hide = true)]
-    build_isolation: bool,
-
-    #[clap(long, hide = true)]
     resolver: Option<Resolver>,
 
     #[clap(long, hide = true)]
@@ -58,19 +55,10 @@ pub(crate) struct PipCompileCompatArgs {
     no_config: bool,
 
     #[clap(long, hide = true)]
-    no_emit_index_url: bool,
-
-    #[clap(long, hide = true)]
-    no_emit_find_links: bool,
-
-    #[clap(long, hide = true)]
     emit_options: bool,
 
     #[clap(long, hide = true)]
     no_emit_options: bool,
-
-    #[clap(long, hide = true)]
-    strip_extras: bool,
 
     #[clap(long, hide = true)]
     pip_args: Option<String>,
@@ -102,12 +90,6 @@ impl CompatArgs for PipCompileCompatArgs {
         if self.no_reuse_hashes {
             warn_user!(
                 "pip-compile's `--no-reuse-hashes` has no effect (uv doesn't reuse hashes)."
-            );
-        }
-
-        if self.build_isolation {
-            warn_user!(
-                "pip-compile's `--build-isolation` has no effect (uv always uses build isolation)."
             );
         }
 
@@ -168,18 +150,6 @@ impl CompatArgs for PipCompileCompatArgs {
             );
         }
 
-        if self.no_emit_index_url {
-            warn_user!(
-                "pip-compile's `--no-emit-index-url` has no effect (uv excludes index URLs by default)."
-            );
-        }
-
-        if self.no_emit_find_links {
-            warn_user!(
-                "pip-compile's `--no-emit-find-links` has no effect (uv excludes `--find-links` URLs by default)."
-            );
-        }
-
         if self.emit_options {
             return Err(anyhow!(
                 "pip-compile's `--emit-options` is unsupported (uv never emits options)."
@@ -188,12 +158,6 @@ impl CompatArgs for PipCompileCompatArgs {
 
         if self.no_emit_options {
             warn_user!("pip-compile's `--no-emit-options` has no effect (uv never emits options).");
-        }
-
-        if self.strip_extras {
-            warn_user!(
-                "pip-compile's `--strip-extras` has no effect (uv strips extras by default)."
-            );
         }
 
         if self.pip_args.is_some() {

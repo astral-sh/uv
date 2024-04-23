@@ -10,18 +10,19 @@ use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
 use tracing::instrument;
 
-use distribution_types::IndexLocations;
-use uv_cache::{Cache, Refresh};
-use uv_client::Connectivity;
-use uv_configuration::{ConfigSettings, NoBinary, NoBuild, Reinstall, SetupPyStrategy, Upgrade};
-use uv_requirements::{ExtrasSpecification, RequirementsSource};
-use uv_resolver::{DependencyMode, PreReleaseMode};
+use uv_cache::Cache;
 
-use crate::cli::{CacheCommand, CacheNamespace, Cli, Commands, Maybe, PipCommand, PipNamespace};
+use uv_requirements::RequirementsSource;
+
+use crate::cli::{CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace};
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace};
 use crate::commands::ExitStatus;
 use crate::compat::CompatArgs;
+use crate::settings::{
+    CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
+    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
+};
 
 #[cfg(target_os = "windows")]
 #[global_allocator]
@@ -44,6 +45,7 @@ mod commands;
 mod compat;
 mod logging;
 mod printer;
+mod settings;
 mod shell;
 mod version;
 
@@ -104,10 +106,20 @@ async fn run() -> Result<ExitStatus> {
         }
     };
 
-    // Load the workspace settings.
-    let _ = uv_workspace::Workspace::find(env::current_dir()?)?;
+    // Load the workspace settings, prioritizing (in order):
+    // 1. The configuration file specified on the command-line.
+    // 2. The configuration file in the current directory.
+    // 3. The user configuration file.
+    let workspace = if let Some(config_file) = cli.config_file.as_ref() {
+        Some(uv_workspace::Workspace::from_file(config_file)?)
+    } else if let Some(workspace) = uv_workspace::Workspace::find(env::current_dir()?)? {
+        Some(workspace)
+    } else {
+        uv_workspace::Workspace::user()?
+    };
 
-    let globals = cli.global_args;
+    // Resolve the global settings.
+    let globals = GlobalSettings::resolve(cli.global_args, workspace.as_ref());
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
@@ -137,11 +149,7 @@ async fn run() -> Result<ExitStatus> {
         uv_warnings::enable();
     }
 
-    if globals.no_color {
-        anstream::ColorChoice::write_global(anstream::ColorChoice::Never);
-    } else {
-        anstream::ColorChoice::write_global(globals.color.into());
-    }
+    anstream::ColorChoice::write_global(globals.color.into());
 
     miette::set_hook(Box::new(|_| {
         Box::new(
@@ -154,7 +162,9 @@ async fn run() -> Result<ExitStatus> {
         )
     }))?;
 
-    let cache = Cache::try_from(cli.cache_args)?;
+    // Resolve the cache settings.
+    let cache = CacheSettings::resolve(cli.cache_args, workspace.as_ref());
+    let cache = Cache::from_settings(cache.no_cache, cache.cache_dir)?;
 
     match cli.command {
         Commands::Pip(PipNamespace {
@@ -162,7 +172,10 @@ async fn run() -> Result<ExitStatus> {
         }) => {
             args.compat_args.validate()?;
 
-            let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = PipCompileSettings::resolve(args, workspace);
+
+            let cache = cache.with_refresh(args.refresh);
             let requirements = args
                 .src_file
                 .into_iter()
@@ -178,78 +191,44 @@ async fn run() -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
-            let index_urls = IndexLocations::new(
-                args.index_url.and_then(Maybe::into_option),
-                args.extra_index_url
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect(),
-                args.find_links,
-                args.no_index,
-            );
-            let extras = if args.all_extras {
-                ExtrasSpecification::All
-            } else if args.extra.is_empty() {
-                ExtrasSpecification::None
-            } else {
-                ExtrasSpecification::Some(&args.extra)
-            };
-            let upgrade = Upgrade::from_args(args.upgrade, args.upgrade_package);
-            let no_build = NoBuild::from_args(args.only_binary, args.no_build);
-            let dependency_mode = if args.no_deps {
-                DependencyMode::Direct
-            } else {
-                DependencyMode::Transitive
-            };
-            let prerelease = if args.pre {
-                PreReleaseMode::Allow
-            } else {
-                args.prerelease
-            };
-            let setup_py = if args.legacy_setup_py {
-                SetupPyStrategy::Setuptools
-            } else {
-                SetupPyStrategy::Pep517
-            };
-            let config_settings = args.config_setting.into_iter().collect::<ConfigSettings>();
+
             commands::pip_compile(
                 &requirements,
                 &constraints,
                 &overrides,
-                extras,
-                args.output_file.as_deref(),
-                args.resolution,
-                prerelease,
-                dependency_mode,
-                upgrade,
-                args.generate_hashes,
-                args.no_emit_package,
-                args.no_strip_extras,
-                !args.no_annotate,
-                !args.no_header,
-                args.custom_compile_command,
-                args.emit_index_url,
-                args.emit_find_links,
-                args.emit_marker_expression,
-                args.emit_index_annotation,
-                index_urls,
-                args.index_strategy,
-                args.keyring_provider,
-                setup_py,
-                config_settings,
-                if args.offline {
-                    Connectivity::Offline
-                } else {
-                    Connectivity::Online
-                },
-                args.no_build_isolation,
-                no_build,
-                args.python_version,
-                args.exclude_newer,
-                args.annotation_style,
+                args.shared.extras,
+                args.shared.output_file.as_deref(),
+                args.shared.resolution,
+                args.shared.prerelease,
+                args.shared.dependency_mode,
+                args.upgrade,
+                args.shared.generate_hashes,
+                args.shared.no_emit_package,
+                args.shared.no_strip_extras,
+                !args.shared.no_annotate,
+                !args.shared.no_header,
+                args.shared.custom_compile_command,
+                args.shared.emit_index_url,
+                args.shared.emit_find_links,
+                args.shared.emit_marker_expression,
+                args.shared.emit_index_annotation,
+                args.shared.index_locations,
+                args.shared.index_strategy,
+                args.shared.keyring_provider,
+                args.shared.setup_py,
+                args.shared.config_setting,
+                args.shared.connectivity,
+                args.shared.no_build_isolation,
+                args.shared.no_build,
+                args.shared.python_version,
+                args.shared.python_platform,
+                args.shared.exclude_newer,
+                args.shared.annotation_style,
+                args.shared.link_mode,
+                args.shared.python,
+                args.shared.system,
                 globals.native_tls,
                 globals.quiet,
-                args.link_mode,
                 cache,
                 printer,
             )
@@ -260,54 +239,37 @@ async fn run() -> Result<ExitStatus> {
         }) => {
             args.compat_args.validate()?;
 
-            let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
-            let index_urls = IndexLocations::new(
-                args.index_url.and_then(Maybe::into_option),
-                args.extra_index_url
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect(),
-                args.find_links,
-                args.no_index,
-            );
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = PipSyncSettings::resolve(args, workspace);
+
+            let cache = cache.with_refresh(args.refresh);
             let sources = args
                 .src_file
                 .into_iter()
                 .map(RequirementsSource::from_requirements_file)
                 .collect::<Vec<_>>();
-            let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
-            let no_binary = NoBinary::from_args(args.no_binary);
-            let no_build = NoBuild::from_args(args.only_binary, args.no_build);
-            let setup_py = if args.legacy_setup_py {
-                SetupPyStrategy::Setuptools
-            } else {
-                SetupPyStrategy::Pep517
-            };
-            let config_settings = args.config_setting.into_iter().collect::<ConfigSettings>();
 
             commands::pip_sync(
                 &sources,
-                &reinstall,
-                args.link_mode,
-                args.compile,
-                args.require_hashes,
-                index_urls,
-                args.index_strategy,
-                args.keyring_provider,
-                setup_py,
-                if args.offline {
-                    Connectivity::Offline
-                } else {
-                    Connectivity::Online
-                },
-                &config_settings,
-                args.no_build_isolation,
-                no_build,
-                no_binary,
-                args.strict,
-                args.python,
-                args.system,
-                args.break_system_packages,
+                &args.reinstall,
+                args.shared.link_mode,
+                args.shared.compile_bytecode,
+                args.shared.require_hashes,
+                args.shared.index_locations,
+                args.shared.index_strategy,
+                args.shared.keyring_provider,
+                args.shared.setup_py,
+                args.shared.connectivity,
+                &args.shared.config_setting,
+                args.shared.no_build_isolation,
+                args.shared.no_build,
+                args.shared.no_binary,
+                args.shared.python_version,
+                args.shared.python_platform,
+                args.shared.strict,
+                args.shared.python,
+                args.shared.system,
+                args.shared.break_system_packages,
                 globals.native_tls,
                 cache,
                 printer,
@@ -317,7 +279,10 @@ async fn run() -> Result<ExitStatus> {
         Commands::Pip(PipNamespace {
             command: PipCommand::Install(args),
         }) => {
-            let cache = cache.with_refresh(Refresh::from_args(args.refresh, args.refresh_package));
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = PipInstallSettings::resolve(args, workspace);
+
+            let cache = cache.with_refresh(args.refresh);
             let requirements = args
                 .package
                 .into_iter()
@@ -339,74 +304,36 @@ async fn run() -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
-            let index_urls = IndexLocations::new(
-                args.index_url.and_then(Maybe::into_option),
-                args.extra_index_url
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect(),
-                args.find_links,
-                args.no_index,
-            );
-            let extras = if args.all_extras {
-                ExtrasSpecification::All
-            } else if args.extra.is_empty() {
-                ExtrasSpecification::None
-            } else {
-                ExtrasSpecification::Some(&args.extra)
-            };
-            let reinstall = Reinstall::from_args(args.reinstall, args.reinstall_package);
-            let upgrade = Upgrade::from_args(args.upgrade, args.upgrade_package);
-            let no_binary = NoBinary::from_args(args.no_binary);
-            let no_build = NoBuild::from_args(args.only_binary, args.no_build);
-            let dependency_mode = if args.no_deps {
-                DependencyMode::Direct
-            } else {
-                DependencyMode::Transitive
-            };
-            let prerelease = if args.pre {
-                PreReleaseMode::Allow
-            } else {
-                args.prerelease
-            };
-            let setup_py = if args.legacy_setup_py {
-                SetupPyStrategy::Setuptools
-            } else {
-                SetupPyStrategy::Pep517
-            };
-            let config_settings = args.config_setting.into_iter().collect::<ConfigSettings>();
 
             commands::pip_install(
                 &requirements,
                 &constraints,
                 &overrides,
-                &extras,
-                args.resolution,
-                prerelease,
-                dependency_mode,
-                upgrade,
-                index_urls,
-                args.index_strategy,
-                args.keyring_provider,
-                reinstall,
-                args.link_mode,
-                args.compile,
-                args.require_hashes,
-                setup_py,
-                if args.offline {
-                    Connectivity::Offline
-                } else {
-                    Connectivity::Online
-                },
-                &config_settings,
-                args.no_build_isolation,
-                no_build,
-                no_binary,
-                args.strict,
-                args.exclude_newer,
-                args.python,
-                args.system,
-                args.break_system_packages,
+                &args.shared.extras,
+                args.shared.resolution,
+                args.shared.prerelease,
+                args.shared.dependency_mode,
+                args.upgrade,
+                args.shared.index_locations,
+                args.shared.index_strategy,
+                args.shared.keyring_provider,
+                args.reinstall,
+                args.shared.link_mode,
+                args.shared.compile_bytecode,
+                args.shared.require_hashes,
+                args.shared.setup_py,
+                args.shared.connectivity,
+                &args.shared.config_setting,
+                args.shared.no_build_isolation,
+                args.shared.no_build,
+                args.shared.no_binary,
+                args.shared.python_version,
+                args.shared.python_platform,
+                args.shared.strict,
+                args.shared.exclude_newer,
+                args.shared.python,
+                args.shared.system,
+                args.shared.break_system_packages,
                 globals.native_tls,
                 cache,
                 args.dry_run,
@@ -417,6 +344,9 @@ async fn run() -> Result<ExitStatus> {
         Commands::Pip(PipNamespace {
             command: PipCommand::Uninstall(args),
         }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = PipUninstallSettings::resolve(args, workspace);
+
             let sources = args
                 .package
                 .into_iter()
@@ -429,61 +359,80 @@ async fn run() -> Result<ExitStatus> {
                 .collect::<Vec<_>>();
             commands::pip_uninstall(
                 &sources,
-                args.python,
-                args.system,
-                args.break_system_packages,
+                args.shared.python,
+                args.shared.system,
+                args.shared.break_system_packages,
                 cache,
-                if args.offline {
-                    Connectivity::Offline
-                } else {
-                    Connectivity::Online
-                },
+                args.shared.connectivity,
                 globals.native_tls,
-                args.keyring_provider,
+                args.shared.keyring_provider,
                 printer,
             )
             .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),
-        }) => commands::pip_freeze(
-            args.exclude_editable,
-            args.strict,
-            args.python.as_deref(),
-            args.system,
-            &cache,
-            printer,
-        ),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = PipFreezeSettings::resolve(args, workspace);
+
+            commands::pip_freeze(
+                args.exclude_editable,
+                args.shared.strict,
+                args.shared.python.as_deref(),
+                args.shared.system,
+                &cache,
+                printer,
+            )
+        }
         Commands::Pip(PipNamespace {
             command: PipCommand::List(args),
         }) => {
             args.compat_args.validate()?;
+
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = PipListSettings::resolve(args, workspace);
 
             commands::pip_list(
                 args.editable,
                 args.exclude_editable,
                 &args.exclude,
                 &args.format,
-                args.strict,
-                args.python.as_deref(),
-                args.system,
+                args.shared.strict,
+                args.shared.python.as_deref(),
+                args.shared.system,
                 &cache,
                 printer,
             )
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Show(args),
-        }) => commands::pip_show(
-            args.package,
-            args.strict,
-            args.python.as_deref(),
-            args.system,
-            &cache,
-            printer,
-        ),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = PipShowSettings::resolve(args, workspace);
+
+            commands::pip_show(
+                args.package,
+                args.shared.strict,
+                args.shared.python.as_deref(),
+                args.shared.system,
+                &cache,
+                printer,
+            )
+        }
         Commands::Pip(PipNamespace {
             command: PipCommand::Check(args),
-        }) => commands::pip_check(args.python.as_deref(), args.system, &cache, printer),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = PipCheckSettings::resolve(args, workspace);
+
+            commands::pip_check(
+                args.shared.python.as_deref(),
+                args.shared.system,
+                &cache,
+                printer,
+            )
+        }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
         })
@@ -500,16 +449,8 @@ async fn run() -> Result<ExitStatus> {
         Commands::Venv(args) => {
             args.compat_args.validate()?;
 
-            let index_locations = IndexLocations::new(
-                args.index_url.and_then(Maybe::into_option),
-                args.extra_index_url
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect(),
-                // No find links for the venv subcommand, to keep things simple
-                Vec::new(),
-                args.no_index,
-            );
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::VenvSettings::resolve(args, workspace);
 
             // Since we use ".venv" as the default name, we use "." as the default prompt.
             let prompt = args.prompt.or_else(|| {
@@ -522,21 +463,53 @@ async fn run() -> Result<ExitStatus> {
 
             commands::venv(
                 &args.name,
-                args.python.as_deref(),
-                args.link_mode,
-                &index_locations,
-                args.index_strategy,
-                args.keyring_provider,
+                args.shared.python.as_deref(),
+                args.shared.link_mode,
+                &args.shared.index_locations,
+                args.shared.index_strategy,
+                args.shared.keyring_provider,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
-                if args.offline {
-                    Connectivity::Offline
-                } else {
-                    Connectivity::Online
-                },
+                args.shared.connectivity,
                 args.seed,
-                args.exclude_newer,
+                args.shared.exclude_newer,
                 globals.native_tls,
+                &cache,
+                printer,
+            )
+            .await
+        }
+        Commands::Run(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::RunSettings::resolve(args, workspace);
+
+            let requirements = args
+                .with
+                .into_iter()
+                .map(RequirementsSource::from_package)
+                // TODO(zanieb): Consider editable package support. What benefit do these have in an ephemeral
+                //               environment?
+                // .chain(
+                //     args.with_editable
+                //         .into_iter()
+                //         .map(RequirementsSource::Editable),
+                // )
+                // TODO(zanieb): Consider requirements file support, this comes with additional complexity due to
+                //               to the extensive configuration allowed in requirements files
+                // .chain(
+                //     args.with_requirements
+                //         .into_iter()
+                //         .map(RequirementsSource::from_requirements_file),
+                // )
+                .collect::<Vec<_>>();
+
+            commands::run(
+                args.target,
+                args.args,
+                requirements,
+                args.isolated,
+                args.no_workspace,
+                globals.preview,
                 &cache,
                 printer,
             )

@@ -425,6 +425,7 @@ impl PythonVersionSelector {
 #[instrument(skip_all, fields(?python_version))]
 pub fn find_best_python(
     python_version: Option<&PythonVersion>,
+    system: bool,
     cache: &Cache,
 ) -> Result<Interpreter, Error> {
     if let Some(python_version) = python_version {
@@ -437,7 +438,7 @@ pub fn find_best_python(
     }
 
     // First, check for an exact match (or the first available version if no Python version was provided)
-    if let Some(interpreter) = find_version(python_version, cache)? {
+    if let Some(interpreter) = find_version(python_version, system, cache)? {
         return Ok(interpreter);
     }
 
@@ -445,14 +446,16 @@ pub fn find_best_python(
         // If that fails, and a specific patch version was requested try again allowing a
         // different patch version
         if python_version.patch().is_some() {
-            if let Some(interpreter) = find_version(Some(&python_version.without_patch()), cache)? {
+            if let Some(interpreter) =
+                find_version(Some(&python_version.without_patch()), system, cache)?
+            {
                 return Ok(interpreter);
             }
         }
     }
 
     // If a Python version was requested but cannot be fulfilled, just take any version
-    if let Some(interpreter) = find_version(None, cache)? {
+    if let Some(interpreter) = find_version(None, system, cache)? {
         return Ok(interpreter);
     }
 
@@ -477,6 +480,7 @@ pub fn find_best_python(
 /// we will return [`None`].
 fn find_version(
     python_version: Option<&PythonVersion>,
+    system: bool,
     cache: &Cache,
 ) -> Result<Option<Interpreter>, Error> {
     let version_matches = |interpreter: &Interpreter| -> bool {
@@ -490,14 +494,16 @@ fn find_version(
     };
 
     // Check if the venv Python matches.
-    if let Some(venv) = detect_virtual_env()? {
-        let executable = detect_python_executable(venv);
-        let interpreter = Interpreter::query(executable, cache)?;
+    if !system {
+        if let Some(venv) = detect_virtual_env()? {
+            let executable = detect_python_executable(venv);
+            let interpreter = Interpreter::query(executable, cache)?;
 
-        if version_matches(&interpreter) {
-            return Ok(Some(interpreter));
-        }
-    };
+            if version_matches(&interpreter) {
+                return Ok(Some(interpreter));
+            }
+        };
+    }
 
     // Look for the requested version with by search for `python{major}.{minor}` in `PATH` on
     // Unix and `py --list-paths` on Windows.

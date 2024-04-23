@@ -126,6 +126,11 @@ impl PythonEnvironment {
             )
         }
     }
+
+    /// Return the [`Interpreter`] for this virtual environment.
+    pub fn into_interpreter(self) -> Interpreter {
+        self.interpreter
+    }
 }
 
 /// Locate the current virtual environment.

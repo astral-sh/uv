@@ -457,10 +457,10 @@ fn dependency_excludes_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
               package-a>=2.0.0,<=3.0.0
-          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
           Because only the following versions of package-c are available:
               package-c==1.0.0
@@ -582,10 +582,10 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
               package-a>=2.0.0,<=3.0.0
-          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
           Because only the following versions of package-c are available:
               package-c==1.0.0
@@ -908,7 +908,7 @@ fn extra_incompatible_with_extra() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a[extra-c]==1.0.0 is available and package-a[extra-c]==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a[extra-c] depend on package-b==2.0.0.
-          And because package-a[extra-b]==1.0.0 depends on package-b==1.0.0 and only package-a[extra-b]==1.0.0 is available, we can conclude that all versions of package-a[extra-c] and all versions of package-a[extra-b] are incompatible.
+          And because package-a[extra-b]==1.0.0 depends on package-b==1.0.0 and only package-a[extra-b]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
           And because you require package-a[extra-b] and you require package-a[extra-c], we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -1183,7 +1183,7 @@ fn transitive_incompatible_with_root_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a depend on package-b==2.0.0.
+      ╰─▶ Because package-a==1.0.0 depends on package-b==2.0.0 and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b==2.0.0.
           And because you require package-a and you require package-b==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -1527,7 +1527,7 @@ fn local_transitive_greater_than() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b>2.0.0, we can conclude that all versions of package-a depend on package-b>2.0.0.
+      ╰─▶ Because package-a==1.0.0 depends on package-b>2.0.0 and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b>2.0.0.
           And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -1638,7 +1638,7 @@ fn local_transitive_less_than() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b<2.0.0, we can conclude that all versions of package-a depend on package-b<2.0.0.
+      ╰─▶ Because package-a==1.0.0 depends on package-b<2.0.0 and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b<2.0.0.
           And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
     "###);
 
@@ -1797,7 +1797,7 @@ fn local_transitive_conflicting() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0+bar, we can conclude that all versions of package-a depend on package-b==2.0.0+bar.
+      ╰─▶ Because package-a==1.0.0 depends on package-b==2.0.0+bar and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b==2.0.0+bar.
           And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
     "###);
 

@@ -40,6 +40,7 @@ use crate::{Manifest, ResolveError};
     feature = "serde",
     serde(deny_unknown_fields, rename_all = "kebab-case")
 )]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum AnnotationStyle {
     /// Render the annotations on a single, comma-separated line.
     Line,
@@ -745,7 +746,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // `# from https://pypi.org/simple`).
             if self.include_index_annotation {
                 if let Some(index) = node.index() {
-                    writeln!(f, "{}", format!("    # from {index}").green())?;
+                    let url = index.redacted();
+                    writeln!(f, "{}", format!("    # from {url}").green())?;
                 }
             }
         }

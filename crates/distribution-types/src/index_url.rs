@@ -27,6 +27,21 @@ pub enum IndexUrl {
     Path(VerbatimUrl),
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for IndexUrl {
+    fn schema_name() -> String {
+        "IndexUrl".to_string()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
+    }
+}
+
 impl IndexUrl {
     /// Return the raw URL for the index.
     pub fn url(&self) -> &Url {
@@ -34,6 +49,19 @@ impl IndexUrl {
             Self::Pypi(url) => url.raw(),
             Self::Url(url) => url.raw(),
             Self::Path(url) => url.raw(),
+        }
+    }
+
+    /// Return the redacted URL for the index, omitting any sensitive credentials.
+    pub fn redacted(&self) -> Cow<'_, Url> {
+        let url = self.url();
+        if url.username().is_empty() && url.password().is_none() {
+            Cow::Borrowed(url)
+        } else {
+            let mut url = url.clone();
+            let _ = url.set_username("");
+            let _ = url.set_password(None);
+            Cow::Owned(url)
         }
     }
 }
@@ -111,6 +139,21 @@ impl Deref for IndexUrl {
 pub enum FlatIndexLocation {
     Path(PathBuf),
     Url(Url),
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for FlatIndexLocation {
+    fn schema_name() -> String {
+        "FlatIndexLocation".to_string()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
+    }
 }
 
 impl FromStr for FlatIndexLocation {

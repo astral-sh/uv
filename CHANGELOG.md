@@ -1,5 +1,94 @@
 # Changelog
 
+## 0.1.36
+
+### Enhancements
+
+- Add support for embedded Python on Windows ([#3161](https://github.com/astral-sh/uv/pull/3161))
+- Add Docker image publishing to release pipeline ([#3155](https://github.com/astral-sh/uv/pull/3155))
+
+### Configuration
+
+- Add `UV_CONSTRAINT` environment variable to provide value for `--constraint`  ([#3162](https://github.com/astral-sh/uv/pull/3162))
+
+### Bug fixes
+
+- Avoid waiting for metadata for `--no-deps` editables ([#3188](https://github.com/astral-sh/uv/pull/3188))
+- Fix `venvlauncher.exe` reference in venv creation ([#3160](https://github.com/astral-sh/uv/pull/3160))
+- Fix authentication for URLs with a shared realm ([#3130](https://github.com/astral-sh/uv/pull/3130))
+- Restrict observed requirements to direct when `--no-deps` is specified ([#3191](https://github.com/astral-sh/uv/pull/3191))
+
+### Documentation
+
+- Add a versioning policy to the README ([#3151](https://github.com/astral-sh/uv/pull/3151))
+
+## 0.1.35
+
+### Enhancements
+
+- Add a `--python-platform` argument to enable resolving against a target platform ([#3111](https://github.com/astral-sh/uv/pull/3111))
+- Enforce HTTP timeouts on a per-read (rather than per-request) basis ([#3144](https://github.com/astral-sh/uv/pull/3144))
+
+### Bug fixes
+
+- Avoid preferring constrained over unconstrained packages ([#3148](https://github.com/astral-sh/uv/pull/3148))
+- Allow `UV_SYSTEM_PYTHON=1` in addition to `UV_SYSTEM_PYTHON=true` ([#3136](https://github.com/astral-sh/uv/pull/3136))
+
+## 0.1.34
+
+### CLI
+
+- Allow `--python` and `--system` on `pip compile` ([#3115](https://github.com/astral-sh/uv/pull/3115))
+- Remove `Option<bool>` for `--no-cache` ([#3129](https://github.com/astral-sh/uv/pull/3129))
+- Rename `--compile` to `--compile-bytecode` ([#3102](https://github.com/astral-sh/uv/pull/3102))
+- Accept `0`, `1`, and similar values for Boolean environment variables ([#3113](https://github.com/astral-sh/uv/pull/3113))
+
+### Configuration
+
+- Add `UV_REQUIRE_HASHES` environment variable ([#3125](https://github.com/astral-sh/uv/pull/3125))
+- Add negation flags to the CLI ([#3050](https://github.com/astral-sh/uv/pull/3050))
+
+### Bug fixes
+
+- Avoid fetching unnecessary extra versions during resolution ([#3100](https://github.com/astral-sh/uv/pull/3100))
+- Avoid deprioritizing recursive editables ([#3133](https://github.com/astral-sh/uv/pull/3133))
+- Avoid treating localhost URLs as local file paths ([#3132](https://github.com/astral-sh/uv/pull/3132))
+- Hide password in the index printed via `--emit-index-annotation` ([#3112](https://github.com/astral-sh/uv/pull/3112))
+- Restore seeding of authentication cache from index URLs ([#3124](https://github.com/astral-sh/uv/pull/3124))
+
+## 0.1.33
+
+### Breaking changes
+
+Using the keyring requires a username to be provided on index URLs now. Previously, the username `oauth2accesstoken`
+was assumed. This will affect Google Artifact Registry users using `--keyring-provider subprocess` and an index URL
+without a username. The suggested fix is to add the required username to index URLs, e.g., `https://oauth2accesstoken@<url>`.
+
+See [#2976](https://github.com/astral-sh/uv/pull/2976#discussion_r1566521453) for details.
+
+### Enhancements
+
+- Allow passing a virtual environment path to `uv pip --python` ([#3064](https://github.com/astral-sh/uv/pull/3064))
+- Add compatibility argument for `pip list --outdated` ([#3055](https://github.com/astral-sh/uv/pull/3055))
+
+### CLI
+
+- Enable auto-wrapping of `--help` output ([#3058](https://github.com/astral-sh/uv/pull/3058))
+- Show `--require-hashes` CLI argument in help ([#3093](https://github.com/astral-sh/uv/pull/3093))
+
+### Performance
+
+- Incorporate heuristics to improve package prioritization ([#3087](https://github.com/astral-sh/uv/pull/3087))
+
+### Bug fixes
+
+- Fix HTTP authentication when the password includes percent encoded characters (e.g. with Google Artifact Registry) ([#2822](https://github.com/astral-sh/uv/issues/2822))
+- Use usernames from URLs when looking for credentials in netrc files and the keyring [#2563](https://github.com/astral-sh/uv/issues/2563))
+- Skip `HEAD` requests for indexes that return 403 (e.g. PyPICloud) ([#3070](https://github.com/astral-sh/uv/pull/3070))
+- Use kebab-case consistently ([#3080](https://github.com/astral-sh/uv/pull/3080))
+- Show package name in no version for direct dependency error ([#3056](https://github.com/astral-sh/uv/pull/3056))
+- Avoid erroring when encountering `.tar.bz2` source distributions ([#3069](https://github.com/astral-sh/uv/pull/3069))
+
 ## 0.1.32
 
 ### Enhancements

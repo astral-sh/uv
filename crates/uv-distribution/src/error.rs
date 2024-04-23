@@ -3,6 +3,7 @@ use tokio::task::JoinError;
 use zip::result::ZipError;
 
 use distribution_filename::WheelFilenameError;
+use distribution_types::DirectUrlError;
 use pep440_rs::Version;
 use pypi_types::HashDigest;
 use uv_client::BetterReqwestError;
@@ -16,12 +17,14 @@ pub enum Error {
     NoBinary,
 
     // Network error
-    #[error("Failed to parse URL: `{0}`")]
+    #[error("Failed to parse URL: {0}")]
     Url(String, #[source] url::ParseError),
     #[error(transparent)]
     JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
     #[error("Git operation failed")]
     Git(#[source] anyhow::Error),
+    #[error(transparent)]
+    DirectUrl(#[from] Box<DirectUrlError>),
     #[error(transparent)]
     Reqwest(#[from] BetterReqwestError),
     #[error(transparent)]
@@ -38,9 +41,9 @@ pub enum Error {
     CacheEncode(#[from] rmp_serde::encode::Error),
 
     // Build error
-    #[error("Failed to build: {0}")]
+    #[error("Failed to build: `{0}`")]
     Build(String, #[source] anyhow::Error),
-    #[error("Failed to build editable: {0}")]
+    #[error("Failed to build editable: `{0}`")]
     BuildEditable(String, #[source] anyhow::Error),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
@@ -87,7 +90,7 @@ pub enum Error {
     #[error("Failed to hash distribution")]
     HashExhaustion(#[source] std::io::Error),
 
-    #[error("Hash mismatch for {distribution}\n\nExpected:\n{expected}\n\nComputed:\n{actual}")]
+    #[error("Hash mismatch for `{distribution}`\n\nExpected:\n{expected}\n\nComputed:\n{actual}")]
     MismatchedHashes {
         distribution: String,
         expected: String,
@@ -95,26 +98,26 @@ pub enum Error {
     },
 
     #[error(
-        "Hash-checking is enabled, but no hashes were provided or computed for: {distribution}"
+        "Hash-checking is enabled, but no hashes were provided or computed for: `{distribution}`"
     )]
     MissingHashes { distribution: String },
 
-    #[error("Hash-checking is enabled, but no hashes were computed for: {distribution}\n\nExpected:\n{expected}")]
+    #[error("Hash-checking is enabled, but no hashes were computed for: `{distribution}`\n\nExpected:\n{expected}")]
     MissingActualHashes {
         distribution: String,
         expected: String,
     },
 
-    #[error("Hash-checking is enabled, but no hashes were provided for: {distribution}\n\nComputed:\n{actual}")]
+    #[error("Hash-checking is enabled, but no hashes were provided for: `{distribution}`\n\nComputed:\n{actual}")]
     MissingExpectedHashes {
         distribution: String,
         actual: String,
     },
 
-    #[error("Hash-checking is not supported for local directories: {0}")]
+    #[error("Hash-checking is not supported for local directories: `{0}`")]
     HashesNotSupportedSourceTree(String),
 
-    #[error("Hash-checking is not supported for Git repositories: {0}")]
+    #[error("Hash-checking is not supported for Git repositories: `{0}`")]
     HashesNotSupportedGit(String),
 }
 

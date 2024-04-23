@@ -309,6 +309,16 @@ fn site_packages_path(venv: &Path, python: String) -> PathBuf {
     }
 }
 
+pub fn venv_bin_path(venv: &Path) -> PathBuf {
+    if cfg!(unix) {
+        venv.join("bin")
+    } else if cfg!(windows) {
+        venv.join("Scripts")
+    } else {
+        unimplemented!("Only Windows and Unix are supported")
+    }
+}
+
 pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
     if cfg!(unix) {
         venv.join("bin").join("python")

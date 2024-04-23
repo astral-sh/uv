@@ -17,17 +17,18 @@ use distribution_types::{IndexLocations, LocalEditable, LocalEditables, Verbatim
 use install_wheel_rs::linker::LinkMode;
 use platform_tags::Tags;
 use requirements_txt::EditableRequirement;
+use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::KeyringProviderType;
 use uv_configuration::{
     ConfigSettings, Constraints, IndexStrategy, NoBinary, NoBuild, Overrides, SetupPyStrategy,
     Upgrade,
 };
+use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::Downloader;
-use uv_interpreter::{find_best_python, PythonEnvironment};
+use uv_interpreter::{find_best_python, find_requested_python, PythonEnvironment};
 use uv_normalize::{ExtraName, PackageName};
 use uv_requirements::{
     upgrade::read_lockfile, ExtrasSpecification, LookaheadResolver, NamedRequirementsResolver,
@@ -52,7 +53,7 @@ pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
-    extras: ExtrasSpecification<'_>,
+    extras: ExtrasSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PreReleaseMode,
@@ -77,11 +78,14 @@ pub(crate) async fn pip_compile(
     no_build_isolation: bool,
     no_build: NoBuild,
     python_version: Option<PythonVersion>,
+    python_platform: Option<TargetTriple>,
     exclude_newer: Option<ExcludeNewer>,
     annotation_style: AnnotationStyle,
+    link_mode: LinkMode,
+    python: Option<String>,
+    system: bool,
     native_tls: bool,
     quiet: bool,
-    link_mode: LinkMode,
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -127,7 +131,7 @@ pub(crate) async fn pip_compile(
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
     if source_trees.is_empty() {
-        if let ExtrasSpecification::Some(extras) = extras {
+        if let ExtrasSpecification::Some(extras) = &extras {
             let mut unused_extras = extras
                 .iter()
                 .filter(|extra| !used_extras.contains(extra))
@@ -145,7 +149,12 @@ pub(crate) async fn pip_compile(
     }
 
     // Find an interpreter to use for building distributions
-    let interpreter = find_best_python(python_version.as_ref(), &cache)?;
+    let interpreter = if let Some(python) = python.as_ref() {
+        find_requested_python(python, &cache)?
+            .ok_or_else(|| uv_interpreter::Error::RequestedPythonNotFound(python.to_string()))?
+    } else {
+        find_best_python(python_version.as_ref(), system, &cache)?
+    };
     debug!(
         "Using Python {} interpreter at {} for builds",
         interpreter.python_version(),
@@ -185,21 +194,40 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let tags = if let Some(python_version) = python_version.as_ref() {
-        Cow::Owned(Tags::from_env(
+    let tags = match (python_platform, python_version.as_ref()) {
+        (Some(python_platform), Some(python_version)) => Cow::Owned(Tags::from_env(
+            &python_platform.platform(),
+            (python_version.major(), python_version.minor()),
+            interpreter.implementation_name(),
+            interpreter.implementation_tuple(),
+            interpreter.gil_disabled(),
+        )?),
+        (Some(python_platform), None) => Cow::Owned(Tags::from_env(
+            &python_platform.platform(),
+            interpreter.python_tuple(),
+            interpreter.implementation_name(),
+            interpreter.implementation_tuple(),
+            interpreter.gil_disabled(),
+        )?),
+        (None, Some(python_version)) => Cow::Owned(Tags::from_env(
             interpreter.platform(),
             (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
             interpreter.gil_disabled(),
-        )?)
-    } else {
-        Cow::Borrowed(interpreter.tags()?)
+        )?),
+        (None, None) => Cow::Borrowed(interpreter.tags()?),
     };
-    let markers = python_version.map_or_else(
-        || Cow::Borrowed(interpreter.markers()),
-        |python_version| Cow::Owned(python_version.markers(interpreter.markers())),
-    );
+
+    // Apply the platform tags to the markers.
+    let markers = match (python_platform, python_version) {
+        (Some(python_platform), Some(python_version)) => {
+            Cow::Owned(python_version.markers(&python_platform.markers(interpreter.markers())))
+        }
+        (Some(python_platform), None) => Cow::Owned(python_platform.markers(interpreter.markers())),
+        (None, Some(python_version)) => Cow::Owned(python_version.markers(interpreter.markers())),
+        (None, None) => Cow::Borrowed(interpreter.markers()),
+    };
 
     // Generate, but don't enforce hashes for the requirements.
     let hasher = if generate_hashes {
@@ -211,6 +239,11 @@ pub(crate) async fn pip_compile(
     // Incorporate any index locations from the provided sources.
     let index_locations =
         index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+
+    // Add all authenticated sources to the cache.
+    for url in index_locations.urls() {
+        store_credentials_from_url(url);
+    }
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
@@ -369,19 +402,24 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine any lookahead requirements.
-    let lookaheads = LookaheadResolver::new(
-        &requirements,
-        &constraints,
-        &overrides,
-        &editables,
-        &hasher,
-        &build_dispatch,
-        &client,
-        &top_level_index,
-    )
-    .with_reporter(ResolverReporter::from(printer))
-    .resolve(&markers)
-    .await?;
+    let lookaheads = match dependency_mode {
+        DependencyMode::Transitive => {
+            LookaheadResolver::new(
+                &requirements,
+                &constraints,
+                &overrides,
+                &editables,
+                &hasher,
+                &build_dispatch,
+                &client,
+                &top_level_index,
+            )
+            .with_reporter(ResolverReporter::from(printer))
+            .resolve(&markers)
+            .await?
+        }
+        DependencyMode::Direct => Vec::new(),
+    };
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(

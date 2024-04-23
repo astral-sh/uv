@@ -75,6 +75,7 @@ dashmap = { version = "5.5.3" }
 data-encoding = { version = "2.5.0" }
 derivative = { version = "2.2.0" }
 directories = { version = "5.0.1" }
+dirs-sys = { version = "0.4.1" }
 dunce = { version = "1.0.4" }
 either = { version = "1.9.0" }
 encoding_rs_io = { version = "0.1.7" }
@@ -105,8 +106,8 @@ pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.4" }
 platform-info = { version = "2.0.2" }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "c26e485213e39582c6f2e4d45c0328422670e7a7" }
-pyo3 = { version = "0.20.3" }
-pyo3-log = { version = "0.9.0" }
+pyo3 = { version = "0.21.0" }
+pyo3-log = { version = "0.10.0" }
 rand = { version = "0.8.5" }
 rayon = { version = "1.8.0" }
 reflink-copy = { version = "0.1.15" }
@@ -148,7 +149,7 @@ wiremock = { version = "0.6.0" }
 walkdir = { version = "2.5.0" }
 which = { version = "6.0.0" }
 winapi = { version = "0.3.9" }
-zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+zip = { version = "1.1.0", default-features = false, features = ["deflate"] }
 
 [patch.crates-io]
 # For pyproject-toml
@@ -202,7 +203,7 @@ lto = "thin"
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.13.0"
+cargo-dist-version = "0.13.2"
 # CI backends to support
 ci = ["github"]
 # The installers to generate for each app
@@ -240,6 +241,8 @@ dispatch-releases = true
 # Whether CI should include auto-generated code to build local artifacts
 build-local-artifacts = false
 # Local artifacts jobs to run in CI
-local-artifacts-jobs = ["./build-binaries"]
+local-artifacts-jobs = ["./build-binaries", "./build-docker"]
 # Publish jobs to run in CI
 publish-jobs = ["./publish-pypi"]
+# We allow modifications for Docker package publish permissions
+allow-dirty = ["ci"]

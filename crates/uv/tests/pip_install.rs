@@ -12,7 +12,7 @@ use itertools::Itertools;
 use common::{uv_snapshot, TestContext};
 use uv_fs::Simplified;
 
-use crate::common::{get_bin, BUILD_VENDOR_LINKS_URL};
+use crate::common::{get_bin, venv_bin_path, BUILD_VENDOR_LINKS_URL};
 
 mod common;
 
@@ -23,13 +23,26 @@ const READ_ONLY_GITHUB_TOKEN: &[&str] = &[
     "NVZMaExzZmtFMHZ1ZEVNd0pPZXZkV040WUdTcmk2WXREeFB4TFlybGlwRTZONEpHV01FMnFZQWJVUm4=",
 ];
 
+// This is a fine-grained token that only has read-only access to the `uv-private-pypackage-2` repository
+#[cfg(not(windows))]
+const READ_ONLY_GITHUB_TOKEN_2: &[&str] = &[
+    "Z2l0aHViX3BhdA==",
+    "MTFCR0laQTdRMHV1MEpwaFp4dFFyRwo=",
+    "cnNmNXJwMHk2WWpteVZvb2ZFc0c5WUs5b2NPcFY1aVpYTnNmdE05eEhaM0lGSExSSktDWTcxeVBVZXkK",
+];
+
 /// Decode a split, base64 encoded authentication token.
 /// We split and encode the token to bypass revoke by GitHub's secret scanning
 fn decode_token(content: &[&str]) -> String {
     let token = content
         .iter()
         .map(|part| base64.decode(part).unwrap())
-        .map(|decoded| std::str::from_utf8(decoded.as_slice()).unwrap().to_string())
+        .map(|decoded| {
+            std::str::from_utf8(decoded.as_slice())
+                .unwrap()
+                .trim_end()
+                .to_string()
+        })
         .join("_");
     token
 }
@@ -195,7 +208,7 @@ dependencies = ["flask==1.0.x"]
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: file://[TEMP_DIR]/
+    error: Failed to build: `file://[TEMP_DIR]/`
       Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit code: 1
     --- stdout:
     configuration error: `project.dependencies[0]` must be pep508
@@ -1033,7 +1046,7 @@ fn install_git_public_https() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###);
 
     context.assert_installed("uv_public_pypackage", "0.1.0");
@@ -1119,7 +1132,7 @@ fn install_git_private_https_pat() {
         .collect();
 
     let package = format!(
-        "uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"
+        "uv-private-pypackage@ git+https://{token}@github.com/astral-test/uv-private-pypackage"
     );
 
     uv_snapshot!(filters, context.install().arg(package)
@@ -1132,7 +1145,78 @@ fn install_git_private_https_pat() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+     + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    "###);
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
+}
+
+/// Install a package from a private GitHub repository using a PAT
+/// Include a public GitHub repository too, to ensure that the authentication is not erroneously copied over.
+#[test]
+#[cfg(all(not(windows), feature = "git"))]
+fn install_git_private_https_pat_mixed_with_public() {
+    let context = TestContext::new("3.8");
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+
+    let filters: Vec<_> = [(token.as_str(), "***")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    let package = format!(
+        "uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"
+    );
+
+    uv_snapshot!(filters, context.install().arg(package).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"),
+    @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    "###);
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
+}
+
+/// Install packages from multiple private GitHub repositories with separate PATS
+#[test]
+#[cfg(all(not(windows), feature = "git"))]
+fn install_git_private_https_multiple_pat() {
+    let context = TestContext::new("3.8");
+    let token_1 = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token_2 = decode_token(READ_ONLY_GITHUB_TOKEN_2);
+
+    let filters: Vec<_> = [(token_1.as_str(), "***_1"), (token_2.as_str(), "***_2")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    let package_1 = format!(
+        "uv-private-pypackage @ git+https://{token_1}@github.com/astral-test/uv-private-pypackage"
+    );
+    let package_2 = format!(
+        "uv-private-pypackage-2 @ git+https://{token_2}@github.com/astral-test/uv-private-pypackage-2"
+    );
+
+    uv_snapshot!(filters, context.install().arg(package_1).arg(package_2)
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://***_1@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage-2==0.1.0 (from git+https://***_2@github.com/astral-test/uv-private-pypackage-2@45c0bec7365710f09b1f4dbca61c86dde9537e4e)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -1243,6 +1327,80 @@ fn install_git_private_https_pat_not_authorized() {
     fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
 
     "###);
+}
+
+/// Install a package from a private GitHub repository using a PAT
+/// Does not use `git`, instead installs a distribution artifact.
+/// Include a public GitHub repository too, to ensure that the authentication is not erroneously copied over.
+#[test]
+#[cfg(not(windows))]
+fn install_github_artifact_private_https_pat_mixed_with_public() {
+    let context = TestContext::new("3.8");
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+
+    let filters: Vec<_> = [(token.as_str(), "***")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    let private_package = format!(
+        "uv-private-pypackage @ https://{token}@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl"
+    );
+    let public_package = "uv-public-pypackage @ https://raw.githubusercontent.com/astral-test/uv-public-pypackage/main/dist/uv_public_pypackage-0.1.0-py3-none-any.whl";
+
+    uv_snapshot!(filters, context.install().arg(private_package).arg(public_package),
+    @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + uv-private-pypackage==0.1.0 (from https://***@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
+     + uv-public-pypackage==0.1.0 (from https://raw.githubusercontent.com/astral-test/uv-public-pypackage/main/dist/uv_public_pypackage-0.1.0-py3-none-any.whl)
+    "###);
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
+}
+
+/// Install packages from multiple private GitHub repositories with separate PATS
+/// Does not use `git`, instead installs a distribution artifact.
+#[test]
+#[cfg(not(windows))]
+fn install_github_artifact_private_https_multiple_pat() {
+    let context = TestContext::new("3.8");
+    let token_1 = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let token_2 = decode_token(READ_ONLY_GITHUB_TOKEN_2);
+
+    let filters: Vec<_> = [(token_1.as_str(), "***_1"), (token_2.as_str(), "***_2")]
+        .into_iter()
+        .chain(context.filters())
+        .collect();
+
+    let package_1 = format!(
+        "uv-private-pypackage @ https://astral-test-bot:{token_1}@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl"
+    );
+    let package_2 = format!(
+        "uv-private-pypackage-2 @ https://astral-test-bot:{token_2}@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl"
+    );
+
+    uv_snapshot!(filters, context.install().arg(package_1).arg(package_2)
+        , @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Downloaded 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + uv-private-pypackage==0.1.0 (from https://astral-test-bot:***_1@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
+     + uv-private-pypackage-2==0.1.0 (from https://astral-test-bot:***_2@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl)
+    "###);
+
+    context.assert_installed("uv_private_pypackage", "0.1.0");
 }
 
 /// Install a package without using pre-built wheels.
@@ -1493,6 +1651,33 @@ fn no_deps() {
     );
 
     context.assert_command("import flask").failure();
+}
+
+/// Install an editable package from the command line into a virtual environment, ignoring its
+/// dependencies.
+#[test]
+fn no_deps_editable() {
+    let context = TestContext::new("3.12");
+
+    // Install the editable version of Black. This should remove the registry-based version.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("--no-deps")
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/black_editable[dev]")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+    "###
+    );
+
+    context.assert_command("import black").success();
+    context.assert_command("import aiohttp").failure();
 }
 
 /// Upgrade a package.
@@ -2441,7 +2626,7 @@ fn no_build_isolation() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download and build: anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz
-      Caused by: Failed to build: anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz
+      Caused by: Failed to build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
     --- stdout:
 
@@ -2889,6 +3074,70 @@ fn install_package_basic_auth_from_url() {
     context.assert_command("import anyio").success();
 }
 
+/// Install a package from an index that requires authentication
+#[test]
+fn install_package_basic_auth_from_netrc_default() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let netrc = context.temp_dir.child(".netrc");
+    netrc.write_str("default login public password heron")?;
+
+    uv_snapshot!(context.install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .env("NETRC", netrc.to_str().unwrap())
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+
+    Ok(())
+}
+
+/// Install a package from an index that requires authentication
+#[test]
+fn install_package_basic_auth_from_netrc() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let netrc = context.temp_dir.child(".netrc");
+    netrc.write_str("machine pypi-proxy.fly.dev login public password heron")?;
+
+    uv_snapshot!(context.install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .env("NETRC", netrc.to_str().unwrap())
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+
+    Ok(())
+}
+
 /// Install a package from an index that provides relative links
 #[test]
 fn install_index_with_relative_links() {
@@ -2914,6 +3163,128 @@ fn install_index_with_relative_links() {
     );
 
     context.assert_command("import anyio").success();
+}
+
+/// Install a package from an index that requires authentication from the keyring.
+#[test]
+fn install_package_basic_auth_from_keyring() {
+    let context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    context
+        .install()
+        .arg(
+            context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    uv_snapshot!(context.install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("--strict")
+        .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env("PATH", venv_bin_path(context.venv.as_path())), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Downloaded 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
+
+/// Install a package from an index that requires authentication
+/// but the keyring has the wrong password
+#[test]
+fn install_package_basic_auth_from_keyring_wrong_password() {
+    let context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    context
+        .install()
+        .arg(
+            context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    uv_snapshot!(context.install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("--strict")
+        .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
+        .env("PATH", venv_bin_path(context.venv.as_path())), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download `anyio==4.3.0`
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+    "###
+    );
+}
+
+/// Install a package from an index that requires authentication
+/// but the keyring has the wrong username
+#[test]
+fn install_package_basic_auth_from_keyring_wrong_username() {
+    let context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    context
+        .install()
+        .arg(
+            context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    uv_snapshot!(context.install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("--strict")
+        .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
+        .env("PATH", venv_bin_path(context.venv.as_path())), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download `anyio==4.3.0`
+      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+    "###
+    );
 }
 
 /// Install a package from an index that provides relative links and requires authentication
@@ -3598,7 +3969,7 @@ fn already_installed_remote_url() {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###);
 
     context.assert_installed("uv_public_pypackage", "0.1.0");
@@ -3659,8 +4030,8 @@ fn already_installed_remote_url() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
-     - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
-     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+     - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###);
 
     // Request installation again with a different version
@@ -3835,7 +4206,7 @@ fn require_hashes_mismatch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: idna
+    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `idna`
     "###
     );
 
@@ -3863,7 +4234,7 @@ fn require_hashes_missing_dependency() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: idna
+    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `idna`
     "###
     );
 
@@ -3893,7 +4264,7 @@ fn require_hashes_editable() -> Result<()> {
 
     ----- stderr -----
     Built 1 editable in [TIME]
-    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: aiohttp
+    error: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `aiohttp`
     "###
     );
 
