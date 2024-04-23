@@ -140,13 +140,9 @@ async fn venv_impl(
     )
     .into_diagnostic()?;
 
-    // Extra cfg for pyvenv.cfg to specify uv version
-    let extra_cfg = vec![("uv".to_string(), env!("CARGO_PKG_VERSION").to_string())];
-
     // Create the virtual environment.
-    let venv =
-        uv_virtualenv::create_venv(path, interpreter, prompt, system_site_packages, extra_cfg)
-            .map_err(VenvError::Creation)?;
+    let venv = uv_virtualenv::create_venv(path, interpreter, prompt, system_site_packages)
+        .map_err(VenvError::Creation)?;
 
     // Install seed packages.
     if seed {
