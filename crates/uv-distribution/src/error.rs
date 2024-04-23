@@ -3,7 +3,7 @@ use tokio::task::JoinError;
 use zip::result::ZipError;
 
 use distribution_filename::WheelFilenameError;
-use distribution_types::DirectUrlError;
+use distribution_types::ParsedUrlError;
 use pep440_rs::Version;
 use pypi_types::HashDigest;
 use uv_client::BetterReqwestError;
@@ -24,7 +24,7 @@ pub enum Error {
     #[error("Git operation failed")]
     Git(#[source] anyhow::Error),
     #[error(transparent)]
-    DirectUrl(#[from] Box<DirectUrlError>),
+    DirectUrl(#[from] Box<ParsedUrlError>),
     #[error(transparent)]
     Reqwest(#[from] BetterReqwestError),
     #[error(transparent)]

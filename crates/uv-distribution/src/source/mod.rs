@@ -16,8 +16,8 @@ use zip::ZipArchive;
 
 use distribution_filename::WheelFilename;
 use distribution_types::{
-    BuildableSource, DirectArchiveUrl, Dist, FileLocation, GitSourceUrl, HashPolicy, Hashed,
-    LocalEditable, PathSourceDist, PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
+    BuildableSource, Dist, FileLocation, GitSourceUrl, HashPolicy, Hashed, LocalEditable,
+    ParsedArchiveUrl, PathSourceDist, PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
 };
 use install_wheel_rs::metadata::read_archive_metadata;
 use platform_tags::Tags;
@@ -135,7 +135,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
                 let filename = dist.filename().expect("Distribution must have a filename");
-                let DirectArchiveUrl { url, subdirectory } = DirectArchiveUrl::from(dist.url.raw());
+                let ParsedArchiveUrl { url, subdirectory } = ParsedArchiveUrl::from(dist.url.raw());
 
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self
@@ -186,7 +186,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .url
                     .filename()
                     .expect("Distribution must have a filename");
-                let DirectArchiveUrl { url, subdirectory } = DirectArchiveUrl::from(resource.url);
+                let ParsedArchiveUrl { url, subdirectory } = ParsedArchiveUrl::from(resource.url);
 
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self
@@ -284,7 +284,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
                 let filename = dist.filename().expect("Distribution must have a filename");
-                let DirectArchiveUrl { url, subdirectory } = DirectArchiveUrl::from(dist.url.raw());
+                let ParsedArchiveUrl { url, subdirectory } = ParsedArchiveUrl::from(dist.url.raw());
 
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self
@@ -328,7 +328,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .url
                     .filename()
                     .expect("Distribution must have a filename");
-                let DirectArchiveUrl { url, subdirectory } = DirectArchiveUrl::from(resource.url);
+                let ParsedArchiveUrl { url, subdirectory } = ParsedArchiveUrl::from(resource.url);
 
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self
