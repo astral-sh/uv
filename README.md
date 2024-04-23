@@ -526,6 +526,8 @@ In addition, uv respects the following environment variables:
 - `FISH_VERSION`: Used to detect the use of the Fish shell.
 - `BASH_VERSION`: Used to detect the use of the Bash shell.
 - `ZSH_VERSION`: Used to detect the use of the Zsh shell.
+- `RAYON_NUM_THREADS`: Used to control the number of threads used when unzipping and installing
+  packages. See the [rayon documentation](https://docs.rs/rayon/latest/rayon/) for more.
 
 ## Versioning
 
