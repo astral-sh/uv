@@ -1071,7 +1071,7 @@ fn install_git_public_https_missing_branch_or_tag() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0
+    error: Failed to download and build: `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0`
       Caused by: Git operation failed
       Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
       Caused by: failed to fetch branch or tag `2.0.0`
@@ -1108,7 +1108,7 @@ fn install_git_public_https_missing_commit() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
+    error: Failed to download and build: `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
       Caused by: Git operation failed
       Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
       Caused by: failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
@@ -1317,7 +1317,7 @@ fn install_git_private_https_pat_not_authorized() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: uv-private-pypackage @ git+https://git:***@github.com/astral-test/uv-private-pypackage
+    error: Failed to download and build: `uv-private-pypackage @ git+https://git:***@github.com/astral-test/uv-private-pypackage`
       Caused by: Git operation failed
       Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
       Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
@@ -2625,7 +2625,7 @@ fn no_build_isolation() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz
+    error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Failed to build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` with exit status: 1
     --- stdout:

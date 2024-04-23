@@ -1115,5 +1115,8 @@ enum Error {
     Fmt(#[from] std::fmt::Error),
 
     #[error(transparent)]
+    Lookahead(#[from] uv_requirements::LookaheadError),
+
+    #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 }
