@@ -2187,7 +2187,7 @@ dependencies = ["anyio==3.7.0", "anyio==4.0.0"]
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because my-project depends on anyio==3.7.0 and my-project depends on anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because my-project depends on anyio==3.7.0 and anyio==4.0.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -5573,7 +5573,7 @@ fn compile_constraints_incompatible_version() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require filelock==1.0.0 and you require filelock==3.8.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -5601,7 +5601,7 @@ fn conflicting_url_markers() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require filelock==1.0.0 and you require filelock==3.8.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
@@ -5749,7 +5749,7 @@ fn override_with_incompatible_constraint() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require anyio>=3.0.0 and you require anyio<3.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because you require anyio>=3.0.0 and anyio<3.0.0, we can conclude that the requirements are unsatisfiable.
     "###
     );
 

@@ -366,7 +366,7 @@ fn excluded_only_compatible_version() {
           And because you require one of:
               package-a<2.0.0
               package-a>2.0.0
-          and you require package-b>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
+           and package-b>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require
@@ -475,7 +475,7 @@ fn dependency_excludes_range_of_compatible_versions() {
               package-b<=1.0.0
               package-b>=3.0.0
 
-          And because you require package-b>=2.0.0,<3.0.0 and you require package-c, we can conclude that the requirements are unsatisfiable.
+          And because you require package-b>=2.0.0,<3.0.0 and package-c, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
@@ -600,7 +600,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
               package-b<=1.0.0
               package-b>=3.0.0
 
-          And because you require package-b>=2.0.0,<3.0.0 and you require package-c, we can conclude that the requirements are unsatisfiable.
+          And because you require package-b>=2.0.0,<3.0.0 and package-c, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0`
@@ -909,7 +909,7 @@ fn extra_incompatible_with_extra() {
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a[extra-c]==1.0.0 is available and package-a[extra-c]==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a[extra-c] depend on package-b==2.0.0.
           And because package-a[extra-b]==1.0.0 depends on package-b==1.0.0 and only package-a[extra-b]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
-          And because you require package-a[extra-b] and you require package-a[extra-c], we can conclude that the requirements are unsatisfiable.
+          And because you require package-a[extra-b] and package-a[extra-c], we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Because both `extra_b` and `extra_c` are requested and they require incompatible
@@ -1024,7 +1024,7 @@ fn extra_incompatible_with_root() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a[extra]==1.0.0 is available and package-a[extra]==1.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-a[extra] depend on package-b==1.0.0.
-          And because you require package-a[extra] and you require package-b==2.0.0, we can conclude that the requirements are unsatisfiable.
+          And because you require package-a[extra] and package-b==2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Because the user requested `b==2.0.0` but the requested extra requires
@@ -1130,7 +1130,7 @@ fn direct_incompatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because you require package-a==1.0.0 and you require package-a==2.0.0, we can conclude that the requirements are unsatisfiable.
+      ╰─▶ Because you require package-a==1.0.0 and package-a==2.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -1184,7 +1184,7 @@ fn transitive_incompatible_with_root_version() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because package-a==1.0.0 depends on package-b==2.0.0 and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b==2.0.0.
-          And because you require package-a and you require package-b==1.0.0, we can conclude that the requirements are unsatisfiable.
+          And because you require package-a and package-b==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -1243,7 +1243,7 @@ fn transitive_incompatible_with_transitive() {
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c==1.0.0, we can conclude that all versions of package-a depend on package-c==1.0.0.
           And because package-b==1.0.0 depends on package-c==2.0.0 and only package-b==1.0.0 is available, we can conclude that all versions of package-a and all versions of package-b are incompatible.
-          And because you require package-a and you require package-b, we can conclude that the requirements are unsatisfiable.
+          And because you require package-a and package-b, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -1573,7 +1573,7 @@ fn local_transitive_greater_than() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because package-a==1.0.0 depends on package-b>2.0.0 and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b>2.0.0.
-          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+          And because you require package-a and package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -1684,7 +1684,7 @@ fn local_transitive_less_than() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because package-a==1.0.0 depends on package-b<2.0.0 and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b<2.0.0.
-          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+          And because you require package-a and package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -1843,7 +1843,7 @@ fn local_transitive_conflicting() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because package-a==1.0.0 depends on package-b==2.0.0+bar and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b==2.0.0+bar.
-          And because you require package-a and you require package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
+          And because you require package-a and package-b==2.0.0+foo, we can conclude that the requirements are unsatisfiable.
     "###);
 
     assert_not_installed(
@@ -3379,7 +3379,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c>=2.0.0b1, we can conclude that all versions of package-a depend on package-c>=2.0.0b1.
           And because only package-c<2.0.0b1 is available, we can conclude that all versions of package-a depend on package-c>3.0.0.
           And because package-b==1.0.0 depends on package-c and only package-b==1.0.0 is available, we can conclude that all versions of package-b and all versions of package-a are incompatible.
-          And because you require package-a and you require package-b, we can conclude that the requirements are unsatisfiable.
+          And because you require package-a and package-b, we can conclude that the requirements are unsatisfiable.
 
           hint: package-c was requested with a pre-release marker (e.g., package-c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);

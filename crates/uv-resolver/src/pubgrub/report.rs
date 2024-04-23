@@ -202,15 +202,13 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
         external2: &External<PubGrubPackage, Range<Version>>,
         current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
     ) -> String {
-        let external1 = self.format_external(external1);
-        let external2 = self.format_external(external2);
+        let external = self.format_both_external(external1, external2);
         let terms = self.format_terms(current_terms);
 
         format!(
-            "Because {}and {}we can conclude that {}",
-            Padded::from_string("", &external1, " "),
-            Padded::from_string("", &external2, ", "),
-            Padded::from_string("", &terms, ".")
+            "Because {}we can conclude that {}",
+            Padded::from_string("", &external, ", "),
+            Padded::from_string("", &terms, "."),
         )
     }
 
@@ -305,13 +303,11 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
         external: &External<PubGrubPackage, Range<Version>>,
         current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
     ) -> String {
-        let prior_external = self.format_external(prior_external);
-        let external = self.format_external(external);
+        let external = self.format_both_external(prior_external, external);
         let terms = self.format_terms(current_terms);
 
         format!(
-            "And because {}and {}we can conclude that {}",
-            Padded::from_string("", &prior_external, " "),
+            "And because {}we can conclude that {}",
             Padded::from_string("", &external, ", "),
             Padded::from_string("", &terms, "."),
         )
@@ -319,6 +315,56 @@ impl ReportFormatter<PubGrubPackage, Range<Version>> for PubGrubReportFormatter<
 }
 
 impl PubGrubReportFormatter<'_> {
+    /// Format two external incompatibilities, combining them if possible.
+    fn format_both_external(
+        &self,
+        external1: &External<PubGrubPackage, Range<Version>>,
+        external2: &External<PubGrubPackage, Range<Version>>,
+    ) -> String {
+        match (external1, external2) {
+            (
+                External::FromDependencyOf(
+                    PubGrubPackage::Root(root1),
+                    _,
+                    dependency1,
+                    dependency_set1,
+                ),
+                External::FromDependencyOf(
+                    PubGrubPackage::Root(root2),
+                    _,
+                    dependency2,
+                    dependency_set2,
+                ),
+            ) if root1 == root2 => {
+                let dependency_set1 = self.simplify_set(dependency_set1, dependency1);
+                let dependency_set2 = self.simplify_set(dependency_set2, dependency2);
+
+                match root1 {
+                    Some(name) => format!(
+                        "{name} depends on {} and {}",
+                        PackageRange::dependency(dependency1, &dependency_set1),
+                        PackageRange::dependency(dependency2, &dependency_set2),
+                    ),
+                    None => format!(
+                        "you require {} and {}",
+                        PackageRange::dependency(dependency1, &dependency_set1),
+                        PackageRange::dependency(dependency2, &dependency_set2),
+                    ),
+                }
+            }
+            _ => {
+                let external1 = self.format_external(external1);
+                let external2 = self.format_external(external2);
+
+                format!(
+                    "{}and {}",
+                    Padded::from_string("", &external1, " "),
+                    Padded::from_string("", &external2, ", "),
+                )
+            }
+        }
+    }
+
     /// Simplify a [`Range`] of versions using the available versions for a package.
     fn simplify_set<'a>(
         &self,
