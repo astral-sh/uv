@@ -61,7 +61,8 @@ pub(crate) struct GlobalArgs {
         long,
         value_enum,
         default_value = "auto",
-        conflicts_with = "no_color"
+        conflicts_with = "no_color",
+        value_name = "COLOR_CHOICE"
     )]
     pub(crate) color: ColorChoice,
 
