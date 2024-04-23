@@ -800,6 +800,44 @@ mod tests {
     }
 
     #[test(tokio::test)]
+    async fn test_credentials_in_keyring_seed() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let server = start_test_server(username, password).await;
+        let base_url = Url::parse(&server.uri())?;
+        let cache = CredentialsCache::new();
+
+        // Seed _just_ the username. This cache entry should be ignored and we should
+        // still find a password via the keyring.
+        cache.insert(
+            &base_url,
+            Arc::new(Credentials::new(Some(username.to_string()), None)),
+        );
+        let client = test_client_builder()
+            .with(AuthMiddleware::new().with_cache(cache).with_keyring(Some(
+                KeyringProvider::dummy([((base_url.host_str().unwrap(), username), password)]),
+            )))
+            .build();
+
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            401,
+            "Credentials are not pulled from the keyring without a username"
+        );
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        assert_eq!(
+            client.get(url).send().await?.status(),
+            200,
+            "Credentials for the username should be pulled from the keyring"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
     async fn test_credentials_in_url_multiple_realms() -> Result<(), Error> {
         let username_1 = "user1";
         let password_1 = "password1";
