@@ -9,7 +9,7 @@ use tracing::debug;
 use url::Url;
 
 use cache_key::{CanonicalUrl, RepositoryUrl};
-use distribution_types::DirectGitUrl;
+use distribution_types::ParsedGitUrl;
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::LockedFile;
 use uv_git::{Fetch, GitReference, GitSha, GitSource, GitUrl};
@@ -67,7 +67,7 @@ pub(crate) async fn fetch_git_archive(
     )
     .map_err(Error::CacheWrite)?;
 
-    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Box::new)?;
+    let ParsedGitUrl { url, subdirectory } = ParsedGitUrl::try_from(url).map_err(Box::new)?;
 
     // Fetch the Git repository.
     let source = if let Some(reporter) = reporter {
@@ -95,7 +95,7 @@ pub(crate) async fn resolve_precise(
     cache: &Cache,
     reporter: Option<&Arc<dyn Reporter>>,
 ) -> Result<Option<Url>, Error> {
-    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).map_err(Box::new)?;
+    let ParsedGitUrl { url, subdirectory } = ParsedGitUrl::try_from(url).map_err(Box::new)?;
 
     // If the Git reference already contains a complete SHA, short-circuit.
     if url.precise().is_some() {
@@ -107,7 +107,7 @@ pub(crate) async fn resolve_precise(
         let resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
         let reference = RepositoryReference::new(&url);
         if let Some(precise) = resolved_git_refs.get(&reference) {
-            return Ok(Some(Url::from(DirectGitUrl {
+            return Ok(Some(Url::from(ParsedGitUrl {
                 url: url.with_precise(*precise),
                 subdirectory,
             })));
@@ -136,7 +136,7 @@ pub(crate) async fn resolve_precise(
     }
 
     // Re-encode as a URL.
-    Ok(Some(Url::from(DirectGitUrl {
+    Ok(Some(Url::from(ParsedGitUrl {
         url: git,
         subdirectory,
     })))
@@ -154,11 +154,11 @@ pub(crate) async fn resolve_precise(
 /// This method will only return precise URLs for URLs that have already been resolved via
 /// [`resolve_precise`].
 pub fn to_precise(url: &Url) -> Option<Url> {
-    let DirectGitUrl { url, subdirectory } = DirectGitUrl::try_from(url).ok()?;
+    let ParsedGitUrl { url, subdirectory } = ParsedGitUrl::try_from(url).ok()?;
     let resolved_git_refs = RESOLVED_GIT_REFS.lock().unwrap();
     let reference = RepositoryReference::new(&url);
     let precise = resolved_git_refs.get(&reference)?;
-    Some(Url::from(DirectGitUrl {
+    Some(Url::from(ParsedGitUrl {
         url: url.with_precise(*precise),
         subdirectory,
     }))
@@ -182,12 +182,12 @@ fn is_same_reference_impl<'a>(
     resolved_refs: &FxHashMap<RepositoryReference, GitSha>,
 ) -> bool {
     // Convert `a` to a Git URL, if possible.
-    let Ok(a_git) = DirectGitUrl::try_from(&Url::from(CanonicalUrl::new(a))) else {
+    let Ok(a_git) = ParsedGitUrl::try_from(&Url::from(CanonicalUrl::new(a))) else {
         return false;
     };
 
     // Convert `b` to a Git URL, if possible.
-    let Ok(b_git) = DirectGitUrl::try_from(&Url::from(CanonicalUrl::new(b))) else {
+    let Ok(b_git) = ParsedGitUrl::try_from(&Url::from(CanonicalUrl::new(b))) else {
         return false;
     };
 

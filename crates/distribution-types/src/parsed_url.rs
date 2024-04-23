@@ -6,7 +6,7 @@ use url::Url;
 use uv_git::{GitSha, GitUrl};
 
 #[derive(Debug, Error)]
-pub enum DirectUrlError {
+pub enum ParsedUrlError {
     #[error("Unsupported URL prefix `{prefix}` in URL: `{url}`")]
     UnsupportedUrlPrefix { prefix: String, url: Url },
     #[error("Invalid path in file URL: `{0}`")]
@@ -28,11 +28,11 @@ pub enum DirectUrlError {
 #[derive(Debug)]
 pub enum ParsedUrl {
     /// The direct URL is a path to a local directory or file.
-    LocalFile(LocalFileUrl),
+    LocalFile(ParsedLocalFileUrl),
     /// The direct URL is path to a Git repository.
-    Git(DirectGitUrl),
+    Git(ParsedGitUrl),
     /// The direct URL is a URL to an archive.
-    Archive(DirectArchiveUrl),
+    Archive(ParsedArchiveUrl),
 }
 
 /// A local path url
@@ -40,7 +40,7 @@ pub enum ParsedUrl {
 /// Examples:
 /// * `file:///home/ferris/my_project`
 #[derive(Debug)]
-pub struct LocalFileUrl {
+pub struct ParsedLocalFileUrl {
     pub url: Url,
     pub editable: bool,
 }
@@ -51,7 +51,7 @@ pub struct LocalFileUrl {
 /// * `git+https://git.example.com/MyProject.git`
 /// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
 #[derive(Debug)]
-pub struct DirectGitUrl {
+pub struct ParsedGitUrl {
     pub url: GitUrl,
     pub subdirectory: Option<PathBuf>,
 }
@@ -63,13 +63,13 @@ pub struct DirectGitUrl {
 /// * source dist, correctly named: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz`
 /// * source dist, only extension recognizable: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
 #[derive(Debug)]
-pub struct DirectArchiveUrl {
+pub struct ParsedArchiveUrl {
     pub url: Url,
     pub subdirectory: Option<PathBuf>,
 }
 
-impl TryFrom<&Url> for DirectGitUrl {
-    type Error = DirectUrlError;
+impl TryFrom<&Url> for ParsedGitUrl {
+    type Error = ParsedUrlError;
 
     fn try_from(url_in: &Url) -> Result<Self, Self::Error> {
         let subdirectory = get_subdirectory(url_in);
@@ -77,15 +77,15 @@ impl TryFrom<&Url> for DirectGitUrl {
         let url = url_in
             .as_str()
             .strip_prefix("git+")
-            .ok_or_else(|| DirectUrlError::MissingUrlPrefix(url_in.clone()))?;
-        let url = Url::parse(url).map_err(|err| DirectUrlError::UrlParse(url.to_string(), err))?;
+            .ok_or_else(|| ParsedUrlError::MissingUrlPrefix(url_in.clone()))?;
+        let url = Url::parse(url).map_err(|err| ParsedUrlError::UrlParse(url.to_string(), err))?;
         let url = GitUrl::try_from(url)
-            .map_err(|err| DirectUrlError::GitShaParse(url_in.clone(), err))?;
+            .map_err(|err| ParsedUrlError::GitShaParse(url_in.clone(), err))?;
         Ok(Self { url, subdirectory })
     }
 }
 
-impl From<&Url> for DirectArchiveUrl {
+impl From<&Url> for ParsedArchiveUrl {
     fn from(url: &Url) -> Self {
         Self {
             url: url.clone(),
@@ -110,29 +110,29 @@ fn get_subdirectory(url: &Url) -> Option<PathBuf> {
 
 /// Return the Git reference of the given URL, if it exists.
 pub fn git_reference(url: &Url) -> Result<Option<GitSha>, Error> {
-    let DirectGitUrl { url, .. } = DirectGitUrl::try_from(url)?;
+    let ParsedGitUrl { url, .. } = ParsedGitUrl::try_from(url)?;
     Ok(url.precise())
 }
 
 impl TryFrom<&Url> for ParsedUrl {
-    type Error = DirectUrlError;
+    type Error = ParsedUrlError;
 
     fn try_from(url: &Url) -> Result<Self, Self::Error> {
         if let Some((prefix, ..)) = url.scheme().split_once('+') {
             match prefix {
-                "git" => Ok(Self::Git(DirectGitUrl::try_from(url)?)),
-                _ => Err(DirectUrlError::UnsupportedUrlPrefix {
+                "git" => Ok(Self::Git(ParsedGitUrl::try_from(url)?)),
+                _ => Err(ParsedUrlError::UnsupportedUrlPrefix {
                     prefix: prefix.to_string(),
                     url: url.clone(),
                 }),
             }
         } else if url.scheme().eq_ignore_ascii_case("file") {
-            Ok(Self::LocalFile(LocalFileUrl {
+            Ok(Self::LocalFile(ParsedLocalFileUrl {
                 url: url.clone(),
                 editable: false,
             }))
         } else {
-            Ok(Self::Archive(DirectArchiveUrl::from(url)))
+            Ok(Self::Archive(ParsedArchiveUrl::from(url)))
         }
     }
 }
@@ -149,10 +149,10 @@ impl TryFrom<&ParsedUrl> for pypi_types::DirectUrl {
     }
 }
 
-impl TryFrom<&LocalFileUrl> for pypi_types::DirectUrl {
+impl TryFrom<&ParsedLocalFileUrl> for pypi_types::DirectUrl {
     type Error = Error;
 
-    fn try_from(value: &LocalFileUrl) -> Result<Self, Self::Error> {
+    fn try_from(value: &ParsedLocalFileUrl) -> Result<Self, Self::Error> {
         Ok(Self::LocalDirectory {
             url: value.url.to_string(),
             dir_info: pypi_types::DirInfo {
@@ -162,10 +162,10 @@ impl TryFrom<&LocalFileUrl> for pypi_types::DirectUrl {
     }
 }
 
-impl TryFrom<&DirectArchiveUrl> for pypi_types::DirectUrl {
+impl TryFrom<&ParsedArchiveUrl> for pypi_types::DirectUrl {
     type Error = Error;
 
-    fn try_from(value: &DirectArchiveUrl) -> Result<Self, Self::Error> {
+    fn try_from(value: &ParsedArchiveUrl) -> Result<Self, Self::Error> {
         Ok(Self::ArchiveUrl {
             url: value.url.to_string(),
             archive_info: pypi_types::ArchiveInfo {
@@ -177,10 +177,10 @@ impl TryFrom<&DirectArchiveUrl> for pypi_types::DirectUrl {
     }
 }
 
-impl TryFrom<&DirectGitUrl> for pypi_types::DirectUrl {
+impl TryFrom<&ParsedGitUrl> for pypi_types::DirectUrl {
     type Error = Error;
 
-    fn try_from(value: &DirectGitUrl) -> Result<Self, Self::Error> {
+    fn try_from(value: &ParsedGitUrl) -> Result<Self, Self::Error> {
         Ok(Self::VcsUrl {
             url: value.url.repository().to_string(),
             vcs_info: pypi_types::VcsInfo {
@@ -203,14 +203,14 @@ impl From<ParsedUrl> for Url {
     }
 }
 
-impl From<LocalFileUrl> for Url {
-    fn from(value: LocalFileUrl) -> Self {
+impl From<ParsedLocalFileUrl> for Url {
+    fn from(value: ParsedLocalFileUrl) -> Self {
         value.url
     }
 }
 
-impl From<DirectArchiveUrl> for Url {
-    fn from(value: DirectArchiveUrl) -> Self {
+impl From<ParsedArchiveUrl> for Url {
+    fn from(value: ParsedArchiveUrl) -> Self {
         let mut url = value.url;
         if let Some(subdirectory) = value.subdirectory {
             url.set_fragment(Some(&format!("subdirectory={}", subdirectory.display())));
@@ -219,8 +219,8 @@ impl From<DirectArchiveUrl> for Url {
     }
 }
 
-impl From<DirectGitUrl> for Url {
-    fn from(value: DirectGitUrl) -> Self {
+impl From<ParsedGitUrl> for Url {
+    fn from(value: ParsedGitUrl) -> Self {
         let mut url = Self::parse(&format!("{}{}", "git+", Self::from(value.url).as_str()))
             .expect("Git URL is invalid");
         if let Some(subdirectory) = value.subdirectory {
@@ -235,7 +235,7 @@ mod tests {
     use anyhow::Result;
     use url::Url;
 
-    use crate::direct_url::ParsedUrl;
+    use crate::parsed_url::ParsedUrl;
 
     #[test]
     fn direct_url_from_url() -> Result<()> {
