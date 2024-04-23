@@ -3,11 +3,13 @@ use crate::commands::ExitStatus;
 use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
 use crate::printer::Printer;
 use anyhow::{Context, Result};
-use distribution_types::{IndexLocations, InstalledMetadata, LocalDist, Name, Resolution};
+use distribution_types::{
+    IndexLocations, InstalledMetadata, LocalDist, Name, Resolution, UvRequirement,
+};
 use install_wheel_rs::linker::LinkMode;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pep508_rs::{MarkerEnvironment, PackageName, Requirement};
+use pep508_rs::{MarkerEnvironment, PackageName};
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use std::ffi::OsString;
@@ -385,7 +387,7 @@ async fn environment_for_run(
 /// Resolve a set of requirements, similar to running `pip compile`.
 #[allow(clippy::too_many_arguments)]
 async fn resolve(
-    requirements: Vec<Requirement>,
+    requirements: Vec<UvRequirement>,
     project: Option<PackageName>,
     hasher: &HashStrategy,
     interpreter: &Interpreter,

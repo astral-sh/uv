@@ -1,3 +1,4 @@
+use pep508_rs::VerbatimUrl;
 use url::Url;
 use uv_normalize::PackageName;
 
@@ -23,4 +24,8 @@ pub enum Error {
 
     #[error("Requested package name `{0}` does not match `{1}` in the distribution filename: {2}")]
     PackageNameMismatch(PackageName, PackageName, String),
+
+    // TODO(konsti): Show given if it exists
+    #[error("Only directories can be installed as editable, not filenames: `{0}`")]
+    EditableFile(VerbatimUrl),
 }

@@ -11,5 +11,6 @@ mod downloader;
 mod editable;
 mod installer;
 mod plan;
+mod satisfies;
 mod site_packages;
 mod uninstall;

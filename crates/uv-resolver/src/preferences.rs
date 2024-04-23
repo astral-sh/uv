@@ -3,9 +3,9 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
+use distribution_types::{UvRequirement, UvSource};
 use pep440_rs::{Operator, Version};
-use pep508_rs::UnnamedRequirement;
-use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
+use pep508_rs::{MarkerEnvironment, UnnamedRequirement};
 use pypi_types::{HashDigest, HashError};
 use requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 use uv_normalize::PackageName;
@@ -21,7 +21,7 @@ pub enum PreferenceError {
 /// A pinned requirement, as extracted from a `requirements.txt` file.
 #[derive(Clone, Debug)]
 pub struct Preference {
-    requirement: Requirement,
+    requirement: UvRequirement,
     hashes: Vec<HashDigest>,
 }
 
@@ -30,7 +30,7 @@ impl Preference {
     pub fn from_entry(entry: RequirementEntry) -> Result<Self, PreferenceError> {
         Ok(Self {
             requirement: match entry.requirement {
-                RequirementsTxtRequirement::Pep508(requirement) => requirement,
+                RequirementsTxtRequirement::Uv(requirement) => requirement,
                 RequirementsTxtRequirement::Unnamed(requirement) => {
                     return Err(PreferenceError::Bare(requirement));
                 }
@@ -45,7 +45,7 @@ impl Preference {
     }
 
     /// Create a [`Preference`] from a [`Requirement`].
-    pub fn from_requirement(requirement: Requirement) -> Self {
+    pub fn from_requirement(requirement: UvRequirement) -> Self {
         Self {
             requirement,
             hashes: Vec::new(),
@@ -58,7 +58,7 @@ impl Preference {
     }
 
     /// Return the [`Requirement`] for this preference.
-    pub fn requirement(&self) -> &Requirement {
+    pub fn requirement(&self) -> &UvRequirement {
         &self.requirement
     }
 }
@@ -96,10 +96,9 @@ impl Preferences {
                         );
                         return None;
                     }
-                    match requirement.version_or_url.as_ref() {
-                        Some(VersionOrUrl::VersionSpecifier(version_specifiers)) =>
-                            {
-                                let [version_specifier] = version_specifiers.as_ref() else {
+                    match &requirement.source {
+                        UvSource::Registry {version , ..} => {
+                            let [version_specifier] = version.as_ref() else {
                                     trace!(
                                     "Excluding {requirement} from preferences due to multiple version specifiers."
                                 );
@@ -119,13 +118,10 @@ impl Preferences {
                                     },
                                 ))
                             }
-                        Some(VersionOrUrl::Url(_)) => {
+                        UvSource::Url {..} | UvSource::Git { .. } | UvSource::Path { .. }=> {
                             trace!(
                                 "Excluding {requirement} from preferences due to URL dependency."
                             );
-                            None
-                        }
-                        _ => {
                             None
                         }
                     }

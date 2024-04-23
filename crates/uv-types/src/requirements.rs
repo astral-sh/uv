@@ -1,4 +1,4 @@
-use pep508_rs::Requirement;
+use distribution_types::UvRequirement;
 use uv_normalize::ExtraName;
 
 /// A set of requirements as requested by a parent requirement.
@@ -11,14 +11,14 @@ pub struct RequestedRequirements {
     /// The set of extras included on the originating requirement.
     extras: Vec<ExtraName>,
     /// The set of requirements that were requested by the originating requirement.
-    requirements: Vec<Requirement>,
+    requirements: Vec<UvRequirement>,
     /// Whether the dependencies were direct or transitive.
     direct: bool,
 }
 
 impl RequestedRequirements {
     /// Instantiate a [`RequestedRequirements`] with the given `extras` and `requirements`.
-    pub fn new(extras: Vec<ExtraName>, requirements: Vec<Requirement>, direct: bool) -> Self {
+    pub fn new(extras: Vec<ExtraName>, requirements: Vec<UvRequirement>, direct: bool) -> Self {
         Self {
             extras,
             requirements,
@@ -32,7 +32,7 @@ impl RequestedRequirements {
     }
 
     /// Return the requirements that were included on the originating requirement.
-    pub fn requirements(&self) -> &[Requirement] {
+    pub fn requirements(&self) -> &[UvRequirement] {
         &self.requirements
     }
 

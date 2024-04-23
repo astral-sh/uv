@@ -5,69 +5,72 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "inflection",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "0.5.1",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "0.5.1",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "upsidedown",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: Equal,
-                                        version: "0.4",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: Equal,
+                                    version: "0.4",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "numpy",
                     ),
                     extras: [],
-                    version_or_url: None,
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],
         },
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "pandas",
                     ),
@@ -76,23 +79,22 @@ RequirementsTxt {
                             "tabulate",
                         ),
                     ],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: GreaterThanEqual,
-                                        version: "1",
-                                    },
-                                    VersionSpecifier {
-                                        operator: LessThan,
-                                        version: "2",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: GreaterThanEqual,
+                                    version: "1",
+                                },
+                                VersionSpecifier {
+                                    operator: LessThan,
+                                    version: "2",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],

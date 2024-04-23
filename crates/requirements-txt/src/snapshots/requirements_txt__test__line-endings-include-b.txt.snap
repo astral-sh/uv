@@ -5,14 +5,19 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "tomli",
                     ),
                     extras: [],
-                    version_or_url: None,
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],

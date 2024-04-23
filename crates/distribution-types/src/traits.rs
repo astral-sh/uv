@@ -169,7 +169,7 @@ impl std::fmt::Display for Dist {
 
 impl std::fmt::Display for GitSourceDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.name(), self.version_or_url())
+        write!(f, "{} @ git+{}", self.name(), self.url)
     }
 }
 

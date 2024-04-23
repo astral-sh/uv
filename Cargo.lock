@@ -1070,6 +1070,7 @@ dependencies = [
  "distribution-filename",
  "fs-err",
  "git2",
+ "indexmap",
  "itertools 0.12.1",
  "once_cell",
  "pep440_rs",
@@ -2474,6 +2475,7 @@ name = "pep508_rs"
 version = "0.4.2"
 dependencies = [
  "derivative",
+ "indexmap",
  "insta",
  "log",
  "once_cell",
@@ -2489,6 +2491,7 @@ dependencies = [
  "unicode-width",
  "url",
  "uv-fs",
+ "uv-git",
  "uv-normalize",
 ]
 
@@ -3022,10 +3025,12 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "assert_fs",
+ "distribution-types",
  "fs-err",
  "indoc",
  "insta",
  "itertools 0.12.1",
+ "pep440_rs",
  "pep508_rs",
  "regex",
  "reqwest",
@@ -3033,6 +3038,7 @@ dependencies = [
  "serde",
  "tempfile",
  "test-case",
+ "thiserror",
  "tokio",
  "tracing",
  "unscanny",
@@ -4434,6 +4440,7 @@ dependencies = [
  "filetime",
  "flate2",
  "fs-err",
+ "indexmap",
  "indicatif",
  "indoc",
  "insta",
@@ -4442,6 +4449,7 @@ dependencies = [
  "miette",
  "mimalloc",
  "owo-colors",
+ "pep440_rs",
  "pep508_rs",
  "platform-tags",
  "predicates",
@@ -4614,6 +4622,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
+ "distribution-types",
  "itertools 0.12.1",
  "pep508_rs",
  "platform-tags",
@@ -4622,6 +4631,7 @@ dependencies = [
  "serde",
  "serde_json",
  "uv-auth",
+ "uv-cache",
  "uv-normalize",
 ]
 
@@ -4888,7 +4898,12 @@ dependencies = [
  "distribution-types",
  "fs-err",
  "futures",
+ "glob",
  "indexmap",
+ "indoc",
+ "insta",
+ "path-absolutize",
+ "pep440_rs",
  "pep508_rs",
  "pypi-types",
  "requirements-txt",
@@ -4902,6 +4917,7 @@ dependencies = [
  "uv-configuration",
  "uv-distribution",
  "uv-fs",
+ "uv-git",
  "uv-normalize",
  "uv-resolver",
  "uv-types",

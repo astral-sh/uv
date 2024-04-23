@@ -50,7 +50,7 @@ impl ResolutionStrategy {
             ResolutionMode::LowestDirect => Self::LowestDirect(
                 manifest
                     .user_requirements(markers, dependencies)
-                    .map(|requirement| requirement.name.clone())
+                    .cloned()
                     .collect(),
             ),
         }

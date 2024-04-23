@@ -26,6 +26,7 @@ uv-normalize = { workspace = true }
 anyhow = { workspace = true }
 fs-err = { workspace = true }
 git2 = { workspace = true }
+indexmap = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
 rkyv = { workspace = true }

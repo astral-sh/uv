@@ -1,6 +1,7 @@
+use distribution_types::UvSource;
 use rustc_hash::FxHashSet;
 
-use pep508_rs::{MarkerEnvironment, VersionOrUrl};
+use pep508_rs::MarkerEnvironment;
 use uv_normalize::PackageName;
 
 use crate::{DependencyMode, Manifest};
@@ -70,16 +71,10 @@ impl PreReleaseStrategy {
                 manifest
                     .requirements(markers, dependencies)
                     .filter(|requirement| {
-                        let Some(version_or_url) = &requirement.version_or_url else {
+                        let UvSource::Registry { version, .. } = &requirement.source else {
                             return false;
                         };
-                        let version_specifiers = match version_or_url {
-                            VersionOrUrl::VersionSpecifier(version_specifiers) => {
-                                version_specifiers
-                            }
-                            VersionOrUrl::Url(_) => return false,
-                        };
-                        version_specifiers
+                        version
                             .iter()
                             .any(pep440_rs::VersionSpecifier::any_prerelease)
                     })
@@ -90,16 +85,10 @@ impl PreReleaseStrategy {
                 manifest
                     .requirements(markers, dependencies)
                     .filter(|requirement| {
-                        let Some(version_or_url) = &requirement.version_or_url else {
+                        let UvSource::Registry { version, .. } = &requirement.source else {
                             return false;
                         };
-                        let version_specifiers = match version_or_url {
-                            VersionOrUrl::VersionSpecifier(version_specifiers) => {
-                                version_specifiers
-                            }
-                            VersionOrUrl::Url(_) => return false,
-                        };
-                        version_specifiers
+                        version
                             .iter()
                             .any(pep440_rs::VersionSpecifier::any_prerelease)
                     })

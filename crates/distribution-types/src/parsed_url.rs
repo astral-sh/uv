@@ -1,5 +1,6 @@
-use anyhow::{Error, Result};
 use std::path::PathBuf;
+
+use anyhow::{Error, Result};
 use thiserror::Error;
 use url::Url;
 
@@ -15,8 +16,6 @@ pub enum ParsedUrlError {
     GitShaParse(Url, #[source] git2::Error),
     #[error("Not a valid URL: `{0}`")]
     UrlParse(String, #[source] url::ParseError),
-    #[error("Missing `git+` prefix for Git URL: `{0}`")]
-    MissingUrlPrefix(Url),
 }
 
 /// We support three types of URLs for distributions:
@@ -39,9 +38,10 @@ pub enum ParsedUrl {
 ///
 /// Examples:
 /// * `file:///home/ferris/my_project`
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ParsedLocalFileUrl {
     pub url: Url,
+    pub path: PathBuf,
     pub editable: bool,
 }
 
@@ -50,7 +50,7 @@ pub struct ParsedLocalFileUrl {
 /// Examples:
 /// * `git+https://git.example.com/MyProject.git`
 /// * `git+https://git.example.com/MyProject.git@v1.0#egg=pkg&subdirectory=pkg_dir`
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ParsedGitUrl {
     pub url: GitUrl,
     pub subdirectory: Option<PathBuf>,
@@ -62,7 +62,7 @@ pub struct ParsedGitUrl {
 /// * wheel: `https://download.pytorch.org/whl/torch-2.0.1-cp39-cp39-manylinux2014_aarch64.whl#sha256=423e0ae257b756bb45a4b49072046772d1ad0c592265c5080070e0767da4e490`
 /// * source dist, correctly named: `https://files.pythonhosted.org/packages/62/06/d5604a70d160f6a6ca5fd2ba25597c24abd5c5ca5f437263d177ac242308/tqdm-4.66.1.tar.gz`
 /// * source dist, only extension recognizable: `https://github.com/foo-labs/foo/archive/master.zip#egg=pkg&subdirectory=packages/bar`
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ParsedArchiveUrl {
     pub url: Url,
     pub subdirectory: Option<PathBuf>,
@@ -71,13 +71,15 @@ pub struct ParsedArchiveUrl {
 impl TryFrom<&Url> for ParsedGitUrl {
     type Error = ParsedUrlError;
 
+    /// Supports url both with `git+` prefix and without. With prefix is PEP 508, without is
+    /// `tool.uv.sources`.
     fn try_from(url_in: &Url) -> Result<Self, Self::Error> {
         let subdirectory = get_subdirectory(url_in);
 
         let url = url_in
             .as_str()
             .strip_prefix("git+")
-            .ok_or_else(|| ParsedUrlError::MissingUrlPrefix(url_in.clone()))?;
+            .unwrap_or(url_in.as_str());
         let url = Url::parse(url).map_err(|err| ParsedUrlError::UrlParse(url.to_string(), err))?;
         let url = GitUrl::try_from(url)
             .map_err(|err| ParsedUrlError::GitShaParse(url_in.clone(), err))?;
@@ -129,6 +131,9 @@ impl TryFrom<&Url> for ParsedUrl {
         } else if url.scheme().eq_ignore_ascii_case("file") {
             Ok(Self::LocalFile(ParsedLocalFileUrl {
                 url: url.clone(),
+                path: url
+                    .to_file_path()
+                    .map_err(|()| ParsedUrlError::InvalidFileUrl(url.clone()))?,
                 editable: false,
             }))
         } else {

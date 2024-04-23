@@ -25,7 +25,7 @@ use tokio::process::Command;
 use tokio::sync::Mutex;
 use tracing::{debug, info_span, instrument, Instrument};
 
-use distribution_types::Resolution;
+use distribution_types::{ParsedUrlError, Resolution, UvRequirement};
 use pep440_rs::Version;
 use pep508_rs::{PackageName, Requirement};
 use uv_configuration::{BuildKind, ConfigSettings, SetupPyStrategy};
@@ -54,14 +54,18 @@ static WHEEL_NOT_FOUND_RE: Lazy<Regex> =
 static DEFAULT_BACKEND: Lazy<Pep517Backend> = Lazy::new(|| Pep517Backend {
     backend: "setuptools.build_meta:__legacy__".to_string(),
     backend_path: None,
-    requirements: vec![Requirement::from_str("setuptools >= 40.8.0").unwrap()],
+    requirements: vec![UvRequirement::from_requirement(
+        Requirement::from_str("setuptools >= 40.8.0").unwrap(),
+    )
+    .unwrap()],
 });
 
 /// The requirements for `--legacy-setup-py` builds.
-static SETUP_PY_REQUIREMENTS: Lazy<[Requirement; 2]> = Lazy::new(|| {
+static SETUP_PY_REQUIREMENTS: Lazy<[UvRequirement; 2]> = Lazy::new(|| {
     [
-        Requirement::from_str("setuptools >= 40.8.0").unwrap(),
-        Requirement::from_str("wheel").unwrap(),
+        UvRequirement::from_requirement(Requirement::from_str("setuptools >= 40.8.0").unwrap())
+            .unwrap(),
+        UvRequirement::from_requirement(Requirement::from_str("wheel").unwrap()).unwrap(),
     ]
 });
 
@@ -100,6 +104,8 @@ pub enum Error {
     },
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
+    #[error("Failed to parse requirements from build backend")]
+    DirectUrl(#[source] ParsedUrlError),
 }
 
 #[derive(Debug)]
@@ -287,7 +293,7 @@ struct Pep517Backend {
     /// <https://peps.python.org/pep-0517/#build-wheel>
     backend: String,
     /// `build-backend.requirements` in pyproject.toml
-    requirements: Vec<Requirement>,
+    requirements: Vec<UvRequirement>,
     /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
     backend_path: Option<BackendPath>,
 }
@@ -570,7 +576,12 @@ impl SourceBuild {
                             .build_backend
                             .unwrap_or_else(|| "setuptools.build_meta:__legacy__".to_string()),
                         backend_path: build_system.backend_path,
-                        requirements: build_system.requires,
+                        requirements: build_system
+                            .requires
+                            .into_iter()
+                            .map(UvRequirement::from_requirement)
+                            .collect::<Result<_, _>>()
+                            .map_err(|err| Box::new(Error::DirectUrl(err)))?,
                     }
                 } else {
                     // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
@@ -942,7 +953,7 @@ async fn create_pep517_build_environment(
     })?;
 
     // Deserialize the requirements from the output file.
-    let extra_requires: Vec<Requirement> = serde_json::from_slice(&contents).map_err(|err| {
+    let extra_requires: Vec<Requirement> = serde_json::from_slice::<Vec<Requirement>>(&contents).map_err(|err| {
         Error::from_command_output(
             format!(
                 "Build backend failed to return extra requires with `get_requires_for_build_{build_kind}`: {err}"
@@ -951,6 +962,11 @@ async fn create_pep517_build_environment(
             version_id,
         )
     })?;
+    let extra_requires: Vec<UvRequirement> = extra_requires
+        .into_iter()
+        .map(UvRequirement::from_requirement)
+        .collect::<Result<_, _>>()
+        .map_err(Error::DirectUrl)?;
 
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of
     // the pyproject.toml requires (in this case, `wheel`). We can skip doing the whole resolution
@@ -961,7 +977,7 @@ async fn create_pep517_build_environment(
         .any(|req| !pep517_backend.requirements.contains(req))
     {
         debug!("Installing extra requirements for build backend");
-        let requirements: Vec<Requirement> = pep517_backend
+        let requirements: Vec<_> = pep517_backend
             .requirements
             .iter()
             .cloned()

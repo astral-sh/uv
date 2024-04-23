@@ -10,7 +10,7 @@ use tokio::time::Instant;
 use tracing::{info, info_span, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use distribution_types::IndexLocations;
+use distribution_types::{IndexLocations, UvRequirement};
 use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
 use pep508_rs::{Requirement, VersionOrUrl};
 use uv_cache::{Cache, CacheArgs};
@@ -140,7 +140,11 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                     requirement
                 };
 
-                let result = build_dispatch.resolve(&[requirement.clone()]).await;
+                let result = build_dispatch
+                    .resolve(&[
+                        UvRequirement::from_requirement(requirement.clone()).expect("TODO(konsti)")
+                    ])
+                    .await;
                 (requirement.to_string(), start.elapsed(), result)
             }
         })

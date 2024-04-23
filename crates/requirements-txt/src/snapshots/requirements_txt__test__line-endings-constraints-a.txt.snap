@@ -5,68 +5,65 @@ expression: actual
 RequirementsTxt {
     requirements: [
         RequirementEntry {
-            requirement: Pep508(
-                Requirement {
+            requirement: Uv(
+                UvRequirement {
                     name: PackageName(
                         "django-debug-toolbar",
                     ),
                     extras: [],
-                    version_or_url: Some(
-                        VersionSpecifier(
-                            VersionSpecifiers(
-                                [
-                                    VersionSpecifier {
-                                        operator: LessThan,
-                                        version: "2.2",
-                                    },
-                                ],
-                            ),
-                        ),
-                    ),
                     marker: None,
+                    source: Registry {
+                        version: VersionSpecifiers(
+                            [
+                                VersionSpecifier {
+                                    operator: LessThan,
+                                    version: "2.2",
+                                },
+                            ],
+                        ),
+                        index: None,
+                    },
                 },
             ),
             hashes: [],
         },
     ],
     constraints: [
-        Requirement {
+        UvRequirement {
             name: PackageName(
                 "django",
             ),
             extras: [],
-            version_or_url: Some(
-                VersionSpecifier(
-                    VersionSpecifiers(
-                        [
-                            VersionSpecifier {
-                                operator: Equal,
-                                version: "2.1.15",
-                            },
-                        ],
-                    ),
-                ),
-            ),
             marker: None,
+            source: Registry {
+                version: VersionSpecifiers(
+                    [
+                        VersionSpecifier {
+                            operator: Equal,
+                            version: "2.1.15",
+                        },
+                    ],
+                ),
+                index: None,
+            },
         },
-        Requirement {
+        UvRequirement {
             name: PackageName(
                 "pytz",
             ),
             extras: [],
-            version_or_url: Some(
-                VersionSpecifier(
-                    VersionSpecifiers(
-                        [
-                            VersionSpecifier {
-                                operator: Equal,
-                                version: "2023.3",
-                            },
-                        ],
-                    ),
-                ),
-            ),
             marker: None,
+            source: Registry {
+                version: VersionSpecifiers(
+                    [
+                        VersionSpecifier {
+                            operator: Equal,
+                            version: "2023.3",
+                        },
+                    ],
+                ),
+                index: None,
+            },
         },
     ],
     editables: [],

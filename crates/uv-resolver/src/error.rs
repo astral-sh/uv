@@ -10,7 +10,8 @@ use pubgrub::report::{DefaultStringReporter, DerivationTree, External, Reporter}
 use rustc_hash::FxHashMap;
 
 use distribution_types::{
-    BuiltDist, IndexLocations, InstalledDist, PathBuiltDist, PathSourceDist, SourceDist,
+    BuiltDist, IndexLocations, InstalledDist, ParsedUrlError, PathBuiltDist, PathSourceDist,
+    SourceDist,
 };
 use once_map::OnceMap;
 use pep440_rs::Version;
@@ -96,6 +97,10 @@ pub enum ResolveError {
 
     #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`")]
     UnhashedPackage(PackageName),
+
+    // TODO(konsti): Error source
+    #[error("Failed to parse requirements")]
+    DirectUrl(#[from] Box<ParsedUrlError>),
 
     /// Something unexpected happened.
     #[error("{0}")]

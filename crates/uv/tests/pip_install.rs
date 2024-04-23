@@ -184,8 +184,9 @@ fn invalid_pyproject_toml_schema() -> Result<()> {
     Ok(())
 }
 
+/// For user controlled pyproject.toml files, we enforce PEP 621.
 #[test]
-fn invalid_pyproject_toml_requirement() -> Result<()> {
+fn invalid_pyproject_toml_requirement_direct() -> Result<()> {
     let context = TestContext::new("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -208,7 +209,54 @@ dependencies = ["flask==1.0.x"]
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `file://[TEMP_DIR]/`
+    error: Failed to parse `pyproject.toml`
+      Caused by: after parsing 1.0, found ".x" after it, which is not part of a valid version
+    flask==1.0.x
+         ^^^^^^^
+    "###
+    );
+
+    Ok(())
+}
+
+/// For indirect, non-user controlled pyproject.toml, we don't enforce correctness.
+///
+/// If we fail to extract the PEP 621 metadata, we fall back to treating it as a source
+/// tree, as there are some cases where the `pyproject.toml` may not be a valid PEP
+/// 621 file, but might still resolve under PEP 517. (If the source tree doesn't
+/// resolve under PEP 517, we'll catch that later.)
+///
+/// For example, Hatch's "Context formatting" API is not compliant with PEP 621, as
+/// it expects dynamic processing by the build backend for the static metadata
+/// fields. See: <https://hatch.pypa.io/latest/config/context/>
+#[test]
+fn invalid_pyproject_toml_requirement_indirect() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("path_dep/pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "project"
+dependencies = ["flask==1.0.x"]
+"#,
+    )?;
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("./path_dep")?;
+
+    let filters = [("exit status", "exit code")]
+        .into_iter()
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to download and build: `project @ file://[TEMP_DIR]/path_dep`
+      Caused by: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
       Caused by: Build backend failed to determine extra requires with `build_wheel()` with exit code: 1
     --- stdout:
     configuration error: `project.dependencies[0]` must be pep508
@@ -3587,7 +3635,7 @@ fn already_installed_dependent_editable() {
     );
 }
 
-/// Install an local package that depends on a previously installed local package.
+/// Install a local package that depends on a previously installed local package.
 #[test]
 fn already_installed_local_path_dependent() {
     let context = TestContext::new("3.12");
@@ -4467,5 +4515,90 @@ fn require_hashes_override() -> Result<()> {
     "###
     );
 
+    Ok(())
+}
+
+#[test]
+fn tool_uv_sources() -> Result<()> {
+    let context = TestContext::new("3.12");
+    // Use a subdir to test path normalization.
+    let require_path = "some_dir/pyproject.toml";
+    let pyproject_toml = context.temp_dir.child(require_path);
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.0.0"
+        dependencies = [
+          "tqdm>4,<=5",
+          "packaging @ git+https://github.com/pypa/packaging",
+          "poetry_editable",
+          "urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl",
+        ]
+
+        [project.optional-dependencies]
+        utils = [
+            "boltons==24.0.0"
+        ]
+        dont_install_me = [
+            "borken @ https://example.org/does/not/exist"
+        ]
+
+        [tool.uv.sources]
+        tqdm = { url = "https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl" }
+        boltons = { git = "https://github.com/mahmoud/boltons" }
+        poetry_editable = { path = "../poetry_editable" }
+    "#})?;
+
+    let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
+    fs_err::create_dir_all(context.temp_dir.join("poetry_editable/poetry_editable"))?;
+    fs_err::copy(
+        project_root.join("scripts/packages/poetry_editable/pyproject.toml"),
+        context.temp_dir.join("poetry_editable/pyproject.toml"),
+    )?;
+    fs_err::copy(
+        project_root.join("scripts/packages/poetry_editable/poetry_editable/__init__.py"),
+        context
+            .temp_dir
+            .join("poetry_editable/poetry_editable/__init__.py"),
+    )?;
+
+    // Install the editable packages.
+    uv_snapshot!(context.filters(), context.install()
+        .arg("-r")
+        .arg(require_path)
+        .arg("--extra")
+        .arg("utils"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Downloaded 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + boltons==24.0.1.dev0 (from git+https://github.com/mahmoud/boltons@57fbaa9b673ed85b32458b31baeeae230520e4a0)
+     + idna==3.6
+     + packaging==24.1.dev0 (from git+https://github.com/pypa/packaging@32deafe8668a2130a3366b98154914d188f3718e)
+     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     + sniffio==1.3.1
+     + tqdm==4.66.0 (from https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl)
+     + urllib3==2.2.1 (from https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl)
+    "###
+    );
+
+    // Install the editable packages.
+    uv_snapshot!(context.install()
+        .arg("-r")
+        .arg(require_path), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Audited 7 packages in [TIME]
+    "###
+    );
     Ok(())
 }

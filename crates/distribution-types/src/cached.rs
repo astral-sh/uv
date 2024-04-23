@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use distribution_filename::WheelFilename;
 use pep508_rs::VerbatimUrl;
@@ -111,6 +111,10 @@ impl CachedDist {
                     assert_eq!(dist.url.scheme(), "file", "{}", dist.url);
                     Ok(Some(ParsedUrl::LocalFile(ParsedLocalFileUrl {
                         url: dist.url.raw().clone(),
+                        path: dist
+                            .url
+                            .to_file_path()
+                            .map_err(|()| anyhow!("Invalid path in file URL"))?,
                         editable: dist.editable,
                     })))
                 } else {
