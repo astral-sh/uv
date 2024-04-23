@@ -867,10 +867,11 @@ pub(crate) struct PipSyncArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aaarch64-apple-darwin`.
     ///
-    /// WARNING: When specified, uv will select wheels that are compatible with the target platform.
-    /// The resulting environment may not be fully compatible with the current platform. Further,
-    /// distributions that are built from source may ultimately be incompatible with the target
-    /// platform. This option is intended for cross-compilation and other advanced use cases.
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
     pub(crate) python_platform: Option<TargetTriple>,
 
@@ -1230,10 +1231,11 @@ pub(crate) struct PipInstallArgs {
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aaarch64-apple-darwin`.
     ///
-    /// WARNING: When specified, uv will select wheels that are compatible with the target platform.
-    /// The resulting environment may not be fully compatible with the current platform. Further,
-    /// distributions that are built from source may ultimately be incompatible with the target
-    /// platform. This option is intended for cross-compilation and other advanced use cases.
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
     pub(crate) python_platform: Option<TargetTriple>,
 
