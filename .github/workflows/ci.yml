@@ -218,7 +218,7 @@ jobs:
 
   build-binary-macos-x86_64:
     runs-on:
-      labels: macos-latest-large
+      labels: macos-14-large
     name: "build binary | macos x86_64"
     steps:
       - uses: actions/checkout@v4
@@ -589,7 +589,7 @@ jobs:
   system-test-macos-x86_64:
     needs: build-binary-macos-x86_64
     name: "check system | python on macos x86_64"
-    runs-on: macos-latest
+    runs-on: macos-12
     steps:
       - uses: actions/checkout@v4
 
