@@ -10,7 +10,6 @@ use reqwest::{Client, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-use tracing::debug;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 

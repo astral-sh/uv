@@ -150,6 +150,7 @@ impl Middleware for AuthMiddleware {
         if let Some(credentials) = credentials {
             let credentials = Arc::new(credentials);
 
+            // If there's a password, send the request and cache
             if credentials.password().is_some() {
                 trace!("Request for {url} is already fully authenticated");
                 return self
@@ -214,80 +215,77 @@ impl Middleware for AuthMiddleware {
                     }
                 };
             }
-        } else {
-            // We have no credentials
-            trace!("Request for {url} is unauthenticated, checking cache");
+        }
+        // We have no credentials
+        trace!("Request for {url} is unauthenticated, checking cache");
 
-            // Check the cache for a URL match
-            let credentials = self.cache().get_url(request.url(), Username::none());
-            if let Some(credentials) = credentials.as_ref() {
-                request = credentials.authenticate(request);
-                if credentials.password().is_some() {
-                    return self.complete_request(None, request, extensions, next).await;
-                }
+        // Check the cache for a URL match
+        let credentials = self.cache().get_url(request.url(), Username::none());
+        if let Some(credentials) = credentials.as_ref() {
+            request = credentials.authenticate(request);
+            if credentials.password().is_some() {
+                return self.complete_request(None, request, extensions, next).await;
             }
-            let attempt_has_username = credentials
-                .as_ref()
-                .is_some_and(|credentials| credentials.username().is_some());
+        }
+        let attempt_has_username = credentials
+            .as_ref()
+            .is_some_and(|credentials| credentials.username().is_some());
 
-            // Otherise, attempt an anonymous request
-            trace!("Attempting unauthenticated request for {url}");
+        // Otherise, attempt an anonymous request
+        trace!("Attempting unauthenticated request for {url}");
 
-            // If we don't fail with authorization related codes, return the response
-            let (response, auth_failure) = self
-                .run_and_check_auth(request, extensions, next.clone())
-                .await?;
-            if !auth_failure {
-                return Ok(response);
-            }
+        // If we don't fail with authorization related codes, return the response
+        let (response, auth_failure) = self
+            .run_and_check_auth(request, extensions, next.clone())
+            .await?;
+        if !auth_failure {
+            return Ok(response);
+        }
 
-            // Otherwise, search for credentials
-            trace!("Request for {url} failed with auth error, checking for credentials");
+        // Otherwise, search for credentials
+        trace!("Request for {url} failed with auth error, checking for credentials");
 
-            // Check in the cache first
-            let credentials = self.cache().get_realm(
-                Realm::from(retry_request.url()),
-                credentials
-                    .map(|credentials| credentials.to_username())
-                    .unwrap_or(Username::none()),
-            );
-            if let Some(credentials) = credentials.as_ref() {
-                if credentials.password().is_some() {
-                    trace!(
-                        "Retrying request for {url} with credentials from cache {credentials:?}"
-                    );
-                    retry_request = credentials.authenticate(retry_request);
-                    return self
-                        .complete_request(None, retry_request, extensions, next)
-                        .await;
-                }
-            }
-
-            // Then, fetch from external services.
-            // Here we use the username from the cache if present.
-            if let Some(credentials) = self
-                .fetch_credentials(credentials.as_deref(), retry_request.url())
-                .await
-            {
+        // Check in the cache first
+        let credentials = self.cache().get_realm(
+            Realm::from(retry_request.url()),
+            credentials
+                .map(|credentials| credentials.to_username())
+                .unwrap_or(Username::none()),
+        );
+        if let Some(credentials) = credentials.as_ref() {
+            if credentials.password().is_some() {
+                trace!("Retrying request for {url} with credentials from cache {credentials:?}");
                 retry_request = credentials.authenticate(retry_request);
-                trace!("Retrying request for {url} with {credentials:?}");
                 return self
-                    .complete_request(Some(Arc::new(credentials)), retry_request, extensions, next)
+                    .complete_request(None, retry_request, extensions, next)
                     .await;
             }
-
-            if let Some(credentials) = credentials.as_ref() {
-                if !attempt_has_username {
-                    trace!("Retrying request for {url} with username from cache {credentials:?}");
-                    retry_request = credentials.authenticate(retry_request);
-                    return self
-                        .complete_request(None, retry_request, extensions, next)
-                        .await;
-                }
-            }
-
-            Ok(response)
         }
+
+        // Then, fetch from external services.
+        // Here we use the username from the cache if present.
+        if let Some(credentials) = self
+            .fetch_credentials(credentials.as_deref(), retry_request.url())
+            .await
+        {
+            retry_request = credentials.authenticate(retry_request);
+            trace!("Retrying request for {url} with {credentials:?}");
+            return self
+                .complete_request(Some(Arc::new(credentials)), retry_request, extensions, next)
+                .await;
+        }
+
+        if let Some(credentials) = credentials.as_ref() {
+            if !attempt_has_username {
+                trace!("Retrying request for {url} with username from cache {credentials:?}");
+                retry_request = credentials.authenticate(retry_request);
+                return self
+                    .complete_request(None, retry_request, extensions, next)
+                    .await;
+            }
+        }
+
+        Ok(response)
     }
 }
 
