@@ -136,7 +136,7 @@ fn find_in_directory(dir: &Path) -> Result<Option<Options>, WorkspaceError> {
     Ok(None)
 }
 
-/// Load [`Options`] from a `pyproject.toml` or `ruff.toml` file.
+/// Load [`Options`] from a `pyproject.toml` or `uv.toml` file.
 fn read_file(path: &Path) -> Result<Options, WorkspaceError> {
     let content = fs_err::read_to_string(path)?;
     if path.ends_with("pyproject.toml") {
