@@ -540,12 +540,12 @@ impl<
             }
             PubGrubPackage::Package(name, _extra, Some(url)) => {
                 // Verify that the package is allowed under the hash-checking policy.
-                if !self.hasher.allows_url(url) {
+                if !self.hasher.allows_url(url.to_verbatim_url().raw()) {
                     return Err(ResolveError::UnhashedPackage(name.clone()));
                 }
 
                 // Emit a request to fetch the metadata for this distribution.
-                let dist = Dist::from_url(name.clone(), url.clone())?;
+                let dist = Dist::from_url(name.clone(), url.to_verbatim_url())?;
                 if self.index.distributions.register(dist.version_id()) {
                     request_sink.send(Request::Dist(dist)).await?;
                 }
@@ -1254,7 +1254,7 @@ impl<
                 PubGrubPackage::Python(_) => {}
                 PubGrubPackage::Extra(_, _, _) => {}
                 PubGrubPackage::Package(package_name, _extra, Some(url)) => {
-                    reporter.on_progress(package_name, &VersionOrUrl::Url(url));
+                    reporter.on_progress(package_name, &VersionOrUrl::Url(&url.to_verbatim_url()));
                 }
                 PubGrubPackage::Package(package_name, _extra, None) => {
                     reporter.on_progress(package_name, &VersionOrUrl::Version(version));

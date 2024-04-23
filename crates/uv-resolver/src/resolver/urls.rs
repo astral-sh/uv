@@ -1,7 +1,7 @@
 use rustc_hash::FxHashMap;
 use tracing::debug;
 
-use distribution_types::{UvSource, Verbatim};
+use distribution_types::{DecomposedUrl, UvSource, Verbatim};
 use pep508_rs::{MarkerEnvironment, VerbatimUrl};
 use uv_distribution::is_same_reference;
 use uv_normalize::PackageName;
@@ -10,14 +10,14 @@ use crate::{Manifest, ResolveError};
 
 /// A map of package names to their associated, required URLs.
 #[derive(Debug, Default)]
-pub(crate) struct Urls(FxHashMap<PackageName, VerbatimUrl>);
+pub(crate) struct Urls(FxHashMap<PackageName, DecomposedUrl>);
 
 impl Urls {
     pub(crate) fn from_manifest(
         manifest: &Manifest,
         markers: &MarkerEnvironment,
     ) -> Result<Self, ResolveError> {
-        let mut urls: FxHashMap<PackageName, VerbatimUrl> = FxHashMap::default();
+        let mut urls: FxHashMap<PackageName, DecomposedUrl> = FxHashMap::default();
 
         // Add the urls themselves to the list of required URLs.
         for (editable, metadata, _) in &manifest.editables {
@@ -83,18 +83,18 @@ impl Urls {
         Ok(Self(urls))
     }
 
-    /// Return the [`VerbatimUrl`] associated with the given package name, if any.
-    pub(crate) fn get(&self, package: &PackageName) -> Option<&VerbatimUrl> {
+    /// Return the [`DecomposedUrl`] associated with the given package name, if any.
+    pub(crate) fn get(&self, package: &PackageName) -> Option<&DecomposedUrl> {
         self.0.get(package)
     }
 
     /// Returns `true` if the provided URL is compatible with the given "allowed" URL.
-    pub(crate) fn is_allowed(expected: &VerbatimUrl, provided: &VerbatimUrl) -> bool {
+    pub(crate) fn is_allowed(expected: &DecomposedUrl, provided: &DecomposedUrl) -> bool {
         #[allow(clippy::if_same_then_else)]
-        if is_equal(expected, provided) {
+        if is_equal(&expected.to_verbatim_url(), &provided.to_verbatim_url()) {
             // If the URLs are canonically equivalent, they're compatible.
             true
-        } else if is_same_reference(expected, provided) {
+        } else if is_same_reference(&expected.to_verbatim_url(), &provided.to_verbatim_url()) {
             // If the URLs refer to the same commit, they're compatible.
             true
         } else {
@@ -104,7 +104,7 @@ impl Urls {
     }
 }
 
-/// Returns `true` if the [`VerbatimUrl`] is compatible with the previous [`VerbatimUrl`].
+/// Returns `true` if the [`DecomposedUrl`] is compatible with the previous [`DecomposedUrl`].
 ///
 /// Accepts URLs that map to the same [`CanonicalUrl`].
 fn is_equal(previous: &VerbatimUrl, url: &VerbatimUrl) -> bool {

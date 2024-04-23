@@ -1,40 +1,36 @@
 use std::borrow::Cow;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use url::Url;
 
-use pep508_rs::VerbatimUrl;
 use uv_normalize::ExtraName;
 
-use crate::Verbatim;
+use crate::{DecomposedFileUrl, Verbatim};
 
 #[derive(Debug, Clone)]
 pub struct LocalEditable {
     /// The underlying [`EditableRequirement`] from the `requirements.txt` file.
-    pub url: VerbatimUrl,
-    /// Either the path to the editable or its checkout.
-    pub path: PathBuf,
+    pub url: DecomposedFileUrl,
     /// The extras that should be installed.
     pub extras: Vec<ExtraName>,
 }
 
 impl LocalEditable {
     /// Return the editable as a [`Url`].
-    pub fn url(&self) -> &VerbatimUrl {
+    pub fn url(&self) -> &DecomposedFileUrl {
         &self.url
     }
 
     /// Return the resolved path to the editable.
-    pub fn raw(&self) -> &Url {
-        self.url.raw()
+    pub fn raw(&self) -> Url {
+        self.url.to_verbatim_url().to_url()
     }
 }
 
 impl Verbatim for LocalEditable {
     fn verbatim(&self) -> Cow<'_, str> {
-        self.url.verbatim()
+        Cow::Owned(self.url.to_verbatim_url().verbatim().to_string())
     }
 }
 
@@ -56,7 +52,7 @@ impl LocalEditables {
     pub fn from_editables(editables: impl Iterator<Item = LocalEditable>) -> Self {
         let mut map = BTreeMap::new();
         for editable in editables {
-            match map.entry(editable.path.clone()) {
+            match map.entry(editable.url.path.clone()) {
                 Entry::Vacant(entry) => {
                     entry.insert(editable);
                 }

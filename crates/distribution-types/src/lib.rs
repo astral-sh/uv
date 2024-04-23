@@ -47,6 +47,7 @@ use uv_normalize::PackageName;
 pub use crate::any::*;
 pub use crate::buildable::*;
 pub use crate::cached::*;
+pub use crate::decomposed_url::*;
 pub use crate::direct_url::*;
 pub use crate::editable::*;
 pub use crate::error::*;
@@ -64,6 +65,7 @@ pub use crate::uv_requirement::*;
 mod any;
 mod buildable;
 mod cached;
+mod decomposed_url;
 mod direct_url;
 mod editable;
 mod error;
@@ -372,11 +374,11 @@ impl Dist {
 
     /// Create a [`Dist`] for a local editable distribution.
     pub fn from_editable(name: PackageName, editable: LocalEditable) -> Result<Self, Error> {
-        let LocalEditable { url, path, .. } = editable;
+        let LocalEditable { url, .. } = editable;
         Ok(Self::Source(SourceDist::Path(PathSourceDist {
             name,
-            url,
-            path,
+            url: url.to_verbatim_url(),
+            path: url.path,
             editable: true,
         })))
     }

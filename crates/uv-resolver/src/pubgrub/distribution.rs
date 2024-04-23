@@ -1,12 +1,11 @@
-use distribution_types::{DistributionMetadata, Name, VersionOrUrl};
+use distribution_types::{DecomposedUrl, DistributionMetadata, Name, VersionOrUrl};
 use pep440_rs::Version;
-use pep508_rs::VerbatimUrl;
 use uv_normalize::PackageName;
 
 #[derive(Debug)]
 pub(crate) enum PubGrubDistribution<'a> {
     Registry(&'a PackageName, &'a Version),
-    Url(&'a PackageName, &'a VerbatimUrl),
+    Url(&'a PackageName, &'a DecomposedUrl),
 }
 
 impl<'a> PubGrubDistribution<'a> {
@@ -14,7 +13,7 @@ impl<'a> PubGrubDistribution<'a> {
         Self::Registry(name, version)
     }
 
-    pub(crate) fn from_url(name: &'a PackageName, url: &'a VerbatimUrl) -> Self {
+    pub(crate) fn from_url(name: &'a PackageName, url: &'a DecomposedUrl) -> Self {
         Self::Url(name, url)
     }
 }
@@ -32,7 +31,7 @@ impl DistributionMetadata for PubGrubDistribution<'_> {
     fn version_or_url(&self) -> VersionOrUrl {
         match self {
             Self::Registry(_, version) => VersionOrUrl::Version(version),
-            Self::Url(_, url) => VersionOrUrl::Url(url),
+            Self::Url(_, url) => VersionOrUrl::Url(&url.to_verbatim_url()),
         }
     }
 }

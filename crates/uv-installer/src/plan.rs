@@ -125,7 +125,7 @@ impl<'a> Planner<'a> {
                     debug!("Treating editable requirement as mutable: {built}");
 
                     // Remove any editable installs.
-                    let existing = site_packages.remove_editables(built.editable.raw());
+                    let existing = site_packages.remove_editables(&built.editable.raw());
                     reinstalls.extend(existing);
 
                     // Remove any non-editable installs of the same package.

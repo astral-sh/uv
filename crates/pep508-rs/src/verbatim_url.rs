@@ -30,6 +30,14 @@ pub struct VerbatimUrl {
 }
 
 impl VerbatimUrl {
+    /// Create a [`VerbatimUrl`] from a [`Url`] and the string the url was parsed from.
+    pub fn new<T: Into<String>>(url: Url, given: Option<T>) -> Self {
+        Self {
+            url,
+            given: given.map(Into::into),
+        }
+    }
+
     /// Create a [`VerbatimUrl`] from a [`Url`].
     pub fn from_url(url: Url) -> Self {
         Self { url, given: None }

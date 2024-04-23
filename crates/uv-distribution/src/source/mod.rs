@@ -1388,15 +1388,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         debug!("Building (editable) {editable}");
 
         // Verify that the editable exists.
-        if !editable.path.exists() {
-            return Err(Error::NotFound(editable.path.clone()));
+        if !editable.url.path.exists() {
+            return Err(Error::NotFound(editable.url.path.clone()));
         }
 
         // Build the wheel.
         let disk_filename = self
             .build_context
             .setup_build(
-                &editable.path,
+                &editable.url.path,
                 None,
                 &editable.to_string(),
                 None,
@@ -1411,8 +1411,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // We finally have the name of the package and can construct the dist.
         let dist = Dist::Source(SourceDist::Path(PathSourceDist {
             name: filename.name.clone(),
-            url: editable.url().clone(),
-            path: editable.path.clone(),
+            url: editable.url().to_verbatim_url().clone(),
+            path: editable.url.path.clone(),
             editable: true,
         }));
         let metadata = read_wheel_metadata(&filename, editable_wheel_dir.join(&disk_filename))?;

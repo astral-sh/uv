@@ -135,7 +135,7 @@ impl<'a, Context: BuildContext + Send + Sync> DistributionDatabase<'a, Context> 
 
         // Unzip into the editable wheel directory.
         let path = editable_wheel_dir.join(&disk_filename);
-        let target = editable_wheel_dir.join(cache_key::digest(&editable.path));
+        let target = editable_wheel_dir.join(cache_key::digest(&editable.url.path));
         let id = self.unzip_wheel(&path, &target).await?;
         let wheel = LocalWheel {
             dist,
