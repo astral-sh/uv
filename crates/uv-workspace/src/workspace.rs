@@ -23,7 +23,7 @@ impl Workspace {
         let root = dir.join("uv");
         let file = root.join("uv.toml");
         Ok(Some(Self {
-            options: find_in_directory(&file)?.unwrap_or_default(),
+            options: read_file(&file).unwrap_or_default(),
             root,
         }))
     }
