@@ -162,7 +162,7 @@ impl Middleware for AuthMiddleware {
                 debug!("Request for {url} is missing a password, looking for credentials");
 
                 // There's just a username, try to find a password
-                if let Some(cached_credentials) = self
+                let resp_or_req = if let Some(cached_credentials) = self
                     .cache()
                     .get_realm(Realm::from(request.url()), credentials.to_username())
                 {
@@ -172,16 +172,20 @@ impl Middleware for AuthMiddleware {
                         .run_and_check_auth(cache_authed_request, extensions, next.clone())
                         .await?;
                     if !auth_failure {
-                        return Ok(response);
+                        Ok(response)
                     } else {
-                        return self
-                            .fetch_and_complete(credentials, retry_request, extensions, next)
-                            .await;
+                        Err(retry_request)
                     }
                 } else {
-                    return self
-                        .fetch_and_complete(credentials, request, extensions, next)
-                        .await;
+                    Err(request)
+                };
+                match resp_or_req {
+                    Ok(resp) => return Ok(resp),
+                    Err(req) => {
+                        return self
+                            .fetch_and_complete(credentials, req, extensions, next)
+                            .await;
+                    }
                 };
             }
         } else {
