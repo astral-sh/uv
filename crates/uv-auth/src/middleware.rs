@@ -162,12 +162,15 @@ impl Middleware for AuthMiddleware {
                 debug!("Request for {url} is missing a password, looking for credentials");
 
                 // There's just a username, try to find a password
+                // 1. First try the cache.
                 let resp_or_req = if let Some(cached_credentials) = self
                     .cache()
                     .get_realm(Realm::from(request.url()), credentials.to_username())
                 {
                     debug!("Got cached credentials");
                     let cache_authed_request = cached_credentials.authenticate(request);
+                    // 1.1 Make a request with the cached credentials; if it works, we are done.
+                    // If it fails with an auth error, fall back to cache-miss behaviour.
                     let (response, auth_failure) = self
                         .run_and_check_auth(cache_authed_request, extensions, next.clone())
                         .await?;
@@ -180,11 +183,37 @@ impl Middleware for AuthMiddleware {
                     Err(request)
                 };
                 match resp_or_req {
+                    // Successful cache-hit case.
                     Ok(resp) => return Ok(resp),
-                    Err(req) => {
-                        return self
-                            .fetch_and_complete(credentials, req, extensions, next)
-                            .await;
+                    // Either cache-miss, or cache-hit but failed authentication.
+                    Err(post_cache_request) => {
+                        // 2. Try to fetch credentials.
+                        if let Some(fetched_credentials) = self
+                            .fetch_credentials(Some(&credentials), post_cache_request.url())
+                            .await
+                        {
+                            debug!("Fetched some credentials");
+                            let authed_request = credentials.authenticate(post_cache_request);
+                            return self
+                                .complete_request(
+                                    Some(Arc::new(fetched_credentials)),
+                                    authed_request,
+                                    extensions,
+                                    next,
+                                )
+                                .await;
+                        } else {
+                            debug!("Didn't find a password");
+                            // If we don't find a password, we'll still attempt the request with the existing credentials
+                            return self
+                                .complete_request(
+                                    Some(credentials),
+                                    post_cache_request,
+                                    extensions,
+                                    next,
+                                )
+                                .await;
+                        };
                     }
                 };
             }
@@ -312,30 +341,6 @@ impl AuthMiddleware {
                 StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
             ),
         ))
-    }
-
-    async fn fetch_and_complete(
-        &self,
-        credentials: Arc<Credentials>,
-        request: Request,
-        extensions: &mut Extensions,
-        next: Next<'_>,
-    ) -> reqwest_middleware::Result<Response> {
-        let (updated_credentials, updated_request) = if let Some(fetched_credentials) = self
-            .fetch_credentials(Some(&credentials), request.url())
-            .await
-        {
-            debug!("Fetched some credentials");
-            let authed_request = credentials.authenticate(request);
-            (Arc::new(fetched_credentials), authed_request)
-        } else {
-            debug!("Didn't find a password");
-            // If we don't find a password, we'll still attempt the request with the existing credentials
-            (credentials, request)
-        };
-        return self
-            .complete_request(Some(updated_credentials), updated_request, extensions, next)
-            .await;
     }
 
     /// Fetch credentials for a URL.
