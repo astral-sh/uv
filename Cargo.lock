@@ -4489,6 +4489,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.0",
+ "futures",
  "http",
  "insta",
  "once_cell",
