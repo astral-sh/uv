@@ -393,6 +393,10 @@ impl<'a> SitePackages<'a> {
                                 return Ok(false);
                             };
 
+                            if installed.editable {
+                                return Ok(false);
+                            }
+
                             if &installed.url != url.raw() {
                                 return Ok(false);
                             }
@@ -437,6 +441,10 @@ impl<'a> SitePackages<'a> {
                                 let InstalledDist::Url(installed) = &distribution else {
                                     return Ok(false);
                                 };
+
+                                if installed.editable {
+                                    return Ok(false);
+                                }
 
                                 if &installed.url != url.raw() {
                                     return Ok(false);
