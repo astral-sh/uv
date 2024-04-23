@@ -144,7 +144,6 @@ impl Middleware for AuthMiddleware {
                 {
                     Some(username) => {
                         debug!("Checking keyring for credentials for {url}");
-                        // how to fix this
                         keyring.fetch(request.url(), username).await
                     }
                     None => {
