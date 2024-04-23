@@ -2377,6 +2377,86 @@ fn sync_editable_and_registry() -> Result<()> {
 }
 
 #[test]
+fn sync_editable_and_local() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Copy the black test editable into the "current" directory
+    copy_dir_all(
+        context
+            .workspace_root
+            .join("scripts/packages/black_editable"),
+        context.temp_dir.join("black_editable"),
+    )?;
+
+    // Install the editable version of Black.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        -e file:./black_editable
+        "
+    })?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(requirements_txt.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Installed 1 package in [TIME]
+     + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+    "###
+    );
+
+    // Install the non-editable version of Black. This should replace the editable version.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        black @ file:./black_editable
+        "
+    })?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(requirements_txt.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+     + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+    "###
+    );
+
+    // Reinstall the editable version of Black. This should replace the non-editable version.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        -e file:./black_editable
+        "
+    })?;
+
+    uv_snapshot!(context.filters(), command(&context)
+        .arg(requirements_txt.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Built 1 editable in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+     + black==0.1.0 (from file://[TEMP_DIR]/black_editable)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn incompatible_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
     let wheel = context.temp_dir.child("foo-1.2.3-not-compatible-wheel.whl");
