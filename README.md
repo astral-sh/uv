@@ -391,24 +391,24 @@ the current platform and Python version. Unlike Poetry and PDM, uv does not yet 
 machine-agnostic lockfile ([#2679](https://github.com/astral-sh/uv/issues/2679)).
 
 However, uv _does_ support resolving for alternate platforms and Python versions via the
-`--platform` and `--python-version` command line arguments.
+`--python-platform` and `--python-version` command line arguments.
 
 For example, if you're running uv on macOS, but want to resolve for Linux, you can run
-`uv pip compile --platform=linux requirements.in` to produce a `manylinux2014`-compatible
+`uv pip compile --python-platform=linux requirements.in` to produce a `manylinux2014`-compatible
 resolution.
 
 Similarly, if you're running uv on Python 3.9, but want to resolve for Python 3.8, you can run
 `uv pip compile --python-version=3.8 requirements.in` to produce a Python 3.8-compatible resolution.
 
-The `--platform` and `--python-version` arguments can be combined to produce a resolution for
+The `--python-platform` and `--python-version` arguments can be combined to produce a resolution for
 a specific platform and Python version, enabling users to generate multiple lockfiles for
 different environments from a single machine.
 
 _N.B. Python's environment markers expose far more information about the current machine
-than can be expressed by a simple `--platform` argument. For example, the `platform_version` marker
+than can be expressed by a simple `--python-platform` argument. For example, the `platform_version` marker
 on macOS includes the time at which the kernel was built, which can (in theory) be encoded in
 package requirements. uv's resolver makes a best-effort attempt to generate a resolution that is
-compatible with any machine running on the target `--platform`, which should be sufficient for
+compatible with any machine running on the target `--python-platform`, which should be sufficient for
 most use cases, but may lose fidelity for complex package and platform combinations._
 
 ### Time-restricted reproducible resolutions
