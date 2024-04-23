@@ -438,20 +438,30 @@ jobs:
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv
 
-  # Note: rockylinux:8 is a 1-1 code compatible distro to rhel-8
-  # rockylinux:8 mimics centos-8 but with added maintenance stability
+  # Note: rockylinux is a 1-1 code compatible distro to rhel
+  # rockylinux mimics centos but with added maintenance stability
   # and avoids issues with centos stream uptime concerns
   system-test-rocky-linux:
     needs: build-binary-linux
-    name: "check system | python on rocky linux"
+    name: "check system | python on rocky linux ${{ matrix.rocky-version }}"
     runs-on: ubuntu-latest
-    container: rockylinux:8
+    container: rockylinux:${{ matrix.rocky-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        rocky-version: ["8", "9"]
     steps:
       - uses: actions/checkout@v4
 
       - name: "Install Python"
+        if: matrix.rocky-version == '8'
         run: |
           dnf install python39 python39-pip which -y
+
+      - name: "Install Python"
+        if: matrix.rocky-version == '9'
+        run: |
+          dnf install python3.9 python3.9-pip which -y
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
