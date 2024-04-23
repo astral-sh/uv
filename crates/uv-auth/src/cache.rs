@@ -37,17 +37,22 @@ impl CredentialsCache {
         } else {
             realm.to_string()
         };
+        let given_username = username.is_some();
         let key = (realm, username);
 
-        realms
-            .get(&key)
-            .cloned()
-            .map(Some)
-            .inspect(|_| trace!("Found cached credentials for realm {name}"))
-            .unwrap_or_else(|| {
-                trace!("No credentials in cache for realm {name}");
-                None
-            })
+        let Some(credentials) = realms.get(&key).cloned() else {
+            trace!("No credentials in cache for realm {name}");
+            return None;
+        };
+
+        if given_username && credentials.password().is_none() {
+            // If given a username, don't return password-less credentials
+            trace!("No password in cache for realm {name}");
+            return None;
+        }
+
+        trace!("Found cached credentials for realm {name}");
+        Some(credentials)
     }
 
     /// Return the cached credentials for a URL and username, if any.
@@ -60,11 +65,16 @@ impl CredentialsCache {
         let credentials = urls.get(url);
         if let Some(credentials) = credentials {
             if username.is_none() || username.as_deref() == credentials.username() {
+                if username.is_some() && credentials.password().is_none() {
+                    // If given a username, don't return password-less credentials
+                    trace!("No password in cache for URL {url}");
+                    return None;
+                }
                 trace!("Found cached credentials for URL {url}");
                 return Some(credentials.clone());
             }
         }
-        trace!("No credentials in URL cache for {url}");
+        trace!("No credentials in cache for URL {url}");
         None
     }
 
