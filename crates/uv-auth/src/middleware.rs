@@ -13,6 +13,7 @@ use netrc::Netrc;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
 use tracing::{debug, trace};
+
 /// A middleware that adds basic authentication to requests.
 ///
 /// Uses a cache to propagate credentials from previously seen requests and
@@ -169,13 +170,13 @@ impl Middleware for AuthMiddleware {
                     let cache_authed_request = cached_credentials.authenticate(request);
                     // 1.1 Make a request with the cached credentials; if it works, we are done.
                     // If it fails with an auth error, fall back to cache-miss behaviour.
-                    let (response, auth_failure) = self
+                    let (response, auth_failure_code) = self
                         .run_and_check_auth(cache_authed_request, extensions, next.clone())
                         .await?;
-                    if !auth_failure {
-                        Ok(response)
-                    } else {
+                    if auth_failure_code.is_some() {
                         Err(retry_request)
+                    } else {
+                        Ok(response)
                     }
                 } else {
                     Err(request)
@@ -235,15 +236,15 @@ impl Middleware for AuthMiddleware {
         trace!("Attempting unauthenticated request for {url}");
 
         // If we don't fail with authorization related codes, return the response
-        let (response, auth_failure) = self
+        // Otherwise, search for credentials
+        let (response, auth_failure_code) = self
             .run_and_check_auth(request, extensions, next.clone())
             .await?;
-        if !auth_failure {
+        if let Some(status) = auth_failure_code {
+            trace!("Request for {url} failed with {status}, checking for credentials");
+        } else {
             return Ok(response);
         }
-
-        // Otherwise, search for credentials
-        trace!("Request for {url} failed with auth error, checking for credentials");
 
         // Check in the cache first
         let credentials = self.cache().get_realm(
@@ -325,16 +326,19 @@ impl AuthMiddleware {
         request: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
-    ) -> reqwest_middleware::Result<(Response, bool)> {
+    ) -> reqwest_middleware::Result<(Response, Option<StatusCode>)> {
         let response = next.clone().run(request, extensions).await?;
-
         let status = response.status();
         Ok((
             response,
-            matches!(
+            if matches!(
                 status,
                 StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
-            ),
+            ) {
+                Some(status)
+            } else {
+                None
+            },
         ))
     }
 
