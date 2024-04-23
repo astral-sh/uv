@@ -66,7 +66,7 @@ impl TargetTriple {
             ),
             Self::Macos | Self::Aarch64AppleDarwin => Platform::new(
                 Os::Macos {
-                    major: 11,
+                    major: 12,
                     minor: 0,
                 },
                 Arch::Aarch64,
