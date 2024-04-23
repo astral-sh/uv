@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.37
+
+### Enhancements
+
+- Change default HTTP read timeout to 30s ([#3182](https://github.com/astral-sh/uv/pull/3182))
+- Add `--python-platform` to `sync` and `install` commands ([#3154](https://github.com/astral-sh/uv/pull/3154))
+- Add ticks around error messages more consistently ([#3004](https://github.com/astral-sh/uv/pull/3004))
+- Fix Docker publish permissions in release pipeline ([#3195](https://github.com/astral-sh/uv/pull/3195))
+- Improve tracing for keyring provider ([#3207](https://github.com/astral-sh/uv/pull/3207))
+
+### Performance
+
+- Update keyring provider to be async ([#3089](https://github.com/astral-sh/uv/pull/3089))
+
+### Bug fixes
+
+- Fix fetch of credentials when cache is seeded with username ([#3206](https://github.com/astral-sh/uv/pull/3206))
+
+### Documentation
+
+- Improve `--python-platform` documentation ([#3202](https://github.com/astral-sh/uv/pull/3202))
+
 ## 0.1.36
 
 ### Enhancements
