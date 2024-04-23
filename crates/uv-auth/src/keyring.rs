@@ -38,6 +38,7 @@ impl KeyringProvider {
     ///
     /// Returns [`None`] if no password was found for the username or if any errors
     /// are encountered in the keyring backend.
+    #[instrument(skip_all, fields(url = % url.to_string(), username))]
     pub(crate) async fn fetch(&self, url: &Url, username: &str) -> Option<Credentials> {
         // Validate the request
         debug_assert!(
@@ -104,7 +105,7 @@ impl KeyringProvider {
         password.map(|password| Credentials::new(Some(username.to_string()), Some(password)))
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     async fn fetch_subprocess(&self, service_name: &str, username: &str) -> Option<String> {
         let output = Command::new("keyring")
             .arg("get")
