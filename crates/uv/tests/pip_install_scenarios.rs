@@ -366,7 +366,7 @@ fn excluded_only_compatible_version() {
           And because you require one of:
               package-a<2.0.0
               package-a>2.0.0
-           and package-b>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
+          and package-b>=2.0.0,<3.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require

@@ -337,18 +337,21 @@ impl PubGrubReportFormatter<'_> {
                 ),
             ) if root1 == root2 => {
                 let dependency_set1 = self.simplify_set(dependency_set1, dependency1);
+                let dependency1 = PackageRange::dependency(dependency1, &dependency_set1);
+
                 let dependency_set2 = self.simplify_set(dependency_set2, dependency2);
+                let dependency2 = PackageRange::dependency(dependency2, &dependency_set2);
 
                 match root1 {
                     Some(name) => format!(
-                        "{name} depends on {} and {}",
-                        PackageRange::dependency(dependency1, &dependency_set1),
-                        PackageRange::dependency(dependency2, &dependency_set2),
+                        "{name} depends on {}and {}",
+                        Padded::new("", &dependency1, " "),
+                        dependency2,
                     ),
                     None => format!(
-                        "you require {} and {}",
-                        PackageRange::dependency(dependency1, &dependency_set1),
-                        PackageRange::dependency(dependency2, &dependency_set2),
+                        "you require {}and {}",
+                        Padded::new("", &dependency1, " "),
+                        dependency2,
                     ),
                 }
             }
@@ -359,7 +362,7 @@ impl PubGrubReportFormatter<'_> {
                 format!(
                     "{}and {}",
                     Padded::from_string("", &external1, " "),
-                    Padded::from_string("", &external2, ", "),
+                    &external2,
                 )
             }
         }
