@@ -11,7 +11,7 @@ license.workspace = true
 
 [dependencies]
 pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
+pep508_rs = { workspace = true, features = ["non-pep508-extensions"] }
 uv-client = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
