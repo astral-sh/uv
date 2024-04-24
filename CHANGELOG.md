@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.1.38
+
+### Enhancements
+
+- Add alternate manylinux targets to `--python-platform` ([#3229](https://github.com/astral-sh/uv/pull/3229))
+- An enum and backticks for lookahead error ([#3216](https://github.com/astral-sh/uv/pull/3216))
+- Upgrade macOS target to `12.0` ([#3228](https://github.com/astral-sh/uv/pull/3228))
+- Add keyring logs for URL and host fetches ([#3212](https://github.com/astral-sh/uv/pull/3212))
+- Combine unresolvable error dependency clauses with the same root ([#3225](https://github.com/astral-sh/uv/pull/3225))
+
+### CLI
+
+- Gave a better name to the `--color` placeholder ([#3226](https://github.com/astral-sh/uv/pull/3226))
+- Warn when an unsupported Python version is encountered ([#3250](https://github.com/astral-sh/uv/pull/3250))
+
+### Configuration
+
+- Use directory instead of file when searching for `uv.toml` file ([#3203](https://github.com/astral-sh/uv/pull/3203))
+
+### Performance
+
+- Only perform fetches of credentials for a realm and username combination once ([#3237](https://github.com/astral-sh/uv/pull/3237))
+- Unroll self-dependencies via extras ([#3230](https://github.com/astral-sh/uv/pull/3230))
+- Use read-write locks instead of mutexes in authentication handling ([#3210](https://github.com/astral-sh/uv/pull/3210))
+
+### Bug fixes
+
+- Avoid removing quites from requirements markers ([#3214](https://github.com/astral-sh/uv/pull/3214))
+- Avoid adding extras when expanding constraints ([#3232](https://github.com/astral-sh/uv/pull/3232))
+- Reinstall package when editable label is removed ([#3219](https://github.com/astral-sh/uv/pull/3219))
+
+### Documentation
+
+- Add `RAYON_NUM_THREADS` to environment variable docs ([#3223](https://github.com/astral-sh/uv/pull/3223))
+- Document support for HTTP proxy variables ([#3247](https://github.com/astral-sh/uv/pull/3247))
+- Fix documentation for `--python-platfor`m ([#3220](https://github.com/astral-sh/uv/pull/3220))
+
 ## 0.1.37
 
 ### Enhancements
