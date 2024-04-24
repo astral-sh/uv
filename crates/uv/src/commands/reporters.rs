@@ -104,7 +104,7 @@ impl uv_installer::DownloadReporter for DownloadReporter {
             ProgressBar::with_draw_target(size, self.printer.target()),
         );
 
-        if size.is_some() {
+        if size.is_none() {
             progress.set_style(
                 ProgressStyle::with_template(
                     "{wide_msg:.dim} {decimal_bytes}/{decimal_total_bytes} [{bar:30}]",
@@ -114,8 +114,8 @@ impl uv_installer::DownloadReporter for DownloadReporter {
             );
             progress.set_message(name.to_string());
         } else {
-            progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-            progress.set_message(format!("{} {}...", "Downloading".bold().cyan(), name));
+            progress.set_style(ProgressStyle::with_template("{wide_msg:.dim} n/a [....]").unwrap());
+            progress.set_message(name.to_string());
             progress.finish();
         }
 
