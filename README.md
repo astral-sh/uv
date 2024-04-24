@@ -515,6 +515,7 @@ In addition, uv respects the following environment variables:
   any filter compatible with the `tracing_subscriber` crate. For example, `RUST_LOG=trace` will
   enable trace-level logging. See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
   for more.
+- `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`: The proxy to use for all HTTP/HTTPS requests.
 - `HTTP_TIMEOUT` (or `UV_HTTP_TIMEOUT`): If set, uv will use this value (in seconds) as the timeout
   for HTTP reads (default: 30s).
 - `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`.
