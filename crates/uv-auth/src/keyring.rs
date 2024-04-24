@@ -1,4 +1,5 @@
-use std::{collections::HashSet, sync::Mutex};
+use std::collections::HashSet;
+use std::sync::RwLock;
 
 use tokio::process::Command;
 use tracing::{debug, instrument, warn};
@@ -13,7 +14,7 @@ use crate::credentials::Credentials;
 #[derive(Debug)]
 pub struct KeyringProvider {
     /// Tracks host and username pairs with no credentials to avoid repeated queries.
-    cache: Mutex<HashSet<(String, String)>>,
+    cache: RwLock<HashSet<(String, String)>>,
     backend: KeyringProviderBackend,
 }
 
@@ -29,7 +30,7 @@ impl KeyringProvider {
     /// Create a new [`KeyringProvider::Subprocess`].
     pub fn subprocess() -> Self {
         Self {
-            cache: Mutex::new(HashSet::new()),
+            cache: RwLock::new(HashSet::new()),
             backend: KeyringProviderBackend::Subprocess,
         }
     }
@@ -65,7 +66,7 @@ impl KeyringProvider {
         //      use-cases.
         let key = (host.to_string(), username.to_string());
         {
-            let cache = self.cache.lock().unwrap();
+            let cache = self.cache.read().unwrap();
 
             if cache.contains(&key) {
                 debug!(
@@ -95,11 +96,9 @@ impl KeyringProvider {
             };
         }
 
-        {
-            let mut cache = self.cache.lock().unwrap();
-            if password.is_none() {
-                cache.insert(key);
-            }
+        if password.is_none() {
+            let mut cache = self.cache.write().unwrap();
+            cache.insert(key);
         }
 
         password.map(|password| Credentials::new(Some(username.to_string()), Some(password)))
@@ -148,7 +147,7 @@ impl KeyringProvider {
         use std::collections::HashMap;
 
         Self {
-            cache: Mutex::new(HashSet::new()),
+            cache: RwLock::new(HashSet::new()),
             backend: KeyringProviderBackend::Dummy(HashMap::from_iter(
                 iter.into_iter()
                     .map(|((service, username), password)| ((service.into(), username), password)),
@@ -162,7 +161,7 @@ impl KeyringProvider {
         use std::collections::HashMap;
 
         Self {
-            cache: Mutex::new(HashSet::new()),
+            cache: RwLock::new(HashSet::new()),
             backend: KeyringProviderBackend::Dummy(HashMap::new()),
         }
     }
