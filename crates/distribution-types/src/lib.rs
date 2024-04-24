@@ -41,7 +41,7 @@ use url::Url;
 
 use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use pep440_rs::Version;
-use pep508_rs::{Scheme, VerbatimUrl};
+use pep508_rs::{Pep508Url, Scheme, VerbatimUrl};
 use uv_normalize::PackageName;
 
 pub use crate::any::*;
@@ -81,11 +81,11 @@ mod specified_requirement;
 mod traits;
 
 #[derive(Debug, Clone)]
-pub enum VersionOrUrlRef<'a> {
+pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier, used to identify a distribution in a registry.
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location.
-    Url(&'a VerbatimUrl),
+    Url(&'a T),
 }
 
 impl Verbatim for VersionOrUrlRef<'_> {

@@ -1,10 +1,11 @@
-use crate::{Pep508Error, Pep508ErrorSource};
 use std::fmt::{Display, Formatter};
 use std::str::Chars;
 
+use crate::{Pep508Error, Pep508ErrorSource, Pep508Url};
+
 /// A [`Cursor`] over a string.
 #[derive(Debug, Clone)]
-pub struct Cursor<'a> {
+pub(crate) struct Cursor<'a> {
     input: &'a str,
     chars: Chars<'a>,
     pos: usize,
@@ -12,7 +13,7 @@ pub struct Cursor<'a> {
 
 impl<'a> Cursor<'a> {
     /// Convert from `&str`.
-    pub fn new(input: &'a str) -> Self {
+    pub(crate) fn new(input: &'a str) -> Self {
         Self {
             input,
             chars: input.chars(),
@@ -21,7 +22,7 @@ impl<'a> Cursor<'a> {
     }
 
     /// Returns a new cursor starting at the given position.
-    pub fn at(self, pos: usize) -> Self {
+    pub(crate) fn at(self, pos: usize) -> Self {
         Self {
             input: self.input,
             chars: self.input[pos..].chars(),
@@ -107,11 +108,11 @@ impl<'a> Cursor<'a> {
     }
 
     /// Consumes characters from the cursor, raising an error if it doesn't match the given token.
-    pub(crate) fn next_expect_char(
+    pub(crate) fn next_expect_char<T: Pep508Url>(
         &mut self,
         expected: char,
         span_start: usize,
-    ) -> Result<(), Pep508Error> {
+    ) -> Result<(), Pep508Error<T>> {
         match self.next() {
             None => Err(Pep508Error {
                 message: Pep508ErrorSource::String(format!(
