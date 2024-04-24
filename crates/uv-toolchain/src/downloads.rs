@@ -217,10 +217,10 @@ impl PythonDownload {
     pub async fn fetch(
         &self,
         client: &uv_client::BaseClient,
-        path: &Path,
+        parent_path: &Path,
     ) -> Result<DownloadResult, Error> {
         let url = Url::parse(self.url)?;
-        let path = path.join(self.key).clone();
+        let path = parent_path.join(self.key).clone();
 
         // If it already exists, return it
         if path.is_dir() {
@@ -234,7 +234,7 @@ impl PythonDownload {
         response.error_for_status_ref()?;
 
         // Download and extract into a temporary directory.
-        let temp_dir = tempfile::tempdir().map_err(Error::DownloadDirError)?;
+        let temp_dir = tempfile::tempdir_in(parent_path).map_err(Error::DownloadDirError)?;
 
         debug!(
             "Downloading {url} to temporary location {}",
