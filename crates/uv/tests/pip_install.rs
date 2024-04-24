@@ -281,7 +281,7 @@ fn no_solution() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only flask<=3.0.2 is available and flask==3.0.2 depends on werkzeug>=3.0.0, we can conclude that flask>=3.0.2 depends on werkzeug>=3.0.0.
-          And because you require flask>=3.0.2 and you require werkzeug<1.0.0, we can conclude that the requirements are unsatisfiable.
+          And because you require flask>=3.0.2 and werkzeug<1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 }
 
