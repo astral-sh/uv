@@ -4492,6 +4492,7 @@ dependencies = [
  "futures",
  "http",
  "insta",
+ "once-map",
  "once_cell",
  "reqwest",
  "reqwest-middleware",

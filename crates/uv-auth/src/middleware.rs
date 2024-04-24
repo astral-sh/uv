@@ -165,7 +165,7 @@ impl Middleware for AuthMiddleware {
                 .await
             {
                 request = credentials.authenticate(request);
-                Some(Arc::new(credentials))
+                Some(credentials)
             } else {
                 // If we don't find a password, we'll still attempt the request with the existing credentials
                 Some(credentials)
@@ -244,7 +244,7 @@ impl Middleware for AuthMiddleware {
             retry_request = credentials.authenticate(retry_request);
             trace!("Retrying request for {url} with {credentials:?}");
             return self
-                .complete_request(Some(Arc::new(credentials)), retry_request, extensions, next)
+                .complete_request(Some(credentials), retry_request, extensions, next)
                 .await;
         }
 
@@ -300,9 +300,37 @@ impl AuthMiddleware {
         &self,
         credentials: Option<&Credentials>,
         url: &Url,
-    ) -> Option<Credentials> {
+    ) -> Option<Arc<Credentials>> {
+        // Fetches can be expensive, so we will only run them _once_ per realm and username combination
+        // All other requests for the same realm will wait until the first one completes
+        let key = (
+            Realm::from(url),
+            Username::from(
+                credentials
+                    .map(|credentials| credentials.username().unwrap_or_default().to_string()),
+            ),
+        );
+
+        if !self.cache().fetches.register(key.clone()) {
+            let credentials = Arc::<_>::unwrap_or_clone(
+                self.cache()
+                    .fetches
+                    .wait(&key)
+                    .await
+                    .expect("The key must exist after register is called"),
+            );
+
+            if credentials.is_some() {
+                trace!("Using credentials from previous fetch for {url}");
+            } else {
+                trace!("Skipping fetch of credentails for {url}, previous attempt failed");
+            };
+
+            return credentials;
+        }
+
         // Netrc support based on: <https://github.com/gribouille/netrc>.
-        if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
+        let credentials = if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
             trace!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,
@@ -336,6 +364,12 @@ impl AuthMiddleware {
         } else {
             None
         }
+        .map(Arc::new);
+
+        // Register the fetch for this key
+        self.cache().fetches.done(key.clone(), credentials.clone());
+
+        credentials
     }
 }
 
