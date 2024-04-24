@@ -913,6 +913,7 @@ fn compile_python_37() -> Result<()> {
             "warning: The requested Python version 3.7 is not available; .* will be used to build dependencies instead.\n",
             "",
         ),
+        (r"warning: uv is only compatible with Python 3\.8\+, found Python 3\.7.*\n", "")
     ]
         .into_iter()
         .chain(context.filters())
