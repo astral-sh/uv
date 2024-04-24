@@ -15,8 +15,6 @@ workspace = true
 [dependencies]
 distribution-types = { workspace = true, features = ["schemars"] }
 install-wheel-rs = { workspace = true, features = ["schemars"] }
-pep508_rs = { workspace = true }
-uv-auth = { workspace = true, features = ["schemars", "serde"] }
 uv-configuration = { workspace = true, features = ["schemars", "serde"] }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true, features = ["schemars"] }

@@ -39,7 +39,6 @@ uv-workspace = { workspace = true, features = ["schemars"] }
 # dependencies, to ensure that we're forced to think twice before including them in other crates.
 anstream = { workspace = true }
 anyhow = { workspace = true }
-chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }

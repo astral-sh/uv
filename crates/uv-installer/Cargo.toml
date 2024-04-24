@@ -36,7 +36,6 @@ async-channel = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 rayon = { workspace = true }
-rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 tempfile = { workspace = true }

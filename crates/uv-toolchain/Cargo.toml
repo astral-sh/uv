@@ -26,7 +26,6 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }
