@@ -7,6 +7,7 @@ use tracing::{debug, instrument};
 
 use uv_cache::Cache;
 use uv_toolchain::PythonVersion;
+use uv_warnings::warn_user_once;
 
 use crate::interpreter::InterpreterInfoError;
 use crate::python_environment::{detect_python_executable, detect_virtual_env};
@@ -42,7 +43,11 @@ pub fn find_requested_python(request: &str, cache: &Cache) -> Result<Option<Inte
             // SAFETY: Guaranteed by the Ok(versions) guard
             _ => unreachable!(),
         };
-        find_python(selector, cache)
+        let interpreter = find_python(selector, cache)?;
+        interpreter
+            .as_ref()
+            .inspect(|inner| warn_on_unsupported_python(inner));
+        Ok(interpreter)
     } else {
         match fs_err::metadata(request) {
             Ok(metadata) => {
@@ -61,14 +66,18 @@ pub fn find_requested_python(request: &str, cache: &Cache) -> Result<Option<Inte
                     // `-p /home/ferris/.local/bin/python3.10`
                     path
                 };
-                Interpreter::query(executable, cache).map(Some)
+                Interpreter::query(executable, cache)
+                    .inspect(warn_on_unsupported_python)
+                    .map(Some)
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 // `-p python3.10`; Generally not used on windows because all Python are `python.exe`.
                 let Some(executable) = find_executable(request)? else {
                     return Ok(None);
                 };
-                Interpreter::query(executable, cache).map(Some)
+                Interpreter::query(executable, cache)
+                    .inspect(warn_on_unsupported_python)
+                    .map(Some)
             }
             Err(err) => return Err(err.into()),
         }
@@ -82,13 +91,15 @@ pub fn find_requested_python(request: &str, cache: &Cache) -> Result<Option<Inte
 #[instrument(skip_all)]
 pub fn find_default_python(cache: &Cache) -> Result<Interpreter, Error> {
     debug!("Starting interpreter discovery for default Python");
-    try_find_default_python(cache)?.ok_or(if cfg!(windows) {
-        Error::NoPythonInstalledWindows
-    } else if cfg!(unix) {
-        Error::NoPythonInstalledUnix
-    } else {
-        unreachable!("Only Unix and Windows are supported")
-    })
+    try_find_default_python(cache)?
+        .ok_or(if cfg!(windows) {
+            Error::NoPythonInstalledWindows
+        } else if cfg!(unix) {
+            Error::NoPythonInstalledUnix
+        } else {
+            unreachable!("Only Unix and Windows are supported")
+        })
+        .inspect(warn_on_unsupported_python)
 }
 
 /// Same as [`find_default_python`] but returns `None` if no python is found instead of returning an `Err`.
@@ -412,6 +423,16 @@ impl PythonVersionSelector {
     }
 }
 
+fn warn_on_unsupported_python(interpreter: &Interpreter) {
+    // Warn on usage with an unsupported Python version
+    if interpreter.python_tuple() < (3, 8) {
+        warn_user_once!(
+            "uv is only compatible with Python 3.8+, found Python {}.",
+            interpreter.python_version()
+        );
+    }
+}
+
 /// Find a matching Python or any fallback Python.
 ///
 /// If no Python version is provided, we will use the first available interpreter.
@@ -439,6 +460,7 @@ pub fn find_best_python(
 
     // First, check for an exact match (or the first available version if no Python version was provided)
     if let Some(interpreter) = find_version(python_version, system, cache)? {
+        warn_on_unsupported_python(&interpreter);
         return Ok(interpreter);
     }
 
@@ -449,6 +471,7 @@ pub fn find_best_python(
             if let Some(interpreter) =
                 find_version(Some(&python_version.without_patch()), system, cache)?
             {
+                warn_on_unsupported_python(&interpreter);
                 return Ok(interpreter);
             }
         }

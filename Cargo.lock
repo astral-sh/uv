@@ -4862,6 +4862,7 @@ dependencies = [
  "uv-cache",
  "uv-fs",
  "uv-toolchain",
+ "uv-warnings",
  "which",
  "winapi",
 ]
