@@ -1,7 +1,7 @@
 use std::collections::HashSet;
+use std::sync::RwLock;
 
 use tokio::process::Command;
-use tokio::sync::RwLock;
 use tracing::{debug, instrument, warn};
 use url::Url;
 
@@ -66,7 +66,7 @@ impl KeyringProvider {
         //      use-cases.
         let key = (host.to_string(), username.to_string());
         {
-            let cache = self.cache.read().await;
+            let cache = self.cache.read().unwrap();
 
             if cache.contains(&key) {
                 debug!(
@@ -97,7 +97,7 @@ impl KeyringProvider {
         }
 
         if password.is_none() {
-            let mut cache = self.cache.write().await;
+            let mut cache = self.cache.write().unwrap();
             cache.insert(key);
         }
 

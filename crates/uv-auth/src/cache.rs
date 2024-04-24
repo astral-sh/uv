@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::{collections::HashMap, sync::Mutex};
+use std::{collections::HashMap, sync::RwLock};
 
 use crate::credentials::{Credentials, Username};
 use crate::Realm;
@@ -10,11 +10,11 @@ use url::Url;
 
 pub struct CredentialsCache {
     /// A cache per realm and username
-    realms: Mutex<HashMap<(Realm, Username), Arc<Credentials>>>,
+    realms: RwLock<HashMap<(Realm, Username), Arc<Credentials>>>,
     /// A cache tracking the result of fetches from external services
     pub(crate) fetches: OnceMap<(Realm, Username), Option<Arc<Credentials>>>,
     /// A cache per URL, uses a trie for efficient prefix queries.
-    urls: Mutex<UrlTrie>,
+    urls: RwLock<UrlTrie>,
 }
 
 impl Default for CredentialsCache {
@@ -27,15 +27,15 @@ impl CredentialsCache {
     /// Create a new cache.
     pub fn new() -> Self {
         Self {
-            realms: Mutex::new(HashMap::new()),
             fetches: OnceMap::default(),
-            urls: Mutex::new(UrlTrie::new()),
+            realms: RwLock::new(HashMap::new()),
+            urls: RwLock::new(UrlTrie::new()),
         }
     }
 
     /// Return the credentials that should be used for a realm and username, if any.
     pub(crate) fn get_realm(&self, realm: Realm, username: Username) -> Option<Arc<Credentials>> {
-        let realms = self.realms.lock().unwrap();
+        let realms = self.realms.read().unwrap();
         let name = if let Some(username) = username.as_deref() {
             format!("{username}@{realm}")
         } else {
@@ -65,7 +65,7 @@ impl CredentialsCache {
     /// cached credentials have a username equal to the provided one — otherwise `None` is returned.
     /// If multiple usernames are used per URL, the realm cache should be queried instead.
     pub(crate) fn get_url(&self, url: &Url, username: Username) -> Option<Arc<Credentials>> {
-        let urls = self.urls.lock().unwrap();
+        let urls = self.urls.read().unwrap();
         let credentials = urls.get(url);
         if let Some(credentials) = credentials {
             if username.is_none() || username.as_deref() == credentials.username() {
@@ -100,7 +100,7 @@ impl CredentialsCache {
         self.insert_realm((Realm::from(url), Username::none()), credentials.clone());
 
         // Insert an entry for the URL
-        let mut urls = self.urls.lock().unwrap();
+        let mut urls = self.urls.write().unwrap();
         urls.insert(url.clone(), credentials.clone());
     }
 
@@ -117,7 +117,7 @@ impl CredentialsCache {
             return None;
         }
 
-        let mut realms = self.realms.lock().unwrap();
+        let mut realms = self.realms.write().unwrap();
 
         // Always replace existing entries if we have a password
         if credentials.password().is_some() {
