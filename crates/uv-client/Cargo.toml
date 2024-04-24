@@ -40,7 +40,7 @@ sys-info = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tl = { workspace = true }
-tokio = { workspace = true, features = ["fs"] }
+tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
@@ -51,5 +51,5 @@ anyhow = { workspace = true }
 http-body-util = { version = "0.1.0" }
 hyper = { version = "1.2.0", features = ["server", "http1"] }
 hyper-util = { version = "0.1.3", features = ["tokio"] }
-insta = { version = "1.36.1" , features = ["filters", "json", "redactions"] }
-tokio = { workspace = true, features = ["fs", "macros"] }
+insta = { version = "1.36.1", features = ["filters", "json", "redactions"] }
+tokio = { workspace = true }
