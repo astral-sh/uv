@@ -88,6 +88,7 @@ pub(crate) struct RunSettings {
     pub(crate) isolated: bool,
     pub(crate) with: Vec<String>,
     pub(crate) no_workspace: bool,
+    pub(crate) python: Option<String>,
 }
 
 impl RunSettings {
@@ -100,6 +101,7 @@ impl RunSettings {
             isolated,
             with,
             no_workspace,
+            python,
         } = args;
 
         Self {
@@ -109,6 +111,7 @@ impl RunSettings {
             isolated,
             with,
             no_workspace,
+            python,
         }
     }
 }

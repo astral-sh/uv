@@ -1706,6 +1706,20 @@ pub(crate) struct RunArgs {
     #[arg(long)]
     pub(crate) with: Vec<String>,
 
+    /// The Python interpreter to use to build the run environment.
+    ///
+    /// By default, `uv` uses the virtual environment in the current working directory or any parent
+    /// directory, falling back to searching for a Python executable in `PATH`. The `--python`
+    /// option allows you to specify a different interpreter.
+    ///
+    /// Supported formats:
+    /// - `3.10` looks for an installed Python 3.10 using `py --list-paths` on Windows, or
+    ///   `python3.10` on Linux and macOS.
+    /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
+    /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
+    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
+    pub(crate) python: Option<String>,
+
     /// Run without the current workspace installed.
     #[arg(long)]
     pub(crate) no_workspace: bool,
