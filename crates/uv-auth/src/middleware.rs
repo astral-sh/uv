@@ -342,7 +342,7 @@ impl AuthMiddleware {
             debug!("Found credentials in netrc file for {url}");
             Some(credentials)
         // N.B. The keyring provider performs lookups for the exact URL then
-        //      falls back to the host, but we cache the result per host so if a keyring
+        //      falls back to the host, but we cache the result per realm so if a keyring
         //      implementation returns different credentials for different URLs in the
         //      same realm we will use the wrong credentials.
         } else if let Some(credentials) = match self.keyring {
@@ -1258,6 +1258,106 @@ mod tests {
             client.get(base_url_3.clone()).send().await?.status(),
             200,
             "Requests to the 'public' prefix should not use credentials"
+        );
+
+        Ok(())
+    }
+
+    /// Demonstrates "incorrect" behavior in our cache which avoids an expensive fetch of
+    /// credentials for _every_ request URL at the cost of inconsistent behavior when
+    /// credentials are not scoped to a realm.
+    #[test(tokio::test)]
+    async fn test_credentials_from_keyring_mixed_authentication_in_realm_same_username(
+    ) -> Result<(), Error> {
+        let username = "user";
+        let password_1 = "password1";
+        let password_2 = "password2";
+
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_1.*"))
+            .and(basic_auth(username, password_1))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_2.*"))
+            .and(basic_auth(username, password_2))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let base_url = Url::parse(&server.uri())?;
+        let base_url_1 = base_url.join("prefix_1")?;
+        let base_url_2 = base_url.join("prefix_2")?;
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_keyring(Some(KeyringProvider::dummy([
+                        ((base_url_1.clone(), username), password_1),
+                        ((base_url_2.clone(), username), password_2),
+                    ]))),
+            )
+            .build();
+
+        // Both servers do not work without a username
+        assert_eq!(
+            client.get(base_url_1.clone()).send().await?.status(),
+            401,
+            "Requests should require a username"
+        );
+        assert_eq!(
+            client.get(base_url_2.clone()).send().await?.status(),
+            401,
+            "Requests should require a username"
+        );
+
+        let mut url_1 = base_url_1.clone();
+        url_1.set_username(username).unwrap();
+        assert_eq!(
+            client.get(url_1.clone()).send().await?.status(),
+            200,
+            "The first request with a username will succeed"
+        );
+        assert_eq!(
+            client.get(base_url_2.clone()).send().await?.status(),
+            401,
+            "Credentials should not be re-used for the second prefix"
+        );
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_1/foo")?)
+                .send()
+                .await?
+                .status(),
+            200,
+            "Subsequent requests can be to different paths in the same prefix"
+        );
+
+        let mut url_2 = base_url_2.clone();
+        url_2.set_username(username).unwrap();
+        assert_eq!(
+            client.get(url_2.clone()).send().await?.status(),
+            401, // INCORRECT BEHAVIOR
+            "A request with the same username and realm for a URL that needs a different password will fail"
+        );
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_2/foo")?)
+                .send()
+                .await?
+                .status(),
+            401, // INCORRECT BEHAVIOR
+            "Requests to other paths in the failing prefix will also fail"
         );
 
         Ok(())

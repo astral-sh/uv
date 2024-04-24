@@ -1,8 +1,5 @@
-use std::collections::HashSet;
-use std::sync::RwLock;
-
 use tokio::process::Command;
-use tracing::{debug, instrument, trace, warn};
+use tracing::{instrument, trace, warn};
 use url::Url;
 
 use crate::credentials::Credentials;
@@ -13,8 +10,6 @@ use crate::credentials::Credentials;
 /// <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L102>
 #[derive(Debug)]
 pub struct KeyringProvider {
-    /// Tracks host and username pairs with no credentials to avoid repeated queries.
-    cache: RwLock<HashSet<(String, String)>>,
     backend: KeyringProviderBackend,
 }
 
@@ -30,7 +25,6 @@ impl KeyringProvider {
     /// Create a new [`KeyringProvider::Subprocess`].
     pub fn subprocess() -> Self {
         Self {
-            cache: RwLock::new(HashSet::new()),
             backend: KeyringProviderBackend::Subprocess,
         }
     }
@@ -55,27 +49,6 @@ impl KeyringProvider {
             "Should only use keyring with a username"
         );
 
-        let host = url.host_str()?;
-
-        // Avoid expensive lookups by tracking previous attempts with no credentials.
-        // N.B. We cache missing credentials per host so no credentials are found for
-        //      a host but would return credentials for some other URL in the same realm
-        //      we may not find the credentials depending on which URL we see first.
-        //      This behavior avoids adding ~80ms to every request when the subprocess keyring
-        //      provider is being used, but makes assumptions about the typical keyring
-        //      use-cases.
-        let key = (host.to_string(), username.to_string());
-        {
-            let cache = self.cache.read().unwrap();
-
-            if cache.contains(&key) {
-                debug!(
-                "Skipping keyring lookup for {username} at {host}, already attempted and found no credentials."
-            );
-                return None;
-            }
-        }
-
         // Check the full URL first
         // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
         trace!("Checking keyring for URL {url}");
@@ -90,17 +63,13 @@ impl KeyringProvider {
         };
         // And fallback to a check for the host
         if password.is_none() {
+            let host = url.host_str()?;
             trace!("Checking keyring for host {host}");
             password = match self.backend {
                 KeyringProviderBackend::Subprocess => self.fetch_subprocess(host, username).await,
                 #[cfg(test)]
                 KeyringProviderBackend::Dummy(ref store) => self.fetch_dummy(store, host, username),
             };
-        }
-
-        if password.is_none() {
-            let mut cache = self.cache.write().unwrap();
-            cache.insert(key);
         }
 
         password.map(|password| Credentials::new(Some(username.to_string()), Some(password)))
@@ -149,7 +118,6 @@ impl KeyringProvider {
         use std::collections::HashMap;
 
         Self {
-            cache: RwLock::new(HashSet::new()),
             backend: KeyringProviderBackend::Dummy(HashMap::from_iter(
                 iter.into_iter()
                     .map(|((service, username), password)| ((service.into(), username), password)),
@@ -163,7 +131,6 @@ impl KeyringProvider {
         use std::collections::HashMap;
 
         Self {
-            cache: RwLock::new(HashSet::new()),
             backend: KeyringProviderBackend::Dummy(HashMap::new()),
         }
     }
@@ -271,22 +238,6 @@ mod test {
                 Some("other-password".to_string())
             ))
         );
-    }
-
-    /// Demonstrates "incorrect" behavior in our cache which avoids an expensive fetch of
-    /// credentials for _every_ request URL at the cost of inconsistent behavior when
-    /// credentials are not scoped to a realm.
-    #[tokio::test]
-    async fn fetch_url_caches_based_on_host() {
-        let url = Url::parse("https://example.com/").unwrap();
-        let keyring =
-            KeyringProvider::dummy([((url.join("foo").unwrap().as_str(), "user"), "password")]);
-
-        // If we attempt an unmatching URL first...
-        assert_eq!(keyring.fetch(&url.join("bar").unwrap(), "user").await, None);
-
-        // ... we will cache the missing credentials on subsequent attempts
-        assert_eq!(keyring.fetch(&url.join("foo").unwrap(), "user").await, None);
     }
 
     #[tokio::test]
