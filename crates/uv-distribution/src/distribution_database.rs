@@ -234,7 +234,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         // If the request failed because streaming is unsupported, download the
                         // wheel directly.
                         let archive = self
-                            .download_wheel(url, &wheel.filename, &wheel_entry, dist, hashes)
+                            .download_wheel(
+                                url,
+                                &wheel.filename,
+                                wheel.file.size,
+                                &wheel_entry,
+                                dist,
+                                hashes,
+                            )
                             .await?;
 
                         Ok(LocalWheel {
@@ -285,6 +292,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             .download_wheel(
                                 wheel.url.raw().clone(),
                                 &wheel.filename,
+                                None,
                                 &wheel_entry,
                                 dist,
                                 hashes,
@@ -456,17 +464,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // get the size from the content-length header if not provided by the registry
         if size.is_none() {
-            size = req
-                .headers()
-                .get(reqwest::header::CONTENT_LENGTH)
-                .and_then(|val| val.to_str().ok())
-                .and_then(|val| val.parse::<usize>().ok())
-                .map(|len| len as u64);
+            size = content_length(&req);
         }
 
         let download = |response: reqwest::Response| {
             async {
-                let index = self
+                let progress = self
                     .reporter
                     .as_ref()
                     .map(|reporter| reporter.on_download_start(dist.name(), size));
@@ -488,7 +491,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 match self.reporter {
                     Some(ref reporter) => {
                         let mut reader =
-                            ProgressReader::new(&mut hasher, index.unwrap(), &**reporter);
+                            ProgressReader::new(&mut hasher, progress.unwrap(), &**reporter);
                         uv_extract::stream::unzip(&mut reader, temp_dir.path()).await?;
                     }
                     None => {
@@ -510,7 +513,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .map_err(Error::CacheRead)?;
 
                 if let Some(ref reporter) = self.reporter {
-                    reporter.on_download_complete(dist.name(), index.unwrap());
+                    reporter.on_download_complete(dist.name(), progress.unwrap());
                 }
 
                 Ok(Archive::new(
@@ -572,6 +575,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         url: Url,
         filename: &WheelFilename,
+        mut size: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
@@ -579,8 +583,20 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
 
+        let req = self.request(url.clone())?;
+
+        // get the size from the content-length header if not provided by the registry
+        if size.is_none() {
+            size = content_length(&req);
+        }
+
         let download = |response: reqwest::Response| {
             async {
+                let progress = self
+                    .reporter
+                    .as_ref()
+                    .map(|reporter| reporter.on_download_start(dist.name(), size));
+
                 let reader = response
                     .bytes_stream()
                     .map_err(|err| self.handle_response_errors(err))
@@ -590,9 +606,25 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
                 let mut writer = tokio::io::BufWriter::new(tokio::fs::File::from_std(temp_file));
-                tokio::io::copy(&mut reader.compat(), &mut writer)
-                    .await
-                    .map_err(Error::CacheWrite)?;
+
+                match self.reporter {
+                    Some(ref reporter) => {
+                        // note this will report 100% progress after the download is complete, even
+                        // if we stil have to unzip and hash, which may not be that fast for large
+                        // files
+                        let mut reader =
+                            ProgressReader::new(reader.compat(), progress.unwrap(), &**reporter);
+
+                        tokio::io::copy(&mut reader, &mut writer)
+                            .await
+                            .map_err(Error::CacheWrite)?;
+                    }
+                    None => {
+                        tokio::io::copy(&mut reader.compat(), &mut writer)
+                            .await
+                            .map_err(Error::CacheWrite)?;
+                    }
+                }
 
                 // Unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
@@ -636,6 +668,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .persist(temp_dir.into_path(), wheel_entry.path())
                     .await
                     .map_err(Error::CacheRead)?;
+
+                if let Some(ref reporter) = self.reporter {
+                    reporter.on_download_complete(dist.name(), progress.unwrap());
+                }
 
                 Ok(Archive::new(id, hashes))
             }
@@ -860,6 +896,15 @@ impl<'a> ManagedClient<'a> {
         let _permit = self.control.acquire().await.unwrap();
         f(self.unmanaged).await
     }
+}
+
+/// Returns the value of the Content-Length header for the request.
+fn content_length(req: &reqwest::Request) -> Option<u64> {
+    req.headers()
+        .get(reqwest::header::CONTENT_LENGTH)
+        .and_then(|val| val.to_str().ok())
+        .and_then(|val| val.parse::<usize>().ok())
+        .map(|len| len as u64)
 }
 
 /// An asynchronous reader that reports progress as bytes are read.
