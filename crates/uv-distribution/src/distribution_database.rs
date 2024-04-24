@@ -918,8 +918,8 @@ impl<'a, R> ProgressReader<'a, R> {
     /// Create a new [`ProgressReader`] that wraps another reader.
     fn new(reader: R, index: usize, reporter: &'a dyn Reporter) -> Self {
         Self {
-            index,
             reader,
+            index,
             reporter,
         }
     }
@@ -936,7 +936,7 @@ where
     ) -> Poll<io::Result<()>> {
         Pin::new(&mut self.as_mut().reader)
             .poll_read(cx, buf)
-            .map_ok(|_| {
+            .map_ok(|()| {
                 self.reporter
                     .on_download_progress(self.index, buf.filled().len() as u64);
             })

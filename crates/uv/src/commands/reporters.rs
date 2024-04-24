@@ -104,22 +104,19 @@ impl uv_installer::DownloadReporter for DownloadReporter {
             ProgressBar::with_draw_target(size, self.printer.target()),
         );
 
-        match size {
-            Some(_) => {
-                progress.set_style(
-                    ProgressStyle::with_template(
-                        "{wide_msg:.dim} {decimal_bytes}/{decimal_total_bytes} [{bar:30}]",
-                    )
-                    .unwrap()
-                    .progress_chars("##-"),
-                );
-                progress.set_message(format!("{}", name));
-            }
-            None => {
-                progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-                progress.set_message(format!("{} {}...", "Downloading".bold().cyan(), name));
-                progress.finish();
-            }
+        if size.is_some() {
+            progress.set_style(
+                ProgressStyle::with_template(
+                    "{wide_msg:.dim} {decimal_bytes}/{decimal_total_bytes} [{bar:30}]",
+                )
+                .unwrap()
+                .progress_chars("##-"),
+            );
+            progress.set_message(name.to_string());
+        } else {
+            progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+            progress.set_message(format!("{} {}...", "Downloading".bold().cyan(), name));
+            progress.finish();
         }
 
         let mut bars = self.bars.lock().unwrap();

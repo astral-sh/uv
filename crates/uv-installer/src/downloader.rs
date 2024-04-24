@@ -287,10 +287,10 @@ impl uv_distribution::Reporter for Facade {
     }
 
     fn on_download_progress(&self, index: usize, inc: u64) {
-        self.reporter.on_download_progress(index, inc)
+        self.reporter.on_download_progress(index, inc);
     }
 
     fn on_download_complete(&self, name: &PackageName, index: usize) {
-        self.reporter.on_download_complete(name, index)
+        self.reporter.on_download_complete(name, index);
     }
 }
