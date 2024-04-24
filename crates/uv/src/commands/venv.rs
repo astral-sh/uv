@@ -24,6 +24,7 @@ use uv_fs::Simplified;
 use uv_interpreter::{find_default_python, find_requested_python, Error};
 use uv_resolver::{ExcludeNewer, FlatIndex, InMemoryIndex, OptionsBuilder};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy, InFlight};
+use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -119,6 +120,14 @@ async fn venv_impl(
     } else {
         find_default_python(cache).into_diagnostic()?
     };
+
+    // Warn on usage with an unsupported Python version
+    if interpreter.python_tuple() < (3, 8) {
+        warn_user!(
+            "uv is only compatible with Python 3.8+, found Python {}.",
+            interpreter.python_version()
+        );
+    }
 
     // Add all authenticated sources to the cache.
     for url in index_locations.urls() {
