@@ -68,7 +68,16 @@ impl PythonEnvironment {
         }
     }
 
-    /// Returns the location of the Python interpreter.
+    /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and `--target` directory.
+    #[must_use]
+    pub fn with_target(self, target: &Path) -> Self {
+        Self {
+            interpreter: self.interpreter.with_target(target),
+            ..self
+        }
+    }
+
+    /// Returns the root (i.e., the prefix) of the Python interpreter.
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -115,7 +124,9 @@ impl PythonEnvironment {
 
     /// Grab a file lock for the virtual environment to prevent concurrent writes across processes.
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
-        if self.interpreter.is_virtualenv() {
+        if self.interpreter.is_target() {
+            LockedFile::acquire(self.root.join(".lock"), self.root.simplified_display())
+        } else if self.interpreter.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lock file.
             LockedFile::acquire(self.root.join(".lock"), self.root.simplified_display())
         } else {

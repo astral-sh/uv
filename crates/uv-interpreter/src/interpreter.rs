@@ -35,6 +35,7 @@ pub struct Interpreter {
     sys_executable: PathBuf,
     stdlib: PathBuf,
     tags: OnceCell<Tags>,
+    target: Option<PathBuf>,
     gil_disabled: bool,
 }
 
@@ -62,6 +63,7 @@ impl Interpreter {
             sys_executable: info.sys_executable,
             stdlib: info.stdlib,
             tags: OnceCell::new(),
+            target: None,
         })
     }
 
@@ -91,6 +93,7 @@ impl Interpreter {
             sys_executable: PathBuf::from("/dev/null"),
             stdlib: PathBuf::from("/dev/null"),
             tags: OnceCell::new(),
+            target: None,
             gil_disabled: false,
         }
     }
@@ -135,7 +138,13 @@ impl Interpreter {
     ///
     /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/utils/virtualenv.py#L14>
     pub fn is_virtualenv(&self) -> bool {
+        // Maybe this should return `false` if it's a target?
         self.prefix != self.base_prefix
+    }
+
+    /// Returns `true` if the environment is a `--target` environment.
+    pub fn is_target(&self) -> bool {
+        self.target.is_some()
     }
 
     /// Returns `Some` if the environment is externally managed, optionally including an error
@@ -145,6 +154,11 @@ impl Interpreter {
     pub fn is_externally_managed(&self) -> Option<ExternallyManaged> {
         // Per the spec, a virtual environment is never externally managed.
         if self.is_virtualenv() {
+            return None;
+        }
+
+        // If we're installing into a target directory, it's never externally managed.
+        if self.is_target() {
             return None;
         }
 
@@ -314,7 +328,9 @@ impl Interpreter {
                 platlib: self.platlib().to_path_buf(),
                 scripts: self.scripts().to_path_buf(),
                 data: self.data().to_path_buf(),
-                include: if self.is_virtualenv() {
+                include: if self.is_target() {
+                    self.include().to_path_buf()
+                } else if self.is_virtualenv() {
                     // If the interpreter is a venv, then the `include` directory has a different structure.
                     // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/locations/_sysconfig.py#L172
                     self.prefix.join("include").join("site").join(format!(
@@ -326,6 +342,21 @@ impl Interpreter {
                     self.include().to_path_buf()
                 },
             },
+        }
+    }
+
+    #[must_use]
+    pub fn with_target(self, target: &Path) -> Self {
+        Self {
+            scheme: Scheme {
+                purelib: target.to_path_buf(),
+                platlib: target.to_path_buf(),
+                scripts: target.join("bin"),
+                data: target.to_path_buf(),
+                include: target.join("include"),
+            },
+            target: Some(target.to_path_buf()),
+            ..self
         }
     }
 

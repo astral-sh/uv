@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::Write;
+use std::path::Path;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
@@ -112,6 +113,8 @@ pub(crate) async fn pip_sync(
         venv.interpreter().python_version(),
         venv.python_executable().user_display().cyan()
     );
+
+    let venv = venv.with_target(Path::new("/Users/crmarsh/workspace/uv/foo"));
 
     // If the environment is externally managed, abort.
     if let Some(externally_managed) = venv.interpreter().is_externally_managed() {
