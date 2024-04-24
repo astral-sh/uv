@@ -3,6 +3,7 @@ use std::sync::Arc;
 use url::Url;
 
 use distribution_types::BuildableSource;
+use pep508_rs::PackageName;
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a source distribution build is kicked off.
@@ -16,6 +17,16 @@ pub trait Reporter: Send + Sync {
 
     /// Callback to invoke when a repository checkout completes.
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
+
+    /// Callback to invoke when a download is kicked off.
+    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize;
+
+    /// Callback to invoke when a download makes progress (i.e. some number of bytes are
+    /// downloaded).
+    fn on_download_progress(&self, index: usize, inc: u64);
+
+    /// Callback to invoke when a download is complete.
+    fn on_download_complete(&self, name: &PackageName, index: usize);
 }
 
 /// A facade for converting from [`Reporter`] to [`uv_git::Reporter`].

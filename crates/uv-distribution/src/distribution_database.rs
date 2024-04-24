@@ -1,12 +1,14 @@
 use std::future::Future;
 use std::io;
 use std::path::Path;
+use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
 use tempfile::TempDir;
-use tokio::io::AsyncSeekExt;
+use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{info_span, instrument, warn, Instrument};
@@ -49,6 +51,7 @@ pub struct DistributionDatabase<'a, Context: BuildContext> {
     builder: SourceDistributionBuilder<'a, Context>,
     locks: Rc<Locks>,
     client: ManagedClient<'a>,
+    reporter: Option<Arc<dyn Reporter>>,
 }
 
 impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
@@ -62,6 +65,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             builder: SourceDistributionBuilder::new(build_context),
             locks: Rc::new(Locks::default()),
             client: ManagedClient::new(client, concurrent_downloads),
+            reporter: None,
         }
     }
 
@@ -70,6 +74,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
         let reporter = Arc::new(reporter);
         Self {
+            reporter: Some(reporter.clone()),
             builder: self.builder.with_reporter(reporter),
             ..self
         }
@@ -168,6 +173,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             NoBinary::All => true,
             NoBinary::Packages(packages) => packages.contains(dist.name()),
         };
+
         if no_binary {
             return Err(Error::NoBinary);
         }
@@ -188,6 +194,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             WheelCache::Index(&wheel.index).wheel_dir(wheel.name().as_ref()),
                             wheel.filename.stem(),
                         );
+
                         return self
                             .load_wheel(path, &wheel.filename, cache_entry, dist, hashes)
                             .await;
@@ -203,7 +210,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Download and unzip.
                 match self
-                    .stream_wheel(url.clone(), &wheel.filename, &wheel_entry, dist, hashes)
+                    .stream_wheel(
+                        url.clone(),
+                        &wheel.filename,
+                        wheel.file.size,
+                        &wheel_entry,
+                        dist,
+                        hashes,
+                    )
                     .await
                 {
                     Ok(archive) => Ok(LocalWheel {
@@ -222,6 +236,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let archive = self
                             .download_wheel(url, &wheel.filename, &wheel_entry, dist, hashes)
                             .await?;
+
                         Ok(LocalWheel {
                             dist: Dist::Built(dist.clone()),
                             archive: self.build_context.cache().archive(&archive.id),
@@ -246,6 +261,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .stream_wheel(
                         wheel.url.raw().clone(),
                         &wheel.filename,
+                        None,
                         &wheel_entry,
                         dist,
                         hashes,
@@ -427,12 +443,33 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         url: Url,
         filename: &WheelFilename,
+        size: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<Archive, Error> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
+
+        let mut progress_index = None;
+
+        // Fetch the archive from the cache, or download it if necessary.
+        let req = self.request(url.clone())?;
+
+        if let Some(ref reporter) = self.reporter {
+            // get the size from the content-length header if not provided by the registry
+            let size = match size {
+                Some(size) => Some(size),
+                None => req
+                    .headers()
+                    .get(reqwest::header::CONTENT_LENGTH)
+                    .and_then(|val| val.to_str().ok())
+                    .and_then(|val| val.parse::<usize>().ok())
+                    .map(|len| len as u64),
+            };
+
+            progress_index = Some(reporter.on_download_start(dist.name(), size));
+        }
 
         let download = |response: reqwest::Response| {
             async {
@@ -449,7 +486,17 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Download and unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
-                uv_extract::stream::unzip(&mut hasher, temp_dir.path()).await?;
+
+                match self.reporter {
+                    Some(ref reporter) => {
+                        let mut reader =
+                            ProgressReader::new(&mut hasher, progress_index.unwrap(), &**reporter);
+                        uv_extract::stream::unzip(&mut reader, temp_dir.path()).await?;
+                    }
+                    None => {
+                        uv_extract::stream::unzip(&mut hasher, temp_dir.path()).await?;
+                    }
+                }
 
                 // If necessary, exhaust the reader to compute the hash.
                 if !hashes.is_none() {
@@ -514,6 +561,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 })
                 .await?
         };
+
+        if let Some(ref reporter) = self.reporter {
+            reporter.on_download_complete(dist.name(), progress_index.unwrap());
+        }
 
         Ok(archive)
     }
@@ -810,6 +861,42 @@ impl<'a> ManagedClient<'a> {
     {
         let _permit = self.control.acquire().await.unwrap();
         f(self.unmanaged).await
+    }
+}
+
+/// An asynchronous reader that reports progress as bytes are read.
+struct ProgressReader<'a, R> {
+    reader: R,
+    index: usize,
+    reporter: &'a dyn Reporter,
+}
+
+impl<'a, R> ProgressReader<'a, R> {
+    /// Create a new [`ProgressReader`] that wraps another reader.
+    fn new(reader: R, index: usize, reporter: &'a dyn Reporter) -> Self {
+        Self {
+            index,
+            reader,
+            reporter,
+        }
+    }
+}
+
+impl<R> AsyncRead for ProgressReader<'_, R>
+where
+    R: AsyncRead + Unpin,
+{
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.as_mut().reader)
+            .poll_read(cx, buf)
+            .map_ok(|_| {
+                self.reporter
+                    .on_download_progress(self.index, buf.filled().len() as u64);
+            })
     }
 }
 

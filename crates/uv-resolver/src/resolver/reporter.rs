@@ -48,4 +48,16 @@ impl uv_distribution::Reporter for Facade {
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
         self.reporter.on_checkout_complete(url, rev, index);
     }
+
+    fn on_download_start(&self, _name: &PackageName, _size: Option<u64>) -> usize {
+        unreachable!()
+    }
+
+    fn on_download_progress(&self, _index: usize, _inc: u64) {
+        unreachable!()
+    }
+
+    fn on_download_complete(&self, _name: &PackageName, _index: usize) {
+        unreachable!()
+    }
 }

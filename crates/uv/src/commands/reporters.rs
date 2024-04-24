@@ -27,7 +27,9 @@ impl From<Printer> for DownloadReporter {
 
         let progress = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
         progress.set_style(
-            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
+            ProgressStyle::with_template(":: Downloading dependencies... ({pos}/{len})")
+                .unwrap()
+                .progress_chars("##-"),
         );
         progress.set_message("Fetching packages...");
 
@@ -94,6 +96,43 @@ impl uv_installer::DownloadReporter for DownloadReporter {
 
     fn on_editable_build_complete(&self, dist: &LocalEditable, id: usize) {
         self.on_any_build_complete(&dist.to_color_string(), id);
+    }
+
+    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
+        let progress = self.multi_progress.insert_after(
+            &self.progress,
+            ProgressBar::with_draw_target(size, self.printer.target()),
+        );
+
+        match size {
+            Some(_) => {
+                progress.set_style(
+                    ProgressStyle::with_template(
+                        "{wide_msg:.dim} {decimal_bytes}/{decimal_total_bytes} [{bar:30}]",
+                    )
+                    .unwrap()
+                    .progress_chars("##-"),
+                );
+                progress.set_message(format!("{}", name));
+            }
+            None => {
+                progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
+                progress.set_message(format!("{} {}...", "Downloading".bold().cyan(), name));
+                progress.finish();
+            }
+        }
+
+        let mut bars = self.bars.lock().unwrap();
+        bars.push(progress);
+        bars.len() - 1
+    }
+
+    fn on_download_progress(&self, index: usize, bytes: u64) {
+        self.bars.lock().unwrap()[index].inc(bytes);
+    }
+
+    fn on_download_complete(&self, _name: &PackageName, index: usize) {
+        self.bars.lock().unwrap()[index].finish_and_clear();
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
@@ -316,6 +355,18 @@ impl uv_distribution::Reporter for ResolverReporter {
 
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
         self.on_checkout_complete(url, rev, index);
+    }
+
+    fn on_download_start(&self, _name: &PackageName, _size: Option<u64>) -> usize {
+        unreachable!()
+    }
+
+    fn on_download_progress(&self, _index: usize, _inc: u64) {
+        unreachable!()
+    }
+
+    fn on_download_complete(&self, _name: &PackageName, _index: usize) {
+        unreachable!()
     }
 }
 
