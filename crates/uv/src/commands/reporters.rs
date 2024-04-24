@@ -14,46 +14,17 @@ use uv_normalize::PackageName;
 use crate::printer::Printer;
 
 #[derive(Debug)]
-pub(crate) struct DownloadReporter {
+struct ProgressReporter {
     printer: Printer,
+    root: ProgressBar,
     multi_progress: MultiProgress,
-    progress: ProgressBar,
     bars: Arc<Mutex<Vec<ProgressBar>>>,
 }
 
-impl From<Printer> for DownloadReporter {
-    fn from(printer: Printer) -> Self {
-        let multi_progress = MultiProgress::with_draw_target(printer.target());
-
-        let progress = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
-        progress.set_style(
-            ProgressStyle::with_template(":: Downloading dependencies... ({pos}/{len})")
-                .unwrap()
-                .progress_chars("##-"),
-        );
-        progress.set_message("Fetching packages...");
-
-        Self {
-            printer,
-            multi_progress,
-            progress,
-            bars: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
-}
-
-impl DownloadReporter {
-    #[must_use]
-    pub(crate) fn with_length(self, length: u64) -> Self {
-        self.progress.set_length(length);
-        self
-    }
-}
-
-impl DownloadReporter {
+impl ProgressReporter {
     fn on_any_build_start(&self, color_string: &str) -> usize {
         let progress = self.multi_progress.insert_before(
-            &self.progress,
+            &self.root,
             ProgressBar::with_draw_target(None, self.printer.target()),
         );
 
@@ -70,41 +41,14 @@ impl DownloadReporter {
         let progress = &bars[id];
         progress.finish_with_message(format!("   {} {}", "Built".bold().green(), color_string));
     }
-}
-
-impl uv_installer::DownloadReporter for DownloadReporter {
-    fn on_progress(&self, dist: &CachedDist) {
-        self.progress.set_message(format!("{dist}"));
-        self.progress.inc(1);
-    }
-
-    fn on_complete(&self) {
-        self.progress.finish_and_clear();
-    }
-
-    fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.on_any_build_start(&source.to_color_string())
-    }
-
-    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
-        self.on_any_build_complete(&source.to_color_string(), index);
-    }
-
-    fn on_editable_build_start(&self, dist: &LocalEditable) -> usize {
-        self.on_any_build_start(&dist.to_color_string())
-    }
-
-    fn on_editable_build_complete(&self, dist: &LocalEditable, id: usize) {
-        self.on_any_build_complete(&dist.to_color_string(), id);
-    }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
         let progress = self.multi_progress.insert_after(
-            &self.progress,
+            &self.root,
             ProgressBar::with_draw_target(size, self.printer.target()),
         );
 
-        if size.is_none() {
+        if size.is_some() {
             progress.set_style(
                 ProgressStyle::with_template(
                     "{wide_msg:.dim} {decimal_bytes}/{decimal_total_bytes} [{bar:30}]",
@@ -134,7 +78,7 @@ impl uv_installer::DownloadReporter for DownloadReporter {
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
         let progress = self.multi_progress.insert_before(
-            &self.progress,
+            &self.root,
             ProgressBar::with_draw_target(None, self.printer.target()),
         );
 
@@ -161,6 +105,205 @@ impl uv_installer::DownloadReporter for DownloadReporter {
             url,
             rev.dimmed()
         ));
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct DownloadReporter {
+    reporter: ProgressReporter,
+}
+
+impl From<Printer> for DownloadReporter {
+    fn from(printer: Printer) -> Self {
+        let multi_progress = MultiProgress::with_draw_target(printer.target());
+
+        let progress = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
+        progress.set_style(
+            ProgressStyle::with_template(":: Downloading dependencies... ({pos}/{len})")
+                .unwrap()
+                .progress_chars("##-"),
+        );
+        progress.set_message("Fetching packages...");
+
+        let reporter = ProgressReporter {
+            printer,
+            multi_progress,
+            root: progress,
+            bars: Arc::new(Mutex::new(Vec::new())),
+        };
+
+        Self { reporter }
+    }
+}
+
+impl DownloadReporter {
+    #[must_use]
+    pub(crate) fn with_length(self, length: u64) -> Self {
+        self.reporter.root.set_length(length);
+        self
+    }
+}
+
+impl uv_installer::DownloadReporter for DownloadReporter {
+    fn on_progress(&self, dist: &CachedDist) {
+        self.reporter.root.set_message(format!("{dist}"));
+        self.reporter.root.inc(1);
+    }
+
+    fn on_complete(&self) {
+        self.reporter.root.finish_and_clear();
+    }
+
+    fn on_build_start(&self, source: &BuildableSource) -> usize {
+        self.reporter.on_any_build_start(&source.to_color_string())
+    }
+
+    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
+        self.reporter
+            .on_any_build_complete(&source.to_color_string(), index);
+    }
+
+    fn on_editable_build_start(&self, dist: &LocalEditable) -> usize {
+        self.reporter.on_any_build_start(&dist.to_color_string())
+    }
+
+    fn on_editable_build_complete(&self, dist: &LocalEditable, id: usize) {
+        self.reporter
+            .on_any_build_complete(&dist.to_color_string(), id);
+    }
+
+    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
+        self.reporter.on_download_start(name, size)
+    }
+
+    fn on_download_progress(&self, index: usize, bytes: u64) {
+        self.reporter.on_download_progress(index, bytes)
+    }
+
+    fn on_download_complete(&self, name: &PackageName, index: usize) {
+        self.reporter.on_download_complete(name, index)
+    }
+
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+        self.reporter.on_checkout_start(url, rev)
+    }
+
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+        self.reporter.on_checkout_complete(url, rev, index)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ResolverReporter {
+    reporter: ProgressReporter,
+}
+
+impl ResolverReporter {
+    #[must_use]
+    pub(crate) fn with_length(self, length: u64) -> Self {
+        self.reporter.root.set_length(length);
+        self
+    }
+}
+
+impl From<Printer> for ResolverReporter {
+    fn from(printer: Printer) -> Self {
+        let multi_progress = MultiProgress::with_draw_target(printer.target());
+
+        let root = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
+        root.enable_steady_tick(Duration::from_millis(200));
+        root.set_style(
+            ProgressStyle::with_template("{spinner:.white} {wide_msg:.dim}")
+                .unwrap()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+        );
+        root.set_message("Resolving dependencies...");
+
+        let reporter = ProgressReporter {
+            root,
+            printer,
+            multi_progress,
+            bars: Arc::new(Mutex::new(Vec::new())),
+        };
+
+        ResolverReporter { reporter }
+    }
+}
+
+impl uv_resolver::ResolverReporter for ResolverReporter {
+    fn on_progress(&self, name: &PackageName, version_or_url: &VersionOrUrlRef) {
+        match version_or_url {
+            VersionOrUrlRef::Version(version) => {
+                self.reporter.root.set_message(format!("{name}=={version}"));
+            }
+            VersionOrUrlRef::Url(url) => {
+                self.reporter.root.set_message(format!("{name} @ {url}"));
+            }
+        }
+    }
+
+    fn on_complete(&self) {
+        self.reporter.root.finish_and_clear();
+    }
+
+    fn on_build_start(&self, source: &BuildableSource) -> usize {
+        self.reporter.on_any_build_start(&source.to_color_string())
+    }
+
+    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
+        self.reporter
+            .on_any_build_complete(&source.to_color_string(), index);
+    }
+
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+        self.reporter.on_checkout_start(url, rev)
+    }
+
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+        self.reporter.on_checkout_complete(url, rev, index);
+    }
+
+    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
+        self.reporter.on_download_start(name, size)
+    }
+
+    fn on_download_progress(&self, index: usize, bytes: u64) {
+        self.reporter.on_download_progress(index, bytes)
+    }
+
+    fn on_download_complete(&self, name: &PackageName, index: usize) {
+        self.reporter.on_download_complete(name, index)
+    }
+}
+
+impl uv_distribution::Reporter for ResolverReporter {
+    fn on_build_start(&self, source: &BuildableSource) -> usize {
+        self.reporter.on_any_build_start(&source.to_color_string())
+    }
+
+    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
+        self.reporter
+            .on_any_build_complete(&source.to_color_string(), index);
+    }
+
+    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
+        self.reporter.on_download_start(name, size)
+    }
+
+    fn on_download_progress(&self, index: usize, bytes: u64) {
+        self.reporter.on_download_progress(index, bytes)
+    }
+
+    fn on_download_complete(&self, name: &PackageName, bytes: usize) {
+        self.reporter.on_download_complete(name, bytes)
+    }
+
+    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+        self.reporter.on_checkout_start(url, rev)
+    }
+
+    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+        self.reporter.on_checkout_complete(url, rev, index)
     }
 }
 
@@ -196,174 +339,6 @@ impl uv_installer::InstallReporter for InstallReporter {
 
     fn on_install_complete(&self) {
         self.progress.finish_and_clear();
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct ResolverReporter {
-    printer: Printer,
-    multi_progress: MultiProgress,
-    progress: ProgressBar,
-    bars: Arc<Mutex<Vec<ProgressBar>>>,
-}
-
-impl From<Printer> for ResolverReporter {
-    fn from(printer: Printer) -> Self {
-        let multi_progress = MultiProgress::with_draw_target(printer.target());
-
-        let progress = multi_progress.add(ProgressBar::with_draw_target(None, printer.target()));
-        progress.enable_steady_tick(Duration::from_millis(200));
-        progress.set_style(
-            ProgressStyle::with_template("{spinner:.white} {wide_msg:.dim}")
-                .unwrap()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
-        );
-        progress.set_message("Resolving dependencies...");
-
-        Self {
-            printer,
-            multi_progress,
-            progress,
-            bars: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
-}
-
-impl ResolverReporter {
-    #[must_use]
-    pub(crate) fn with_length(self, length: u64) -> Self {
-        self.progress.set_length(length);
-        self
-    }
-
-    fn on_progress(&self, name: &PackageName, version_or_url: &VersionOrUrlRef) {
-        match version_or_url {
-            VersionOrUrlRef::Version(version) => {
-                self.progress.set_message(format!("{name}=={version}"));
-            }
-            VersionOrUrlRef::Url(url) => {
-                self.progress.set_message(format!("{name} @ {url}"));
-            }
-        }
-    }
-
-    fn on_complete(&self) {
-        self.progress.finish_and_clear();
-    }
-
-    fn on_build_start(&self, source: &BuildableSource) -> usize {
-        let progress = self.multi_progress.insert_before(
-            &self.progress,
-            ProgressBar::with_draw_target(None, self.printer.target()),
-        );
-
-        progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!(
-            "{} {}",
-            "Building".bold().cyan(),
-            source.to_color_string(),
-        ));
-
-        let mut bars = self.bars.lock().unwrap();
-        bars.push(progress);
-        bars.len() - 1
-    }
-
-    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
-        let bars = self.bars.lock().unwrap();
-        let progress = &bars[index];
-        progress.finish_with_message(format!(
-            "   {} {}",
-            "Built".bold().green(),
-            source.to_color_string(),
-        ));
-    }
-
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
-        let progress = self.multi_progress.insert_before(
-            &self.progress,
-            ProgressBar::with_draw_target(None, self.printer.target()),
-        );
-
-        progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!(
-            "{} {} ({})",
-            "Updating".bold().cyan(),
-            url,
-            rev.dimmed()
-        ));
-        progress.finish();
-
-        let mut bars = self.bars.lock().unwrap();
-        bars.push(progress);
-        bars.len() - 1
-    }
-
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
-        let bars = self.bars.lock().unwrap();
-        let progress = &bars[index];
-        progress.finish_with_message(format!(
-            " {} {} ({})",
-            "Updated".bold().green(),
-            url,
-            rev.dimmed()
-        ));
-    }
-}
-
-impl uv_resolver::ResolverReporter for ResolverReporter {
-    fn on_progress(&self, name: &PackageName, version_or_url: &VersionOrUrlRef) {
-        self.on_progress(name, version_or_url);
-    }
-
-    fn on_complete(&self) {
-        self.on_complete();
-    }
-
-    fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.on_build_start(source)
-    }
-
-    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
-        self.on_build_complete(source, index);
-    }
-
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
-        self.on_checkout_start(url, rev)
-    }
-
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
-        self.on_checkout_complete(url, rev, index);
-    }
-}
-
-impl uv_distribution::Reporter for ResolverReporter {
-    fn on_build_start(&self, source: &BuildableSource) -> usize {
-        self.on_build_start(source)
-    }
-
-    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
-        self.on_build_complete(source, index);
-    }
-
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
-        self.on_checkout_start(url, rev)
-    }
-
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
-        self.on_checkout_complete(url, rev, index);
-    }
-
-    fn on_download_start(&self, _name: &PackageName, _size: Option<u64>) -> usize {
-        unreachable!()
-    }
-
-    fn on_download_progress(&self, _index: usize, _inc: u64) {
-        unreachable!()
-    }
-
-    fn on_download_complete(&self, _name: &PackageName, _index: usize) {
-        unreachable!()
     }
 }
 

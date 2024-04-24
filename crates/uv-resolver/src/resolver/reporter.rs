@@ -20,6 +20,16 @@ pub trait Reporter: Send + Sync {
     /// Callback to invoke when a source distribution build is complete.
     fn on_build_complete(&self, source: &BuildableSource, id: usize);
 
+    /// Callback to invoke when a download is kicked off.
+    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize;
+
+    /// Callback to invoke when a download makes progress (i.e. some number of bytes are
+    /// downloaded).
+    fn on_download_progress(&self, index: usize, bytes: u64);
+
+    /// Callback to invoke when a download is complete.
+    fn on_download_complete(&self, name: &PackageName, index: usize);
+
     /// Callback to invoke when a repository checkout begins.
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
 
@@ -49,15 +59,15 @@ impl uv_distribution::Reporter for Facade {
         self.reporter.on_checkout_complete(url, rev, index);
     }
 
-    fn on_download_start(&self, _name: &PackageName, _size: Option<u64>) -> usize {
-        unreachable!()
+    fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
+        self.reporter.on_download_start(name, size)
     }
 
-    fn on_download_progress(&self, _index: usize, _inc: u64) {
-        unreachable!()
+    fn on_download_progress(&self, index: usize, bytes: u64) {
+        self.reporter.on_download_progress(index, bytes)
     }
 
-    fn on_download_complete(&self, _name: &PackageName, _index: usize) {
-        unreachable!()
+    fn on_download_complete(&self, name: &PackageName, index: usize) {
+        self.reporter.on_download_complete(name, index)
     }
 }
