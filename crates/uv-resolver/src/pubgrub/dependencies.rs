@@ -50,10 +50,10 @@ impl PubGrubDependencies {
                     .into_iter()
                     .map(|extra| to_pubgrub(requirement, Some(extra), urls, locals)),
             ) {
-                let (mut package, version) = result?;
+                let (package, version) = result?;
 
                 // Detect self-dependencies.
-                if let PubGrubPackage::Package(name, extra, ..) = &mut package {
+                if let PubGrubPackage::Package(name, extra, ..) = &package {
                     if source_name.is_some_and(|source_name| source_name == name) {
                         // Allow, e.g., `black` to depend on `black[colorama]`.
                         if source_extra == extra.as_ref() {
@@ -76,29 +76,21 @@ impl PubGrubDependencies {
                         continue;
                     }
 
-                    // Add the package, plus any extra variants.
-                    for result in std::iter::once(to_pubgrub(constraint, None, urls, locals)).chain(
-                        constraint
-                            .extras
-                            .clone()
-                            .into_iter()
-                            .map(|extra| to_pubgrub(constraint, Some(extra), urls, locals)),
-                    ) {
-                        let (mut package, version) = result?;
+                    // Add the package.
+                    let (package, version) = to_pubgrub(constraint, None, urls, locals)?;
 
-                        // Detect self-dependencies.
-                        if let PubGrubPackage::Package(name, extra, ..) = &mut package {
-                            if source_name.is_some_and(|source_name| source_name == name) {
-                                // Allow, e.g., `black` to depend on `black[colorama]`.
-                                if source_extra == extra.as_ref() {
-                                    warn!("{name} has a dependency on itself");
-                                    continue;
-                                }
+                    // Detect self-dependencies.
+                    if let PubGrubPackage::Package(name, extra, ..) = &package {
+                        if source_name.is_some_and(|source_name| source_name == name) {
+                            // Allow, e.g., `black` to depend on `black[colorama]`.
+                            if source_extra == extra.as_ref() {
+                                warn!("{name} has a dependency on itself");
+                                continue;
                             }
                         }
-
-                        dependencies.push((package.clone(), version.clone()));
                     }
+
+                    dependencies.push((package.clone(), version.clone()));
                 }
             }
         }
