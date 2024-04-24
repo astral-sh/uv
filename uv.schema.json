@@ -592,7 +592,7 @@
           ]
         },
         {
-          "description": "An x86 Linux target.",
+          "description": "An x86 Linux target. Equivalent to `x86_64-manylinux_2_17`.",
           "type": "string",
           "enum": [
             "x8664-unknown-linux-gnu"
@@ -613,7 +613,7 @@
           ]
         },
         {
-          "description": "An ARM64 Linux target.",
+          "description": "An ARM64 Linux target. Equivalent to `aarch64-manylinux_2_17`.",
           "type": "string",
           "enum": [
             "aarch64-unknown-linux-gnu"
@@ -631,6 +631,34 @@
           "type": "string",
           "enum": [
             "x8664-unknown-linux-musl"
+          ]
+        },
+        {
+          "description": "An x86_64 target for the `manylinux_2_17` platform.",
+          "type": "string",
+          "enum": [
+            "x8664-manylinux217"
+          ]
+        },
+        {
+          "description": "An x86_64 target for the `manylinux_2_28` platform.",
+          "type": "string",
+          "enum": [
+            "x8664-manylinux228"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux_2_17` platform.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux217"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux_2_28` platform.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux228"
           ]
         }
       ]
