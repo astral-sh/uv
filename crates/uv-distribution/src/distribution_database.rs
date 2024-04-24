@@ -443,7 +443,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         url: Url,
         filename: &WheelFilename,
-        size: Option<u64>,
+        mut size: Option<u64>,
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
@@ -451,28 +451,26 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.stem()));
 
-        let mut progress_index = None;
-
         // Fetch the archive from the cache, or download it if necessary.
         let req = self.request(url.clone())?;
 
-        if let Some(ref reporter) = self.reporter {
-            // get the size from the content-length header if not provided by the registry
-            let size = match size {
-                Some(size) => Some(size),
-                None => req
-                    .headers()
-                    .get(reqwest::header::CONTENT_LENGTH)
-                    .and_then(|val| val.to_str().ok())
-                    .and_then(|val| val.parse::<usize>().ok())
-                    .map(|len| len as u64),
-            };
-
-            progress_index = Some(reporter.on_download_start(dist.name(), size));
+        // get the size from the content-length header if not provided by the registry
+        if size.is_none() {
+            size = req
+                .headers()
+                .get(reqwest::header::CONTENT_LENGTH)
+                .and_then(|val| val.to_str().ok())
+                .and_then(|val| val.parse::<usize>().ok())
+                .map(|len| len as u64);
         }
 
         let download = |response: reqwest::Response| {
             async {
+                let index = self
+                    .reporter
+                    .as_ref()
+                    .map(|reporter| reporter.on_download_start(dist.name(), size));
+
                 let reader = response
                     .bytes_stream()
                     .map_err(|err| self.handle_response_errors(err))
@@ -490,7 +488,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 match self.reporter {
                     Some(ref reporter) => {
                         let mut reader =
-                            ProgressReader::new(&mut hasher, progress_index.unwrap(), &**reporter);
+                            ProgressReader::new(&mut hasher, index.unwrap(), &**reporter);
                         uv_extract::stream::unzip(&mut reader, temp_dir.path()).await?;
                     }
                     None => {
@@ -510,6 +508,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .persist(temp_dir.into_path(), wheel_entry.path())
                     .await
                     .map_err(Error::CacheRead)?;
+
+                if let Some(ref reporter) = self.reporter {
+                    reporter.on_download_complete(dist.name(), index.unwrap());
+                }
 
                 Ok(Archive::new(
                     id,
@@ -561,10 +563,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 })
                 .await?
         };
-
-        if let Some(ref reporter) = self.reporter {
-            reporter.on_download_complete(dist.name(), progress_index.unwrap());
-        }
 
         Ok(archive)
     }
