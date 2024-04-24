@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use pubgrub::range::Range;
+use rustc_hash::FxHashSet;
 use tracing::warn;
 
 use distribution_types::Verbatim;
@@ -30,70 +31,20 @@ impl PubGrubDependencies {
         env: &MarkerEnvironment,
     ) -> Result<Self, ResolveError> {
         let mut dependencies = Vec::default();
+        let mut seen = FxHashSet::default();
 
-        // Iterate over all declared requirements.
-        for requirement in overrides.apply(requirements) {
-            // If the requirement isn't relevant for the current platform, skip it.
-            if let Some(extra) = source_extra {
-                if !requirement.evaluate_markers(env, std::slice::from_ref(extra)) {
-                    continue;
-                }
-            } else if !requirement.evaluate_markers(env, &[]) {
-                continue;
-            }
-
-            // Add the package, plus any extra variants.
-            for result in std::iter::once(to_pubgrub(requirement, None, urls, locals)).chain(
-                requirement
-                    .extras
-                    .clone()
-                    .into_iter()
-                    .map(|extra| to_pubgrub(requirement, Some(extra), urls, locals)),
-            ) {
-                let (package, version) = result?;
-
-                // Detect self-dependencies.
-                if let PubGrubPackage::Package(name, extra, ..) = &package {
-                    if source_name.is_some_and(|source_name| source_name == name) {
-                        // Allow, e.g., `black` to depend on `black[colorama]`.
-                        if source_extra == extra.as_ref() {
-                            warn!("{name} has a dependency on itself");
-                            continue;
-                        }
-                    }
-                }
-
-                dependencies.push((package.clone(), version.clone()));
-
-                // If the requirement was constrained, add those constraints.
-                for constraint in constraints.get(&requirement.name).into_iter().flatten() {
-                    // If the requirement isn't relevant for the current platform, skip it.
-                    if let Some(extra) = source_extra {
-                        if !constraint.evaluate_markers(env, std::slice::from_ref(extra)) {
-                            continue;
-                        }
-                    } else if !constraint.evaluate_markers(env, &[]) {
-                        continue;
-                    }
-
-                    // Add the package.
-                    let (package, version) = to_pubgrub(constraint, None, urls, locals)?;
-
-                    // Detect self-dependencies.
-                    if let PubGrubPackage::Package(name, extra, ..) = &package {
-                        if source_name.is_some_and(|source_name| source_name == name) {
-                            // Allow, e.g., `black` to depend on `black[colorama]`.
-                            if source_extra == extra.as_ref() {
-                                warn!("{name} has a dependency on itself");
-                                continue;
-                            }
-                        }
-                    }
-
-                    dependencies.push((package.clone(), version.clone()));
-                }
-            }
-        }
+        add_requirements(
+            requirements,
+            constraints,
+            overrides,
+            source_name,
+            source_extra,
+            urls,
+            locals,
+            env,
+            &mut dependencies,
+            &mut seen,
+        )?;
 
         Ok(Self(dependencies))
     }
@@ -107,6 +58,117 @@ impl PubGrubDependencies {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &(PubGrubPackage, Range<Version>)> {
         self.0.iter()
     }
+}
+
+/// Add a set of requirements to a list of dependencies.
+#[allow(clippy::too_many_arguments)]
+fn add_requirements(
+    requirements: &[Requirement],
+    constraints: &Constraints,
+    overrides: &Overrides,
+    source_name: Option<&PackageName>,
+    source_extra: Option<&ExtraName>,
+    urls: &Urls,
+    locals: &Locals,
+    env: &MarkerEnvironment,
+    dependencies: &mut Vec<(PubGrubPackage, Range<Version>)>,
+    seen: &mut FxHashSet<ExtraName>,
+) -> Result<(), ResolveError> {
+    // Iterate over all declared requirements.
+    for requirement in overrides.apply(requirements) {
+        // If the requirement isn't relevant for the current platform, skip it.
+        match source_extra {
+            Some(source_extra) => {
+                if !requirement.evaluate_markers(env, std::slice::from_ref(source_extra)) {
+                    continue;
+                }
+            }
+            None => {
+                if !requirement.evaluate_markers(env, &[]) {
+                    continue;
+                }
+            }
+        }
+
+        // Add the package, plus any extra variants.
+        for result in std::iter::once(to_pubgrub(requirement, None, urls, locals)).chain(
+            requirement
+                .extras
+                .clone()
+                .into_iter()
+                .map(|extra| to_pubgrub(requirement, Some(extra), urls, locals)),
+        ) {
+            let (package, version) = result?;
+
+            match &package {
+                PubGrubPackage::Package(name, ..) => {
+                    // Detect self-dependencies.
+                    if source_name.is_some_and(|source_name| source_name == name) {
+                        warn!("{name} has a dependency on itself");
+                        continue;
+                    }
+
+                    dependencies.push((package.clone(), version.clone()));
+                }
+                PubGrubPackage::Extra(name, extra, ..) => {
+                    // Recursively add the dependencies of the current package (e.g., `black` depending on
+                    // `black[colorama]`).
+                    if source_name.is_some_and(|source_name| source_name == name) {
+                        if seen.insert(extra.clone()) {
+                            add_requirements(
+                                requirements,
+                                constraints,
+                                overrides,
+                                source_name,
+                                Some(extra),
+                                urls,
+                                locals,
+                                env,
+                                dependencies,
+                                seen,
+                            )?;
+                        }
+                    } else {
+                        dependencies.push((package.clone(), version.clone()));
+                    }
+                }
+                _ => {}
+            }
+
+            // If the requirement was constrained, add those constraints.
+            for constraint in constraints.get(&requirement.name).into_iter().flatten() {
+                // If the requirement isn't relevant for the current platform, skip it.
+                match source_extra {
+                    Some(source_extra) => {
+                        if !constraint.evaluate_markers(env, std::slice::from_ref(source_extra)) {
+                            continue;
+                        }
+                    }
+                    None => {
+                        if !constraint.evaluate_markers(env, &[]) {
+                            continue;
+                        }
+                    }
+                }
+
+                // Add the package.
+                let (package, version) = to_pubgrub(constraint, None, urls, locals)?;
+
+                // Ignore self-dependencies.
+                if let PubGrubPackage::Package(name, ..) = &package {
+                    // Detect self-dependencies.
+                    if source_name.is_some_and(|source_name| source_name == name) {
+                        warn!("{name} has a dependency on itself");
+                        continue;
+                    }
+                }
+
+                dependencies.push((package.clone(), version.clone()));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Convert a [`PubGrubDependencies`] to a [`DependencyConstraints`].
