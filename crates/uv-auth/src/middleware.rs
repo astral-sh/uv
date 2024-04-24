@@ -312,13 +312,12 @@ impl AuthMiddleware {
         );
 
         if !self.cache().fetches.register(key.clone()) {
-            let credentials = Arc::<_>::unwrap_or_clone(
-                self.cache()
-                    .fetches
-                    .wait(&key)
-                    .await
-                    .expect("The key must exist after register is called"),
-            );
+            let credentials = self
+                .cache()
+                .fetches
+                .wait(&key)
+                .await
+                .expect("The key must exist after register is called");
 
             if credentials.is_some() {
                 trace!("Using credentials from previous fetch for {url}");
