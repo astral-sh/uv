@@ -1292,7 +1292,7 @@ fn transitive_incompatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
     "###);
 
