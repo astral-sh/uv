@@ -4,12 +4,15 @@ use std::{collections::HashMap, sync::Mutex};
 use crate::credentials::{Credentials, Username};
 use crate::Realm;
 
+use once_map::OnceMap;
 use tracing::trace;
 use url::Url;
 
 pub struct CredentialsCache {
     /// A cache per realm and username
     realms: Mutex<HashMap<(Realm, Username), Arc<Credentials>>>,
+    /// A cache tracking the result of fetches from external services
+    pub(crate) fetches: OnceMap<(Realm, Username), Option<Arc<Credentials>>>,
     /// A cache per URL, uses a trie for efficient prefix queries.
     urls: Mutex<UrlTrie>,
 }
@@ -25,6 +28,7 @@ impl CredentialsCache {
     pub fn new() -> Self {
         Self {
             realms: Mutex::new(HashMap::new()),
+            fetches: OnceMap::default(),
             urls: Mutex::new(UrlTrie::new()),
         }
     }
