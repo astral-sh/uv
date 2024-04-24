@@ -232,7 +232,7 @@ impl NoSolutionError {
         mut self,
         python_requirement: &PythonRequirement,
         visited: &DashSet<PackageName>,
-        package_versions: &OnceMap<PackageName, VersionsResponse>,
+        package_versions: &OnceMap<PackageName, Arc<VersionsResponse>>,
     ) -> Self {
         let mut available_versions = IndexMap::default();
         for package in self.derivation_tree.packages() {

@@ -1046,13 +1046,15 @@ impl<
             match response? {
                 Some(Response::Package(package_name, version_map)) => {
                     trace!("Received package metadata for: {package_name}");
-                    self.index.packages.done(package_name, version_map);
+                    self.index
+                        .packages
+                        .done(package_name, Arc::new(version_map));
                 }
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
                     self.index.distributions.done(
                         dist.version_id(),
-                        MetadataResponse::Found(ArchiveMetadata::from(metadata)),
+                        Arc::new(MetadataResponse::Found(ArchiveMetadata::from(metadata))),
                     );
                 }
                 Some(Response::Dist {
@@ -1069,7 +1071,9 @@ impl<
                         }
                         _ => {}
                     }
-                    self.index.distributions.done(dist.version_id(), metadata);
+                    self.index
+                        .distributions
+                        .done(dist.version_id(), Arc::new(metadata));
                 }
                 Some(Response::Dist {
                     dist: Dist::Source(dist),
@@ -1085,7 +1089,9 @@ impl<
                         }
                         _ => {}
                     }
-                    self.index.distributions.done(dist.version_id(), metadata);
+                    self.index
+                        .distributions
+                        .done(dist.version_id(), Arc::new(metadata));
                 }
                 None => {}
             }
