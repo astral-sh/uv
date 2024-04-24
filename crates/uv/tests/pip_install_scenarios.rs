@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.14/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.15/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -46,9 +46,9 @@ fn command(context: &TestContext) -> Command {
         .arg("pip")
         .arg("install")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/packse/0.3.14/simple-html/")
+        .arg("https://astral-sh.github.io/packse/0.3.15/simple-html/")
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.14/vendor/links.html")
+        .arg("https://raw.githubusercontent.com/astral-sh/packse/0.3.15/vendor/links.html")
         .arg("--cache-dir")
         .arg(context.cache_dir.path())
         .env("VIRTUAL_ENV", context.venv.as_os_str())
@@ -1254,6 +1254,51 @@ fn transitive_incompatible_with_transitive() {
     assert_not_installed(
         &context.venv,
         "transitive_incompatible_with_transitive_b",
+        &context.temp_dir,
+    );
+}
+
+/// The user requires `a`, which requires two incompatible, existing versions of
+/// package `b`
+///
+/// ```text
+/// transitive-incompatible-versions
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a==1.0.0
+/// │       └── satisfied by a-1.0.0
+/// └── a
+///     └── a-1.0.0
+///         ├── requires b==2.0.0
+///             └── unsatisfied: no versions for package
+///         └── requires b==1.0.0
+///             └── unsatisfied: no versions for package
+/// ```
+#[test]
+fn transitive_incompatible_versions() {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"transitive-incompatible-versions-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("transitive-incompatible-versions-a==1.0.0")
+        , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
+          And because you require package-a==1.0.0, we can conclude that the requirements are unsatisfiable.
+    "###);
+
+    assert_not_installed(
+        &context.venv,
+        "transitive_incompatible_versions_a",
         &context.temp_dir,
     );
 }
