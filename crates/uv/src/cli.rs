@@ -1717,7 +1717,7 @@ pub(crate) struct RunArgs {
     ///   `python3.10` on Linux and macOS.
     /// - `python3.10` or `python.exe` looks for a binary with the given name in `PATH`.
     /// - `/home/ferris/.local/bin/python3.10` uses the exact Python at the given path.
-    #[arg(long, verbatim_doc_comment, group = "discovery")]
+    #[arg(long, short, verbatim_doc_comment, group = "discovery")]
     pub(crate) python: Option<String>,
 
     /// Run without the current workspace installed.
