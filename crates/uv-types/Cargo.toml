@@ -25,14 +25,9 @@ uv-normalize = { workspace = true }
 uv-configuration = { workspace = true }
 
 anyhow = { workspace = true }
-clap = { workspace = true, features = ["derive"], optional = true }
-itertools = { workspace = true }
 rustc-hash = { workspace = true }
-serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 url = { workspace = true }
 
 [features]
 default = []
-serde = ["dep:serde", "dep:serde_json"]
