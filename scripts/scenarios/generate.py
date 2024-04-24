@@ -39,6 +39,7 @@ import argparse
 import importlib.metadata
 import logging
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -54,6 +55,7 @@ PROJECT_ROOT = TOOL_ROOT.parent.parent
 TESTS = PROJECT_ROOT / "crates" / "uv" / "tests"
 INSTALL_TESTS = TESTS / "pip_install_scenarios.rs"
 COMPILE_TESTS = TESTS / "pip_compile_scenarios.rs"
+TESTS_COMMON_MOD_RS = TESTS / "common/mod.rs"
 
 try:
     import packse
@@ -80,6 +82,8 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
     packse_version = importlib.metadata.version("packse")
 
     debug = logging.getLogger().getEffectiveLevel() <= logging.DEBUG
+
+    update_common_mod_rs(packse_version)
 
     if not scenarios:
         if packse_version == "0.0.0":
@@ -233,6 +237,26 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             logging.info("Skipping snapshot update")
 
     logging.info("Done!")
+
+
+def update_common_mod_rs(packse_version: str):
+    """Update the value of `BUILD_VENDOR_LINKS_URL` used in non-scenario tests."""
+    test_common = TESTS_COMMON_MOD_RS.read_text()
+    url_before_version = "https://raw.githubusercontent.com/astral-sh/packse/"
+    url_after_version = "/vendor/links.html"
+    build_vendor_links_url = f"{url_before_version}{packse_version}{url_after_version}"
+    if build_vendor_links_url in test_common:
+        logging.info(f"Up-to-date: {TESTS_COMMON_MOD_RS}")
+    else:
+        logging.info(f"Updating: {TESTS_COMMON_MOD_RS}")
+        url_matcher = re.compile(
+            re.escape(url_before_version) + "[^/]+" + re.escape(url_after_version)
+        )
+        assert (
+            len(url_matcher.findall(test_common)) == 1
+        ), f"BUILD_VENDOR_LINKS_URL not found in {TESTS_COMMON_MOD_RS}"
+        test_common = url_matcher.sub(build_vendor_links_url, test_common)
+        TESTS_COMMON_MOD_RS.write_text(test_common)
 
 
 if __name__ == "__main__":
