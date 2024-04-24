@@ -1,3 +1,0 @@
-black
-mypy
-requests

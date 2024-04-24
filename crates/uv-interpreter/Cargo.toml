@@ -26,6 +26,7 @@ uv-warnings = { workspace = true }
 
 configparser = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
+itertools = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
 rmp-serde = { workspace = true }

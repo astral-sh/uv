@@ -109,6 +109,14 @@ impl Interpreter {
         }
     }
 
+    #[must_use]
+    pub fn with_target(self, target: &Path) -> Self {
+        Self {
+            target: Some(target.to_path_buf()),
+            ..self
+        }
+    }
+
     /// Returns the path to the Python virtual environment.
     #[inline]
     pub fn platform(&self) -> &Platform {
@@ -317,46 +325,44 @@ impl Interpreter {
         self.gil_disabled
     }
 
+    /// Return the `--target` directory for this interpreter, if any.
+    pub fn target(&self) -> Option<&Path> {
+        self.target.as_deref()
+    }
+
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
     pub fn layout(&self) -> Layout {
         Layout {
             python_version: self.python_tuple(),
             sys_executable: self.sys_executable().to_path_buf(),
             os_name: self.markers.os_name.clone(),
-            scheme: Scheme {
-                purelib: self.purelib().to_path_buf(),
-                platlib: self.platlib().to_path_buf(),
-                scripts: self.scripts().to_path_buf(),
-                data: self.data().to_path_buf(),
-                include: if self.is_target() {
-                    self.include().to_path_buf()
-                } else if self.is_virtualenv() {
-                    // If the interpreter is a venv, then the `include` directory has a different structure.
-                    // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/locations/_sysconfig.py#L172
-                    self.prefix.join("include").join("site").join(format!(
-                        "python{}.{}",
-                        self.python_major(),
-                        self.python_minor()
-                    ))
-                } else {
-                    self.include().to_path_buf()
-                },
+            scheme: if let Some(target) = self.target.as_deref() {
+                Scheme {
+                    purelib: target.to_path_buf(),
+                    platlib: target.to_path_buf(),
+                    scripts: target.join("bin"),
+                    data: target.to_path_buf(),
+                    include: target.join("include"),
+                }
+            } else {
+                Scheme {
+                    purelib: self.purelib().to_path_buf(),
+                    platlib: self.platlib().to_path_buf(),
+                    scripts: self.scripts().to_path_buf(),
+                    data: self.data().to_path_buf(),
+                    include: if self.is_virtualenv() {
+                        // If the interpreter is a venv, then the `include` directory has a different structure.
+                        // See: https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/locations/_sysconfig.py#L172
+                        self.prefix.join("include").join("site").join(format!(
+                            "python{}.{}",
+                            self.python_major(),
+                            self.python_minor()
+                        ))
+                    } else {
+                        self.include().to_path_buf()
+                    },
+                }
             },
-        }
-    }
-
-    #[must_use]
-    pub fn with_target(self, target: &Path) -> Self {
-        Self {
-            scheme: Scheme {
-                purelib: target.to_path_buf(),
-                platlib: target.to_path_buf(),
-                scripts: target.join("bin"),
-                data: target.to_path_buf(),
-                include: target.join("include"),
-            },
-            target: Some(target.to_path_buf()),
-            ..self
         }
     }
 
