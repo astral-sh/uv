@@ -323,13 +323,11 @@ fn compile_constraint_extra() -> Result<()> {
         # via
         #   jinja2
         #   werkzeug
-    python-dotenv==1.0.1
-        # via flask
     werkzeug==3.0.1
         # via flask
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
+    Resolved 7 packages in [TIME]
     "###
     );
 
