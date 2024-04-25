@@ -52,7 +52,7 @@ impl BatchPrefetcher {
         index: &InMemoryIndex,
         selector: &CandidateSelector,
     ) -> anyhow::Result<(), ResolveError> {
-        let PubGrubPackage::Package(package_name, None, None) = &next else {
+        let PubGrubPackage::Package(package_name, None, None, _source) = &next else {
             return Ok(());
         };
 

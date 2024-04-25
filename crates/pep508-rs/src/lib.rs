@@ -41,7 +41,7 @@ pub use marker::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
     MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringVersion,
 };
-use pep440_rs::{Version, VersionSpecifier, VersionSpecifiers};
+use pep440_rs::{TrackedFromStr, Version, VersionSpecifier, VersionSpecifiers};
 use uv_fs::normalize_url_path;
 // Parity with the crates.io version of pep508_rs
 use crate::verbatim_url::VerbatimUrlError;
@@ -222,6 +222,8 @@ pub struct Requirement {
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
     pub marker: Option<MarkerTree>,
+    /// Path of the original file (where existing)
+    pub path: Option<String>,
 }
 
 impl Display for Requirement {
@@ -266,7 +268,7 @@ impl<'de> Deserialize<'de> for Requirement {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        TrackedFromStr::tracked_from_str(&s, None, None).map_err(de::Error::custom)
     }
 }
 
@@ -562,19 +564,35 @@ impl From<UnnamedRequirement> for RequirementsTxtRequirement {
     }
 }
 
-impl FromStr for Requirement {
+impl TrackedFromStr for Requirement {
     type Err = Pep508Error;
 
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/).
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        parse_pep508_requirement(&mut Cursor::new(input), None)
+    fn tracked_from_str(
+        input: &str,
+        source: Option<&Path>,
+        working_dir: Option<&Path>,
+    ) -> Result<Self, Self::Err> {
+        parse_pep508_requirement(&mut Cursor::new(input), source, working_dir)
+    }
+}
+
+impl FromStr for Requirement {
+    type Err = Pep508Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::tracked_from_str(s, None, None)
     }
 }
 
 impl Requirement {
     /// Parse a [Dependency Specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers/).
-    pub fn parse(input: &str, working_dir: impl AsRef<Path>) -> Result<Self, Pep508Error> {
-        parse_pep508_requirement(&mut Cursor::new(input), Some(working_dir.as_ref()))
+    pub fn parse(
+        input: &str,
+        source: Option<&Path>,
+        working_dir: impl AsRef<Path>,
+    ) -> Result<Self, Pep508Error> {
+        parse_pep508_requirement(&mut Cursor::new(input), source, Some(working_dir.as_ref()))
     }
 }
 
@@ -594,12 +612,16 @@ impl UnnamedRequirement {
     }
 }
 
-impl FromStr for RequirementsTxtRequirement {
+impl TrackedFromStr for RequirementsTxtRequirement {
     type Err = Pep508Error;
 
     /// Parse a requirement as seen in a `requirements.txt` file.
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match Requirement::from_str(input) {
+    fn tracked_from_str(
+        input: &str,
+        source: Option<&Path>,
+        working_dir: Option<&Path>,
+    ) -> Result<Self, Self::Err> {
+        match Requirement::tracked_from_str(input, source, working_dir) {
             Ok(requirement) => Ok(Self::Pep508(requirement)),
             Err(err) => match err.message {
                 Pep508ErrorSource::UnsupportedRequirement(_) => {
@@ -613,9 +635,13 @@ impl FromStr for RequirementsTxtRequirement {
 
 impl RequirementsTxtRequirement {
     /// Parse a requirement as seen in a `requirements.txt` file.
-    pub fn parse(input: &str, working_dir: impl AsRef<Path>) -> Result<Self, Pep508Error> {
+    pub fn parse(
+        input: &str,
+        source: Option<&Path>,
+        working_dir: impl AsRef<Path>,
+    ) -> Result<Self, Pep508Error> {
         // Attempt to parse as a PEP 508-compliant requirement.
-        match Requirement::parse(input, &working_dir) {
+        match Requirement::parse(input, source, &working_dir) {
             Ok(requirement) => Ok(Self::Pep508(requirement)),
             Err(err) => match err.message {
                 Pep508ErrorSource::UnsupportedRequirement(_) => {
@@ -1379,6 +1405,7 @@ fn parse_version_specifier_parentheses(
 /// Parse a PEP 508-compliant [dependency specifier](https://packaging.python.org/en/latest/specifications/dependency-specifiers).
 fn parse_pep508_requirement(
     cursor: &mut Cursor,
+    source: Option<&Path>,
     working_dir: Option<&Path>,
 ) -> Result<Requirement, Pep508Error> {
     let start = cursor.pos();
@@ -1491,6 +1518,7 @@ fn parse_pep508_requirement(
         extras,
         version_or_url: requirement_kind,
         marker,
+        path: source.map(|p| p.to_string_lossy().to_string()),
     })
 }
 
@@ -1592,10 +1620,15 @@ mod tests {
         parse_markers_impl, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue,
         MarkerValueString, MarkerValueVersion,
     };
-    use crate::{Cursor, Pep508Error, Requirement, UnnamedRequirement, VerbatimUrl, VersionOrUrl};
+    use crate::{
+        parse_pep508_requirement, Cursor, Pep508Error, Requirement, TrackedFromStr,
+        UnnamedRequirement, VerbatimUrl, VersionOrUrl,
+    };
 
     fn parse_pepe508_err(input: &str) -> String {
-        Requirement::from_str(input).unwrap_err().to_string()
+        parse_pep508_requirement(&mut Cursor::new(&input), None, None)
+            .unwrap_err()
+            .to_string()
     }
 
     fn parse_unnamed_err(input: &str) -> String {
@@ -1656,7 +1689,7 @@ mod tests {
     #[test]
     fn basic_examples() {
         let input = r"requests[security,tests]>=2.8.1,==2.8.* ; python_version < '2.7'";
-        let requests = Requirement::from_str(input).unwrap();
+        let requests = Requirement::tracked_from_str(input, None, None).unwrap();
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
             name: PackageName::from_str("requests").unwrap(),
@@ -1685,31 +1718,32 @@ mod tests {
                 operator: MarkerOperator::LessThan,
                 r_value: MarkerValue::QuotedString("2.7".to_string()),
             })),
+            path: None,
         };
         assert_eq!(requests, expected);
     }
 
     #[test]
     fn parenthesized_single() {
-        let numpy = Requirement::from_str("numpy ( >=1.19 )").unwrap();
+        let numpy = Requirement::tracked_from_str("numpy ( >=1.19 )", None, None).unwrap();
         assert_eq!(numpy.name.as_ref(), "numpy");
     }
 
     #[test]
     fn parenthesized_double() {
-        let numpy = Requirement::from_str("numpy ( >=1.19, <2.0 )").unwrap();
+        let numpy = Requirement::tracked_from_str("numpy ( >=1.19, <2.0 )", None, None).unwrap();
         assert_eq!(numpy.name.as_ref(), "numpy");
     }
 
     #[test]
     fn versions_single() {
-        let numpy = Requirement::from_str("numpy >=1.19 ").unwrap();
+        let numpy = Requirement::tracked_from_str("numpy >=1.19 ", None, None).unwrap();
         assert_eq!(numpy.name.as_ref(), "numpy");
     }
 
     #[test]
     fn versions_double() {
-        let numpy = Requirement::from_str("numpy >=1.19, <2.0 ").unwrap();
+        let numpy = Requirement::tracked_from_str("numpy >=1.19, <2.0 ", None, None).unwrap();
         assert_eq!(numpy.name.as_ref(), "numpy");
     }
 
@@ -1825,13 +1859,13 @@ mod tests {
 
     #[test]
     fn error_extras1() {
-        let numpy = Requirement::from_str("black[d]").unwrap();
+        let numpy = Requirement::tracked_from_str("black[d]", None, None).unwrap();
         assert_eq!(numpy.extras, vec![ExtraName::from_str("d").unwrap()]);
     }
 
     #[test]
     fn error_extras2() {
-        let numpy = Requirement::from_str("black[d,jupyter]").unwrap();
+        let numpy = Requirement::tracked_from_str("black[d,jupyter]", None, None).unwrap();
         assert_eq!(
             numpy.extras,
             vec![
@@ -1843,13 +1877,13 @@ mod tests {
 
     #[test]
     fn empty_extras() {
-        let black = Requirement::from_str("black[]").unwrap();
+        let black = Requirement::tracked_from_str("black[]", None, None).unwrap();
         assert_eq!(black.extras, vec![]);
     }
 
     #[test]
     fn empty_extras_with_spaces() {
-        let black = Requirement::from_str("black[  ]").unwrap();
+        let black = Requirement::tracked_from_str("black[  ]", None, None).unwrap();
         assert_eq!(black.extras, vec![]);
     }
 
@@ -1900,7 +1934,7 @@ mod tests {
     #[test]
     fn url() {
         let pip_url =
-            Requirement::from_str("pip @ https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686")
+            Requirement::tracked_from_str("pip @ https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686", None, None)
                 .unwrap();
         let url = "https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686";
         let expected = Requirement {
@@ -1908,6 +1942,7 @@ mod tests {
             extras: vec![],
             marker: None,
             version_or_url: Some(VersionOrUrl::Url(VerbatimUrl::from_str(url).unwrap())),
+            path: None,
         };
         assert_eq!(pip_url, expected);
     }
@@ -1949,7 +1984,7 @@ mod tests {
 
     #[test]
     fn name_and_marker() {
-        Requirement::from_str(r#"numpy; sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython')"#).unwrap();
+        Requirement::tracked_from_str(r#"numpy; sys_platform == "win32" or (os_name == "linux" and implementation_name == 'cpython')"#, None, None).unwrap();
     }
 
     #[test]
@@ -2243,18 +2278,19 @@ mod tests {
 
         for requirement in requirements {
             assert_eq!(
-                Requirement::parse(requirement, &cwd).is_ok(),
+                Requirement::parse(requirement, None, &cwd).is_ok(),
                 cfg!(feature = "non-pep508-extensions"),
                 "{}: {:?}",
                 requirement,
-                Requirement::parse(requirement, &cwd)
+                Requirement::parse(requirement, None, &cwd)
             );
         }
     }
 
     #[test]
     fn no_space_after_operator() {
-        let requirement = Requirement::from_str("pytest;'4.0'>=python_version").unwrap();
+        let requirement =
+            Requirement::tracked_from_str("pytest;'4.0'>=python_version", None, None).unwrap();
         assert_eq!(requirement.to_string(), "pytest ; '4.0' >= python_version");
     }
 
@@ -2274,7 +2310,8 @@ mod tests {
 
         for requirement in requirements {
             // Extract the URL.
-            let Some(VersionOrUrl::Url(url)) = Requirement::from_str(requirement)?.version_or_url
+            let Some(VersionOrUrl::Url(url)) =
+                Requirement::tracked_from_str(requirement, None, None)?.version_or_url
             else {
                 unreachable!("Expected a URL")
             };
@@ -2293,22 +2330,33 @@ mod tests {
 
     #[test]
     fn add_extra_marker() -> Result<(), InvalidNameError> {
-        let requirement = Requirement::from_str("pytest").unwrap();
-        let expected = Requirement::from_str("pytest; extra == 'dotenv'").unwrap();
-        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
-        assert_eq!(actual, expected);
-
-        let requirement = Requirement::from_str("pytest; '4.0' >= python_version").unwrap();
+        let requirement = Requirement::tracked_from_str("pytest", None, None).unwrap();
         let expected =
-            Requirement::from_str("pytest; '4.0' >= python_version and extra == 'dotenv'").unwrap();
+            Requirement::tracked_from_str("pytest; extra == 'dotenv'", None, None).unwrap();
         let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
         assert_eq!(actual, expected);
 
         let requirement =
-            Requirement::from_str("pytest; '4.0' >= python_version or sys_platform == 'win32'")
-                .unwrap();
-        let expected = Requirement::from_str(
+            Requirement::tracked_from_str("pytest; '4.0' >= python_version", None, None).unwrap();
+        let expected = Requirement::tracked_from_str(
+            "pytest; '4.0' >= python_version and extra == 'dotenv'",
+            None,
+            None,
+        )
+        .unwrap();
+        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
+        assert_eq!(actual, expected);
+
+        let requirement = Requirement::tracked_from_str(
+            "pytest; '4.0' >= python_version or sys_platform == 'win32'",
+            None,
+            None,
+        )
+        .unwrap();
+        let expected = Requirement::tracked_from_str(
             "pytest; ('4.0' >= python_version or sys_platform == 'win32') and extra == 'dotenv'",
+            None,
+            None,
         )
         .unwrap();
         let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);

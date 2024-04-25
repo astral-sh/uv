@@ -24,9 +24,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/basic.txt",
+            ),
         },
         RequirementEntry {
             requirement: Pep508(
@@ -48,9 +54,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/basic.txt",
+            ),
         },
         RequirementEntry {
             requirement: Pep508(
@@ -72,9 +84,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/basic.txt",
+            ),
         },
         RequirementEntry {
             requirement: Pep508(
@@ -96,9 +114,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/basic.txt",
+            ),
         },
         RequirementEntry {
             requirement: Pep508(
@@ -120,9 +144,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/basic.txt",
+            ),
         },
         RequirementEntry {
             requirement: Pep508(
@@ -144,9 +174,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/basic.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/basic.txt",
+            ),
         },
     ],
     constraints: [],

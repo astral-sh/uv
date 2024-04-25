@@ -6,7 +6,7 @@ use distribution_types::Verbatim;
 use pep440_rs::Version;
 use pep508_rs::{MarkerEnvironment, Requirement, VersionOrUrl};
 use uv_configuration::{Constraints, Overrides};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, PackageName, SourceName};
 
 use crate::pubgrub::specifier::PubGrubSpecifier;
 use crate::pubgrub::PubGrubPackage;
@@ -134,7 +134,16 @@ fn to_pubgrub(
     match requirement.version_or_url.as_ref() {
         // The requirement has no specifier (e.g., `flask`).
         None => Ok((
-            PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
+            PubGrubPackage::from_package(
+                requirement.name.clone(),
+                extra,
+                requirement
+                    .path
+                    .as_ref()
+                    .map(|p| vec![SourceName::new(p.clone())])
+                    .unwrap_or_default(),
+                urls,
+            ),
             Range::full(),
         )),
 
@@ -163,7 +172,16 @@ fn to_pubgrub(
             };
 
             Ok((
-                PubGrubPackage::from_package(requirement.name.clone(), extra, urls),
+                PubGrubPackage::from_package(
+                    requirement.name.clone(),
+                    extra,
+                    requirement
+                        .path
+                        .as_ref()
+                        .map(|p| vec![SourceName::new(p.clone())])
+                        .unwrap_or_default(),
+                    urls,
+                ),
                 version,
             ))
         }
@@ -186,7 +204,16 @@ fn to_pubgrub(
             }
 
             Ok((
-                PubGrubPackage::Package(requirement.name.clone(), extra, Some(expected.clone())),
+                PubGrubPackage::Package(
+                    requirement.name.clone(),
+                    extra,
+                    Some(expected.clone()),
+                    requirement
+                        .path
+                        .as_ref()
+                        .map(|p| vec![SourceName::new(p.clone())])
+                        .unwrap_or_default(),
+                ),
                 Range::full(),
             ))
         }

@@ -24,9 +24,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/constraints-b.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/constraints-b.txt",
+            ),
         },
         RequirementEntry {
             requirement: Pep508(
@@ -48,9 +54,15 @@ RequirementsTxt {
                         ),
                     ),
                     marker: None,
+                    path: Some(
+                        "<REQUIREMENTS_DIR>/constraints-b.txt",
+                    ),
                 },
             ),
             hashes: [],
+            path: Some(
+                "<REQUIREMENTS_DIR>/constraints-b.txt",
+            ),
         },
     ],
     constraints: [],

@@ -20,7 +20,7 @@ use pep440_rs::Version;
 use pep508_rs::MarkerEnvironment;
 use pypi_types::HashDigest;
 use uv_distribution::to_precise;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, PackageName, SourceName};
 
 use crate::dependency_provider::UvDependencyProvider;
 use crate::editables::Editables;
@@ -57,6 +57,8 @@ pub struct ResolutionGraph {
     editables: Editables,
     /// Any diagnostics that were encountered while building the graph.
     diagnostics: Vec<Diagnostic>,
+    /// Source files for dependencies
+    sources: FxHashMap<PackageName, Vec<SourceName>>,
 }
 
 impl ResolutionGraph {
@@ -78,13 +80,24 @@ impl ResolutionGraph {
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
         let mut extras = FxHashMap::default();
         let mut diagnostics = Vec::new();
+        let mut sources: FxHashMap<PackageName, Vec<SourceName>> = FxHashMap::default();
+
+        let mut insert_source = |package_name: &PackageName, source_names: &Vec<SourceName>| {
+            for source_name in source_names {
+                if let Some(source_packages) = sources.get_mut(package_name) {
+                    source_packages.push(source_name.clone());
+                } else {
+                    sources.insert(package_name.clone(), vec![source_name.clone()]);
+                }
+            }
+        };
 
         // Add every package to the graph.
         let mut inverse =
             FxHashMap::with_capacity_and_hasher(selection.len(), BuildHasherDefault::default());
         for (package, version) in selection {
             match package {
-                PubGrubPackage::Package(package_name, None, None) => {
+                PubGrubPackage::Package(package_name, None, None, source) => {
                     // Create the distribution.
                     let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
                         Dist::from_editable(package_name.clone(), editable.clone())?.into()
@@ -116,8 +129,10 @@ impl ResolutionGraph {
                     // Add the distribution to the graph.
                     let index = petgraph.add_node(pinned_package);
                     inverse.insert(package_name, index);
+
+                    insert_source(package_name, source);
                 }
-                PubGrubPackage::Package(package_name, None, Some(url)) => {
+                PubGrubPackage::Package(package_name, None, Some(url), source) => {
                     // Create the distribution.
                     let pinned_package = if let Some((editable, _)) = editables.get(package_name) {
                         Dist::from_editable(package_name.clone(), editable.clone())?
@@ -147,8 +162,9 @@ impl ResolutionGraph {
                     // Add the distribution to the graph.
                     let index = petgraph.add_node(pinned_package.into());
                     inverse.insert(package_name, index);
+                    insert_source(package_name, source);
                 }
-                PubGrubPackage::Package(package_name, Some(extra), None) => {
+                PubGrubPackage::Package(package_name, Some(extra), None, _) => {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_registry(package_name, version);
 
@@ -202,7 +218,7 @@ impl ResolutionGraph {
                         }
                     }
                 }
-                PubGrubPackage::Package(package_name, Some(extra), Some(url)) => {
+                PubGrubPackage::Package(package_name, Some(extra), Some(url), _) => {
                     // Validate that the `extra` exists.
                     let dist = PubGrubDistribution::from_url(package_name, url);
 
@@ -277,10 +293,10 @@ impl ResolutionGraph {
                         continue;
                     }
 
-                    let PubGrubPackage::Package(self_package, _, _) = self_package else {
+                    let PubGrubPackage::Package(self_package, _, _, _) = self_package else {
                         continue;
                     };
-                    let PubGrubPackage::Package(dependency_package, _, _) = dependency_package
+                    let PubGrubPackage::Package(dependency_package, _, _, _) = dependency_package
                     else {
                         continue;
                     };
@@ -309,6 +325,7 @@ impl ResolutionGraph {
             extras,
             editables,
             diagnostics,
+            sources,
         })
     }
 
@@ -690,6 +707,12 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .map(|edge| &self.resolution.petgraph[edge.source()])
                     .collect::<Vec<_>>();
                 edges.sort_unstable_by_key(|package| package.name());
+                let source = self
+                    .resolution
+                    .sources
+                    .get(node.name())
+                    .map(|s| s.clone())
+                    .unwrap_or(vec![]);
 
                 match self.annotation_style {
                     AnnotationStyle::Line => {
@@ -697,7 +720,8 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let separator = if has_hashes { "\n    " } else { "  " };
                             let deps = edges
                                 .into_iter()
-                                .map(|dependency| dependency.name().to_string())
+                                .map(|dependency| format!("{}", dependency.name()))
+                                .chain(source.into_iter().map(|source| format!("-r {}", source)))
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             let comment = format!("# via {deps}").green().to_string();
@@ -705,17 +729,30 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                         }
                     }
                     AnnotationStyle::Split => match edges.as_slice() {
-                        [] => {}
-                        [edge] => {
+                        [] if source.len() == 0 => {}
+                        [] if source.len() == 1 => {
+                            let separator = "\n";
+                            let comment = format!("    # via -r {}", source.first().unwrap())
+                                .green()
+                                .to_string();
+                            annotation = Some((separator, comment));
+                        }
+                        [edge] if source.len() == 0 => {
                             let separator = "\n";
                             let comment = format!("    # via {}", edge.name()).green().to_string();
                             annotation = Some((separator, comment));
                         }
                         edges => {
                             let separator = "\n";
-                            let deps = edges
-                                .iter()
-                                .map(|dependency| format!("    #   {}", dependency.name()))
+                            let deps = source
+                                .into_iter()
+                                .map(|source| format!("-r {}", source))
+                                .chain(
+                                    edges
+                                        .iter()
+                                        .map(|dependency| format!("{}", dependency.name())),
+                                )
+                                .map(|name| format!("    #   {}", name))
                                 .collect::<Vec<_>>()
                                 .join("\n");
                             let comment = format!("    # via\n{deps}").green().to_string();

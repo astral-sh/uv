@@ -1,11 +1,11 @@
-use std::str::FromStr;
+use std::{path::Path, str::FromStr};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{de, Deserialize, Deserializer, Serialize};
 use tracing::warn;
 
-use pep440_rs::{VersionSpecifiers, VersionSpecifiersParseError};
+use pep440_rs::{TrackedFromStr, VersionSpecifiers, VersionSpecifiersParseError};
 use pep508_rs::{Pep508Error, Requirement};
 
 /// Ex) `>=7.2.0<8.0.0`
@@ -56,8 +56,13 @@ static FIXUPS: &[(&Lazy<Regex>, &str, &str)] = &[
     (&STRAY_QUOTES, r"$1$2", "removing stray quotes"),
 ];
 
-fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -> Result<T, Err> {
-    match T::from_str(input) {
+fn parse_with_fixups<Err, T: TrackedFromStr<Err = Err>>(
+    input: &str,
+    type_name: &str,
+    source: Option<&Path>,
+    working_dir: Option<&Path>,
+) -> Result<T, Err> {
+    match T::tracked_from_str(input, source, working_dir) {
         Ok(requirement) => Ok(requirement),
         Err(err) => {
             let mut patched_input = input.to_string();
@@ -67,7 +72,7 @@ fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -
                 if patched != patched_input {
                     messages.push(*message);
 
-                    if let Ok(requirement) = T::from_str(&patched) {
+                    if let Ok(requirement) = T::tracked_from_str(&patched, source, working_dir) {
                         warn!(
                             "Fixing invalid {type_name} by {} (before: `{input}`; after: `{patched}`)",
                             messages.join(", ")
@@ -88,11 +93,28 @@ fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct LenientRequirement(Requirement);
 
+impl TrackedFromStr for LenientRequirement {
+    type Err = Pep508Error;
+
+    fn tracked_from_str(
+        input: &str,
+        source: Option<&Path>,
+        working_dir: Option<&Path>,
+    ) -> Result<Self, Self::Err> {
+        Ok(Self(parse_with_fixups(
+            input,
+            "requirement",
+            source,
+            working_dir,
+        )?))
+    }
+}
+
 impl FromStr for LenientRequirement {
     type Err = Pep508Error;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_with_fixups(input, "requirement")?))
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        TrackedFromStr::tracked_from_str(s, None, None)
     }
 }
 
@@ -108,11 +130,28 @@ impl From<LenientRequirement> for Requirement {
 #[derive(Debug, Clone, Serialize, Eq, PartialEq)]
 pub struct LenientVersionSpecifiers(VersionSpecifiers);
 
+impl TrackedFromStr for LenientVersionSpecifiers {
+    type Err = VersionSpecifiersParseError;
+
+    fn tracked_from_str(
+        input: &str,
+        source: Option<&Path>,
+        working_dir: Option<&Path>,
+    ) -> Result<Self, Self::Err> {
+        Ok(Self(parse_with_fixups(
+            input,
+            "version specifier",
+            source,
+            working_dir,
+        )?))
+    }
+}
+
 impl FromStr for LenientVersionSpecifiers {
     type Err = VersionSpecifiersParseError;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_with_fixups(input, "version specifier")?))
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::tracked_from_str(s, None, None)
     }
 }
 

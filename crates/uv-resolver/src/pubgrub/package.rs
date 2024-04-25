@@ -1,7 +1,7 @@
 use derivative::Derivative;
-
 use pep508_rs::VerbatimUrl;
-use uv_normalize::{ExtraName, PackageName};
+use std::hash::Hash;
+use uv_normalize::{ExtraName, PackageName, SourceName};
 
 use crate::resolver::Urls;
 
@@ -13,7 +13,6 @@ use crate::resolver::Urls;
 ///    package (e.g., `black[colorama]`), and mark it as a dependency of the real package (e.g.,
 ///    `black`). We then discard the virtual packages at the end of the resolution process.
 #[derive(Debug, Clone, Eq, Derivative)]
-#[derivative(PartialEq, Hash)]
 pub enum PubGrubPackage {
     /// The root package, which is used to start the resolution process.
     Root(Option<PackageName>),
@@ -60,14 +59,70 @@ pub enum PubGrubPackage {
         /// version before the registry version. So we could just error if we visit a URL variant
         /// _after_ a registry variant.
         Option<VerbatimUrl>,
+        /// Names of the file sources of this package (e.g. requirements.in), or empty for dependencies
+        /// only from other libraries
+        Vec<SourceName>,
     ),
 }
 
 impl PubGrubPackage {
     /// Create a [`PubGrubPackage`] from a package name and optional extra name.
-    pub(crate) fn from_package(name: PackageName, extra: Option<ExtraName>, urls: &Urls) -> Self {
+    pub(crate) fn from_package(
+        name: PackageName,
+        extra: Option<ExtraName>,
+        source: Vec<SourceName>,
+        urls: &Urls,
+    ) -> Self {
         let url = urls.get(&name).cloned();
-        Self::Package(name, extra, url)
+        Self::Package(name, extra, url, source)
+    }
+}
+
+impl Hash for PubGrubPackage {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            PubGrubPackage::Root(name) => {
+                "Root".hash(state);
+                name.hash(state);
+            }
+            PubGrubPackage::Python(version) => {
+                "Python".hash(state);
+                version.hash(state);
+            }
+            PubGrubPackage::Package(name, extra, url, _source) => {
+                "Package".hash(state);
+                name.hash(state);
+                extra.hash(state);
+                url.hash(state);
+            }
+        }
+    }
+}
+
+impl PartialEq for PubGrubPackage {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            PubGrubPackage::Root(name) => {
+                if let PubGrubPackage::Root(other_name) = other {
+                    return other_name == name;
+                }
+                return false;
+            }
+            PubGrubPackage::Python(version) => {
+                if let PubGrubPackage::Python(other_version) = other {
+                    return other_version == version;
+                }
+                return false;
+            }
+            PubGrubPackage::Package(name, extra, url, _source) => {
+                if let PubGrubPackage::Package(other_name, other_extra, other_url, _other_source) =
+                    other
+                {
+                    return other_name == name && other_extra == extra && other_url == url;
+                }
+                return false;
+            }
+        }
     }
 }
 

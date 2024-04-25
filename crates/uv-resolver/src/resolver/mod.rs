@@ -364,7 +364,7 @@ impl<
                         .expect("a package was chosen but we don't have a term.");
 
                     let reason = {
-                        if let PubGrubPackage::Package(ref package_name, _, _) = next {
+                        if let PubGrubPackage::Package(ref package_name, _, _, _) = next {
                             // Check if the decision was due to the package being unavailable
                             self.unavailable_packages
                                 .get(package_name)
@@ -523,7 +523,7 @@ impl<
         match package {
             PubGrubPackage::Root(_) => {}
             PubGrubPackage::Python(_) => {}
-            PubGrubPackage::Package(name, _extra, None) => {
+            PubGrubPackage::Package(name, _extra, None, _) => {
                 // Verify that the package is allowed under the hash-checking policy.
                 if !self.hasher.allows_package(name) {
                     return Err(ResolveError::UnhashedPackage(name.clone()));
@@ -535,7 +535,7 @@ impl<
                     request_sink.send(Request::Package(name.clone())).await?;
                 }
             }
-            PubGrubPackage::Package(name, _extra, Some(url)) => {
+            PubGrubPackage::Package(name, _extra, Some(url), _) => {
                 // Verify that the package is allowed under the hash-checking policy.
                 if !self.hasher.allows_url(url) {
                     return Err(ResolveError::UnhashedPackage(name.clone()));
@@ -561,7 +561,7 @@ impl<
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
         for (package, range) in packages {
-            let PubGrubPackage::Package(package_name, _extra, None) = package else {
+            let PubGrubPackage::Package(package_name, _extra, None, _source) = package else {
                 continue;
             };
             request_sink
@@ -604,7 +604,7 @@ impl<
                 }
             }
 
-            PubGrubPackage::Package(package_name, extra, Some(url)) => {
+            PubGrubPackage::Package(package_name, extra, Some(url), _source) => {
                 if let Some(extra) = extra {
                     debug!(
                         "Searching for a compatible version of {package_name}[{extra}] @ {url} ({range})",
@@ -702,7 +702,7 @@ impl<
                 Ok(Some(ResolverVersion::Available(version.clone())))
             }
 
-            PubGrubPackage::Package(package_name, extra, None) => {
+            PubGrubPackage::Package(package_name, extra, None, _source) => {
                 // Wait for the metadata to be available.
                 let versions_response = self
                     .index
@@ -847,7 +847,12 @@ impl<
                 // Add a dependency on each editable.
                 for (editable, metadata) in self.editables.iter() {
                     constraints.push(
-                        PubGrubPackage::from_package(metadata.name.clone(), None, &self.urls),
+                        PubGrubPackage::from_package(
+                            metadata.name.clone(),
+                            None,
+                            vec![],
+                            &self.urls,
+                        ),
                         Range::singleton(metadata.version.clone()),
                     );
                     for extra in &editable.extras {
@@ -855,6 +860,7 @@ impl<
                             PubGrubPackage::from_package(
                                 metadata.name.clone(),
                                 Some(extra.clone()),
+                                vec![],
                                 &self.urls,
                             ),
                             Range::singleton(metadata.version.clone()),
@@ -867,7 +873,7 @@ impl<
 
             PubGrubPackage::Python(_) => Ok(Dependencies::Available(Vec::default())),
 
-            PubGrubPackage::Package(package_name, extra, url) => {
+            PubGrubPackage::Package(package_name, extra, url, _source) => {
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
                     // If an extra is provided, wait for the metadata to be available, since it's
@@ -916,7 +922,12 @@ impl<
                     // If a package has an extra, insert a constraint on the base package.
                     if extra.is_some() {
                         constraints.push(
-                            PubGrubPackage::Package(package_name.clone(), None, url.clone()),
+                            PubGrubPackage::Package(
+                                package_name.clone(),
+                                None,
+                                url.clone(),
+                                vec![],
+                            ),
                             Range::singleton(version.clone()),
                         );
                     }
@@ -1031,7 +1042,7 @@ impl<
                 // If a package has an extra, insert a constraint on the base package.
                 if extra.is_some() {
                     constraints.push(
-                        PubGrubPackage::Package(package_name.clone(), None, url.clone()),
+                        PubGrubPackage::Package(package_name.clone(), None, url.clone(), vec![]),
                         Range::singleton(version.clone()),
                     );
                 }
@@ -1245,10 +1256,10 @@ impl<
             match package {
                 PubGrubPackage::Root(_) => {}
                 PubGrubPackage::Python(_) => {}
-                PubGrubPackage::Package(package_name, _extra, Some(url)) => {
+                PubGrubPackage::Package(package_name, _extra, Some(url), _source) => {
                     reporter.on_progress(package_name, &VersionOrUrl::Url(url));
                 }
-                PubGrubPackage::Package(package_name, _extra, None) => {
+                PubGrubPackage::Package(package_name, _extra, None, _source) => {
                     reporter.on_progress(package_name, &VersionOrUrl::Version(version));
                 }
             }

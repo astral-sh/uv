@@ -104,6 +104,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                 extras: requirement.extras,
                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                 marker: requirement.marker,
+                path: None,
             });
         }
 
@@ -122,6 +123,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                 extras: requirement.extras,
                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                 marker: requirement.marker,
+                path: None,
             });
         }
 
@@ -149,6 +151,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                             extras: requirement.extras,
                             version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                             marker: requirement.marker,
+                            path: None,
                         });
                     }
 
@@ -169,6 +172,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                                 extras: requirement.extras,
                                 version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                 marker: requirement.marker,
+                                path: None,
                             });
                         }
 
@@ -186,6 +190,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                                         extras: requirement.extras,
                                         version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                         marker: requirement.marker,
+                                        path: None,
                                     });
                                 }
                             }
@@ -214,6 +219,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
                                         extras: requirement.extras,
                                         version_or_url: Some(VersionOrUrl::Url(requirement.url)),
                                         marker: requirement.marker,
+                                        path: None,
                                     });
                                 }
                             }
@@ -272,6 +278,7 @@ impl<'a, Context: BuildContext + Send + Sync> NamedRequirementsResolver<'a, Cont
             extras: requirement.extras,
             version_or_url: Some(VersionOrUrl::Url(requirement.url)),
             marker: requirement.marker,
+            path: None,
         })
     }
 }

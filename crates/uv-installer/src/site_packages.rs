@@ -128,6 +128,7 @@ impl<'a> SitePackages<'a> {
                 }
             }),
             marker: None,
+            path: None,
         })
     }
 
@@ -352,6 +353,7 @@ impl<'a> SitePackages<'a> {
                             let dependency = RequirementEntry {
                                 requirement: RequirementsTxtRequirement::Pep508(dependency),
                                 hashes: vec![],
+                                path: None,
                             };
                             if seen.insert(dependency.clone()) {
                                 stack.push(dependency);
@@ -474,6 +476,7 @@ impl<'a> SitePackages<'a> {
                             let dependency = RequirementEntry {
                                 requirement: RequirementsTxtRequirement::Pep508(dependency),
                                 hashes: vec![],
+                                path: None,
                             };
                             if seen.insert(dependency.clone()) {
                                 stack.push(dependency);

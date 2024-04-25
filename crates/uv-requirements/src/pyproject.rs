@@ -1,8 +1,9 @@
 use indexmap::IndexMap;
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::path::Path;
 
+use pep440_rs::TrackedFromStr;
 use pep508_rs::Requirement;
 use pypi_types::LenientRequirement;
 use uv_normalize::{ExtraName, PackageName};
@@ -65,7 +66,14 @@ impl Pep621Metadata {
     pub(crate) fn try_from(
         project: Project,
         extras: &ExtrasSpecification,
+        path: &Path,
     ) -> Result<Option<Self>, Pep621Error> {
+        let source = if path == Path::new("-") {
+            None
+        } else {
+            Some(path)
+        };
+
         if let Some(dynamic) = project.dynamic.as_ref() {
             // If the project specifies dynamic dependencies, we can't extract the requirements.
             if dynamic.iter().any(|field| field == "dependencies") {
@@ -86,7 +94,9 @@ impl Pep621Metadata {
             .unwrap_or_default()
             .iter()
             .map(String::as_str)
-            .map(|s| LenientRequirement::from_str(s).map(Requirement::from))
+            .map(|s| {
+                LenientRequirement::tracked_from_str(s, source, None).map(Requirement::from)
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         // Include any optional dependencies specified in `extras`.
@@ -100,7 +110,10 @@ impl Pep621Metadata {
                         let requirements = requirements
                             .iter()
                             .map(String::as_str)
-                            .map(|s| LenientRequirement::from_str(s).map(Requirement::from))
+                            .map(|s| {
+                                LenientRequirement::tracked_from_str(s, source, None)
+                                    .map(Requirement::from)
+                            })
                             .collect::<Result<Vec<_>, _>>()?;
                         Ok::<(ExtraName, Vec<Requirement>), Pep621Error>((extra, requirements))
                     })

@@ -4756,6 +4756,7 @@ dependencies = [
  "fs-err",
  "futures",
  "indexmap",
+ "pep440_rs",
  "pep508_rs",
  "pypi-types",
  "requirements-txt",

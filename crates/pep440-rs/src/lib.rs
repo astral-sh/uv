@@ -37,6 +37,7 @@
 #[cfg(feature = "pyo3")]
 pub use version::PyVersion;
 pub use {
+    tracked_from_str::TrackedFromStr,
     version::{
         LocalSegment, Operator, OperatorParseError, PreRelease, PreReleaseKind, Version,
         VersionParseError, VersionPattern, VersionPatternParseError, MIN_VERSION,
@@ -47,6 +48,7 @@ pub use {
     },
 };
 
+mod tracked_from_str;
 mod version;
 mod version_specifier;
 

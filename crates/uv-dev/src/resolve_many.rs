@@ -131,6 +131,7 @@ pub(crate) async fn resolve_many(args: ResolveManyArgs) -> Result<()> {
                             extras: requirement.extras,
                             version_or_url: Some(equals_version),
                             marker: None,
+                            path: requirement.path,
                         }
                     } else {
                         requirement

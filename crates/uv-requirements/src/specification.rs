@@ -56,13 +56,15 @@ impl RequirementsSpecification {
     ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Package(name) => {
-                let requirement = RequirementsTxtRequirement::parse(name, std::env::current_dir()?)
-                    .with_context(|| format!("Failed to parse `{name}`"))?;
+                let requirement =
+                    RequirementsTxtRequirement::parse(name, None, std::env::current_dir()?)
+                        .with_context(|| format!("Failed to parse `{name}`"))?;
                 Self {
                     project: None,
                     requirements: vec![RequirementEntry {
                         requirement,
                         hashes: vec![],
+                        path: None,
                     }],
                     constraints: vec![],
                     overrides: vec![],
@@ -141,10 +143,11 @@ impl RequirementsSpecification {
                 // For example, Hatch's "Context formatting" API is not compliant with PEP 621, as
                 // it expects dynamic processing by the build backend for the static metadata
                 // fields. See: https://hatch.pypa.io/latest/config/context/
-                if let Some(project) = pyproject
-                    .project
-                    .and_then(|project| Pep621Metadata::try_from(project, extras).ok().flatten())
-                {
+                if let Some(project) = pyproject.project.and_then(|project| {
+                    Pep621Metadata::try_from(project, extras, path)
+                        .ok()
+                        .flatten()
+                }) {
                     Self {
                         project: Some(project.name),
                         requirements: project
@@ -153,6 +156,7 @@ impl RequirementsSpecification {
                             .map(|requirement| RequirementEntry {
                                 requirement: RequirementsTxtRequirement::Pep508(requirement),
                                 hashes: vec![],
+                                path: Some(path.to_string_lossy().to_string()),
                             })
                             .collect(),
                         constraints: vec![],
