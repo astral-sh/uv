@@ -836,7 +836,7 @@ impl<
                     ) {
                         debug!("new_warning: direct {package}{version}");
                         if *version == (Range::full()) {
-                            debug!("new_warning_match: direct {package}{version}")
+                            debug!("new_warning_match: direct {package}{version}");
                         }
                     }
                     // Update the package priorities.
@@ -923,7 +923,7 @@ impl<
                         ) {
                             debug!("new_warning: transitive {package}{dep_version}");
                             if *dep_version == (Range::full()) {
-                                debug!("new_warning_match: transitive {package}{dep_version}")
+                                debug!("new_warning_match: transitive {package}{dep_version}");
                             }
                         }
 
@@ -1042,7 +1042,7 @@ impl<
                     ) {
                         debug!("new_warning: transitive {package}{dep_version}");
                         if *dep_version == (Range::full()) {
-                            debug!("new_warning_match: transitive {package}{dep_version}")
+                            debug!("new_warning_match: transitive {package}{dep_version}");
                         }
                     }
                     // Update the package priorities.
