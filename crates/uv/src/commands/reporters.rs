@@ -61,10 +61,7 @@ impl ProgressReporter {
         let mut state = self.state.lock().unwrap();
 
         // preserve ascending order
-        let position = size
-            .map(|size| state.sizes.partition_point(|&len| len < size))
-            .unwrap_or(0);
-
+        let position = size.map_or(0, |size| state.sizes.partition_point(|&len| len < size));
         state.sizes.insert(position, size.unwrap_or(0));
 
         let progress = self.multi_progress.insert(
