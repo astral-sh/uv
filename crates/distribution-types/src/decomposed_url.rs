@@ -117,6 +117,14 @@ impl DecomposedUrl {
             }
         }
     }
+
+    pub fn given(&self) -> Option<&str> {
+        match self {
+            DecomposedUrl::LocalFile(file) => file.given.as_deref(),
+            DecomposedUrl::Git(git) => git.given.as_deref(),
+            DecomposedUrl::Archive(archive) => archive.given.as_deref(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
