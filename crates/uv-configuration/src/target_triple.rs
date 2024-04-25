@@ -143,7 +143,7 @@ impl TargetTriple {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "x86_64",
             Self::Linux | Self::X8664UnknownLinuxGnu => "x86_64",
-            Self::Macos | Self::Aarch64AppleDarwin => "aarch64",
+            Self::Macos | Self::Aarch64AppleDarwin => "arm64",
             Self::X8664AppleDarwin => "x86_64",
             Self::Aarch64UnknownLinuxGnu => "aarch64",
             Self::Aarch64UnknownLinuxMusl => "aarch64",
