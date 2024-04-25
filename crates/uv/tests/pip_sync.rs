@@ -671,15 +671,16 @@ fn install_sdist_url() -> Result<()> {
 fn install_sdist_archive_type_bz2() -> Result<()> {
     let context = TestContext::new("3.8");
 
-    // Install a version of Twisted that uses `.tar.bz2`.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("Twisted==20.3.0")?;
+    requirements_txt.write_str("bz2==1.0.0")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.txt")
         .arg("--no-binary")
         .arg(":all:")
-        .arg("--strict"), @r###"
+        .arg("--strict")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
