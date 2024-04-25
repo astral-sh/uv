@@ -65,7 +65,8 @@ impl ProgressReporter {
         state.sizes.insert(position, size.unwrap_or(0));
 
         let progress = self.multi_progress.insert(
-            position,
+            // make sure not to reorder the initial "downloading.." bar
+            position + 1,
             ProgressBar::with_draw_target(size, self.printer.target()),
         );
 
