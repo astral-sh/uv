@@ -64,10 +64,10 @@ impl uv_distribution::Reporter for Facade {
     }
 
     fn on_download_progress(&self, index: usize, bytes: u64) {
-        self.reporter.on_download_progress(index, bytes)
+        self.reporter.on_download_progress(index, bytes);
     }
 
     fn on_download_complete(&self, name: &PackageName, index: usize) {
-        self.reporter.on_download_complete(name, index)
+        self.reporter.on_download_complete(name, index);
     }
 }

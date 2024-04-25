@@ -177,11 +177,11 @@ impl uv_installer::DownloadReporter for DownloadReporter {
     }
 
     fn on_download_progress(&self, index: usize, bytes: u64) {
-        self.reporter.on_download_progress(index, bytes)
+        self.reporter.on_download_progress(index, bytes);
     }
 
     fn on_download_complete(&self, name: &PackageName, index: usize) {
-        self.reporter.on_download_complete(name, index)
+        self.reporter.on_download_complete(name, index);
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
@@ -189,7 +189,7 @@ impl uv_installer::DownloadReporter for DownloadReporter {
     }
 
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
-        self.reporter.on_checkout_complete(url, rev, index)
+        self.reporter.on_checkout_complete(url, rev, index);
     }
 }
 
@@ -268,11 +268,11 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
     }
 
     fn on_download_progress(&self, index: usize, bytes: u64) {
-        self.reporter.on_download_progress(index, bytes)
+        self.reporter.on_download_progress(index, bytes);
     }
 
     fn on_download_complete(&self, name: &PackageName, index: usize) {
-        self.reporter.on_download_complete(name, index)
+        self.reporter.on_download_complete(name, index);
     }
 }
 
@@ -291,11 +291,11 @@ impl uv_distribution::Reporter for ResolverReporter {
     }
 
     fn on_download_progress(&self, index: usize, bytes: u64) {
-        self.reporter.on_download_progress(index, bytes)
+        self.reporter.on_download_progress(index, bytes);
     }
 
     fn on_download_complete(&self, name: &PackageName, bytes: usize) {
-        self.reporter.on_download_complete(name, bytes)
+        self.reporter.on_download_complete(name, bytes);
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
@@ -303,7 +303,7 @@ impl uv_distribution::Reporter for ResolverReporter {
     }
 
     fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
-        self.reporter.on_checkout_complete(url, rev, index)
+        self.reporter.on_checkout_complete(url, rev, index);
     }
 }
 
