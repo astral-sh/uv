@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::Write;
-use std::path::Path;
+use std::path::PathBuf;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
@@ -12,7 +12,6 @@ use distribution_types::{
     IndexLocations, InstalledMetadata, LocalDist, LocalEditable, LocalEditables, Name, ResolvedDist,
 };
 use install_wheel_rs::linker::LinkMode;
-
 use platform_tags::Tags;
 use pypi_types::Yanked;
 use requirements_txt::EditableRequirement;
@@ -65,6 +64,7 @@ pub(crate) async fn pip_sync(
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
+    target: Option<PathBuf>,
     native_tls: bool,
     cache: Cache,
     printer: Printer,
@@ -114,7 +114,12 @@ pub(crate) async fn pip_sync(
         venv.python_executable().user_display().cyan()
     );
 
-    let venv = venv.with_target(Path::new("/Users/crmarsh/workspace/uv/foo"));
+    // Apply any `--target` directory.
+    let venv = if let Some(target) = target {
+        venv.with_target(target)?
+    } else {
+        venv
+    };
 
     // If the environment is externally managed, abort.
     if let Some(externally_managed) = venv.interpreter().is_externally_managed() {

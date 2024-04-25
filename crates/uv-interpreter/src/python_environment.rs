@@ -70,12 +70,11 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and `--target` directory.
-    #[must_use]
-    pub fn with_target(self, target: &Path) -> Self {
-        Self {
-            interpreter: self.interpreter.with_target(target),
+    pub fn with_target(self, target: PathBuf) -> Result<Self, Error> {
+        Ok(Self {
+            interpreter: self.interpreter.with_target(target)?,
             ..self
-        }
+        })
     }
 
     /// Returns the root (i.e., `prefix`) of the Python interpreter.

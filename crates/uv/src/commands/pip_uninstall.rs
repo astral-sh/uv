@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use itertools::{Either, Itertools};
@@ -25,6 +26,7 @@ pub(crate) async fn pip_uninstall(
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
+    target: Option<PathBuf>,
     cache: Cache,
     connectivity: Connectivity,
     native_tls: bool,
@@ -53,6 +55,13 @@ pub(crate) async fn pip_uninstall(
         venv.interpreter().python_version(),
         venv.python_executable().user_display().cyan(),
     );
+
+    // Apply any `--target` directory.
+    let venv = if let Some(target) = target {
+        venv.with_target(target)?
+    } else {
+        venv
+    };
 
     // If the environment is externally managed, abort.
     if let Some(externally_managed) = venv.interpreter().is_externally_managed() {

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::Write;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
@@ -84,6 +84,7 @@ pub(crate) async fn pip_install(
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
+    target: Option<PathBuf>,
     native_tls: bool,
     cache: Cache,
     dry_run: bool,
@@ -133,6 +134,13 @@ pub(crate) async fn pip_install(
         venv.interpreter().python_version(),
         venv.python_executable().user_display().cyan()
     );
+
+    // Apply any `--target` directory.
+    let venv = if let Some(target) = target {
+        venv.with_target(target)?
+    } else {
+        venv
+    };
 
     // If the environment is externally managed, abort.
     if let Some(externally_managed) = venv.interpreter().is_externally_managed() {

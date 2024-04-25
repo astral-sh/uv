@@ -109,12 +109,19 @@ impl Interpreter {
         }
     }
 
-    #[must_use]
-    pub fn with_target(self, target: &Path) -> Self {
-        Self {
-            target: Some(target.to_path_buf()),
+    /// Return a new [`Interpreter`] to install into the given `--target` directory.
+    ///
+    /// Initializes the `--target` directory with the expected layout.
+    pub fn with_target(self, target: PathBuf) -> Result<Self, Error> {
+        // Create the `--target` directory layout.
+        fs_err::create_dir_all(&target)?;
+        fs_err::create_dir_all(target.join("bin"))?;
+        fs_err::create_dir_all(target.join("include"))?;
+
+        Ok(Self {
+            target: Some(target),
             ..self
-        }
+        })
     }
 
     /// Returns the path to the Python virtual environment.

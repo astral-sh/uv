@@ -4814,3 +4814,72 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
     Ok(())
 }
+
+/// Sync to a `--target` directory.
+#[test]
+fn target() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install `anyio` to the target directory.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio==4.1.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.in")
+        .arg("--target")
+        .arg("target"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.1.0
+    "###);
+
+    // Upgrade it.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio==4.2.0")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.in")
+        .arg("--target")
+        .arg("target"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.1.0
+     + anyio==4.2.0
+    "###);
+
+    // Remove it, and replace with `flask`, which includes a binary.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("flask")?;
+
+    uv_snapshot!(command(&context)
+        .arg("requirements.in")
+        .arg("--target")
+        .arg("target"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Downloaded 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.2.0
+     + flask==3.0.3
+    "###);
+
+    Ok(())
+}
