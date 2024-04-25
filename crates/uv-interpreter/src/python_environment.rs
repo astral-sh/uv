@@ -1,3 +1,4 @@
+use itertools::Either;
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -8,7 +9,7 @@ use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
 use crate::cfg::PyVenvConfiguration;
-use crate::{find_default_python, find_requested_python, Error, Interpreter};
+use crate::{find_default_python, find_requested_python, Error, Interpreter, Target};
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
 #[derive(Debug, Clone)]
@@ -68,7 +69,16 @@ impl PythonEnvironment {
         }
     }
 
-    /// Returns the location of the Python interpreter.
+    /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and `--target` directory.
+    #[must_use]
+    pub fn with_target(self, target: Target) -> Self {
+        Self {
+            interpreter: self.interpreter.with_target(target),
+            ..self
+        }
+    }
+
+    /// Returns the root (i.e., `prefix`) of the Python interpreter.
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -97,15 +107,19 @@ impl PythonEnvironment {
     /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
     /// still deduplicate the entries, returning a single path.
     pub fn site_packages(&self) -> impl Iterator<Item = &Path> {
-        let purelib = self.interpreter.purelib();
-        let platlib = self.interpreter.platlib();
-        std::iter::once(purelib).chain(
-            if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
-                None
-            } else {
-                Some(platlib)
-            },
-        )
+        if let Some(target) = self.interpreter.target() {
+            Either::Left(std::iter::once(target.root()))
+        } else {
+            let purelib = self.interpreter.purelib();
+            let platlib = self.interpreter.platlib();
+            Either::Right(std::iter::once(purelib).chain(
+                if purelib == platlib || is_same_file(purelib, platlib).unwrap_or(false) {
+                    None
+                } else {
+                    Some(platlib)
+                },
+            ))
+        }
     }
 
     /// Returns the path to the `bin` directory inside a virtual environment.
@@ -115,7 +129,13 @@ impl PythonEnvironment {
 
     /// Grab a file lock for the virtual environment to prevent concurrent writes across processes.
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
-        if self.interpreter.is_virtualenv() {
+        if let Some(target) = self.interpreter.target() {
+            // If we're installing into a `--target`, use a target-specific lock file.
+            LockedFile::acquire(
+                target.root().join(".lock"),
+                target.root().simplified_display(),
+            )
+        } else if self.interpreter.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lock file.
             LockedFile::acquire(self.root.join(".lock"), self.root.simplified_display())
         } else {

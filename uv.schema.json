@@ -489,6 +489,12 @@
             "boolean",
             "null"
           ]
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false

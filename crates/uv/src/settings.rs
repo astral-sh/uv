@@ -9,6 +9,7 @@ use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
     SetupPyStrategy, TargetTriple, Upgrade,
 };
+use uv_interpreter::Target;
 use uv_normalize::PackageName;
 use uv_requirements::ExtrasSpecification;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
@@ -302,6 +303,7 @@ impl PipSyncSettings {
             no_system,
             break_system_packages,
             no_break_system_packages,
+            target,
             legacy_setup_py,
             no_legacy_setup_py,
             no_build_isolation,
@@ -332,6 +334,7 @@ impl PipSyncSettings {
                     python,
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
+                    target,
                     offline: flag(offline, no_offline),
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
@@ -423,6 +426,7 @@ impl PipInstallSettings {
             no_system,
             break_system_packages,
             no_break_system_packages,
+            target,
             legacy_setup_py,
             no_legacy_setup_py,
             no_build_isolation,
@@ -463,6 +467,7 @@ impl PipInstallSettings {
                     python,
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
+                    target,
                     offline: flag(offline, no_offline),
                     index_url: index_url.and_then(Maybe::into_option),
                     extra_index_url: extra_index_url.map(|extra_index_urls| {
@@ -530,6 +535,7 @@ impl PipUninstallSettings {
             no_system,
             break_system_packages,
             no_break_system_packages,
+            target,
             offline,
             no_offline,
         } = args;
@@ -545,6 +551,7 @@ impl PipUninstallSettings {
                     python,
                     system: flag(system, no_system),
                     break_system_packages: flag(break_system_packages, no_break_system_packages),
+                    target,
                     offline: flag(offline, no_offline),
                     keyring_provider,
                     ..PipOptions::default()
@@ -801,6 +808,7 @@ pub(crate) struct PipSharedSettings {
     pub(crate) system: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) break_system_packages: bool,
+    pub(crate) target: Option<Target>,
     pub(crate) connectivity: Connectivity,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
@@ -840,6 +848,7 @@ impl PipSharedSettings {
             python,
             system,
             break_system_packages,
+            target,
             offline,
             index_url,
             extra_index_url,
@@ -955,6 +964,7 @@ impl PipSharedSettings {
                 .break_system_packages
                 .or(break_system_packages)
                 .unwrap_or_default(),
+            target: args.target.or(target).map(Target::from),
             no_binary: NoBinary::from_args(args.no_binary.or(no_binary).unwrap_or_default()),
             compile_bytecode: args
                 .compile_bytecode

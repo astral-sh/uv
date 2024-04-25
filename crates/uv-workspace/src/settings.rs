@@ -47,6 +47,7 @@ pub struct PipOptions {
     pub python: Option<String>,
     pub system: Option<bool>,
     pub break_system_packages: Option<bool>,
+    pub target: Option<PathBuf>,
     pub offline: Option<bool>,
     pub index_url: Option<IndexUrl>,
     pub extra_index_url: Option<Vec<IndexUrl>>,
