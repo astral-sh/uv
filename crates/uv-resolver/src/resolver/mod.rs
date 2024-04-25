@@ -831,8 +831,12 @@ impl<
 
                 // Add a dependency on each editable.
                 for (editable, metadata) in self.editables.iter() {
-                    let package =
-                        PubGrubPackage::from_package(metadata.name.clone(), None, vec![], &self.urls);
+                    let package = PubGrubPackage::from_package(
+                        metadata.name.clone(),
+                        None,
+                        vec![],
+                        &self.urls,
+                    );
                     let version = Range::singleton(metadata.version.clone());
 
                     // Update the package priorities.
@@ -1027,7 +1031,12 @@ impl<
                     Range::singleton(version.clone()),
                 ),
                 (
-                    PubGrubPackage::Package(package_name.clone(), Some(extra.clone()), url.clone(), vec![]),
+                    PubGrubPackage::Package(
+                        package_name.clone(),
+                        Some(extra.clone()),
+                        url.clone(),
+                        vec![],
+                    ),
                     Range::singleton(version.clone()),
                 ),
             ])),

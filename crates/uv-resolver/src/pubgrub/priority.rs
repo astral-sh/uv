@@ -61,7 +61,8 @@ impl PubGrubPriorities {
                     }
                 }
             }
-            PubGrubPackage::Extra(name, _, Some(_)) | PubGrubPackage::Package(name, _, Some(_), _) => {
+            PubGrubPackage::Extra(name, _, Some(_))
+            | PubGrubPackage::Package(name, _, Some(_), _) => {
                 match self.0.entry(name.clone()) {
                     std::collections::hash_map::Entry::Occupied(mut entry) => {
                         // Preserve the original index.

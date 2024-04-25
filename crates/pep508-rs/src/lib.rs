@@ -1425,7 +1425,7 @@ mod tests {
     };
 
     fn parse_pepe508_err(input: &str) -> String {
-        parse_pep508_requirement(&mut Cursor::new(&input), None, None)
+        parse_pep508_requirement(&mut Cursor::new(input), None, None)
             .unwrap_err()
             .to_string()
     }

@@ -94,9 +94,7 @@ impl Pep621Metadata {
             .unwrap_or_default()
             .iter()
             .map(String::as_str)
-            .map(|s| {
-                LenientRequirement::tracked_from_str(s, source, None).map(Requirement::from)
-            })
+            .map(|s| LenientRequirement::tracked_from_str(s, source, None).map(Requirement::from))
             .collect::<Result<Vec<_>, _>>()?;
 
         // Include any optional dependencies specified in `extras`.

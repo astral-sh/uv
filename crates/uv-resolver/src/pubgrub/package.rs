@@ -120,7 +120,7 @@ impl Hash for PubGrubPackage {
                 name.hash(state);
                 extra.hash(state);
                 url.hash(state);
-            },
+            }
         }
     }
 }
@@ -132,13 +132,13 @@ impl PartialEq for PubGrubPackage {
                 if let PubGrubPackage::Root(other_name) = other {
                     return other_name == name;
                 }
-                return false;
+                false
             }
             PubGrubPackage::Python(version) => {
                 if let PubGrubPackage::Python(other_version) = other {
                     return other_version == version;
                 }
-                return false;
+                false
             }
             PubGrubPackage::Package(name, extra, url, _source) => {
                 if let PubGrubPackage::Package(other_name, other_extra, other_url, _other_source) =
@@ -146,16 +146,14 @@ impl PartialEq for PubGrubPackage {
                 {
                     return other_name == name && other_extra == extra && other_url == url;
                 }
-                return false;
+                false
             }
             PubGrubPackage::Extra(name, extra, url) => {
-                if let PubGrubPackage::Extra(other_name, other_extra, other_url) =
-                    other
-                {
+                if let PubGrubPackage::Extra(other_name, other_extra, other_url) = other {
                     return other_name == name && other_extra == extra && other_url == url;
                 }
-                return false;
-            },
+                false
+            }
         }
     }
 }

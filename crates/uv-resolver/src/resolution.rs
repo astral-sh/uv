@@ -718,7 +718,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     .resolution
                     .sources
                     .get(node.name())
-                    .map(|s| s.clone())
+                    .cloned()
                     .unwrap_or(vec![]);
 
                 match self.annotation_style {
@@ -728,7 +728,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let deps = edges
                                 .into_iter()
                                 .map(|dependency| format!("{}", dependency.name()))
-                                .chain(source.into_iter().map(|source| format!("-r {}", source)))
+                                .chain(source.into_iter().map(|source| format!("-r {source}")))
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             let comment = format!("# via {deps}").green().to_string();
@@ -736,7 +736,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                         }
                     }
                     AnnotationStyle::Split => match edges.as_slice() {
-                        [] if source.len() == 0 => {}
+                        [] if source.is_empty() => {}
                         [] if source.len() == 1 => {
                             let separator = "\n";
                             let comment = format!("    # via -r {}", source.first().unwrap())
@@ -744,7 +744,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                                 .to_string();
                             annotation = Some((separator, comment));
                         }
-                        [edge] if source.len() == 0 => {
+                        [edge] if source.is_empty() => {
                             let separator = "\n";
                             let comment = format!("    # via {}", edge.name()).green().to_string();
                             annotation = Some((separator, comment));
@@ -753,13 +753,13 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                             let separator = "\n";
                             let deps = source
                                 .into_iter()
-                                .map(|source| format!("-r {}", source))
+                                .map(|source| format!("-r {source}"))
                                 .chain(
                                     edges
                                         .iter()
                                         .map(|dependency| format!("{}", dependency.name())),
                                 )
-                                .map(|name| format!("    #   {}", name))
+                                .map(|name| format!("    #   {name}"))
                                 .collect::<Vec<_>>()
                                 .join("\n");
                             let comment = format!("    # via\n{deps}").green().to_string();

@@ -678,12 +678,11 @@ fn parse_entry(
             Some(requirements_txt)
         };
 
-        let (requirement, hashes) =
-            parse_requirement_and_hashes(s, content, source, working_dir)?;
+        let (requirement, hashes) = parse_requirement_and_hashes(s, content, source, working_dir)?;
         RequirementsTxtStatement::RequirementEntry(RequirementEntry {
             requirement,
             hashes,
-            path: requirements_txt.to_str().map(|s| s.to_string()),
+            path: requirements_txt.to_str().map(ToString::to_string),
         })
     } else if let Some(char) = s.peek() {
         let (line, column) = calculate_row_column(content, s.cursor());

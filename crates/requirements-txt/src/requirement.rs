@@ -97,7 +97,11 @@ impl FromStr for RequirementsTxtRequirement {
 
 impl RequirementsTxtRequirement {
     /// Parse a requirement as seen in a `requirements.txt` file.
-    pub fn parse(input: &str, source: Option<&Path>, working_dir: impl AsRef<Path>) -> Result<Self, Pep508Error> {
+    pub fn parse(
+        input: &str,
+        source: Option<&Path>,
+        working_dir: impl AsRef<Path>,
+    ) -> Result<Self, Pep508Error> {
         // Attempt to parse as a PEP 508-compliant requirement.
         match Requirement::parse(input, source, &working_dir) {
             Ok(requirement) => Ok(Self::Pep508(requirement)),

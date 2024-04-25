@@ -1,5 +1,5 @@
-use std::{borrow::Cow, path::Path};
 use std::str::FromStr;
+use std::{borrow::Cow, path::Path};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
