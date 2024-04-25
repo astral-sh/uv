@@ -4820,9 +4820,9 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 fn target() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Install `anyio` to the target directory.
+    // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("anyio==4.1.0")?;
+    requirements_in.write_str("iniconfig==2.0.0")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.in")
@@ -4836,12 +4836,28 @@ fn target() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.1.0
+     + iniconfig==2.0.0
     "###);
+
+    // Ensure that the package is present in the target directory.
+    assert!(context.temp_dir.child("target").child("iniconfig").is_dir());
+
+    // Ensure that we can't import the package.
+    context.assert_command("import iniconfig").failure();
+
+    // Ensure that we can import the package by augmenting the `PYTHONPATH`.
+    Command::new(venv_to_interpreter(&context.venv))
+        .arg("-B")
+        .arg("-c")
+        .arg("import iniconfig")
+        .env("PYTHONPATH", context.temp_dir.child("target").path())
+        .current_dir(&context.temp_dir)
+        .assert()
+        .success();
 
     // Upgrade it.
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("anyio==4.2.0")?;
+    requirements_in.write_str("iniconfig==1.1.1")?;
 
     uv_snapshot!(command(&context)
         .arg("requirements.in")
@@ -4856,8 +4872,8 @@ fn target() -> Result<()> {
     Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.1.0
-     + anyio==4.2.0
+     - iniconfig==2.0.0
+     + iniconfig==1.1.1
     "###);
 
     // Remove it, and replace with `flask`, which includes a binary.
@@ -4877,9 +4893,16 @@ fn target() -> Result<()> {
     Downloaded 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.2.0
      + flask==3.0.3
+     - iniconfig==1.1.1
     "###);
+    // Ensure that the binary is present in the target directory.
+    assert!(context
+        .temp_dir
+        .child("target")
+        .child("bin")
+        .child(format!("flask{EXE_SUFFIX}"))
+        .is_file());
 
     Ok(())
 }

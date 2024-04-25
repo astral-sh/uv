@@ -9,6 +9,7 @@ use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, NoBinary, NoBuild, PreviewMode, Reinstall,
     SetupPyStrategy, TargetTriple, Upgrade,
 };
+use uv_interpreter::Target;
 use uv_normalize::PackageName;
 use uv_requirements::ExtrasSpecification;
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PreReleaseMode, ResolutionMode};
@@ -807,7 +808,7 @@ pub(crate) struct PipSharedSettings {
     pub(crate) system: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) break_system_packages: bool,
-    pub(crate) target: Option<PathBuf>,
+    pub(crate) target: Option<Target>,
     pub(crate) connectivity: Connectivity,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
@@ -963,7 +964,7 @@ impl PipSharedSettings {
                 .break_system_packages
                 .or(break_system_packages)
                 .unwrap_or_default(),
-            target: args.target.or(target),
+            target: args.target.or(target).map(Target::from),
             no_binary: NoBinary::from_args(args.no_binary.or(no_binary).unwrap_or_default()),
             compile_bytecode: args
                 .compile_bytecode

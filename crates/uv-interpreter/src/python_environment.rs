@@ -9,7 +9,7 @@ use uv_cache::Cache;
 use uv_fs::{LockedFile, Simplified};
 
 use crate::cfg::PyVenvConfiguration;
-use crate::{find_default_python, find_requested_python, Error, Interpreter};
+use crate::{find_default_python, find_requested_python, Error, Interpreter, Target};
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
 #[derive(Debug, Clone)]
@@ -70,11 +70,12 @@ impl PythonEnvironment {
     }
 
     /// Create a [`PythonEnvironment`] from an existing [`Interpreter`] and `--target` directory.
-    pub fn with_target(self, target: PathBuf) -> Result<Self, Error> {
-        Ok(Self {
-            interpreter: self.interpreter.with_target(target)?,
+    #[must_use]
+    pub fn with_target(self, target: Target) -> Self {
+        Self {
+            interpreter: self.interpreter.with_target(target),
             ..self
-        })
+        }
     }
 
     /// Returns the root (i.e., `prefix`) of the Python interpreter.
@@ -107,7 +108,7 @@ impl PythonEnvironment {
     /// still deduplicate the entries, returning a single path.
     pub fn site_packages(&self) -> impl Iterator<Item = &Path> {
         if let Some(target) = self.interpreter.target() {
-            Either::Left(std::iter::once(target))
+            Either::Left(std::iter::once(target.root()))
         } else {
             let purelib = self.interpreter.purelib();
             let platlib = self.interpreter.platlib();
@@ -130,7 +131,10 @@ impl PythonEnvironment {
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
         if let Some(target) = self.interpreter.target() {
             // If we're installing into a `--target`, use a target-specific lock file.
-            LockedFile::acquire(target.join(".lock"), target.simplified_display())
+            LockedFile::acquire(
+                target.root().join(".lock"),
+                target.root().simplified_display(),
+            )
         } else if self.interpreter.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lock file.
             LockedFile::acquire(self.root.join(".lock"), self.root.simplified_display())

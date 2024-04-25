@@ -18,8 +18,8 @@ use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness, Timestamp};
 use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 use uv_toolchain::PythonVersion;
 
-use crate::Error;
 use crate::Virtualenv;
+use crate::{Error, Target};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -35,7 +35,7 @@ pub struct Interpreter {
     sys_executable: PathBuf,
     stdlib: PathBuf,
     tags: OnceCell<Tags>,
-    target: Option<PathBuf>,
+    target: Option<Target>,
     gil_disabled: bool,
 }
 
@@ -112,16 +112,12 @@ impl Interpreter {
     /// Return a new [`Interpreter`] to install into the given `--target` directory.
     ///
     /// Initializes the `--target` directory with the expected layout.
-    pub fn with_target(self, target: PathBuf) -> Result<Self, Error> {
-        // Create the `--target` directory layout.
-        fs_err::create_dir_all(&target)?;
-        fs_err::create_dir_all(target.join("bin"))?;
-        fs_err::create_dir_all(target.join("include"))?;
-
-        Ok(Self {
+    #[must_use]
+    pub fn with_target(self, target: Target) -> Self {
+        Self {
             target: Some(target),
             ..self
-        })
+        }
     }
 
     /// Returns the path to the Python virtual environment.
@@ -333,8 +329,8 @@ impl Interpreter {
     }
 
     /// Return the `--target` directory for this interpreter, if any.
-    pub fn target(&self) -> Option<&Path> {
-        self.target.as_deref()
+    pub fn target(&self) -> Option<&Target> {
+        self.target.as_ref()
     }
 
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
@@ -343,14 +339,8 @@ impl Interpreter {
             python_version: self.python_tuple(),
             sys_executable: self.sys_executable().to_path_buf(),
             os_name: self.markers.os_name.clone(),
-            scheme: if let Some(target) = self.target.as_deref() {
-                Scheme {
-                    purelib: target.to_path_buf(),
-                    platlib: target.to_path_buf(),
-                    scripts: target.join("bin"),
-                    data: target.to_path_buf(),
-                    include: target.join("include"),
-                }
+            scheme: if let Some(target) = self.target.as_ref() {
+                target.scheme()
             } else {
                 Scheme {
                     purelib: self.purelib().to_path_buf(),

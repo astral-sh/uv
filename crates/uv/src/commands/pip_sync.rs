@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::fmt::Write;
-use std::path::PathBuf;
 
 use anstream::eprint;
 use anyhow::{anyhow, Context, Result};
@@ -27,7 +26,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
 use uv_installer::{is_dynamic, Downloader, Plan, Planner, ResolvedEditable, SitePackages};
-use uv_interpreter::{Interpreter, PythonEnvironment};
+use uv_interpreter::{Interpreter, PythonEnvironment, Target};
 use uv_requirements::{
     ExtrasSpecification, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
@@ -64,7 +63,7 @@ pub(crate) async fn pip_sync(
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
-    target: Option<PathBuf>,
+    target: Option<Target>,
     native_tls: bool,
     cache: Cache,
     printer: Printer,
@@ -116,7 +115,8 @@ pub(crate) async fn pip_sync(
 
     // Apply any `--target` directory.
     let venv = if let Some(target) = target {
-        venv.with_target(target)?
+        target.init()?;
+        venv.with_target(target)
     } else {
         venv
     };
