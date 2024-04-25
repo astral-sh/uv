@@ -20,7 +20,7 @@ use crate::compat;
 
 #[derive(Parser)]
 #[command(author, version, long_version = crate::version::version(), about)]
-#[command(propagate_version = true)]
+#[command(propagate_version = true, args_override_self = true)]
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct Cli {
     #[command(subcommand)]
