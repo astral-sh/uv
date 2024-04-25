@@ -1,8 +1,10 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashMap;
 use url::Url;
 
 use distribution_types::{
@@ -15,13 +17,26 @@ use crate::printer::Printer;
 
 #[derive(Debug)]
 struct ProgressReporter {
+    id: AtomicUsize,
     printer: Printer,
     root: ProgressBar,
     multi_progress: MultiProgress,
-    bars: Arc<Mutex<Vec<ProgressBar>>>,
+    state: Arc<Mutex<BarState>>,
+}
+
+#[derive(Default, Debug)]
+struct BarState {
+    bars: FxHashMap<usize, ProgressBar>,
+    // A list of progress bar sizes, in descending order.
+    sizes: Vec<u64>,
 }
 
 impl ProgressReporter {
+    // Returns and unique ID for the bars map.
+    fn id(&self) -> usize {
+        self.id.fetch_add(1, Ordering::Relaxed)
+    }
+
     fn on_any_build_start(&self, color_string: &str) -> usize {
         let progress = self.multi_progress.insert_before(
             &self.root,
@@ -31,20 +46,29 @@ impl ProgressReporter {
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         progress.set_message(format!("{} {}", "Building".bold().cyan(), color_string));
 
-        let mut bars = self.bars.lock().unwrap();
-        bars.push(progress);
-        bars.len() - 1
+        let id = self.id();
+        let mut state = self.state.lock().unwrap();
+        state.bars.insert(id, progress);
+        id
     }
 
     fn on_any_build_complete(&self, color_string: &str, id: usize) {
-        let bars = self.bars.lock().unwrap();
-        let progress = &bars[id];
+        let progress = self.state.lock().unwrap().bars.remove(&id).unwrap();
         progress.finish_with_message(format!("   {} {}", "Built".bold().green(), color_string));
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
-        let progress = self.multi_progress.insert_after(
-            &self.root,
+        let mut state = self.state.lock().unwrap();
+
+        // preserve ascending order
+        let position = size
+            .map(|size| state.sizes.partition_point(|&len| len < size))
+            .unwrap_or(0);
+
+        state.sizes.insert(position, size.unwrap_or(0));
+
+        let progress = self.multi_progress.insert(
+            position,
             ProgressBar::with_draw_target(size, self.printer.target()),
         );
 
@@ -63,17 +87,18 @@ impl ProgressReporter {
             progress.finish();
         }
 
-        let mut bars = self.bars.lock().unwrap();
-        bars.push(progress);
-        bars.len() - 1
+        let id = self.id();
+        state.bars.insert(id, progress);
+        id
     }
 
-    fn on_download_progress(&self, index: usize, bytes: u64) {
-        self.bars.lock().unwrap()[index].inc(bytes);
+    fn on_download_progress(&self, id: usize, bytes: u64) {
+        self.state.lock().unwrap().bars[&id].inc(bytes);
     }
 
-    fn on_download_complete(&self, _name: &PackageName, index: usize) {
-        self.bars.lock().unwrap()[index].finish_and_clear();
+    fn on_download_complete(&self, id: usize) {
+        let progress = self.state.lock().unwrap().bars.remove(&id).unwrap();
+        progress.finish_and_clear();
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
@@ -91,14 +116,13 @@ impl ProgressReporter {
         ));
         progress.finish();
 
-        let mut bars = self.bars.lock().unwrap();
-        bars.push(progress);
-        bars.len() - 1
+        let id = self.id();
+        self.state.lock().unwrap().bars.insert(id, progress);
+        id
     }
 
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
-        let bars = self.bars.lock().unwrap();
-        let progress = &bars[index];
+    fn on_checkout_complete(&self, url: &Url, rev: &str, id: usize) {
+        let progress = self.state.lock().unwrap().bars.remove(&id).unwrap();
         progress.finish_with_message(format!(
             " {} {} ({})",
             "Updated".bold().green(),
@@ -126,10 +150,11 @@ impl From<Printer> for DownloadReporter {
         progress.set_message("Fetching packages...");
 
         let reporter = ProgressReporter {
+            id: AtomicUsize::new(0),
             printer,
             multi_progress,
             root: progress,
-            bars: Arc::new(Mutex::new(Vec::new())),
+            state: Arc::default(),
         };
 
         Self { reporter }
@@ -158,9 +183,9 @@ impl uv_installer::DownloadReporter for DownloadReporter {
         self.reporter.on_any_build_start(&source.to_color_string())
     }
 
-    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
+    fn on_build_complete(&self, source: &BuildableSource, id: usize) {
         self.reporter
-            .on_any_build_complete(&source.to_color_string(), index);
+            .on_any_build_complete(&source.to_color_string(), id);
     }
 
     fn on_editable_build_start(&self, dist: &LocalEditable) -> usize {
@@ -176,20 +201,20 @@ impl uv_installer::DownloadReporter for DownloadReporter {
         self.reporter.on_download_start(name, size)
     }
 
-    fn on_download_progress(&self, index: usize, bytes: u64) {
-        self.reporter.on_download_progress(index, bytes);
+    fn on_download_progress(&self, id: usize, bytes: u64) {
+        self.reporter.on_download_progress(id, bytes);
     }
 
-    fn on_download_complete(&self, name: &PackageName, index: usize) {
-        self.reporter.on_download_complete(name, index);
+    fn on_download_complete(&self, _name: &PackageName, id: usize) {
+        self.reporter.on_download_complete(id);
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }
 
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
-        self.reporter.on_checkout_complete(url, rev, index);
+    fn on_checkout_complete(&self, url: &Url, rev: &str, id: usize) {
+        self.reporter.on_checkout_complete(url, rev, id);
     }
 }
 
@@ -220,10 +245,11 @@ impl From<Printer> for ResolverReporter {
         root.set_message("Resolving dependencies...");
 
         let reporter = ProgressReporter {
+            id: AtomicUsize::new(0),
             root,
             printer,
             multi_progress,
-            bars: Arc::new(Mutex::new(Vec::new())),
+            state: Arc::default(),
         };
 
         ResolverReporter { reporter }
@@ -250,29 +276,29 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
         self.reporter.on_any_build_start(&source.to_color_string())
     }
 
-    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
+    fn on_build_complete(&self, source: &BuildableSource, id: usize) {
         self.reporter
-            .on_any_build_complete(&source.to_color_string(), index);
+            .on_any_build_complete(&source.to_color_string(), id);
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }
 
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
-        self.reporter.on_checkout_complete(url, rev, index);
+    fn on_checkout_complete(&self, url: &Url, rev: &str, id: usize) {
+        self.reporter.on_checkout_complete(url, rev, id);
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
         self.reporter.on_download_start(name, size)
     }
 
-    fn on_download_progress(&self, index: usize, bytes: u64) {
-        self.reporter.on_download_progress(index, bytes);
+    fn on_download_progress(&self, id: usize, bytes: u64) {
+        self.reporter.on_download_progress(id, bytes);
     }
 
-    fn on_download_complete(&self, name: &PackageName, index: usize) {
-        self.reporter.on_download_complete(name, index);
+    fn on_download_complete(&self, _name: &PackageName, id: usize) {
+        self.reporter.on_download_complete(id);
     }
 }
 
@@ -281,29 +307,29 @@ impl uv_distribution::Reporter for ResolverReporter {
         self.reporter.on_any_build_start(&source.to_color_string())
     }
 
-    fn on_build_complete(&self, source: &BuildableSource, index: usize) {
+    fn on_build_complete(&self, source: &BuildableSource, id: usize) {
         self.reporter
-            .on_any_build_complete(&source.to_color_string(), index);
+            .on_any_build_complete(&source.to_color_string(), id);
     }
 
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize {
         self.reporter.on_download_start(name, size)
     }
 
-    fn on_download_progress(&self, index: usize, bytes: u64) {
-        self.reporter.on_download_progress(index, bytes);
+    fn on_download_progress(&self, id: usize, bytes: u64) {
+        self.reporter.on_download_progress(id, bytes);
     }
 
-    fn on_download_complete(&self, name: &PackageName, bytes: usize) {
-        self.reporter.on_download_complete(name, bytes);
+    fn on_download_complete(&self, _name: &PackageName, id: usize) {
+        self.reporter.on_download_complete(id);
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }
 
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
-        self.reporter.on_checkout_complete(url, rev, index);
+    fn on_checkout_complete(&self, url: &Url, rev: &str, id: usize) {
+        self.reporter.on_checkout_complete(url, rev, id);
     }
 }
 
