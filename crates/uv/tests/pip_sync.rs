@@ -689,14 +689,7 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
     Resolved 1 package in [TIME]
     Downloaded 1 package in [TIME]
     Installed 1 package in [TIME]
-     + twisted==20.3.0
-    warning: The package `twisted` requires `zope-interface>=4.4.2`, but it's not installed.
-    warning: The package `twisted` requires `constantly>=15.1`, but it's not installed.
-    warning: The package `twisted` requires `incremental>=16.10.1`, but it's not installed.
-    warning: The package `twisted` requires `automat>=0.3.0`, but it's not installed.
-    warning: The package `twisted` requires `hyperlink>=17.1.1`, but it's not installed.
-    warning: The package `twisted` requires `pyhamcrest!=1.10.0,>=1.9.0`, but it's not installed.
-    warning: The package `twisted` requires `attrs>=19.2.0`, but it's not installed.
+     + bz2==1.0.0
     "###
     );
 
