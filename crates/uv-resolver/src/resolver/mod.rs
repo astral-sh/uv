@@ -5,6 +5,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
 
+use crate::resolution_mode::ResolutionStrategy;
 use anyhow::Result;
 use dashmap::{DashMap, DashSet};
 use futures::{FutureExt, StreamExt};
@@ -466,7 +467,13 @@ impl<
                 // Retrieve that package dependencies.
                 let package = &next;
                 let dependencies = match self
-                    .get_dependencies(package, &version, &mut priorities, &request_sink)
+                    .get_dependencies(
+                        package,
+                        &version,
+                        &mut priorities,
+                        &request_sink,
+                        self.selector.resolution_strategy(),
+                    )
                     .await?
                 {
                     Dependencies::Unavailable(reason) => {
@@ -797,6 +804,7 @@ impl<
         version: &Version,
         priorities: &mut PubGrubPriorities,
         request_sink: &tokio::sync::mpsc::Sender<Request>,
+        resolution_strategy: &ResolutionStrategy,
     ) -> Result<Dependencies, ResolveError> {
         match package {
             PubGrubPackage::Root(_) => {
@@ -822,6 +830,15 @@ impl<
                 for (package, version) in constraints.iter() {
                     debug!("Adding direct dependency: {package}{version}");
 
+                    if matches!(
+                        resolution_strategy,
+                        ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
+                    ) {
+                        debug!("new_warning: direct {package}{version}");
+                        if *version == (Range::full()) {
+                            debug!("new_warning_match: direct {package}{version}")
+                        }
+                    }
                     // Update the package priorities.
                     priorities.insert(package, version);
 
@@ -899,6 +916,16 @@ impl<
 
                     for (dep_package, dep_version) in constraints.iter() {
                         debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
+
+                        if matches!(
+                            resolution_strategy,
+                            ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
+                        ) {
+                            debug!("new_warning: transitive {package}{dep_version}");
+                            if *dep_version == (Range::full()) {
+                                debug!("new_warning_match: transitive {package}{dep_version}")
+                            }
+                        }
 
                         // Update the package priorities.
                         priorities.insert(dep_package, dep_version);
@@ -1009,6 +1036,15 @@ impl<
                 for (dep_package, dep_version) in constraints.iter() {
                     debug!("Adding transitive dependency for {package}=={version}: {dep_package}{dep_version}");
 
+                    if matches!(
+                        resolution_strategy,
+                        ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
+                    ) {
+                        debug!("new_warning: transitive {package}{dep_version}");
+                        if *dep_version == (Range::full()) {
+                            debug!("new_warning_match: transitive {package}{dep_version}")
+                        }
+                    }
                     // Update the package priorities.
                     priorities.insert(dep_package, dep_version);
 
